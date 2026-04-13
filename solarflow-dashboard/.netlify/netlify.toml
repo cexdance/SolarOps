@@ -1,0 +1,42 @@
+functionsDirectory = "/Users/cex/SolarOps÷/solarflow-dashboard/netlify/functions"
+functionsDirectoryOrigin = "default"
+redirectsOrigin = "config"
+plugins = []
+headers = []
+
+[build]
+publish = "/Users/cex/SolarOps÷/solarflow-dashboard/dist"
+publishOrigin = "config"
+commandOrigin = "config"
+command = "npx vite build"
+functions = "/Users/cex/SolarOps÷/solarflow-dashboard/netlify/functions"
+
+[build.environment]
+
+[build.processing]
+
+[build.processing.css]
+
+[build.processing.html]
+
+[build.processing.images]
+
+[build.processing.js]
+
+[build.services]
+
+[functions]
+
+[functions."*"]
+
+[[redirects]]
+from = "/*"
+to = "/index.html"
+status = 200.0
+force = false
+
+[redirects.query]
+
+[redirects.conditions]
+
+[redirects.headers]

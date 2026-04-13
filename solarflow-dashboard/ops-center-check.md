@@ -1,0 +1,327 @@
+- generic [ref=e1]:
+  - generic [ref=e3]:
+    - banner [ref=e4]:
+      - generic [ref=e5]:
+        - button [ref=e6] [cursor=pointer]:
+          - img [ref=e7]
+        - img "Conexsol" [ref=e9]
+      - generic [ref=e11]: Cesar Jurado (Admin)
+    - complementary [ref=e12]:
+      - generic [ref=e13]:
+        - img "Conexsol" [ref=e17]
+        - navigation [ref=e18]:
+          - button "Ops Center" [active] [ref=e19] [cursor=pointer]:
+            - img [ref=e20]
+            - generic [ref=e22]: Ops Center
+          - button "Dashboard" [ref=e23] [cursor=pointer]:
+            - img [ref=e24]
+            - generic [ref=e29]: Dashboard
+          - button "Work Orders" [ref=e30] [cursor=pointer]:
+            - img [ref=e31]
+            - generic [ref=e33]: Work Orders
+          - button "Customers" [ref=e35] [cursor=pointer]:
+            - img [ref=e36]
+            - generic [ref=e41]: Customers
+            - img [ref=e42]
+          - button "Billing" [ref=e45] [cursor=pointer]:
+            - img [ref=e46]
+            - generic [ref=e49]: Billing
+            - img [ref=e50]
+          - button "Manage Work Orders" [ref=e52] [cursor=pointer]:
+            - img [ref=e53]
+            - generic [ref=e55]: Manage Work Orders
+          - button "Contractors" [ref=e56] [cursor=pointer]:
+            - img [ref=e57]
+            - generic [ref=e69]: Contractors
+          - button "Inventory" [ref=e70] [cursor=pointer]:
+            - img [ref=e71]
+            - generic [ref=e75]: Inventory
+          - button "Settings" [ref=e76] [cursor=pointer]:
+            - img [ref=e77]
+            - generic [ref=e80]: Settings
+        - button "Cesar Jurado (Admin) admin" [ref=e83] [cursor=pointer]:
+          - img [ref=e85]
+          - generic [ref=e88]:
+            - paragraph [ref=e89]: Cesar Jurado (Admin)
+            - paragraph [ref=e90]: admin
+          - img [ref=e91]
+    - main [ref=e93]:
+      - generic [ref=e515]:
+        - generic [ref=e517]:
+          - generic [ref=e518]:
+            - img [ref=e520]
+            - generic [ref=e522]:
+              - heading "Ops Center" [level=1] [ref=e523]
+              - paragraph [ref=e524]: Sunday, March 15, 2026
+          - generic [ref=e525]:
+            - generic [ref=e526]:
+              - generic [ref=e527]:
+                - img [ref=e528]
+                - generic [ref=e530]: 62 Alert Sites
+              - generic [ref=e531]:
+                - img [ref=e532]
+                - generic [ref=e534]: 1 Open WOs
+              - generic [ref=e535]:
+                - img [ref=e536]
+                - generic [ref=e542]: 185 Sites
+            - paragraph [ref=e543]: 10:16 PM
+            - button "Edit Layout" [ref=e544] [cursor=pointer]:
+              - img [ref=e545]
+              - text: Edit Layout
+        - generic [ref=e551]:
+          - generic [ref=e552]:
+            - img [ref=e554]
+            - button "Remove widget" [ref=e561] [cursor=pointer]:
+              - img [ref=e562]
+            - generic [ref=e565]:
+              - generic [ref=e566]:
+                - generic [ref=e567]:
+                  - img [ref=e568]
+                  - generic [ref=e570]: Alert State
+                - generic [ref=e571]: 62 sites · 186 alerts
+              - generic [ref=e572]:
+                - generic [ref=e573]:
+                  - generic [ref=e575]:
+                    - paragraph [ref=e576]: "-1 Charles Roach"
+                    - paragraph [ref=e577]: US-15523XX
+                  - generic [ref=e578]: "1"
+                  - generic [ref=e579]: Active
+                - generic [ref=e580]:
+                  - generic [ref=e582]:
+                    - paragraph [ref=e583]: Janet Bravo
+                    - paragraph [ref=e584]: US-15253
+                  - generic [ref=e585]: "4"
+                  - generic [ref=e586]: Active
+                - generic [ref=e587]:
+                  - generic [ref=e589]:
+                    - paragraph [ref=e590]: Paulino Vieira Neto
+                    - paragraph [ref=e591]: US-15358
+                  - generic [ref=e592]: "2"
+                  - generic [ref=e593]: Active
+                - generic [ref=e594]:
+                  - generic [ref=e596]:
+                    - paragraph [ref=e597]: Duerr, Lee & Johanna TSP110340
+                    - paragraph [ref=e598]: US-15533.2
+                  - generic [ref=e599]: "1"
+                  - generic [ref=e600]: Active
+                - generic [ref=e601]:
+                  - generic [ref=e603]:
+                    - paragraph [ref=e604]: Lino 26 panel 7.8kW
+                    - paragraph [ref=e605]: US-15533.4
+                  - generic [ref=e606]: "3"
+                  - generic [ref=e607]: Active
+                - generic [ref=e608]:
+                  - generic [ref=e610]:
+                    - paragraph [ref=e611]: Carla Harris
+                    - paragraph [ref=e612]: US-15200
+                  - generic [ref=e613]: "3"
+                  - generic [ref=e614]: Active
+                - generic [ref=e615]:
+                  - generic [ref=e617]:
+                    - paragraph [ref=e618]: Regla Glau
+                    - paragraph [ref=e619]: US-15226
+                  - generic [ref=e620]: "4"
+                  - generic [ref=e621]: Active
+                - generic [ref=e622]:
+                  - generic [ref=e624]:
+                    - paragraph [ref=e625]: Freida Rosario
+                    - paragraph [ref=e626]: US-15235
+                  - generic [ref=e627]: "3"
+                  - generic [ref=e628]: Active
+                - generic [ref=e629]:
+                  - generic [ref=e631]:
+                    - paragraph [ref=e632]: James Ward
+                    - paragraph [ref=e633]: US-15289
+                  - generic [ref=e634]: "1"
+                  - generic [ref=e635]: Active
+                - generic [ref=e636]:
+                  - generic [ref=e638]:
+                    - paragraph [ref=e639]: Cheryl Duncan
+                    - paragraph [ref=e640]: US-15330
+                  - generic [ref=e641]: "1"
+                  - generic [ref=e642]: Active
+          - generic [ref=e643]:
+            - img [ref=e645]
+            - button "Remove widget" [ref=e652] [cursor=pointer]:
+              - img [ref=e653]
+            - generic [ref=e656]:
+              - generic [ref=e657]:
+                - generic [ref=e658]:
+                  - img [ref=e659]
+                  - generic [ref=e661]: Fleet Production
+                - generic [ref=e662]: 178/185 sites
+              - generic [ref=e663]:
+                - generic [ref=e664]:
+                  - generic [ref=e665]:
+                    - paragraph [ref=e666]: Today
+                    - paragraph [ref=e667]: 0 kWh
+                  - generic [ref=e668]:
+                    - paragraph [ref=e669]: This Month
+                    - paragraph [ref=e670]: 46.5 MWh
+                - generic [ref=e671]:
+                  - generic [ref=e672]:
+                    - paragraph [ref=e673]: This Year
+                    - paragraph [ref=e674]: 327.7 MWh
+                  - generic [ref=e675]:
+                    - paragraph [ref=e676]: Lifetime
+                    - paragraph [ref=e677]: 7.93 GWh
+                - generic [ref=e678]:
+                  - generic [ref=e681]: 62 with alerts
+                  - generic [ref=e682]:
+                    - img [ref=e683]
+                    - text: 2026-03-08
+          - generic [ref=e686]:
+            - img [ref=e688]
+            - button "Remove widget" [ref=e695] [cursor=pointer]:
+              - img [ref=e696]
+            - generic [ref=e699]:
+              - generic [ref=e700]:
+                - generic [ref=e701]:
+                  - img [ref=e702]
+                  - generic [ref=e704]: Work Orders
+                - generic [ref=e705]: 1 open
+              - generic [ref=e707]:
+                - generic [ref=e708]:
+                  - generic [ref=e709]:
+                    - generic [ref=e710]: US-15015
+                    - generic [ref=e711]: Daniel Matos Residence
+                  - generic [ref=e712]: New
+                - generic [ref=e713]:
+                  - generic [ref=e714]:
+                    - img [ref=e715]
+                    - generic [ref=e718]: Kings Point, FL
+                  - generic [ref=e719]:
+                    - img [ref=e720]
+                    - generic [ref=e723]: Mar 9
+          - generic [ref=e724]:
+            - img [ref=e726]
+            - button "Remove widget" [ref=e733] [cursor=pointer]:
+              - img [ref=e734]
+            - generic [ref=e737]:
+              - generic [ref=e738]:
+                - generic [ref=e739]:
+                  - img [ref=e740]
+                  - generic [ref=e746]:
+                    - paragraph [ref=e747]: US-15015
+                    - paragraph [ref=e748]: Daniel Matos Residence
+                - generic [ref=e749]: Pending
+              - generic [ref=e750]:
+                - generic [ref=e751]:
+                  - generic [ref=e752]:
+                    - paragraph [ref=e753]: Today
+                    - paragraph [ref=e754]: 0 kWh
+                  - generic [ref=e755]:
+                    - paragraph [ref=e756]: Month
+                    - paragraph [ref=e757]: 0 kWh
+                - generic [ref=e758]:
+                  - generic [ref=e759]:
+                    - paragraph [ref=e760]: Year
+                    - paragraph [ref=e761]: 0 kWh
+                  - generic [ref=e762]:
+                    - paragraph [ref=e763]: Peak
+                    - paragraph [ref=e764]: —
+          - generic [ref=e765]:
+            - img [ref=e767]
+            - button "Remove widget" [ref=e774] [cursor=pointer]:
+              - img [ref=e775]
+            - generic [ref=e778]:
+              - generic [ref=e779]:
+                - generic [ref=e780]:
+                  - img [ref=e781]
+                  - generic [ref=e784]:
+                    - paragraph [ref=e785]: US-15057
+                    - paragraph [ref=e786]: Augusto Fonte
+                - generic [ref=e787]:
+                  - paragraph [ref=e788]: Today
+                  - paragraph [ref=e789]: 0 kWh
+              - img [ref=e793]:
+                - generic [ref=e795]:
+                  - generic [ref=e797]: 00:00
+                  - generic [ref=e799]: 06:00
+                  - generic [ref=e801]: 12:00
+                  - generic [ref=e803]: 18:00
+                - generic [ref=e805]:
+                  - generic [ref=e807]: "0"
+                  - generic [ref=e809]: "3"
+                  - generic [ref=e811]: "6"
+                  - generic [ref=e813]: "9"
+          - generic [ref=e820]:
+            - img [ref=e822]
+            - button "Remove widget" [ref=e829] [cursor=pointer]:
+              - img [ref=e830]
+            - generic [ref=e833]:
+              - generic [ref=e834]:
+                - generic [ref=e835]:
+                  - img [ref=e836]
+                  - generic [ref=e839]: Lead Pipeline
+                - generic [ref=e840]: 25 active
+              - generic [ref=e841]:
+                - paragraph [ref=e842]: Close Potential
+                - paragraph [ref=e843]: $1,823,760
+              - generic [ref=e844]:
+                - generic [ref=e845]:
+                  - generic [ref=e846]: New
+                  - generic [ref=e849]: "24"
+                - generic [ref=e850]:
+                  - generic [ref=e851]: Attempting
+                  - generic [ref=e854]: "1"
+                - generic [ref=e855]:
+                  - generic [ref=e856]: Connected
+                  - generic [ref=e858]: "0"
+                - generic [ref=e859]:
+                  - generic [ref=e860]: Appt
+                  - generic [ref=e862]: "0"
+                - generic [ref=e863]:
+                  - generic [ref=e864]: Qualified
+                  - generic [ref=e866]: "0"
+                - generic [ref=e867]:
+                  - generic [ref=e868]: Proposal
+                  - generic [ref=e870]: "0"
+              - button "Quick Add Lead" [ref=e872] [cursor=pointer]:
+                - img [ref=e873]
+                - text: Quick Add Lead
+          - generic [ref=e874]:
+            - img [ref=e876]
+            - button "Remove widget" [ref=e883] [cursor=pointer]:
+              - img [ref=e884]
+            - generic [ref=e887]:
+              - generic [ref=e888]:
+                - generic [ref=e889]:
+                  - img [ref=e891]
+                  - generic [ref=e894]:
+                    - paragraph [ref=e895]: Betty Davis
+                    - paragraph [ref=e896]: sales lead
+                - generic [ref=e897]: Attempting
+              - generic [ref=e898]:
+                - generic [ref=e900]: high
+                - generic [ref=e901]: ·
+                - generic [ref=e902]: website
+              - generic [ref=e903]:
+                - link "(296) 877-7571" [ref=e904] [cursor=pointer]:
+                  - /url: tel:(296) 877-7571
+                  - img [ref=e905]
+                  - generic [ref=e907]: (296) 877-7571
+                - link "betty.davis@email.com" [ref=e908] [cursor=pointer]:
+                  - /url: mailto:betty.davis@email.com
+                  - img [ref=e909]
+                  - generic [ref=e912]: betty.davis@email.com
+                - generic [ref=e913]:
+                  - img [ref=e914]
+                  - generic [ref=e917]: West Palm Beach, FL
+              - paragraph [ref=e919]: Added Mar 13, 2026
+          - generic [ref=e920] [cursor=pointer]:
+            - img [ref=e921]
+            - paragraph [ref=e922]: Add Widget
+          - generic [ref=e923] [cursor=pointer]:
+            - img [ref=e924]
+            - paragraph [ref=e925]: Add Widget
+          - generic [ref=e926] [cursor=pointer]:
+            - img [ref=e927]
+            - paragraph [ref=e928]: Add Widget
+          - generic [ref=e929] [cursor=pointer]:
+            - img [ref=e930]
+            - paragraph [ref=e931]: Add Widget
+          - generic [ref=e932] [cursor=pointer]:
+            - img [ref=e933]
+            - paragraph [ref=e934]: Add Widget
+  - generic [ref=e514]: "0"

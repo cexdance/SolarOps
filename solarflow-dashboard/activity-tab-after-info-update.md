@@ -1,0 +1,121 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e5]:
+      - button [ref=e6] [cursor=pointer]:
+        - img [ref=e7]
+      - img "Conexsol" [ref=e9]
+    - generic [ref=e11]: Cesar Jurado (Admin)
+  - complementary [ref=e12]:
+    - generic [ref=e13]:
+      - img "Conexsol" [ref=e17]
+      - navigation [ref=e18]:
+        - button "DISPATCH" [ref=e19] [cursor=pointer]:
+          - img [ref=e20]
+          - generic [ref=e22]: DISPATCH
+        - button "Dashboard" [ref=e23] [cursor=pointer]:
+          - img [ref=e24]
+          - generic [ref=e29]: Dashboard
+        - button "Work Orders" [ref=e30] [cursor=pointer]:
+          - img [ref=e31]
+          - generic [ref=e33]: Work Orders
+        - button "Customers" [ref=e35] [cursor=pointer]:
+          - img [ref=e36]
+          - generic [ref=e41]: Customers
+          - img [ref=e42]
+        - button "Billing" [ref=e45] [cursor=pointer]:
+          - img [ref=e46]
+          - generic [ref=e49]: Billing
+          - img [ref=e50]
+        - button "Manage WORK ORDERS" [ref=e52] [cursor=pointer]:
+          - img [ref=e53]
+          - generic [ref=e55]: Manage WORK ORDERS
+        - button "Contractors" [ref=e56] [cursor=pointer]:
+          - img [ref=e57]
+          - generic [ref=e69]: Contractors
+        - button "Inventory" [ref=e70] [cursor=pointer]:
+          - img [ref=e71]
+          - generic [ref=e75]: Inventory
+        - button "Settings" [ref=e76] [cursor=pointer]:
+          - img [ref=e77]
+          - generic [ref=e80]: Settings
+      - button "Cesar Jurado (Admin) admin" [ref=e83] [cursor=pointer]:
+        - img [ref=e85]
+        - generic [ref=e88]:
+          - paragraph [ref=e89]: Cesar Jurado (Admin)
+          - paragraph [ref=e90]: admin
+        - img [ref=e91]
+  - main [ref=e93]:
+    - generic [ref=e1421]:
+      - generic [ref=e1422]:
+        - generic [ref=e1423]:
+          - button [ref=e1424] [cursor=pointer]:
+            - img [ref=e1425]
+          - generic [ref=e1427]:
+            - paragraph [ref=e1428]: US-15057
+            - heading "Augusto Fonte" [level=2] [ref=e1429]
+            - paragraph [ref=e1430]: residential Customer
+          - button "Edit" [ref=e1431] [cursor=pointer]:
+            - img [ref=e1432]
+            - text: Edit
+        - generic [ref=e1435]:
+          - button "Customer Story" [ref=e1436] [cursor=pointer]
+          - button "Work Orders (0)" [ref=e1437] [cursor=pointer]
+          - button "Files & Photos" [ref=e1438] [cursor=pointer]
+          - button "Activity" [active] [ref=e1439] [cursor=pointer]
+        - generic [ref=e1539]:
+          - heading "Activity Timeline" [level=3] [ref=e1540]:
+            - img [ref=e1541]
+            - text: Activity Timeline
+          - generic [ref=e1607]:
+            - generic [ref=e1608]:
+              - generic [ref=e1609]: Info Updated
+              - generic [ref=e1610]: Mar 13, 2026
+            - paragraph [ref=e1611]: "Updated: Phone: \"3059846881\" → \"305-555-9999\"; Status: \"In Progress\" → \"Standby\""
+      - generic [ref=e1485]:
+        - heading "Contact Information" [level=3] [ref=e1486]
+        - generic [ref=e1487]:
+          - generic [ref=e1488]:
+            - img [ref=e1490]
+            - generic [ref=e1493]:
+              - paragraph [ref=e1494]: Augusto Fonte
+              - paragraph [ref=e1495]: residential
+          - generic [ref=e1496]:
+            - generic [ref=e1497]:
+              - img [ref=e1498]
+              - generic [ref=e1500]: 305-555-9999
+              - link "Dial" [ref=e1501] [cursor=pointer]:
+                - /url: tel:305-555-9999
+            - link "gus@ajfproperties.com" [ref=e1502] [cursor=pointer]:
+              - /url: mailto:gus@ajfproperties.com
+              - img [ref=e1503]
+              - text: gus@ajfproperties.com
+            - generic [ref=e1506]:
+              - img [ref=e1507]
+              - generic [ref=e1510]:
+                - paragraph [ref=e1511]: Southwest 68th Street 7400, Glenvar Heights, FL, 33143
+                - paragraph [ref=e1512]: Glenvar Heights, FL 33143
+            - generic [ref=e1513]:
+              - generic [ref=e1514]: O&M
+              - generic [ref=e1515]: SolarEdge
+              - 'link "SolarEdge ID: 3822044" [ref=e1516] [cursor=pointer]':
+                - /url: https://monitoring.solaredge.com/one#/residential/dashboard?siteId=3822044
+              - generic [ref=e1517]: Standby
+          - link "View on Google Maps" [ref=e1518] [cursor=pointer]:
+            - /url: https://www.google.com/maps/search/?api=1&query=Southwest%2068th%20Street%207400%2C%20Glenvar%20Heights%2C%20FL%2C%2033143%2C%20Glenvar%20Heights%2C%20FL%2033143
+            - img [ref=e1519]
+            - generic [ref=e1522]: View on Google Maps
+        - generic [ref=e1523]:
+          - heading "Quick Stats" [level=4] [ref=e1524]
+          - generic [ref=e1525]:
+            - generic [ref=e1526]:
+              - generic [ref=e1527]: Total Work Orders
+              - generic [ref=e1528]: "0"
+            - generic [ref=e1529]:
+              - generic [ref=e1530]: Completed
+              - generic [ref=e1531]: "0"
+            - generic [ref=e1532]:
+              - generic [ref=e1533]: Pending
+              - generic [ref=e1534]: "0"
+        - generic [ref=e1535]:
+          - button "Create Work Order" [ref=e1536] [cursor=pointer]
+          - button "Send Message" [ref=e1537] [cursor=pointer]

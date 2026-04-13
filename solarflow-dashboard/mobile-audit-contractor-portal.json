@@ -1,0 +1,307 @@
+{
+  "test_goal": "Mobile responsiveness audit of SolarOps contractor portal at iPhone 14 size (390x844px)",
+  "url_tested": "http://localhost:5173",
+  "success": true,
+  "methodology": "Code-level static analysis of all contractor portal components (no Playwright browser tools available). Examined Tailwind classes, layout patterns, fixed widths, grid configurations, and tap target sizes across all screens.",
+
+  "screens": {
+
+    "1_login_page": {
+      "verdict": "PASS",
+      "file": "src/App.tsx (lines 314-441)",
+      "notes": [
+        "Container uses max-w-md (448px) which exceeds 390px viewport, but is constrained by w-full and p-4 padding — so effective width is 390-32=358px. PASS.",
+        "Logo uses fixed style={{ width: 300 }} — fits within 358px available space. PASS.",
+        "Staff/Contractor tab toggle uses flex-1 evenly split — PASS.",
+        "Form inputs use w-full with py-3 (48px height) — adequate tap target. PASS.",
+        "Submit button uses w-full py-3 — adequate tap target. PASS.",
+        "Face ID button uses w-full py-3 — adequate tap target. PASS."
+      ],
+      "issues": []
+    },
+
+    "2_contractor_dashboard_header": {
+      "verdict": "PASS (minor issue)",
+      "file": "src/components/contractor/ContractorDashboard.tsx (lines 424-518)",
+      "notes": [
+        "Header px-4 with flex layout. Name + weather + logout in a row.",
+        "Weather toggle has 4 buttons at p-1.5 (approx 28px each) inside bg-slate-800 rounded container. Tap target is borderline small.",
+        "Stats row (Today/Route/Done/Earned) uses flex gap-5 — fits on 390px. PASS.",
+        "XP bar, badges strip all use flex-wrap. PASS."
+      ],
+      "issues": [
+        {
+          "severity": "low",
+          "description": "Weather toggle buttons are ~28px tap targets (p-1.5 + icon w-4 h-4 = ~28px). Below the 44px minimum recommended by Apple HIG.",
+          "suggestion": "Increase padding to p-2.5 or add min-h-[44px] min-w-[44px] to weather buttons."
+        }
+      ]
+    },
+
+    "3_contractor_dashboard_view_toggle": {
+      "verdict": "PASS (minor issue)",
+      "file": "src/components/contractor/ContractorDashboard.tsx (lines 558-578)",
+      "notes": [
+        "4 view toggle buttons (Board, Map, List, Billing) in a flex row with gap-1.5 and px-3 py-1.5.",
+        "At 390px with px-4 container padding, 4 buttons + work order count text need ~350px+ horizontal space.",
+        "Button height py-1.5 = ~30px, below 44px recommendation."
+      ],
+      "issues": [
+        {
+          "severity": "medium",
+          "description": "View toggle buttons (Board/Map/List/Billing) have py-1.5 (~30px height). On a mobile-first contractor portal this is a primary navigation element. Below 44px minimum tap target.",
+          "suggestion": "Increase to py-2.5 or py-3 for touch-friendly targets. Consider using an icon-only mode on mobile to save space."
+        },
+        {
+          "severity": "low",
+          "description": "The 'X work orders' counter at ml-auto may get squeezed or hidden if all 4 tab labels are long.",
+          "suggestion": "Consider hiding the counter on mobile or moving it below the toggle row."
+        }
+      ]
+    },
+
+    "4_kanban_board_view": {
+      "verdict": "FAIL",
+      "file": "src/components/contractor/ContractorDashboard.tsx (lines 588-634)",
+      "notes": [
+        "Kanban uses: flex gap-3 p-4 h-full min-w-max md:min-w-0 md:grid md:grid-cols-4",
+        "Each column is w-64 (256px) md:w-auto flex-shrink-0",
+        "On mobile (<md): 4 columns x 256px = 1024px minimum width, forces horizontal scroll",
+        "overflow-x-auto on parent allows scrolling but creates a poor mobile experience"
+      ],
+      "issues": [
+        {
+          "severity": "high",
+          "description": "Kanban board forces horizontal scroll on mobile. 4 columns at 256px each = 1024px content width on a 390px screen. User must scroll sideways to see all columns. This is the PRIMARY view for contractors managing their jobs.",
+          "genius_analysis": "The min-w-max class explicitly prevents the flex container from shrinking. While overflow-x-auto prevents layout break, the horizontal scroll pattern is hostile on touch devices for a primary workflow view. Violates Nielsen's heuristic of 'Recognition rather than recall' — user cannot see all columns simultaneously.",
+          "suggestion": "On mobile, switch to a stacked vertical layout (one column visible at a time with swipe/tab navigation), or use a horizontal scrolling carousel with snap points and visible column indicators. Consider making 'list' view the default on mobile."
+        }
+      ]
+    },
+
+    "5_billing_kanban_view": {
+      "verdict": "FAIL",
+      "file": "src/components/contractor/ContractorDashboard.tsx (billing section)",
+      "notes": [
+        "Same layout as job kanban: flex gap-3 p-4 h-full min-w-max md:min-w-0 md:grid md:grid-cols-4",
+        "Identical horizontal scroll problem."
+      ],
+      "issues": [
+        {
+          "severity": "high",
+          "description": "Billing kanban has identical horizontal scroll issue as the job kanban. 4 columns at 256px each on 390px screen.",
+          "suggestion": "Same fix as kanban — vertical stack or tabbed columns on mobile."
+        }
+      ]
+    },
+
+    "6_list_view": {
+      "verdict": "PASS",
+      "file": "src/components/contractor/ContractorDashboard.tsx (lines 370-407)",
+      "notes": [
+        "ListCard uses flex with min-w-0 on text container and flex-shrink-0 on price.",
+        "Address text uses truncate. Good.",
+        "Card uses p-4 with rounded-xl border — adequate touch target. PASS."
+      ],
+      "issues": []
+    },
+
+    "7_map_view": {
+      "verdict": "PASS",
+      "file": "src/components/contractor/JobMapView.tsx",
+      "notes": [
+        "Map view uses flex-1 overflow-hidden — fills available space. PASS.",
+        "Google Maps integration should auto-resize to container. PASS."
+      ],
+      "issues": []
+    },
+
+    "8_job_detail": {
+      "verdict": "PASS (minor issues)",
+      "file": "src/components/contractor/JobDetail.tsx",
+      "notes": [
+        "Fixed bottom CTA bar: fixed bottom-0 left-0 right-0 px-4 py-3 pb-safe. Good safe area handling.",
+        "Photo grid uses grid-cols-3 gap-2 — at 390px with px-4 padding: (358-8)/3 = ~116px per cell. Acceptable.",
+        "Parts grid uses grid-cols-2. PASS.",
+        "Customer info grid-cols-2 gap-3. PASS.",
+        "Uses flex-1 min-w-0 pattern for text truncation. PASS."
+      ],
+      "issues": [
+        {
+          "severity": "low",
+          "description": "Photo category filter buttons use px-3 py-1.5 rounded-lg text-xs — approximately 30px height tap target. With 5-7 categories in a row they may wrap, which is handled, but individual tap targets are small.",
+          "suggestion": "Increase to py-2 minimum and ensure min-h-[44px] on these filter chips."
+        },
+        {
+          "severity": "low",
+          "description": "Service status grid (grid-cols-3 gap-2 at line 657) with small stat boxes may have tight text on 390px.",
+          "suggestion": "Consider grid-cols-2 on mobile for better readability."
+        }
+      ]
+    },
+
+    "9_contractor_register": {
+      "verdict": "PASS",
+      "file": "src/components/contractor/ContractorRegister.tsx",
+      "notes": [
+        "Multi-step form with w-full inputs, px-4 py-3 sizing.",
+        "All form inputs use w-full — fills container width. PASS.",
+        "Signature input uses w-full px-4 py-3. PASS.",
+        "Step indicator and progress bar present.",
+        "Safety guide scroll container present with overflow handling."
+      ],
+      "issues": []
+    },
+
+    "10_rate_management_admin": {
+      "verdict": "FAIL",
+      "file": "src/components/contractor/RateManagement.tsx",
+      "notes": [
+        "This is an admin-only screen (not contractor-facing), but included for completeness.",
+        "Uses a full HTML <table> with 11 columns.",
+        "Wrapped in overflow-x-auto — will scroll horizontally.",
+        "Summary stats use grid-cols-3 with no responsive breakpoints.",
+        "At 390px the 3-column stats grid gives each card ~110px width — text may overflow."
+      ],
+      "issues": [
+        {
+          "severity": "high",
+          "description": "Rate management table has 11 columns in a standard HTML table. On 390px viewport this creates massive horizontal scroll (~800px+ content width). Column headers alone (Code, Service Name, Unit, Est Hrs, Labor $, Parts $, Client $, Powercare, Status, Actions) won't fit.",
+          "suggestion": "On mobile, replace the table with expandable card/accordion pattern. Show service name + key rate on the card face, expand to show all fields on tap. Alternatively, use a responsive table that hides less-critical columns on mobile."
+        },
+        {
+          "severity": "medium",
+          "description": "Summary stats grid-cols-3 has no mobile breakpoint. At 390px each card is ~110px wide. The 'Avg Client Rate' label and the currency value may not fit cleanly.",
+          "suggestion": "Use grid-cols-1 sm:grid-cols-3 to stack on mobile."
+        }
+      ]
+    },
+
+    "11_contractor_approvals_admin": {
+      "verdict": "PASS (minor issues)",
+      "file": "src/components/contractor/ContractorApprovals.tsx",
+      "notes": [
+        "Admin-only screen for reviewing contractor applications.",
+        "Uses grid-cols-3 for status filter tabs (line 147).",
+        "Detail view uses grid-cols-2 for info layout (lines 327, 637, 656).",
+        "Grid2 component at line 755: grid grid-cols-2 gap-x-6 gap-y-3 — the gap-x-6 (24px) is generous for 390px."
+      ],
+      "issues": [
+        {
+          "severity": "medium",
+          "description": "Grid2 helper (grid-cols-2 gap-x-6) gives each column ~(358-24)/2 = ~167px. With label + value pairs this can be tight for longer values like email addresses or business names.",
+          "suggestion": "Use grid-cols-1 on mobile (below sm:) for Grid2, or reduce gap-x to gap-x-3."
+        },
+        {
+          "severity": "low",
+          "description": "Performance stats grid-cols-3 gap-3 (line 492, 592) — each cell ~110px on mobile. Numbers should fit but labels may truncate.",
+          "suggestion": "Add truncate class to stat labels or use grid-cols-2 on mobile."
+        }
+      ]
+    },
+
+    "12_terms_and_conditions_overlay": {
+      "verdict": "PASS",
+      "file": "src/components/contractor/ConexSolTerms.tsx",
+      "notes": [
+        "Overlay uses fixed inset-0 with p-4 and max-w-2xl — constrained by w-full on mobile.",
+        "Scrollable content area. PASS."
+      ],
+      "issues": []
+    }
+  },
+
+  "usability_issues": [
+    {
+      "severity": "high",
+      "screen": "Kanban Board View (default view)",
+      "description": "The primary job management view (kanban) forces horizontal scrolling on mobile. Four 256px-wide columns create a 1024px+ content area on a 390px screen. Contractors in the field using phones cannot see their full job pipeline at a glance.",
+      "genius_analysis": "Violates Nielsen heuristic #6 (Recognition rather than recall) and #7 (Flexibility and efficiency of use). The min-w-max class explicitly prevents shrinking. While overflow-x-auto prevents layout breakage, it creates a fundamentally desktop-oriented experience on a mobile-first tool.",
+      "suggestion": "Detect mobile viewport and default to 'list' view. For kanban on mobile, use a tabbed/swipeable single-column layout with column pills at the top."
+    },
+    {
+      "severity": "high",
+      "screen": "Billing Kanban View",
+      "description": "Identical horizontal scroll issue as job kanban.",
+      "suggestion": "Same fix — tabbed columns or default to list on mobile."
+    },
+    {
+      "severity": "high",
+      "screen": "Rate Management (admin)",
+      "description": "11-column HTML table is unusable on mobile. Requires extensive horizontal scrolling to view or edit rates.",
+      "suggestion": "Replace with card/accordion layout on mobile viewports."
+    },
+    {
+      "severity": "medium",
+      "screen": "Dashboard View Toggle",
+      "description": "Primary navigation tabs (Board/Map/List/Billing) have ~30px height tap targets, below the 44px Apple HIG minimum.",
+      "suggestion": "Increase padding to py-2.5 or py-3."
+    },
+    {
+      "severity": "medium",
+      "screen": "Rate Management Stats",
+      "description": "grid-cols-3 summary stats with no mobile breakpoint. Cards may have text overflow at 110px width.",
+      "suggestion": "Add responsive breakpoint: grid-cols-1 sm:grid-cols-3."
+    },
+    {
+      "severity": "medium",
+      "screen": "Contractor Approvals Detail",
+      "description": "Grid2 layout (grid-cols-2 gap-x-6) is tight on 390px for long text values.",
+      "suggestion": "Stack to grid-cols-1 on mobile."
+    },
+    {
+      "severity": "low",
+      "screen": "Dashboard Header",
+      "description": "Weather toggle buttons are ~28px tap targets.",
+      "suggestion": "Increase to min-h-[44px] min-w-[44px]."
+    },
+    {
+      "severity": "low",
+      "screen": "Job Detail",
+      "description": "Photo category filter chips and service stats grid are slightly tight on mobile.",
+      "suggestion": "Increase chip padding; consider grid-cols-2 for stat grid."
+    }
+  ],
+
+  "accessibility_observations": [
+    {
+      "element": "Weather toggle buttons (ContractorDashboard header)",
+      "issue": "Buttons use only icons with title attribute — no visible label or aria-label for screen readers.",
+      "wcag_criterion": "1.1.1 Non-text Content, 4.1.2 Name, Role, Value"
+    },
+    {
+      "element": "View mode toggle buttons (Board/Map/List/Billing)",
+      "issue": "No aria-pressed or aria-selected attribute to indicate current active view to assistive technology.",
+      "wcag_criterion": "4.1.2 Name, Role, Value"
+    },
+    {
+      "element": "Kanban drag-and-drop",
+      "issue": "Drag-and-drop is the primary interaction for moving jobs between columns. No keyboard alternative provided. Quick-move buttons exist on cards which partially mitigates this.",
+      "wcag_criterion": "2.1.1 Keyboard"
+    },
+    {
+      "element": "Priority badge text",
+      "issue": "Text at text-[10px] (10px) is below WCAG minimum recommended size. Used for priority labels and tracking text.",
+      "wcag_criterion": "1.4.4 Resize Text"
+    }
+  ],
+
+  "blockers_encountered": [
+    {
+      "type": "other",
+      "description": "No Playwright/browser automation tools available in this environment. Audit conducted via static code analysis rather than live interaction testing.",
+      "impact": "Cannot verify runtime rendering, actual pixel measurements, or dynamic state changes. All findings are based on Tailwind class analysis and layout logic review."
+    }
+  ],
+
+  "final_assessment": {
+    "intuitive": true,
+    "friction_score": 5,
+    "summary": "The contractor portal is well-designed for mobile in most areas — the login page, list view, job detail, and registration form all handle 390px gracefully with proper w-full inputs, flex layouts, and safe area padding. However, the TWO most-used views (kanban board and billing kanban) have a critical mobile usability problem: they force 1024px of horizontal scrolling on a 390px screen. Since kanban is the default view, every contractor opening the app on their phone hits this friction immediately. The list view works perfectly on mobile but is not the default. The rate management table (admin-only) is also unusable on mobile with 11 columns. Quick wins: (1) default to list view on mobile, (2) add responsive breakpoints to stat grids, (3) increase tap target sizes on navigation tabs.",
+    "top_priorities": [
+      "1. Make 'list' the default view on mobile, or rebuild kanban as a single-column tabbed layout for <768px screens",
+      "2. Increase tap target sizes on view toggle tabs and weather buttons to meet 44px minimum",
+      "3. Add mobile-responsive breakpoints to grid-cols-3 stat layouts (grid-cols-1 sm:grid-cols-3)"
+    ]
+  }
+}

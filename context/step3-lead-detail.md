@@ -1,0 +1,371 @@
+- generic [ref=e25]:
+  - banner [ref=e26]:
+    - generic [ref=e27]:
+      - button [ref=e28] [cursor=pointer]:
+        - img [ref=e29]
+      - img "Conexsol" [ref=e31]
+    - generic [ref=e33]: Cesar Jurado (Admin)
+  - complementary [ref=e34]:
+    - generic [ref=e35]:
+      - img "Conexsol" [ref=e39]
+      - navigation [ref=e40]:
+        - button "DISPATCH" [ref=e41] [cursor=pointer]:
+          - img [ref=e42]
+          - generic [ref=e44]: DISPATCH
+        - button "Dashboard" [ref=e45] [cursor=pointer]:
+          - img [ref=e46]
+          - generic [ref=e51]: Dashboard
+        - button "Work Orders" [ref=e52] [cursor=pointer]:
+          - img [ref=e53]
+          - generic [ref=e55]: Work Orders
+        - button "Customers" [ref=e57] [cursor=pointer]:
+          - img [ref=e58]
+          - generic [ref=e63]: Customers
+          - img [ref=e64]
+        - button "Billing" [ref=e66] [cursor=pointer]:
+          - img [ref=e67]
+          - generic [ref=e70]: Billing
+        - button "Contractor Pay" [ref=e71] [cursor=pointer]:
+          - img [ref=e72]
+          - generic [ref=e74]: Contractor Pay
+        - button "Manage WORK ORDERS" [ref=e75] [cursor=pointer]:
+          - img [ref=e76]
+          - generic [ref=e78]: Manage WORK ORDERS
+        - button "Contractors" [ref=e79] [cursor=pointer]:
+          - img [ref=e80]
+          - generic [ref=e92]: Contractors
+        - button "Inventory" [ref=e93] [cursor=pointer]:
+          - img [ref=e94]
+          - generic [ref=e98]: Inventory
+        - button "Service Rates" [ref=e99] [cursor=pointer]:
+          - img [ref=e100]
+          - generic [ref=e102]: Service Rates
+        - button "Settings" [ref=e103] [cursor=pointer]:
+          - img [ref=e104]
+          - generic [ref=e107]: Settings
+        - button "Lead Lobby" [ref=e108] [cursor=pointer]:
+          - img [ref=e109]
+          - generic [ref=e112]: Lead Lobby
+      - button "Cesar Jurado (Admin) admin" [ref=e115] [cursor=pointer]:
+        - img [ref=e117]
+        - generic [ref=e120]:
+          - paragraph [ref=e121]: Cesar Jurado (Admin)
+          - paragraph [ref=e122]: admin
+        - img [ref=e123]
+  - main [ref=e125]:
+    - generic [ref=e224]:
+      - generic [ref=e226]:
+        - generic [ref=e227]:
+          - img [ref=e229]
+          - generic [ref=e232]:
+            - heading "Lead Lobby" [level=1] [ref=e233]
+            - paragraph [ref=e234]: Triage and route incoming leads
+        - generic [ref=e235]:
+          - generic [ref=e236]: "Total: 25"
+          - generic [ref=e237]: "New: 25"
+          - generic [ref=e238]: "Service: 0"
+          - generic [ref=e239]: "Sales: 25"
+          - button "New Lead" [ref=e240] [cursor=pointer]:
+            - img [ref=e241]
+            - text: New Lead
+      - generic [ref=e242]:
+        - generic [ref=e243]:
+          - generic [ref=e244]:
+            - generic [ref=e245]:
+              - button "All" [ref=e246] [cursor=pointer]
+              - button "Service" [ref=e247] [cursor=pointer]
+              - button "Sales" [ref=e248] [cursor=pointer]
+            - combobox [ref=e249]:
+              - option "All Statuses" [selected]
+              - option "New"
+              - option "Attempting"
+              - option "Connected"
+              - option "Appointment"
+              - option "Qualified"
+              - option "Proposal"
+              - option "Won"
+              - option "Lost"
+              - option "Not Interested"
+            - generic [ref=e250]:
+              - img [ref=e251]
+              - textbox "Search name, phone, email..." [ref=e254]
+          - generic [ref=e255]:
+            - button "Antonio Hernandez Sales 118 (523) 952-9651 Advertising $172/mo" [active] [ref=e256] [cursor=pointer]:
+              - generic [ref=e257]:
+                - generic [ref=e259]: Antonio Hernandez
+                - generic [ref=e260]: Sales
+                - generic [ref=e261]: "118"
+              - paragraph [ref=e262]: (523) 952-9651
+              - generic [ref=e263]:
+                - generic [ref=e264]: Advertising
+                - generic [ref=e265]: $172/mo
+            - button "Daniel Williams Sales 94 (237) 871-5548 Cold Call $152/mo" [ref=e266] [cursor=pointer]:
+              - generic [ref=e267]:
+                - generic [ref=e269]: Daniel Williams
+                - generic [ref=e270]: Sales
+                - generic [ref=e271]: "94"
+              - paragraph [ref=e272]: (237) 871-5548
+              - generic [ref=e273]:
+                - generic [ref=e274]: Cold Call
+                - generic [ref=e275]: $152/mo
+            - button "Patricia Rodriguez Sales 91 (181) 627-2087 Referral $345/mo" [ref=e276] [cursor=pointer]:
+              - generic [ref=e277]:
+                - generic [ref=e279]: Patricia Rodriguez
+                - generic [ref=e280]: Sales
+                - generic [ref=e281]: "91"
+              - paragraph [ref=e282]: (181) 627-2087
+              - generic [ref=e283]:
+                - generic [ref=e284]: Referral
+                - generic [ref=e285]: $345/mo
+            - button "John Lopez Sales 90 (918) 331-4031 Referral $137/mo" [ref=e286] [cursor=pointer]:
+              - generic [ref=e287]:
+                - generic [ref=e289]: John Lopez
+                - generic [ref=e290]: Sales
+                - generic [ref=e291]: "90"
+              - paragraph [ref=e292]: (918) 331-4031
+              - generic [ref=e293]:
+                - generic [ref=e294]: Referral
+                - generic [ref=e295]: $137/mo
+            - button "Linda Garcia Sales 85 (449) 487-1759 Partner $468/mo" [ref=e296] [cursor=pointer]:
+              - generic [ref=e297]:
+                - generic [ref=e299]: Linda Garcia
+                - generic [ref=e300]: Sales
+                - generic [ref=e301]: "85"
+              - paragraph [ref=e302]: (449) 487-1759
+              - generic [ref=e303]:
+                - generic [ref=e304]: Partner
+                - generic [ref=e305]: $468/mo
+            - button "Betty Lopez Sales 85 (251) 141-4200 Advertising $128/mo" [ref=e306] [cursor=pointer]:
+              - generic [ref=e307]:
+                - generic [ref=e309]: Betty Lopez
+                - generic [ref=e310]: Sales
+                - generic [ref=e311]: "85"
+              - paragraph [ref=e312]: (251) 141-4200
+              - generic [ref=e313]:
+                - generic [ref=e314]: Advertising
+                - generic [ref=e315]: $128/mo
+            - button "Maria Martin Sales 82 (503) 847-3070 Google Forms $427/mo" [ref=e316] [cursor=pointer]:
+              - generic [ref=e317]:
+                - generic [ref=e319]: Maria Martin
+                - generic [ref=e320]: Sales
+                - generic [ref=e321]: "82"
+              - paragraph [ref=e322]: (503) 847-3070
+              - generic [ref=e323]:
+                - generic [ref=e324]: Google Forms
+                - generic [ref=e325]: $427/mo
+            - button "Michael Moore Sales 77 (864) 428-1776 Website $89/mo" [ref=e326] [cursor=pointer]:
+              - generic [ref=e327]:
+                - generic [ref=e329]: Michael Moore
+                - generic [ref=e330]: Sales
+                - generic [ref=e331]: "77"
+              - paragraph [ref=e332]: (864) 428-1776
+              - generic [ref=e333]:
+                - generic [ref=e334]: Website
+                - generic [ref=e335]: $89/mo
+            - button "Carlos Wilson Sales 73 (586) 429-5417 Partner $415/mo" [ref=e336] [cursor=pointer]:
+              - generic [ref=e337]:
+                - generic [ref=e339]: Carlos Wilson
+                - generic [ref=e340]: Sales
+                - generic [ref=e341]: "73"
+              - paragraph [ref=e342]: (586) 429-5417
+              - generic [ref=e343]:
+                - generic [ref=e344]: Partner
+                - generic [ref=e345]: $415/mo
+            - button "Robert Taylor Sales 68 (269) 926-8470 Google Forms $353/mo" [ref=e346] [cursor=pointer]:
+              - generic [ref=e347]:
+                - generic [ref=e349]: Robert Taylor
+                - generic [ref=e350]: Sales
+                - generic [ref=e351]: "68"
+              - paragraph [ref=e352]: (269) 926-8470
+              - generic [ref=e353]:
+                - generic [ref=e354]: Google Forms
+                - generic [ref=e355]: $353/mo
+            - button "Maria Jones Sales 66 (284) 583-1666 Social Media $81/mo" [ref=e356] [cursor=pointer]:
+              - generic [ref=e357]:
+                - generic [ref=e359]: Maria Jones
+                - generic [ref=e360]: Sales
+                - generic [ref=e361]: "66"
+              - paragraph [ref=e362]: (284) 583-1666
+              - generic [ref=e363]:
+                - generic [ref=e364]: Social Media
+                - generic [ref=e365]: $81/mo
+            - button "David Johnson Sales 63 (536) 939-4662 Cold Call $152/mo" [ref=e366] [cursor=pointer]:
+              - generic [ref=e367]:
+                - generic [ref=e369]: David Johnson
+                - generic [ref=e370]: Sales
+                - generic [ref=e371]: "63"
+              - paragraph [ref=e372]: (536) 939-4662
+              - generic [ref=e373]:
+                - generic [ref=e374]: Cold Call
+                - generic [ref=e375]: $152/mo
+            - button "David Johnson Sales 59 (783) 380-1576 Cold Call $336/mo" [ref=e376] [cursor=pointer]:
+              - generic [ref=e377]:
+                - generic [ref=e379]: David Johnson
+                - generic [ref=e380]: Sales
+                - generic [ref=e381]: "59"
+              - paragraph [ref=e382]: (783) 380-1576
+              - generic [ref=e383]:
+                - generic [ref=e384]: Cold Call
+                - generic [ref=e385]: $336/mo
+            - button "Carlos Johnson Sales 54 (409) 395-8455 Website $170/mo" [ref=e386] [cursor=pointer]:
+              - generic [ref=e387]:
+                - generic [ref=e389]: Carlos Johnson
+                - generic [ref=e390]: Sales
+                - generic [ref=e391]: "54"
+              - paragraph [ref=e392]: (409) 395-8455
+              - generic [ref=e393]:
+                - generic [ref=e394]: Website
+                - generic [ref=e395]: $170/mo
+            - button "Maria Gonzalez Sales 53 (923) 943-1151 Website $233/mo" [ref=e396] [cursor=pointer]:
+              - generic [ref=e397]:
+                - generic [ref=e399]: Maria Gonzalez
+                - generic [ref=e400]: Sales
+                - generic [ref=e401]: "53"
+              - paragraph [ref=e402]: (923) 943-1151
+              - generic [ref=e403]:
+                - generic [ref=e404]: Website
+                - generic [ref=e405]: $233/mo
+            - button "Francisco Wilson Sales 37 (617) 239-6690 Website $247/mo" [ref=e406] [cursor=pointer]:
+              - generic [ref=e407]:
+                - generic [ref=e409]: Francisco Wilson
+                - generic [ref=e410]: Sales
+                - generic [ref=e411]: "37"
+              - paragraph [ref=e412]: (617) 239-6690
+              - generic [ref=e413]:
+                - generic [ref=e414]: Website
+                - generic [ref=e415]: $247/mo
+            - button "Maria Thomas Sales 31 (729) 819-2983 Partner $254/mo" [ref=e416] [cursor=pointer]:
+              - generic [ref=e417]:
+                - generic [ref=e419]: Maria Thomas
+                - generic [ref=e420]: Sales
+                - generic [ref=e421]: "31"
+              - paragraph [ref=e422]: (729) 819-2983
+              - generic [ref=e423]:
+                - generic [ref=e424]: Partner
+                - generic [ref=e425]: $254/mo
+            - button "James Rodriguez Sales 29 (813) 132-1277 Social Media $333/mo" [ref=e426] [cursor=pointer]:
+              - generic [ref=e427]:
+                - generic [ref=e429]: James Rodriguez
+                - generic [ref=e430]: Sales
+                - generic [ref=e431]: "29"
+              - paragraph [ref=e432]: (813) 132-1277
+              - generic [ref=e433]:
+                - generic [ref=e434]: Social Media
+                - generic [ref=e435]: $333/mo
+            - button "Betty Rodriguez Sales 27 (894) 556-6129 Website $380/mo" [ref=e436] [cursor=pointer]:
+              - generic [ref=e437]:
+                - generic [ref=e439]: Betty Rodriguez
+                - generic [ref=e440]: Sales
+                - generic [ref=e441]: "27"
+              - paragraph [ref=e442]: (894) 556-6129
+              - generic [ref=e443]:
+                - generic [ref=e444]: Website
+                - generic [ref=e445]: $380/mo
+            - button "Antonio Jackson Sales 23 (720) 879-5519 Cold Call $231/mo" [ref=e446] [cursor=pointer]:
+              - generic [ref=e447]:
+                - generic [ref=e449]: Antonio Jackson
+                - generic [ref=e450]: Sales
+                - generic [ref=e451]: "23"
+              - paragraph [ref=e452]: (720) 879-5519
+              - generic [ref=e453]:
+                - generic [ref=e454]: Cold Call
+                - generic [ref=e455]: $231/mo
+            - button "Patricia Brown Sales 22 (699) 642-3815 Partner $442/mo" [ref=e456] [cursor=pointer]:
+              - generic [ref=e457]:
+                - generic [ref=e459]: Patricia Brown
+                - generic [ref=e460]: Sales
+                - generic [ref=e461]: "22"
+              - paragraph [ref=e462]: (699) 642-3815
+              - generic [ref=e463]:
+                - generic [ref=e464]: Partner
+                - generic [ref=e465]: $442/mo
+            - button "Carlos Rodriguez Sales 19 (598) 315-8880 Referral $402/mo" [ref=e466] [cursor=pointer]:
+              - generic [ref=e467]:
+                - generic [ref=e469]: Carlos Rodriguez
+                - generic [ref=e470]: Sales
+                - generic [ref=e471]: "19"
+              - paragraph [ref=e472]: (598) 315-8880
+              - generic [ref=e473]:
+                - generic [ref=e474]: Referral
+                - generic [ref=e475]: $402/mo
+            - button "Jennifer Wilson Sales 14 (700) 135-1290 Cold Call $398/mo" [ref=e476] [cursor=pointer]:
+              - generic [ref=e477]:
+                - generic [ref=e479]: Jennifer Wilson
+                - generic [ref=e480]: Sales
+                - generic [ref=e481]: "14"
+              - paragraph [ref=e482]: (700) 135-1290
+              - generic [ref=e483]:
+                - generic [ref=e484]: Cold Call
+                - generic [ref=e485]: $398/mo
+            - button "Jennifer Wilson Sales 13 (956) 954-3704 Cold Call $128/mo" [ref=e486] [cursor=pointer]:
+              - generic [ref=e487]:
+                - generic [ref=e489]: Jennifer Wilson
+                - generic [ref=e490]: Sales
+                - generic [ref=e491]: "13"
+              - paragraph [ref=e492]: (956) 954-3704
+              - generic [ref=e493]:
+                - generic [ref=e494]: Cold Call
+                - generic [ref=e495]: $128/mo
+            - button "Daniel Jackson Sales 11 (314) 912-5189 Advertising $435/mo" [ref=e496] [cursor=pointer]:
+              - generic [ref=e497]:
+                - generic [ref=e499]: Daniel Jackson
+                - generic [ref=e500]: Sales
+                - generic [ref=e501]: "11"
+              - paragraph [ref=e502]: (314) 912-5189
+              - generic [ref=e503]:
+                - generic [ref=e504]: Advertising
+                - generic [ref=e505]: $435/mo
+        - generic [ref=e507]:
+          - generic [ref=e512]:
+            - img [ref=e514]
+            - generic [ref=e517]:
+              - generic [ref=e518]:
+                - heading "Antonio Hernandez" [level=2] [ref=e519]
+                - generic [ref=e520]: Sales
+                - generic [ref=e521]: high
+                - generic [ref=e522]:
+                  - img [ref=e523]
+                  - text: "118"
+              - paragraph [ref=e525]: New · Advertising
+          - generic [ref=e526]:
+            - button "Call" [ref=e527] [cursor=pointer]:
+              - img [ref=e528]
+              - text: Call
+            - button "Email" [ref=e530] [cursor=pointer]:
+              - img [ref=e531]
+              - text: Email
+          - generic [ref=e534]:
+            - generic [ref=e535]:
+              - paragraph [ref=e536]: Phone
+              - paragraph [ref=e537]: (523) 952-9651
+            - generic [ref=e538]:
+              - paragraph [ref=e539]: Email
+              - paragraph [ref=e540]: antonio.hernandez@email.com
+            - generic [ref=e541]:
+              - paragraph [ref=e542]: Address
+              - paragraph [ref=e543]: 8077 Sunset Blvd, Jacksonville
+            - generic [ref=e544]:
+              - paragraph [ref=e545]: Monthly Bill
+              - paragraph [ref=e546]: $172/mo
+            - generic [ref=e547]:
+              - paragraph [ref=e548]: Roof Type
+              - paragraph [ref=e549]: sloped
+            - generic [ref=e550]:
+              - paragraph [ref=e551]: Homeowner
+              - paragraph [ref=e552]: "Yes"
+          - generic [ref=e553]:
+            - paragraph [ref=e554]: Notes
+            - textbox "Add a note..." [ref=e555]
+            - button "Save Note" [disabled] [ref=e556]
+          - generic [ref=e557]:
+            - generic [ref=e558]:
+              - img [ref=e559]
+              - paragraph [ref=e562]: Route Lead
+            - generic [ref=e563]:
+              - button "Route to Service" [ref=e564] [cursor=pointer]:
+                - img [ref=e565]
+                - text: Route to Service
+              - combobox [ref=e567] [cursor=pointer]:
+                - option "Route to Sales Rep..." [selected]
+                - option "Edgar Diaz"
+                - option "Andreina Lecue"
