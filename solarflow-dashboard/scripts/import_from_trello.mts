@@ -10,8 +10,8 @@ import { fileURLToPath } from 'url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
 
-const KEY   = 'REDACTED_KEY';
-const TOKEN = 'REDACTED_TOKEN';
+const KEY   = process.env.TRELLO_KEY   ?? '';
+const TOKEN = process.env.TRELLO_TOKEN ?? '';
 const LIST_ID = '662f9781997caa90e43c6f00'; // SOLAREDGE LEADS (Servicios)
 
 const BASE = 'https://api.trello.com/1';

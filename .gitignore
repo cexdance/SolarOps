@@ -24,7 +24,6 @@ build/
 backups/
 "BAckuos SolarOps/"
 extracted_package/
-scripts/
 
 # Misc images / logs
 *.png
