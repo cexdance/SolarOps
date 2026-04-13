@@ -1,0 +1,33 @@
+# macOS
+.DS_Store
+
+# Env files with secrets
+.env
+.env.*
+!.env.example
+
+# Node
+node_modules/
+dist/
+build/
+
+# Netlify
+.netlify/
+
+# Claude / editor
+.claude/
+.obsidian/
+.minimax/
+.playwright-mcp/
+
+# Backups / scratch
+backups/
+"BAckuos SolarOps/"
+extracted_package/
+scripts/
+
+# Misc images / logs
+*.png
+*.jpg
+*.log
+*.zip
