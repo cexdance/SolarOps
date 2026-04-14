@@ -116,6 +116,7 @@ interface KanbanColumnProps {
   draggedJobId: string | null;
   customers: Customer[];
   users: UserType[];
+  contractors: import('../types/contractor').Contractor[];
   onUpdateJob: (job: Job) => void;
   onDragStart: (e: React.DragEvent, jobId: string) => void;
   onDragEnd: () => void;
@@ -133,7 +134,7 @@ const colColors: Record<JobStatus, string> = {
 
 const KanbanColumn: React.FC<KanbanColumnProps> = ({
   status, title, columnJobs, allJobs, draggedJobId,
-  customers, users, onUpdateJob, onDragStart, onDragEnd, onCardClick,
+  customers, users, contractors, onUpdateJob, onDragStart, onDragEnd, onCardClick,
 }) => {
   const [isOver, setIsOver] = useState(false);
 
@@ -320,6 +321,7 @@ export const Jobs: React.FC<JobsProps> = ({
               draggedJobId={draggedJobId}
               customers={customers}
               users={users}
+              contractors={contractors}
               onUpdateJob={onUpdateJob}
               onDragStart={handleDragStart}
               onDragEnd={() => setDraggedJobId(null)}
