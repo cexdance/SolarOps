@@ -579,6 +579,7 @@ const DailyProductionGraphWidget: React.FC<{ customerId: string; customers: Cust
               itemStyle={{ color: '#34d399' }}
               formatter={(v: number | null) => v !== null ? [`${v} kW`, 'Power'] : ['—', 'Power']}
             />
+            {/* @ts-expect-error recharts v2 type compat */}
             <Area type="monotone" dataKey="kw" stroke="#10b981" strokeWidth={2} fill={`url(#grad-${site.siteId})`} dot={false} connectNulls={false} />
           </AreaChart>
         </ResponsiveContainer>

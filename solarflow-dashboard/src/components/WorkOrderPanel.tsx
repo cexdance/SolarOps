@@ -469,7 +469,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
       estimatedDuration: 120,
       assignedAt: new Date().toISOString(),
       notes,
-      photos: { before: [], serial: [], parts: [], process: [], after: [] },
+      photos: { before: [], serial: [], parts: [], process: [], after: [], progress: [], ppe: [], voltage: [], old_serial: [], string_voltage: [], cabinet_old: [], cabinet_new: [], new_serial: [], inv_overview: [] },
       parts: lineItems.filter(i => i.type === 'part').map(i => ({
         id: i.id,
         name: i.description,

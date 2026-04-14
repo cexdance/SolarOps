@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   Plus, Search, Calendar, MapPin, User, Clock, X, Wrench, Zap,
 } from 'lucide-react';
-import { Job, Customer, User as UserType, JobStatus, UrgencyLevel } from '../types';
+import { Job, Customer, User as UserType, JobStatus, UrgencyLevel, ServiceType } from '../types';
 import { WorkOrderPanel } from './WorkOrderPanel';
 
 // ─── Standalone sub-components (defined outside Jobs to prevent remount on parent re-render) ───

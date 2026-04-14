@@ -162,6 +162,7 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
   const [phase, setPhase] = useState<CallPhase>(
     isCompleted ? 'completed' : (job.status === 'in_progress' || job.status === 'documentation') ? 'active' : 'pre_start'
   );
+  const [showBeforeModal, setShowBeforeModal] = useState(false);
   const [showAfterModal, setShowAfterModal] = useState(false);
 
   // Photos
