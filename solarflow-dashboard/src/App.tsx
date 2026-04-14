@@ -1675,6 +1675,7 @@ function App() {
             currentUser={currentUser}
             onViewChange={handleViewChange}
             onViewCustomer={(customerId) => { setSelectedCustomerId(customerId); setCurrentView('customers'); }}
+            onJobClick={(jobId) => handleViewChange('jobDetail', jobId)}
             isMobile={isMobile}
             notifications={data.notifications}
             onMarkNotificationRead={(notifId) => {
@@ -1688,19 +1689,6 @@ function App() {
         );
 
       case 'jobs':
-        if (selectedJob && selectedCustomer && selectedTechnician) {
-          return (
-            <JobDetail
-              job={selectedJob}
-              customer={selectedCustomer}
-              technician={selectedTechnician}
-              onBack={() => setSelectedJobId(null)}
-              onUpdateJob={handleUpdateJob}
-              onCreateInvoice={handleCreateInvoice}
-              isMobile={isMobile}
-            />
-          );
-        }
         return (
           <Jobs
             jobs={data.jobs}

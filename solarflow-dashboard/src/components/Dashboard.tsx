@@ -137,6 +137,7 @@ interface DashboardProps {
   currentUser?: User | null;
   onViewChange: (view: string) => void;
   onViewCustomer?: (customerId: string) => void;
+  onJobClick?: (jobId: string) => void;
   isMobile: boolean;
   notifications?: AppNotification[];
   onMarkNotificationRead?: (notificationId: string) => void;
@@ -146,7 +147,7 @@ interface DashboardProps {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export const Dashboard: React.FC<DashboardProps> = ({
-  jobs, customers, users, currentUser, onViewChange, onViewCustomer, isMobile,
+  jobs, customers, users, currentUser, onViewChange, onViewCustomer, onJobClick, isMobile,
   notifications = [], onMarkNotificationRead, isConnected = true,
 }) => {
   const uid = currentUser?.id ?? 'default';
@@ -417,7 +418,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 <div
                   key={job.id}
                   className="px-4 py-3 hover:bg-slate-50 transition-colors cursor-pointer group"
-                  onClick={() => customer && handleViewCustomer(customer.id)}
+                  onClick={() => onJobClick ? onJobClick(job.id) : customer && handleViewCustomer(customer.id)}
                 >
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex-1 min-w-0">
@@ -645,7 +646,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
             {notifications.slice(0, 5).map(notification => (
               <div
                 key={notification.id}
-                onClick={() => onMarkNotificationRead?.(notification.id)}
+                onClick={() => {
+                  onMarkNotificationRead?.(notification.id);
+                  if (notification.relatedJobId && onJobClick) onJobClick(notification.relatedJobId);
+                }}
                 className={`px-4 py-3 cursor-pointer transition-colors group ${
                   notification.read ? 'hover:bg-slate-50' : 'bg-orange-50 hover:bg-orange-100'
                 }`}
