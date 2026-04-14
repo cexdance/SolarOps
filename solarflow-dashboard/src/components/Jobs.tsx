@@ -47,13 +47,21 @@ interface JobCardProps {
   onClick: (jobId: string) => void;
 }
 
-const JobCard: React.FC<JobCardProps> = ({ job, customer, technician, contractorName, isDragging, onDragStart, onDragEnd, onClick }) => (
+const JobCard: React.FC<JobCardProps> = ({ job, customer, technician, contractorName, isDragging, onDragStart, onDragEnd, onClick }) => {
+  const handleCardClick = (e: React.MouseEvent) => {
+    // Only trigger click if not dragging and no drag is in progress
+    if (!isDragging) {
+      onClick(job.id);
+    }
+  };
+
+  return (
   <div
     draggable
     onDragStart={e => onDragStart(e, job.id)}
     onDragEnd={onDragEnd}
-    onClick={() => onClick(job.id)}
-    className={`bg-white rounded-xl border border-slate-200 p-4 hover:shadow-md transition-all cursor-grab active:cursor-grabbing select-none ${isDragging ? 'opacity-40 scale-95' : ''}`}
+    onClick={handleCardClick}
+    className={`bg-white rounded-xl border border-slate-200 p-4 hover:shadow-md transition-all ${isDragging ? 'cursor-grabbing opacity-40 scale-95' : 'cursor-pointer hover:border-orange-300'} select-none`}
   >
     <div className="flex items-start justify-between mb-3">
       <div className="flex-1 min-w-0">
@@ -97,7 +105,8 @@ const JobCard: React.FC<JobCardProps> = ({ job, customer, technician, contractor
       <span className="font-semibold text-slate-900">${job.totalAmount.toFixed(0)}</span>
     </div>
   </div>
-);
+  );
+};
 
 interface KanbanColumnProps {
   status: JobStatus;

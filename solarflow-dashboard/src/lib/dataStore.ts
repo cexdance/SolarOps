@@ -12,7 +12,17 @@ const VERSION_KEY = 'solarflow_data_version';
 
 const generateDemoData = (): AppState => {
   // Users are fetched from Supabase after login — not hardcoded here
-  const demoUsers: User[] = [];
+  const demoUsers: User[] = [
+    {
+      id: 'user-mia-lopez',
+      name: 'Mia Lopez',
+      email: 'mia.lopez@conexsol.us',
+      phone: '',
+      role: 'sales',
+      active: true,
+      username: 'mialopez',
+    },
+  ];
 
   // Build customers from merged dataset (fl_sites.csv + Google Sheet + importedClients)
   const demoCustomers: Customer[] = mergedCustomerData.map((c, index) => ({
