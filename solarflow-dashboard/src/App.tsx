@@ -1363,7 +1363,7 @@ function App() {
       for (const item of accepted) {
         if (item.type === 'new' && item.site) {
           const s = item.site;
-          const loc = s.location ?? {};
+          const loc = (s.location ?? {}) as { address?: string; city?: string; zip?: string };
           const newC: Customer = {
             id: `cust-se-${s.id}-${Date.now()}`,
             name: s.name,
@@ -1384,7 +1384,7 @@ function App() {
 
         if (item.type === 'updated' && item.site && item.customer && item.changes) {
           const s = item.site;
-          const loc = s.location ?? {};
+          const loc = (s.location ?? {}) as { address?: string; city?: string; zip?: string };
           customers = customers.map(c => {
             if (c.id !== item.customer!.id) return c;
             const updates: Partial<Customer> = {};

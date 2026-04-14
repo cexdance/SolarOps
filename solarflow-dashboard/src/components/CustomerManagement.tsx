@@ -84,6 +84,11 @@ const sourceLabels: Record<LeadSource, string> = {
   social_media: 'Social Media',
   advertising: 'Advertising',
   partner: 'Partner',
+  solaredge: 'SolarEdge',
+  customer_referral: 'Customer Referral',
+  contractor_referral: 'Contractor Referral',
+  marketing: 'Marketing',
+  google: 'Google',
   other: 'Other',
 };
 
