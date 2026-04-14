@@ -1,0 +1,186 @@
+SolarEdge Site ID,Conexsol Client ID,Site Name,Address,Status,Peak Power (kW),Install Date,PTO Date,Alerts,Highest Impact,System Type,Module,Today (kWh),Month (kWh),Year (kWh),Lifetime (kWh),Last Update
+1879754,,City of Tamarac Firestation 36,"Northwest 72nd Street 7499, Tamarac, FL, 33321",Active,0.0,2020-08-05,,6,2,,,0.0,0.0,0.0,77316.72,2026-03-08 20:04:59
+2811367,,"Duerr, Lee & Johanna TSP110340","North 147 Avenue 3896, Royal Palm Beach, FL, 33470",Active,0.0,2022-03-30,,1,5,,,0.0,0.0,243.34,28650.85,2026-03-08 20:05:38
+2141371,,"Flabio Jose, TSP56902","Hamlet Loop 421, Loughman, FL, 33837",Active,0.0,2021-02-24,,1,4,,,0.0,228.27,1749.78,63934.16,2026-03-08 20:05:12
+760512,,Lino 26 panel 7.8kW,"Creekside Way 124, Meadow Woods, FL, 32824",Active,0.0,2018-06-25,,3,5,,,0.0,0.0,0.0,43909.26,2026-01-12 10:18:29
+1051701,,"Novar, John TSP18070","Southwest 83rd Avenue 13055, Pinecrest, FL, 33156",Active,0.0,2019-02-05,,0,0,,,0.0,286.92,1975.27,44604.97,2026-03-08 19:50:44
+2762131,,Santos Auli,"Comerwood Drive 1386, Deltona, FL, 32738",Active,0.0,2022-02-21,,1,4,,,0.0,0.0,0.0,43238.14,
+4003521,,Thomas Brady,"Hope Lane, 5232, Weeki Wachee, FL, 34606",Active,0.0,2019-11-21,,3,2,,,0.0,142.43,142.43,75371.18,2026-03-08 20:06:00
+2492815,,US-15015,"Northwest 52nd Street 2081, Kings Point, FL, 33496",Pending,0.0,2021-10-01,,0,0,,,0.0,0.0,0.0,0.0,
+1893574,US-15017,Parque Solar Doral,"Northwest 78th Avenue 3500, Virginia Gardens, FL, 33122",Pending,0.0,2020-11-03,,0,0,,,0.0,0.0,0.0,0.0,
+1991357,,US-15019,"Alcazar Avenue 395, Coral Gables, FL, 33134",Pending,0.0,2020-12-22,,0,0,,,0.0,0.0,0.0,0.0,
+3151049,US-15036,Res Bobby Acon,"Northwest 100th Avenue 2700, Doral, FL, 33172",Active,0.0,2022-09-28,,3,2,,,0.0,281.54,1856.96,17167.33,2026-03-08 20:05:35
+2933092,,US 15054 Residence Rosales Coral Gable,"Palermo Avenue 928, Coral Gables, FL, 33134",Pending,0.0,2022-06-03,,0,0,,,0.0,0.0,0.0,0.0,
+3822044,US-15057,Fonte Residenc,"Southwest 68th Street 7400, Glenvar Heights, FL, 33143",Pending,0.0,2023-07-27,,0,0,,,0.0,0.0,0.0,0.0,
+3821377,US-15057,Fonte Residence,"7400 SW 68th Street, Glenvar Heights, FL, 33143",Active,0.0,2023-07-27,,3,2,,,0.0,759.92,5107.67,87492.44,2026-03-08 20:06:02
+4040407,US-15068,Pelaez Residence,"Country Club Lane 3995, Oakland Park, FL, 33308",Active,0.0,2023-11-22,,0,0,,,0.0,337.84,2428.33,27450.76,2026-03-08 20:06:02
+3874712,US-15086,Korda Residence,"Northeast 12th Place 1515, Miami, FL, 33139",Active,0.0,2023-08-25,,0,0,,,0.0,204.97,1111.05,20974.22,2026-03-08 20:05:39
+3778884,US-15101,Ciampi Residence,"Montclaire Drive 149, Weston, FL, 33326",Active,0.0,2023-12-01,,0,0,,,0.0,495.07,3551.92,49994.28,2026-03-08 20:05:57
+1094489,US-15175,Pablo Herrera,"Southwest 23rd Street 2305, Coral Gables, FL, 33145",Active,0.0,2019-03-05,,0,0,,,0.0,280.2,1995.61,22827.95,2026-03-08 20:06:05
+2265412,US-15190,Paredes Manuel,"Southwest 122nd Court 13978, Three Lakes, FL, 33186",Active,0.0,2021-04-27,,0,0,,,0.0,319.96,2364.91,57492.55,2026-03-08 20:04:49
+912113,US-15193,David Gonzalez,"Misty Oaks Circle 2724, Royal Palm Beach, FL, 33411",Active,0.0,2018-11-11,,2,4,,,0.0,0.0,0.0,54832.71,
+3012235,US-15194,Lucas Varela-Cid,"Northeast 5th Avenue 15391, Golden Glades, FL, 33162",Active,0.0,2022-05-10,,0,0,,,0.0,404.21,3203.82,65757.86,2026-03-08 10:22:12
+2911143,US-15196,Sean Paquet,"Southwest 111th Avenue 16423, Palmetto Estates, FL, 33157",Active,0.0,2022-01-28,,0,0,,,0.0,384.85,2601.27,67990.91,2026-03-08 20:05:38
+198866,US-15197,Island Hammock Pet Hospital,"98175 Overseas Highway , Key Largo, FL, 33037",Active,0.0,2015-12-14,,21,2,,,0.0,479.22,3228.46,397781.0,2026-03-08 20:05:28
+3514539,US-15198,Juan Recio,"Aqua Court 10711, Parkland, FL, 33076",Active,0.0,2022-12-05,,0,0,,,0.0,378.03,2745.29,53935.74,2026-03-08 20:04:28
+3334347,US-15200,Clarance Harris,"Northwest 24th Avenue 13310, Opa-locka, FL, 33167",Active,0.0,2022-10-02,,3,5,,,0.0,198.06,2157.52,14687.65,2026-03-08 20:05:56
+4429124,US-15204,Juan Alassia,"Bay Heights Drive 20, Miami, FL, 33133",Active,0.0,2024-10-08,,0,0,,,0.0,0.0,0.0,0.0,2026-03-08 20:05:37
+1466122,US-15206,Daniel Rey,"Northwest 20th Court 10330, Plantation, FL, 33322",Active,0.0,2020-01-23,,0,0,,,0.0,236.12,1848.94,57536.79,2026-03-08 20:05:53
+1080967,US-15207,Marco Oliveira,"Southwest 133rd Terrace, 6700, Pinecrest, FL, 33156",Active,0.0,2019-04-19,,0,0,,,0.0,0.0,0.0,166934.94,2026-03-08 20:05:54
+533422,US-15208,Azad Amin,"Lauderdale Manor Drive 1753, Rock Island, FL, 33311",Active,0.0,2017-09-05,,1,2,,,0.0,250.7,1823.32,71718.86,2026-03-08 20:04:31
+2907284,US-15210,Ramon Gutierrez,"Southwest 159th Terrace 11014, Palmetto Estates, FL, 33157",Active,0.0,2022-03-28,,0,0,,,0.0,206.17,1437.81,29628.73,2026-03-08 20:05:57
+2979061,US-15213,"Walumbwa, Ochieng","Southwest 179th Street 8521, East Perrine, FL, 33157",Active,0.0,2022-02-25,,0,0,,,0.0,644.79,4228.46,91145.79,2026-03-08 20:05:34
+291002,US-15214,Alexey Alonso,"19120 NW 10th Street , Southwest Ranches, FL, 33029",Active,0.0,2016-06-27,,0,0,,,0.0,246.15,1776.09,85548.0,2026-03-08 20:05:17
+3602247,US-15215,Jeeyoung Kim,"Funston Street 1418, Hollywood, FL, 33020",Active,0.0,2022-06-14,,0,0,,,0.0,304.38,2059.08,24239.78,2026-03-08 20:05:30
+880643,US-15216,Yadiel Huet,"6081 SW 153 Court Road , Kendale Lakes, FL, 33193",Active,0.0,2018-10-23,,1,2,,,0.0,417.02,2897.78,28270.48,2026-03-08 20:06:03
+4151683,US-15217,Donald Said,"Northwest 26th Drive 11090, Coral Springs, FL, 33065",Active,0.0,2024-01-25,,21,4,,,0.0,87.29,921.07,19886.55,2026-03-08 20:05:58
+3927343,US-15218,Darryl Leversuch,"Northwest 15th Street 10862, Coral Springs, FL, 33071",Active,0.0,2023-05-09,,0,0,,,0.0,284.69,1969.13,28620.08,2026-03-08 20:05:15
+1586005,US-15219,Jessica Valenzuela,"Dynasty Drive 8407, Sandalfoot Cove, FL, 33433",Active,0.0,2020-04-20,,4,4,,,0.0,0.0,0.0,47713.53,2025-12-18 00:14:41
+1202725,US-15222,Francisco Maldonado,"Dinner Lake Avenue 141, Waverly, FL, 33859",Active,0.0,2019-06-18,,1,1,,,0.0,0.0,0.0,16083.41,2026-03-08 20:05:45
+3092553,US-15223,Thomas Mcleod,"Southwest 44th Terrace 5990, Coral Terrace, FL, 33155",Active,0.0,2022-05-31,,0,0,,,0.0,226.9,1490.11,37085.28,2026-03-08 20:05:54
+3592758,US-15226,Regla Glau,"Southwest 302nd Street 15370, Leisure City, FL, 33033",Active,0.0,2022-08-04,,4,5,,,0.0,350.03,3498.93,3580.86,2026-03-08 20:04:58
+767705,US-15227,Joshua McGehee,"11683 46th Place North, Royal Palm Beach, FL, 33411",Active,0.0,2018-06-22,,0,0,,,0.0,343.02,2420.35,116618.92,2026-03-08 19:45:12
+913858,US-15228,William Rolack,"Long Acre Drive 8461, Lake Lucerne, FL, 33025",Active,0.0,2018-10-16,,0,0,,,0.0,119.58,866.68,0.0,2026-03-08 20:05:02
+657747,US-15229,Gary McMillan,"Allamanda Street 3255, Coral Gables, FL, 33133",Active,0.0,2018-03-02,,2,4,,,0.0,0.0,655.85,83208.19,2026-03-01 05:13:21
+1699709,US-15230,Dorine Wollangk,"Northeast 26th Avenue 954, Terra Mar, FL, 33062",Active,0.0,2020-07-07,,0,0,,,0.0,257.65,1763.36,11707.15,2026-03-08 19:57:13
+1504435,US-15233,David Smitherman,"Northwest 112th Street 570, Pinewood, FL, 33168",Active,0.0,2019-10-10,,0,0,,,0.0,128.68,933.64,40925.8,2026-03-08 20:05:58
+883536,US-15234,Robert Moch,"7770 NW 47th St, Tamarac, FL, 33351",Active,0.0,2018-10-25,,1,1,,,0.0,0.0,0.0,11912.42,2026-03-08 19:43:14
+813738,US-15235,Freída Rosario,"Royal Palm Beach Boulevard 4840, Royal Palm Beach, FL, 33411",Active,0.0,2018-05-09,,3,5,,,0.0,195.62,2540.15,127088.7,2026-03-05 14:13:23
+874172,US-15236,Tara Batz,"Country Cottage Lane, 240, Winter Garden, FL, 34787",Active,0.0,2018-10-17,,0,0,,,0.0,360.16,2822.37,91435.57,2026-03-08 20:05:44
+2677385,US-15238,Yamile Camejo,"Southwest 69th Avenue 1366, Coral Terrace, FL, 33144",Active,0.0,2022-01-12,,0,0,,,0.0,342.27,2315.05,65175.66,2026-03-08 20:06:07
+1255465,US-15240,Anthony Gandley,"Bishop Landing Way 3785, Meadow Woods, FL, 32824",Active,0.0,2019-08-29,,0,0,,,0.0,260.99,1877.82,40117.82,2026-03-08 20:05:07
+1144936,US-15242,Ernesto Catala,"402 South Jefferson Street , Beverly Hills, FL, 34465",Active,0.0,2019-04-08,,0,0,,,0.0,97.24,722.38,42232.84,2026-03-08 20:04:45
+3175522,US-15243,Yosvani Camargo,"Southwest 154th Court 1379, Tamiami, FL, 33194",Active,0.0,2022-08-04,,9,2,,,0.0,476.95,3495.9,85733.38,2026-03-08 20:05:39
+3606676,US-15244,Carolys Rivera,"Majestic Lane 1529, Wahneta, FL, 33880",Active,0.0,2023-03-30,,0,0,,,0.0,294.21,2411.42,33113.02,2026-03-08 20:04:12
+1524195,US-15245,Cristiano Sanches-Rodrigues,"Lake Park Circle North 8981, Pine Island Ridge, FL, 33328",Active,0.0,2020-03-24,,1,2,,,0.0,159.04,1052.86,38458.2,2026-03-08 20:05:37
+2046496,US-15019,One Eleven South,"US-15019  One Eleven South, Statesboro, GA, 30458",Pending,0.0,2021-01-20,,0,0,,,0.0,0.0,0.0,0.0,
+514479,US-15246,John Pirroni,"3230 Northeast 40th Street, Lauderdale-by-the-Sea, FL, 33308",Active,0.0,2017-08-04,,1,4,,,0.0,692.74,4903.53,216602.69,2026-03-08 20:09:22
+1106221,US-15247,Anniel Romero,"Burlington Street, 731, Opa-locka, FL, 33054",Active,0.0,2019-05-10,,0,0,,,0.0,0.0,0.0,14865.37,
+1217797,US-15248,Jeremy Fisher,"Alhambra Boulevard 7721, Miramar, FL, 33023",Active,0.0,2019-03-25,,0,0,,,0.0,97.61,766.84,16679.95,2026-03-08 20:08:15
+4016590,US-15253,Jorge Bravo,"Northwest 15th Court 8631, Cooper City, FL, 33024",Active,0.0,2022-08-25,,4,8,,,0.0,361.95,2758.33,37068.69,2026-03-08 20:09:37
+2339903,US-15256,Kyle LaCroix,"Surrey Drive 2579, Palm Harbor, FL, 34684",Active,0.0,2021-06-25,,0,0,,,0.0,277.72,1959.74,46109.17,2026-03-08 20:09:00
+3334934,US-15259,Miguel Vargas,"Porter Road 14548, Bay Lake, FL, 34787",Active,0.0,2022-08-02,,0,0,,,0.0,493.83,3980.43,71190.61,2026-03-08 20:08:18
+740778,US-15260,Luisking Pena,"Northwest 53rd Court 10246, Coral Springs, FL, 33076",Active,0.0,2018-06-03,,0,0,,,0.0,544.48,4072.76,168087.7,2026-03-08 20:09:49
+1830725,US-15272,Tino Garcia,"406 Galloway Street , Lake Alfred, FL, 33850",Active,0.0,2020-09-18,,0,0,,,0.0,140.31,775.07,37180.95,2026-03-08 20:08:34
+3185499,US-15273,Gabriel Gareis,"Northwest 149th Street 1050, Golden Glades, FL, 33168",Active,0.0,2022-06-20,,1,2,,,0.0,284.7,1983.74,46389.21,2026-03-08 20:09:18
+2788011,US-15274,Joaquín Molina,"Lobelia Drive 408, Davenport, FL, 33837",Active,0.0,2022-02-08,,0,0,,,0.0,333.1,2669.99,5598.44,2026-03-08 20:09:50
+515771,US-15276,Pedro Olavarria,"Horse Creek Lane 2031, Davenport, FL, 33844",Active,0.0,2017-08-08,,0,0,,,0.0,336.5,2426.17,128827.0,2026-03-08 19:36:48
+1593529,US-15279,Ivan Rodríguez,"Haines Drive 1210, Lake Alfred, FL, 33881",Active,0.0,2020-03-23,,0,0,,,0.0,316.08,2295.43,13757.3,2026-03-08 20:08:29
+2601416,US-15285,Roselore Edouard,"Bravada Street 354, Ocoee, FL, 34761",Active,0.0,2021-10-28,,0,0,,,0.0,222.84,1533.99,38884.84,2026-03-08 20:09:48
+2800067,US-15287,Germitha Hora,"Northwest 28th Street 6461, Lauderdale Lakes, FL, 33313",Active,0.0,2022-02-02,,0,0,,,0.0,332.99,2353.4,59662.72,2026-03-08 20:09:22
+3369430,US-15288,Maritza Garcia,"Southwest 149th Avenue 5853, Kendale Lakes, FL, 33193",Active,0.0,2022-09-20,,1,2,,,0.0,253.18,1891.84,31900.77,2026-03-08 20:09:46
+300242,US-15289,James Ward,"Wilkinson Road 590, Hypoluxo, FL, 33462",Active,0.0,2016-07-20,,1,5,,,0.0,30.06,210.13,893.05,2026-03-08 20:09:21
+455865,US-15290,Omar Resto,"West Hamilton Avenue 9007, Town 'n' Country, FL, 33615",Active,0.0,2017-04-27,,0,0,,,0.0,464.07,3477.29,98837.46,2026-03-08 19:54:09
+3349192,US-15291,"Barrea, William","Northeast 155th Street 1145, North Miami Beach, FL, 33162",Active,0.0,2022-04-27,,0,0,,,0.0,232.82,1467.57,18372.54,2026-03-08 20:08:48
+1024878,US-15291,Lellany Guevara,"15270 Southwest 41st Terrace, Kendale Lakes, FL, 33185",Active,0.0,2019-03-05,,0,0,,,0.0,255.23,1880.56,79811.88,2026-03-08 19:45:56
+103050,US-15292,ManishPV,"E Cherry Lake Dr 14371, Palm Valley, FL, 32258",Active,0.0,2015-02-18,,0,0,,,0.0,370.31,2680.88,160174.6,2026-03-08 20:09:00
+490551,US-15293,Arlene Malloch,"3910 Lake Drive Ext, Delray Beach, FL, 33435",Active,0.0,2017-06-27,,0,0,,,0.0,359.69,2584.01,131207.06,2026-03-08 20:08:32
+3230026,US-15294,Bruno Dominijanni,"Longmeadow Circle 9384, Boynton Beach, FL, 33436",Active,0.0,2022-02-12,,0,0,,,0.0,254.88,1851.55,41280.52,2026-03-08 20:09:17
+3125493,US-15295,Julio Gómez,"Southwest 191st Street 8190, Lakes by the Bay, FL, 33157",Active,0.0,2022-09-13,,0,0,,,0.0,549.22,4108.06,43046.26,2026-03-08 20:08:57
+660462,US-15297,Carlos Pineda,"312 Southwest 2nd Street, Hallandale Beach, FL, 33009",Active,0.0,2018-03-08,,0,0,,,0.0,418.93,2812.35,133031.5,2026-03-08 19:53:22
+3777860,US-15298,Charlie Roldan,"Bass Boat Way 3125, Campbell, FL, 34746",Active,0.0,2023-03-14,,7,2,,,0.0,589.83,4023.5,62025.39,2026-03-08 20:09:53
+4827180,US-15299,Marcus Haynes,"Belsfield Circle 2238, Clermont, FL, 34711",Active,0.0,2026-02-19,,0,0,,,0.0,175.25,363.69,6471.93,2026-03-08 20:09:43
+464346,US-15302,Junior Rodríguez (Jacksonville),"Paul Bett Drive 5520, Jacksonville, FL, 32277",Active,0.0,2017-05-09,,0,0,,,0.0,0.0,0.0,80274.78,
+1014826,US-15306,Ian Brown,"Northwest 28th Manor 10621, Tamarac, FL, 33322",Active,0.0,2019-02-26,,2,4,,,0.0,0.0,2299.6,91301.22,2026-02-28 14:49:19
+483575,US-15310,Evelyn and Joangel Gonzalez,"4301 Washington Street, Carver Ranches, FL, 33021",Active,0.0,2017-06-15,,0,0,,,0.0,358.44,2607.39,11971.79,2026-03-08 20:09:38
+3508416,US-15311,Jesús Soto,"Barberry Drive 1531, Kissimmee, FL, 34744",Active,0.0,2023-02-12,,0,0,,,0.0,312.61,2516.5,32792.61,2026-03-08 20:09:36
+3294301,US-15312,Jerry Hesselman,"Bluff Oak Loop 4420, Campbell, FL, 34746",Active,0.0,2022-11-28,,0,0,,,0.0,326.21,2425.87,38615.1,2026-03-08 20:09:22
+2883230,US-15313,Leonard Johnson,"Satin Lily Drive 13206, Boyette, FL, 33579",Active,0.0,2022-05-25,,1,2,,,0.0,318.05,2446.25,41061.44,2026-03-08 20:09:11
+2819723,US-15314,Iris Aponte,"Lake Smart Circle 276, Lake Alfred, FL, 33881",Active,0.0,2022-03-08,,0,0,,,0.0,246.63,2152.76,45615.59,2026-03-08 10:54:58
+3654063,US-15315,Clara Fana,"Northwest 27th Street 6704, Margate, FL, 33063",Active,0.0,2023-04-11,,0,0,,,0.0,306.61,1701.01,39053.47,2026-03-08 20:10:15
+643657,US-15316,Eric Morales,"Summerfield Circle, 4720, Cypress Gardens, FL, 33881",Active,0.0,2018-02-12,,0,0,,,0.0,166.61,1362.19,39616.88,2026-03-08 20:10:03
+4620406,US-15317,Gemhson Villarson,"Delancey Drive 739, Davenport, FL, 33837",Active,0.0,2024-05-13,,0,0,,,0.0,164.6,1249.06,6703.94,2026-03-08 20:09:27
+3722620,US-15318,Rick Hackbarth,"Grove Street 456, De Leon Springs, FL, 32720",Active,0.0,2022-12-27,,1,4,,,0.0,0.0,0.0,5744.57,
+3185518,US-15320,Ana Henriquez,"Northwest 195th Terrace 5682, Country Club, FL, 33055",Active,0.0,2022-06-11,,0,0,,,0.0,253.07,1959.34,6949.67,2026-03-08 20:09:32
+4680814,US-15321,Cleverton Possani,"Knoll Tree Lane 439, Forest City, FL, 32712",Pending,0.0,2025-07-22,,0,0,,,0.0,0.0,0.0,0.0,
+2349689,US-15323,Yongxin Guo,"Clubhouse Estates Drive 7627, Doctor Phillips, FL, 32819",Active,0.0,2021-08-27,,0,0,,,0.0,351.98,2802.32,30022.19,2026-03-08 20:08:55
+2827287,US-15325,Donald Byrd,"Henderson Street 954, Deltona, FL, 32725",Active,0.0,2022-02-09,,0,0,,,0.0,205.62,1288.74,27288.77,2026-03-08 20:09:08
+188878,US-15326,Alejandro Vallera,"1200 S Alhambra Cir, South Miami, FL, 33146",Active,0.0,2015-11-13,,2,2,,,0.0,254.58,1770.13,87587.18,2026-03-08 20:09:55
+1868331,US-15328,Waren Lantigua,"Lake Lucerne Way 327, Lake Alfred, FL, 33881",Active,0.0,2020-10-13,,0,0,,,0.0,220.91,1795.36,47629.91,2026-03-08 20:09:50
+847816,US-15330,Cheryl Duncan,"Minnesota Street 514, Lantana, FL, 33462",Active,0.0,2018-05-11,,1,5,,,0.0,191.93,1429.62,2649.97,2026-03-08 20:10:05
+3498902,US-15331,Karen Savadge,"Hoffner Avenue 2911, Pine Castle, FL, 32812",Active,0.0,2022-07-28,,0,0,,,0.0,385.72,3057.43,44273.0,2026-03-08 20:10:18
+4692910,US-15332,Eduardo Echagarruga,"Southwest 146th Street 13245, Three Lakes, FL, 33186",Active,0.0,2025-08-06,,1,2,,,0.0,215.06,1513.47,4414.63,2026-03-08 20:10:12
+1709610,US-15333,John Santos,"Thomas Jefferson Circle West 7225, Wahneta, FL, 33830",Active,0.0,2020-07-09,,1,4,,,0.0,0.0,0.0,45258.62,2025-11-06 11:13:19
+3051916,US-15337,Virginia Cumberbatch,"Northwest 11th Court 1600, Washington Park, FL, 33311",Active,0.0,2022-08-08,,0,0,,,0.0,213.03,1595.32,2963.85,2026-03-08 20:09:36
+671234,US-15339,Iki Dugno,"8314 Civic Road, Town 'n' Country, FL, 33615",Active,0.0,2018-03-17,,0,0,,,0.0,0.0,0.0,33401.24,2026-03-08 20:10:14
+1235308,US-15342,Abed Laracuente,"Oak Shore Drive 6187, Saint Cloud, FL, 34771",Active,0.0,2019-08-14,,1,2,,,0.0,189.86,1600.93,32845.54,2026-03-08 20:09:27
+4000854,US-15344,Edgar Fernandez,"835 Northwest 132nd Street, Golden Glades, FL, 33168",Active,0.0,2023-07-25,,1,2,,,0.0,337.44,1836.92,26767.19,2026-03-08 20:10:04
+3615945,US-15358,Paulino Vieira Neto,"Verona Lakes Boulevard 9530, Greenacres City, FL, 33472",Active,0.0,2023-02-14,,2,6,,,0.0,262.56,2275.16,66221.04,2026-03-08 20:10:18
+4357504,US-15359,Héctor Escobales,"9006 Bana Villa Court, Town 'n' Country, FL, 33635",Active,0.0,2024-08-03,,0,0,,,0.0,437.29,2920.72,23003.45,2026-03-08 20:09:31
+960603,US-15362,Edgar Vazquez,"Zachary Ridge Court 1145, Loughman, FL, 34747",Active,0.0,2019-01-05,,0,0,,,0.0,300.43,2417.77,5906.43,2026-03-08 20:10:12
+3925027,US-15363,Francisco Perez,"Southwest 161st Place 11338, The Hammocks, FL, 33196",Active,0.0,2023-07-17,,0,0,,,0.0,266.99,2145.24,29230.19,2026-03-08 20:10:43
+4682784,US-15364,Clifford Langston,"Elnor Street 609, Plant City, FL, 33563",Active,0.0,2025-01-01,,0,0,,,0.0,260.43,2003.51,6143.48,2026-03-08 20:11:41
+3210117,US-15365,Jim Larrimore,"Formby Grande Avenue 113, Daytona Beach, FL, 32124",Active,0.0,2022-10-20,,7,2,,,0.0,127.72,891.19,28734.58,2026-03-08 20:10:40
+3357545,US-15366,Rolando Edwards,"Maiden Terrace 1037, Celebration, FL, 34747",Active,0.0,2022-10-13,,0,0,,,0.0,191.61,1388.24,12853.91,2026-03-08 20:11:40
+113640,US-15367,Sonja Reeves,"5525 Jefferson Street, Carver Ranches, FL, 33021",Active,0.0,2015-04-14,,1,4,,,0.0,0.0,0.0,61926.22,
+2392861,US-15368,THOMAS TWEIT,"Ramblewood Road 10532, Southchase, FL, 32837",Active,0.0,2021-06-14,,1,4,,,0.0,0.0,1384.07,38375.02,2026-02-26 17:38:52
+1361894,US-15370,Meyer - Killeen,"Southwest 147th Avenue 25750, Naranja, FL, 33032",Active,0.0,2019-11-04,,0,0,,,0.0,378.03,3076.08,10335.15,2026-03-08 20:10:25
+458212,US-15371,Rachel Hober,"Plantation Oak Drive 1929, Meadow Woods, FL, 32824",Active,0.0,2017-05-02,,1,2,,,0.0,254.03,2015.09,86047.5,2026-03-08 20:11:45
+2875515,US-15372,Emily Helbick,"Southeast 27th Court 170, Gulf Stream, FL, 33435",Active,0.0,2022-05-03,,0,0,,,0.0,238.03,1732.69,30081.2,2026-03-08 20:10:52
+3223848,US-15373,Tyler Murphy,"Dolce Drive 314, Dundee, FL, 33838",Active,0.0,2022-09-19,,0,0,,,0.0,363.73,2522.27,9048.38,2026-03-08 20:11:04
+3358969,US-15374,Carole Walker,"Dellwood Road 3680, Royal Palm Beach, FL, 33470",Active,0.0,2022-10-05,,0,0,,,0.0,213.35,1568.82,30719.89,2026-03-08 20:10:05
+2272438,US-15375,Chris Rediske,"Pocahontas Path 1750, Maitland, FL, 32751",Active,0.0,2021-03-24,,0,0,,,0.0,317.06,2003.99,6842.91,2026-03-08 20:10:28
+2198392,US-15376,Patricia Marshall,"Irving Bend Drive 358, Mascotte, FL, 34736",Active,0.0,2021-03-10,,0,0,,,0.0,445.86,3410.45,102525.58,2026-03-08 20:11:34
+1737038,US-15377,Liz Hargis,"Avenue F Southeast 706, Winter Haven, FL, 33880",Active,0.0,2020-07-28,,0,0,,,0.0,196.06,1459.26,2766.5,2026-03-08 20:10:14
+3304023,US-15379,Bracci Residence,"Peach Orchard Way 13921, Tildenville, FL, 34787",Active,0.0,2022-10-11,,0,0,,,0.0,336.45,2741.67,8459.86,2026-03-08 20:11:00
+4009909,US-15380,Juliann Malecot,"94th Street North 12055, Largo, FL, 33773",Active,0.0,2023-03-01,,0,0,,,0.0,347.66,2449.34,29230.11,2026-03-08 20:10:46
+3331062,US-15381,Heriberto Rosario,"Cheri Court 1541, Kissimmee, FL, 34744",Active,0.0,2022-12-07,,2,2,,,0.0,329.01,2582.42,15549.72,2026-03-08 20:10:00
+645843,US-15383,Diana Parra,"414 Largovista Drive, Oakland, FL, 34787",Active,0.0,2018-02-14,,2,2,,,0.0,749.35,5838.86,256258.5,2026-03-08 20:10:55
+4694516,US-15388,Dorothy Grant,"Hawkshead Drive 3657, Minneola, FL, 34711",Active,0.0,2025-08-08,,0,0,,,0.0,167.47,1399.51,41368.3,2026-03-08 20:11:27
+4823287,US-15389,-1 Mister 01 (1),"West 26th Street 689, Hialeah, FL, 33010",Active,0.0,2026-02-12,,0,0,,,0.0,1021.97,2836.7,2898.16,2026-03-08 20:11:03
+3981245,US-15394,Michael Young,"Verwood Way 10, Seminole Manor, FL, 33426",Active,0.0,2023-10-16,,0,0,,,0.0,348.8,2076.69,2898.85,2026-03-08 20:08:57
+2568456,US-15395,Brian Robertson,"Snapper Drive 1873, Poinciana, FL, 34759",Active,0.0,2021-11-01,,0,0,,,0.0,288.57,2113.25,52335.06,2026-03-08 20:10:55
+1226193,US-15396,Manesh Mohan,"Russell Bridge Drive 15097, Fruit Cove, FL, 32259",Active,0.0,2019-08-08,,0,0,,,0.0,160.55,1161.87,18940.72,2026-03-08 20:10:49
+68251,US-15397,Jarrod Hollander,"13241 Starfish Drive, Hudson, FL, 34667",Active,0.0,2014-07-29,,4,5,,,0.0,0.0,0.0,113827.0,
+1040552,US-15399,Jesse Foote,"Dornich Drive 5780, Polk City, FL, 33823",Active,0.0,2019-03-19,,0,0,,,0.0,235.53,1053.97,1055.15,2026-03-08 20:10:34
+2938744,US-15400,Bud Laudenslager,"Windswept Way 331, Fruit Cove, FL, 32092",Active,0.0,2022-06-06,,0,0,,,0.0,176.63,1284.16,19515.81,2026-03-08 20:10:53
+3237302,US-15401,Blas Santander,"Southwest 24th Avenue 2501, Coral Gables, FL, 33133",Active,0.0,2022-10-05,,0,0,,,0.0,199.55,1210.7,34080.81,2026-03-08 20:11:27
+1131486,,Us-15402 Pavel Rizo,"Grand Island Way, 9238, Bay Lake, FL, 34787",Active,0.0,2019-05-29,,0,0,,,0.0,209.81,1669.28,3174.81,2026-03-08 20:11:35
+2267220,US-15403,Austria Díaz,"Settlers Creek Loop 8256, Gibsonia, FL, 33810",Active,0.0,2021-04-28,,2,2,,,0.0,311.03,2123.14,34774.72,2026-03-08 20:11:10
+417144,US-15405,Amanda Himmler,"Whirley Road 16748, Cheval, FL, 33558",Active,0.0,2017-02-16,,0,0,,,0.0,133.62,1079.66,42996.3,2026-03-08 20:11:38
+2788929,US-15406,Chase Laurain,"Deerfield Drive 17641, Cheval, FL, 33558",Active,0.0,2022-01-19,,0,0,,,0.0,175.55,1296.22,2207.23,2026-03-08 20:10:30
+2697150,US-15407,Yaniel del corral,"West 79th Street 993, Miami Lakes, FL, 33014",Active,0.0,2022-01-24,,0,0,,,0.0,266.06,1839.88,50760.51,2026-03-08 20:11:36
+2002284,US-15408,Philip King,"Lake Mirror Drive Northwest 1540, Inwood, FL, 33881",Active,0.0,2020-12-07,,3,2,,,0.0,448.41,2827.19,1118.93,2026-03-08 20:05:51
+1053376,US-15409,Silvio Negron,"70 Andora Court , Poinciana, FL, 34758",Active,0.0,2019-03-29,,0,0,,,0.0,150.36,1221.12,2499.12,2026-03-08 17:26:16
+1385733,US-15411,Lynn Wagner,"130 West Welch Road , Apopka, FL, 32712",Active,0.0,2019-11-18,,0,0,,,0.0,0.0,438.22,97227.47,2026-01-15 07:59:16
+1757021,US-15412,Khristopher deCapua,"16601 Goose Ribbon Pl. , Wimauma, FL, 33598",Active,0.0,2020-07-03,,0,0,,,0.0,293.79,2032.05,5033.91,2026-03-08 17:07:36
+2866995,US-15414,Tanya Aleman,"Tidal Rock Avenue 1015, Ruskin, FL, 33570",Active,0.0,2022-04-12,,0,0,,,0.0,177.03,1897.07,37004.66,2026-03-08 20:10:46
+3310258,US-15421,Rafael Padron,"Southwest 14th Street 1811, Miami, FL, 33145",Active,0.0,2022-08-31,,0,0,,,0.0,275.51,1203.81,692.26,2026-03-08 20:09:58
+4167778,US-15422,Huston Newsome,"Challenger Drive 15025, Tavares, FL, 32778",Active,0.0,2024-01-18,,0,0,,,0.0,292.42,1697.13,2314.05,2026-03-08 20:11:35
+1443054,US-15423,Brett Conroy,"John Hancock Drive , Lake Butter, FL, 34787",Active,0.0,2019-12-19,,0,0,,,0.0,400.7,3120.72,7054.02,2026-03-08 20:11:27
+436620,US-15431,Jeffrey Estevez,"West Frierson Avenue 203, Tampa, FL, 33603",Active,0.0,2017-03-17,,0,0,,,0.0,190.35,1509.16,1926.85,2026-03-08 20:11:49
+2726777,US-15435,Jose Tobar,"Beulah Road 1330, Winter Garden, FL, 34787",Active,0.0,2022-02-02,,0,0,,,0.0,320.86,2788.18,46995.53,2026-03-08 20:07:37
+3170349,US-15436,Ashley Halliwell,"Wattenberg Court East, 10251, Baldwin, FL, 32221",Active,0.0,2022-10-03,,3,2,,,0.0,568.94,3266.01,64732.46,2026-03-08 20:11:36
+3452173,US-15437,Christian Tovar,"Alba Lane 9008, Citrus Ridge, FL, 34747",Active,0.0,2023-01-18,,0,0,,,0.0,255.57,2018.5,4371.4,2026-03-08 20:10:21
+3461374,US-15438,Cory Mulinare,"74 Northwest 108th Street , Miami Shores, FL, 33168",Active,0.0,2023-02-06,,0,0,,,0.0,224.09,1611.42,31859.26,2026-03-08 20:11:45
+1358103,US-15439,Yachira Gutierrez,"Elm Court 229, Poinciana, FL, 34759",Active,0.0,2019-10-28,,0,0,,,0.0,3.99,3.99,52953.05,2026-03-01 14:42:52
+3729709,US-15440,Carlin Doyen,"Patrick Henry Road 118, Wahneta, FL, 33830",Active,0.0,2023-02-02,,2,4,,,0.0,0.0,479.25,15468.09,2026-03-08 20:11:20
+1284769,US-15441,Georgina Martinez,"Sunset Point Circle 12125, Wellington, FL, 33414",Active,0.0,2019-07-17,,0,0,,,0.0,178.85,1273.87,2142.18,2026-03-08 20:11:32
+1537938,US-15448,John Hinshaw,"Cadiz Loop 324, Davenport, FL, 33837",Active,0.0,2020-03-13,,1,4,,,0.0,0.0,0.0,117270.78,
+3847506,US-15451,Johanna Danton,"Hayes Street 5510, Pembroke Pines, FL, 33021",Active,0.0,2023-05-22,,4,2,,,0.0,243.55,375.26,1001.4,2026-03-08 20:09:55
+1384540,US-15454,Nicolas Guerrero,"Haulover Drive 819, Wekiwa Springs, FL, 32714",Active,0.0,2019-10-29,,0,0,,,0.0,298.28,2141.73,68943.17,2026-03-08 20:11:07
+471166,US-15461,Richard Falkowski,"Calle De Sol 5053, Bay Hill, FL, 32819",Active,0.0,2017-05-24,,0,0,,,0.0,275.0,2079.03,3855.75,2026-03-08 20:11:33
+1235853,US-15464,Judith Martin Dundee FL,"Valentina Drive 902, Dundee, FL, 33838",Active,0.0,2019-08-11,,1,2,,,0.0,285.3,2172.91,51158.94,2026-03-08 20:11:06
+2269643,US-15468,Mary Hannon,"Sonia Street 9231, Union Park, FL, 32825",Active,0.0,2021-05-24,,0,0,,,0.0,196.88,1249.23,50098.33,2026-03-08 20:11:55
+1932573,US-15469,Jonathan Ambaye,"Balmoral Drive 925, Loughman, FL, 33896",Active,0.0,2020-11-18,,0,0,,,0.0,415.12,2219.78,955.19,2026-03-08 20:11:38
+2343070,US-15470,Arthur Kramer,"2057 HEMINGWAY AVE, Haines City, FL, 33844-2401",Active,0.0,2021-07-06,,0,0,,,0.0,340.59,2832.54,46423.66,2026-03-08 20:11:52
+4808395,US-15471,Dereck Johnson,"Chelsea Woods Drive 2919, Bloomingdale, FL, 33596",Active,0.0,2026-01-18,,0,0,,,0.0,475.07,2086.82,2744.33,2026-03-08 20:10:12
+4817221,US-15473,Martin Krauss,"Crossing Lane 6435, Gibsonia, FL, 33809",Active,0.0,2026-02-02,,0,0,,,0.0,259.36,963.36,33125.27,2026-03-08 20:11:54
+3748641,US-15479,Kurt Lenz,"Bird Song Drive 518, West De Land, FL, 32720",Active,0.0,2021-01-13,,0,0,,,0.0,167.28,1250.26,1401.63,2026-03-08 20:11:21
+3352794,US-15483,David Lautermilch,"Hall Road Southeast 3282, Malabar, FL, 32909",Active,0.0,2022-02-23,,1,1,,,0.0,223.23,1618.11,28214.29,2026-03-08 20:11:13
+3294333,US-15490,Isaac Scott,"Belmont Place 896, Rockledge, FL, 32955",Active,0.0,2022-11-28,,5,5,,,0.0,214.03,1326.98,58528.59,2026-03-08 20:11:28
+2069819,US-15491,Joe Ricketts,"Riverport Drive North 2653, Fruit Cove, FL, 32223",Active,0.0,2020-09-29,,8,2,,,0.0,315.71,1815.24,28244.58,2026-03-08 20:10:06
+3914500,US-15492,Shaykat Ahamed,"Southwest 9th Court 5320, Broadview Park, FL, 33317",Active,0.0,2023-06-29,,0,0,,,0.0,703.62,5107.94,2486.25,2026-03-08 20:10:46
+3270833,US-15499,Tony Perry,"Southwest 124th Street 8990, Kendall, FL, 33176",Active,0.0,2022-08-05,,0,0,,,0.0,385.68,2168.31,2167.84,2026-03-08 20:11:14
+3069568,US-15503,Jason Brunson,"Los Arbor Drive 109, North De Land, FL, 32724",Active,0.0,2022-06-05,,3,5,,,0.0,0.0,0.0,22323.82,2026-03-08 20:11:19
+2010041,US-15504,N Rodriguez - 16771 Yellow Bluff Rd,"Yellow Bluff Road 16771, Yulee, FL, 32226",Active,0.0,2021-01-05,,1,4,,,0.0,0.0,251.5,61224.62,2026-01-12 12:32:58
+4109951,US-15505,Britney W,"Southwest 8th Court 7910A, North Lauderdale, FL, 33068",Active,0.0,2023-12-07,,0,0,,,0.0,168.52,1058.85,12976.28,2026-03-08 20:10:57
+3456903,US-15505,Britney W.,"Northwest 166th Avenue 1230, Sunshine Ranches, FL, 33028",Active,0.0,2022-11-02,,0,0,,,0.0,734.15,5254.69,42102.06,2026-03-08 20:11:33
+510385,US-15506,Jonathan Harden,"Broken Arrow Drive, 10614, Pebble Creek, FL, 33592",Active,0.0,2017-07-19,,1,4,,,0.0,0.0,0.0,0.0,
+3504967,US-15515,"Journigan, Steven","Sawmill Court 1188, Goldenrod, FL, 32792",Active,0.0,2023-01-09,,0,0,,,0.0,179.72,737.47,736.84,2026-03-08 20:11:06
+3037874,US-15516,Carolina Garcia,"352 Creek Road, Lake Alfred, FL, 33850",Active,0.0,2022-07-27,,1,2,,,0.0,254.42,1905.98,36038.5,2026-03-08 20:11:36
+1509688,US-15517,Bobby Furedi,"Northeast 33rd Street 899, Oakland Park, FL, 33334",Active,0.0,2020-02-21,,0,0,,,0.0,211.9,523.07,523.09,2026-03-08 20:10:30
+333365,US-15518,Brian Daly,"Northeast 21st Avenue 2819, Oakland Park, FL, 33306",Active,0.0,2016-11-22,,0,0,,,0.0,254.33,1161.03,94131.63,2026-03-08 20:11:56
+3542143,US-15521,Antonio Marques,"South Roundtable Road 15610, Southwest Ranches, FL, 33331",Active,0.0,2021-10-07,,6,2,,,0.0,355.07,605.41,39211.58,2026-03-08 20:10:44
+3131378,US-15523,-1 Charles Roach,"16 Sunset Lane, Terra Mar, FL, 33062",Active,0.0,2022-09-15,,1,9,,,0.0,807.86,5740.74,125042.71,2026-03-08 20:11:53
+1473775,US-15523,-2 Charles Roach,"15 Sunset Lane, Terra Mar, FL, 33062",Active,0.0,2020-01-29,,2,4,,,0.0,325.04,2174.34,13.11,2026-03-08 20:11:27

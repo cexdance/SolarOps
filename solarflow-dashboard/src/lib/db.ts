@@ -41,6 +41,9 @@ export async function dbGet(key: string): Promise<unknown | null> {
 }
 
 export async function dbSet(key: string, data: unknown): Promise<void> {
+  // Skip Neon sync on Vercel (frontend-only deployment, no backend API)
+  if (!window.location.hostname.includes('localhost')) return;
+
   try {
     await fetch(`${BASE}?key=${encodeURIComponent(key)}`, {
       method: 'POST',
@@ -57,6 +60,9 @@ export async function dbSet(key: string, data: unknown): Promise<void> {
 
 // On app startup: pull all keys from Neon → seed localStorage
 export async function syncFromDB(): Promise<void> {
+  // Skip on Vercel (frontend-only deployment)
+  if (!window.location.hostname.includes('localhost')) return;
+
   await Promise.all(
     ALL_KEYS.map(async (key) => {
       const data = await dbGet(key);

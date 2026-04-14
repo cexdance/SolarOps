@@ -40,13 +40,14 @@ interface JobCardProps {
   job: Job;
   customer: Customer | undefined;
   technician: UserType | undefined;
+  contractorName?: string;
   isDragging: boolean;
   onDragStart: (e: React.DragEvent, jobId: string) => void;
   onDragEnd: () => void;
   onClick: (jobId: string) => void;
 }
 
-const JobCard: React.FC<JobCardProps> = ({ job, customer, technician, isDragging, onDragStart, onDragEnd, onClick }) => (
+const JobCard: React.FC<JobCardProps> = ({ job, customer, technician, contractorName, isDragging, onDragStart, onDragEnd, onClick }) => (
   <div
     draggable
     onDragStart={e => onDragStart(e, job.id)}
@@ -82,9 +83,9 @@ const JobCard: React.FC<JobCardProps> = ({ job, customer, technician, isDragging
           <Zap className="w-3 h-3" />PowerCare
         </span>
       )}
-      {technician && (
+      {contractorName && (
         <span className="text-xs text-slate-500 flex items-center gap-1">
-          <User className="w-3 h-3" />{technician.name}
+          <User className="w-3 h-3" />{contractorName}
         </span>
       )}
     </div>
@@ -161,6 +162,7 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({
             job={job}
             customer={customers.find(c => c.id === job.customerId)}
             technician={users.find(u => u.id === job.technicianId)}
+            contractorName={contractors.find(c => c.id === job.contractorId)?.contactName}
             isDragging={draggedJobId === job.id}
             onDragStart={onDragStart}
             onDragEnd={onDragEnd}
@@ -327,6 +329,7 @@ export const Jobs: React.FC<JobsProps> = ({
               job={job}
               customer={customers.find(c => c.id === job.customerId)}
               technician={users.find(u => u.id === job.technicianId)}
+              contractorName={contractors.find(c => c.id === job.contractorId)?.contactName}
               isDragging={draggedJobId === job.id}
               onDragStart={handleDragStart}
               onDragEnd={() => setDraggedJobId(null)}

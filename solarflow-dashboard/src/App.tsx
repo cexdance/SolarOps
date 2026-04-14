@@ -576,12 +576,32 @@ function App() {
     initializeContractorData();
     return loadContractors();
   });
+
+  // One-time migration: reassign any admin-side jobs from legacy contractor-1 → contractor-2
+  useEffect(() => {
+    setData(prev => {
+      const needsPatch = prev.jobs.some(j => j.contractorId === 'contractor-1');
+      if (!needsPatch) return prev;
+      return { ...prev, jobs: prev.jobs.map(j => j.contractorId === 'contractor-1' ? { ...j, contractorId: 'contractor-2' } : j) };
+    });
+  }, []);
   const [serviceRates, setServiceRates] = useState(() => loadServiceRates());
   const [contractorJobs, setContractorJobs] = useState(() => loadContractorJobs());
 
-  // Sync from Neon on startup, then reload state from localStorage
+  // Sync from Neon on startup (if available), then reload state from localStorage
   useEffect(() => {
+    // Skip Neon sync on Vercel (frontend-only deployment)
+    if (!window.location.hostname.includes('localhost')) {
+      setData(loadData());
+      setDbReady(true);
+      return;
+    }
+    // On localhost, try to sync from Neon
     syncFromDB().then(() => {
+      setData(loadData());
+      setDbReady(true);
+    }).catch(() => {
+      // If sync fails, use localStorage
       setData(loadData());
       setDbReady(true);
     });
@@ -969,6 +989,12 @@ function App() {
       zip: customer.zip || '',
       type: customer.type || 'residential',
       notes: customer.notes || '',
+      clientId: customer.clientId,
+      clientStatus: customer.clientStatus,
+      category: customer.category,
+      systemType: customer.systemType,
+      referralSource: customer.referralSource,
+      howFound: customer.referralSource,
       isPowerCare: customer.isPowerCare,
       solarEdgeSiteId: customer.solarEdgeSiteId,
       createdAt: customer.createdAt || new Date().toISOString(),

@@ -324,13 +324,14 @@ const LEGACY_DEMO_JOB_IDS = new Set(['cj-1', 'cj-2', 'cj-3', 'cj-4', 'cj-5']);
 // Demo contractor
 const demoContractors: Contractor[] = [
   {
-    id: 'contractor-1',
-    email: 'cesar.jurado@conexsol.us',
+    // Merged master record: IMPower Marketing LLC (was contractor-1 ConexSol + contractor-2 MPower)
+    id: 'contractor-2',
+    email: 'cjurado@mpowermarketing.com',
     role: 'contractor',
     status: 'approved',
     createdAt: new Date().toISOString(),
 
-    businessName: 'ConexSol',
+    businessName: 'IMPower Marketing LLC',
     businessType: 'llc',
     ein: '12-3456789',
     streetAddress: '456 Contractor Way',
@@ -350,38 +351,9 @@ const demoContractors: Contractor[] = [
 
     contactName: 'Cesar Jurado',
     contactPhone: '555-0101',
-    skills: ['residential', 'commercial', 'battery'],
-  },
-  {
-    id: 'contractor-2',
-    email: 'cjurado@mpowermarketing.com',
-    role: 'contractor',
-    status: 'approved',
-    createdAt: new Date().toISOString(),
-
-    businessName: 'MPower Marketing, LLC',
-    businessType: 'llc',
-    ein: '',
-    streetAddress: '',
-    city: 'Miami',
-    state: 'FL',
-    zip: '',
-
-    insuranceProvider: '',
-    policyNumber: '',
-    coiDocument: '',
-    coiExpiryDate: '',
-    generalLiabilityLimit: 1000000,
-    workersCompPolicy: '',
-
-    agreedToSafety: true,
-    safetyAgreedDate: new Date().toISOString(),
-
-    contactName: 'Cesar Jurado',
-    contactPhone: '',
     username: 'cjurado',
     altEmails: ['cesar.jurado@conexsol.us'],
-    skills: ['residential', 'commercial'],
+    skills: ['residential', 'commercial', 'battery'],
   },
   {
     id: 'contractor-3',
@@ -556,11 +528,15 @@ export const initializeContractorData = (): void => {
     const existing = loadContractors();
     const existingIds = new Set(existing.map(c => c.id));
     const missing = demoContractors.filter(c => !existingIds.has(c.id));
-    const updated = existing.map(c => {
+    // Remove legacy contractor-1 (duplicate of contractor-2 / IMPower Marketing LLC)
+    const deduped = existing.filter(c => c.id !== 'contractor-1');
+    const updated = deduped.map(c => {
       const demo = demoContractors.find(d => d.id === c.id);
       if (demo) {
-        // Migrate stale "Mike" name/business data to current seed values
-        const needsMigration = c.businessName === "Mike's Solar Services" || c.contactName === 'Mike Johnson';
+        // Migrate stale name/business data to current seed values
+        const needsMigration =
+          c.businessName === "Mike's Solar Services" || c.contactName === 'Mike Johnson' ||
+          c.businessName === 'ConexSol' || c.businessName === 'MPower Marketing, LLC';
         return {
           ...c,
           email: demo.email,
@@ -570,9 +546,13 @@ export const initializeContractorData = (): void => {
       }
       return c;
     });
-    if (missing.length > 0 || updated.some((c, i) => c !== existing[i])) {
+    if (missing.length > 0 || updated.some((c, i) => c !== deduped[i]) || deduped.length !== existing.length) {
       saveContractors([...updated, ...missing]);
     }
+    // Reassign any contractor jobs from legacy contractor-1 → contractor-2
+    const cJobs = loadContractorJobs();
+    const reassigned = cJobs.map(j => j.contractorId === 'contractor-1' ? { ...j, contractorId: 'contractor-2' } : j);
+    if (reassigned.some((j, i) => j !== cJobs[i])) saveContractorJobs(reassigned);
   }
   if (!localStorage.getItem(RATES_KEY)) {
     saveServiceRates(defaultServiceRates);
