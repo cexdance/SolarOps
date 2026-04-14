@@ -104,27 +104,31 @@ async function calcDrivingMiles(origin: string, destination: string): Promise<nu
 
   // ── Google Maps path ───────────────────────────────────────────────────────
   if (apiKey) {
-    await loadGoogleMaps(apiKey);
-    const google = (window as any).google;
-    if (google?.maps?.DistanceMatrixService) {
-      return new Promise<number>((resolve, reject) => {
-        const svc = new google.maps.DistanceMatrixService();
-        svc.getDistanceMatrix(
-          {
-            origins: [origin],
-            destinations: [destination],
-            travelMode: google.maps.TravelMode.DRIVING,
-            unitSystem: google.maps.UnitSystem.IMPERIAL,
-          },
-          (response: any, status: string) => {
-            if (status !== 'OK') { reject(new Error(`DistanceMatrix: ${status}`)); return; }
-            const el = response?.rows?.[0]?.elements?.[0];
-            if (el?.status !== 'OK') { reject(new Error(`Element status: ${el?.status}`)); return; }
-            // distance.value is in metres
-            resolve(Math.round(el.distance.value / 1609.34));
-          }
-        );
-      });
+    try {
+      await loadGoogleMaps(apiKey);
+      const google = (window as any).google;
+      if (google?.maps?.DistanceMatrixService) {
+        return new Promise<number>((resolve, reject) => {
+          const svc = new google.maps.DistanceMatrixService();
+          svc.getDistanceMatrix(
+            {
+              origins: [origin],
+              destinations: [destination],
+              travelMode: google.maps.TravelMode.DRIVING,
+              unitSystem: google.maps.UnitSystem.IMPERIAL,
+            },
+            (response: any, status: string) => {
+              if (status !== 'OK') { reject(new Error(`DistanceMatrix: ${status}`)); return; }
+              const el = response?.rows?.[0]?.elements?.[0];
+              if (el?.status !== 'OK') { reject(new Error(`Element status: ${el?.status}`)); return; }
+              // distance.value is in metres
+              resolve(Math.round(el.distance.value / 1609.34));
+            }
+          );
+        });
+      }
+    } catch (e) {
+      console.warn('[calcDrivingMiles] Google Maps failed, falling back to OSRM:', e);
     }
   }
 
@@ -134,6 +138,7 @@ async function calcDrivingMiles(origin: string, destination: string): Promise<nu
       `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(addr)}&format=json&limit=1`,
       { headers: { 'Accept-Language': 'en', 'User-Agent': 'SolarOps/1.0' } }
     );
+    if (!r.ok) throw new Error(`Nominatim failed: ${r.status}`);
     const d = await r.json();
     if (!d[0]) throw new Error(`Address not found: ${addr}`);
     return { lat: parseFloat(d[0].lat), lon: parseFloat(d[0].lon) };
@@ -142,8 +147,9 @@ async function calcDrivingMiles(origin: string, destination: string): Promise<nu
   const route = await fetch(
     `https://router.project-osrm.org/route/v1/driving/${o.lon},${o.lat};${t.lon},${t.lat}?overview=false`
   );
+  if (!route.ok) throw new Error(`OSRM failed: ${route.status}`);
   const rd = await route.json();
-  if (rd.code !== 'Ok') throw new Error('OSRM routing failed');
+  if (rd.code !== 'Ok') throw new Error(`OSRM error: ${rd.code}`);
   return Math.round(rd.routes[0].distance / 1609.34);
 }
 
@@ -422,7 +428,10 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
     setTravelCalcStatus('loading');
     calcDrivingMiles(travelFromAddress, siteAddress)
       .then(miles => { setTravelMiles(miles); setTravelCalcStatus('done'); })
-      .catch(() => setTravelCalcStatus('error'));
+      .catch(err => {
+        console.warn('[WorkOrderPanel] Travel miles calculation failed:', err?.message || err);
+        setTravelCalcStatus('error');
+      });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [siteAddress, travelCalcStatus]);
 
