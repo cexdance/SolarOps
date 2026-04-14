@@ -3,9 +3,9 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   Wrench, Users, AlertTriangle, CheckCircle, Clock, TrendingUp, TrendingDown,
   Calendar, AtSign, FileText, Receipt, CreditCard, Pencil, Plus, Trash2,
-  X, ChevronRight, ExternalLink,
+  X, ChevronRight, ExternalLink, Bell, Wifi, WifiOff,
 } from 'lucide-react';
-import { Job, Customer, User } from '../types';
+import { Job, Customer, User, AppNotification } from '../types';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -138,12 +138,16 @@ interface DashboardProps {
   onViewChange: (view: string) => void;
   onViewCustomer?: (customerId: string) => void;
   isMobile: boolean;
+  notifications?: AppNotification[];
+  onMarkNotificationRead?: (notificationId: string) => void;
+  isConnected?: boolean;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export const Dashboard: React.FC<DashboardProps> = ({
   jobs, customers, users, currentUser, onViewChange, onViewCustomer, isMobile,
+  notifications = [], onMarkNotificationRead, isConnected = true,
 }) => {
   const uid = currentUser?.id ?? 'default';
 
@@ -606,6 +610,82 @@ export const Dashboard: React.FC<DashboardProps> = ({
             </button>
           ))}
         </div>
+      </div>
+
+      {/* ── Notifications ─────────────────────────────────────────────────── */}
+      <div className="bg-white rounded-xl shadow-sm border border-slate-100">
+        <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Bell className="w-4 h-4 text-slate-500" />
+            <h2 className="font-semibold text-slate-900 text-sm">Notifications</h2>
+            {notifications.filter(n => !n.read).length > 0 && (
+              <span className="ml-auto text-xs bg-orange-100 text-orange-700 font-semibold px-2 py-0.5 rounded-full">
+                {notifications.filter(n => !n.read).length} new
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2 ml-auto">
+            {isConnected ? (
+              <div className="flex items-center gap-1 text-xs text-green-600">
+                <Wifi className="w-3 h-3" />
+                <span>Connected</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1 text-xs text-red-600">
+                <WifiOff className="w-3 h-3" />
+                <span>Offline</span>
+              </div>
+            )}
+          </div>
+        </div>
+        {notifications.length === 0 ? (
+          <div className="p-8 text-center text-slate-400 text-sm">No notifications</div>
+        ) : (
+          <div className="divide-y divide-slate-50">
+            {notifications.slice(0, 5).map(notification => (
+              <div
+                key={notification.id}
+                onClick={() => onMarkNotificationRead?.(notification.id)}
+                className={`px-4 py-3 cursor-pointer transition-colors group ${
+                  notification.read ? 'hover:bg-slate-50' : 'bg-orange-50 hover:bg-orange-100'
+                }`}
+              >
+                <div className="flex items-start gap-3">
+                  {!notification.read && (
+                    <div className="w-2.5 h-2.5 rounded-full bg-orange-500 mt-1.5 shrink-0" />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm ${notification.read ? 'text-slate-600' : 'font-semibold text-slate-900'}`}>
+                      {notification.title}
+                    </p>
+                    <p className={`text-xs mt-0.5 ${notification.read ? 'text-slate-400' : 'text-slate-600'}`}>
+                      {notification.message}
+                    </p>
+                    <p className="text-xs text-slate-400 mt-1">
+                      {new Date(notification.createdAt).toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </p>
+                  </div>
+                  <ExternalLink className="w-3.5 h-3.5 text-slate-300 group-hover:text-orange-400 transition-colors shrink-0 mt-0.5" />
+                </div>
+              </div>
+            ))}
+            {notifications.length > 5 && (
+              <div className="px-4 py-2 text-center">
+                <button
+                  onClick={() => onViewChange('notifications')}
+                  className="text-xs text-orange-600 hover:text-orange-700 font-medium"
+                >
+                  View all {notifications.length} notifications
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* ── Quick Actions ─────────────────────────────────────────────────── */}

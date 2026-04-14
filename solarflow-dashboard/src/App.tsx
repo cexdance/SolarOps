@@ -1676,6 +1676,14 @@ function App() {
             onViewChange={handleViewChange}
             onViewCustomer={(customerId) => { setSelectedCustomerId(customerId); setCurrentView('customers'); }}
             isMobile={isMobile}
+            notifications={data.notifications}
+            onMarkNotificationRead={(notifId) => {
+              setData(prev => ({
+                ...prev,
+                notifications: prev.notifications.map(n => n.id === notifId ? { ...n, read: true } : n)
+              }));
+            }}
+            isConnected={true}
           />
         );
 

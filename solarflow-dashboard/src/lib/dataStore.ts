@@ -59,6 +59,37 @@ const generateDemoData = (): AppState => {
   // No demo jobs - imported clients don't have associated jobs yet
   const demoJobs: Job[] = [];
 
+  // Sample notifications for testing
+  const demoNotifications = [
+    {
+      id: 'notif-1',
+      userId: 'user-1',
+      type: 'contractor_completed' as const,
+      title: 'Work Order Completed',
+      message: 'Contractor has marked work order WO-2603-00123 as completed',
+      read: false,
+      createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+    },
+    {
+      id: 'notif-2',
+      userId: 'user-1',
+      type: 'late_fee_1' as const,
+      title: 'Payment Due Soon',
+      message: 'Invoice INV-001 is due in 3 days',
+      read: false,
+      createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+    },
+    {
+      id: 'notif-3',
+      userId: 'user-1',
+      type: 'service_disconnect' as const,
+      title: 'Service Update',
+      message: 'System maintenance scheduled for 2026-04-20 at 2:00 AM',
+      read: true,
+      createdAt: new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString(),
+    },
+  ];
+
   return {
     users: demoUsers,
     customers: demoCustomers,
@@ -70,7 +101,7 @@ const generateDemoData = (): AppState => {
       apiKey: '',
     },
     currentUser: undefined as any,
-    notifications: [],
+    notifications: demoNotifications,
   };
 };
 
