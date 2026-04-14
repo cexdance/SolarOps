@@ -7,9 +7,9 @@ import {
   TrendingUp, UserCog, ClipboardList, User, Check, Inbox,
   Phone, Mail, CheckSquare, Trash2, Calendar, GripVertical,
 } from 'lucide-react';
-import {
-  AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer,
-} from 'recharts';
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+import * as _recharts from 'recharts';
+const { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } = _recharts as any;
 import { FL_SITES, SolarEdgeSite } from '../lib/solarEdgeSites';
 import { Job, Customer, LeadSource } from '../types';
 import { loadCRMData, saveCRMData, addLead, CRMData } from '../lib/crmStore';
@@ -579,7 +579,6 @@ const DailyProductionGraphWidget: React.FC<{ customerId: string; customers: Cust
               itemStyle={{ color: '#34d399' }}
               formatter={(v: number | null) => v !== null ? [`${v} kW`, 'Power'] : ['—', 'Power']}
             />
-            {/* @ts-expect-error recharts v2 type compat */}
             <Area type="monotone" dataKey="kw" stroke="#10b981" strokeWidth={2} fill={`url(#grad-${site.siteId})`} dot={false} connectNulls={false} />
           </AreaChart>
         </ResponsiveContainer>

@@ -19,7 +19,6 @@ export default defineConfig({
     },
   },
   server: {
-    historyApiFallback: true,
     proxy: {
       // Proxy Xero token endpoint to avoid CORS in dev
       '/xero-token': {
