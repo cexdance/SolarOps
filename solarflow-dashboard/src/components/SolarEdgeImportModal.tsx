@@ -5,7 +5,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   X, RefreshCw, CheckSquare, Square, AlertTriangle,
-  Plus, Edit2, Trash2, Check, ChevronDown, ChevronUp, Loader2,
+  Plus, Edit2, Trash2, Check, ChevronDown, ChevronUp, Loader2, Search,
 } from 'lucide-react';
 import { Customer, CustomerCategory } from '../types';
 
@@ -58,6 +58,7 @@ async function fetchAllSites(apiKey?: string): Promise<LiveSite[]> {
   const PAGE = 100;
   let start = 0;
   let all: LiveSite[] = [];
+  let totalCount = 0;
   while (true) {
     // Server-side proxy uses SOLAREDGE_API_KEY env var by default; client key is optional override
     const params = new URLSearchParams({ path: '/sites/list', size: String(PAGE), startIndex: String(start) });
@@ -67,12 +68,15 @@ async function fetchAllSites(apiKey?: string): Promise<LiveSite[]> {
     const json = await res.json();
     if (json.errors) throw new Error(json.errors?.error?.[0]?.message || 'API error');
     const page: LiveSite[] = json.sites?.site || [];
+    totalCount = json.sites?.count ?? (all.length + page.length);
     all = all.concat(page);
-    if (page.length < PAGE) break;
+    if (page.length < PAGE || all.length >= totalCount) break;
     start += PAGE;
   }
-  // Florida only
-  return all.filter(s => s.location?.country === 'United States' && s.location?.state === 'Florida');
+  // Accept all sites in this account — it IS the Conexsol Florida group.
+  // Previously filtered state === 'Florida' (exact), which dropped sites where the
+  // API returns state as 'FL' (abbreviated) or leaves state blank.
+  return all;
 }
 
 function fmtAddress(site: LiveSite): string {
@@ -171,6 +175,7 @@ export const SolarEdgeImportModal: React.FC<Props> = ({
   const [error, setError] = useState('');
   const [diff, setDiff] = useState<DiffItem[]>([]);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [search, setSearch] = useState('');
 
   // Auto-fetch on mount
   useEffect(() => {
@@ -212,7 +217,17 @@ export const SolarEdgeImportModal: React.FC<Props> = ({
   const acceptedTotal = diff.filter(d => d.accepted).length;
 
   const renderGroup = (type: DiffType) => {
-    const items = diff.filter(d => d.type === type);
+    const q = search.trim().toLowerCase();
+    const items = diff.filter(d => {
+      if (d.type !== type) return false;
+      if (!q) return true;
+      // Search raw site name (preserves US-15586), transformed name, address, site ID
+      const rawName  = (d.site?.name || d.customer?.name || '').toLowerCase();
+      const xfName   = siteToName(d.site?.name || '').toLowerCase();
+      const addr     = fmtAddress(d.site ?? { location: {} as any } as LiveSite).toLowerCase();
+      const siteId   = String(d.site?.id || d.customer?.solarEdgeSiteId || '');
+      return rawName.includes(q) || xfName.includes(q) || addr.includes(q) || siteId.includes(q);
+    });
     if (!items.length) return null;
     const cfg = typeConfig[type];
     const allOn  = items.every(d => d.accepted);
@@ -256,8 +271,14 @@ export const SolarEdgeImportModal: React.FC<Props> = ({
 
                   {/* Info */}
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-medium text-slate-800 text-sm truncate">{name || item.site?.name}</span>
+                      {/* Show raw US- prefix if the original name had it (e.g. US-15586) */}
+                      {item.site?.name && /^US[\s-]\d+/i.test(item.site.name) && (
+                        <span className="text-xs font-mono text-orange-500 bg-orange-50 px-1.5 py-0.5 rounded">
+                          {item.site.name.split(' ')[0]}
+                        </span>
+                      )}
                       {city && <span className="text-xs text-slate-400">{city}</span>}
                       {item.site && (
                         <span className="text-xs text-slate-400 font-mono">#{item.site.id}</span>
@@ -357,7 +378,7 @@ export const SolarEdgeImportModal: React.FC<Props> = ({
           {status === 'ready' && diff.length > 0 && (
             <>
               {/* Summary bar */}
-              <div className="flex gap-3 text-sm">
+              <div className="flex gap-3 text-sm flex-wrap">
                 {counts.new > 0 && (
                   <div className="flex items-center gap-1.5 px-3 py-1.5 bg-green-50 text-green-700 rounded-lg border border-green-200">
                     <Plus className="w-3.5 h-3.5" />
@@ -375,6 +396,23 @@ export const SolarEdgeImportModal: React.FC<Props> = ({
                     <AlertTriangle className="w-3.5 h-3.5" />
                     <span className="font-semibold">{counts.removed}</span> not in API
                   </div>
+                )}
+              </div>
+
+              {/* Search — finds by US-NNNNN, name, address, or site ID */}
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                <input
+                  type="text"
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  placeholder="Search by name, US-ID, address, or site #…"
+                  className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-300"
+                />
+                {search && (
+                  <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
                 )}
               </div>
 
