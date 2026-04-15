@@ -411,10 +411,10 @@ export const SolarEdgeMonitoring: React.FC<Props> = ({
     if (search.trim()) {
       const q = search.toLowerCase();
       rows = rows.filter(s =>
-        s.clientId.toLowerCase().includes(q) ||
-        s.siteName.toLowerCase().includes(q) ||
-        s.address.toLowerCase().includes(q) ||
-        s.siteId.includes(q)
+        (s.clientId || '').toLowerCase().includes(q) ||
+        (s.siteName || '').toLowerCase().includes(q) ||
+        (s.address || '').toLowerCase().includes(q) ||
+        (s.siteId || '').includes(q)
       );
     }
     if (statusFilter !== 'all') rows = rows.filter(s => s.status === statusFilter);
