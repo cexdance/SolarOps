@@ -842,8 +842,10 @@ interface EnergyDataPoint {
 const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
   const siteId = customer.solarEdgeSiteId;
   const [graphPeriod, setGraphPeriod] = useState<'week' | 'quarter' | 'year'>('week');
-  const [energyData, setEnergyData] = useState<EnergyDataPoint[]>([]);
+  // Cache energy data per period so toggling tabs doesn't consume extra API calls
+  const [energyCache, setEnergyCache] = useState<Record<string, EnergyDataPoint[]>>({});
   const [loading, setLoading] = useState(false);
+  const [fetchError, setFetchError] = useState('');
   const [reportNotes, setReportNotes] = useState('');
   const [sendingReport, setSendingReport] = useState(false);
   const [reportSent, setReportSent] = useState(false);
@@ -851,12 +853,15 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
   const [xeroLoading, setXeroLoading] = useState(false);
   const [xeroError, setXeroError] = useState('');
 
+  const energyData = energyCache[graphPeriod] || [];
+
   // Find site data from FL_SITES or localStorage extras
+  // NOTE: correct key is 'solarflow_data' (not 'solarflow_state')
   const siteData = React.useMemo(() => {
     const fromStatic = FL_SITES.find(s => s.siteId === siteId);
     if (fromStatic) return fromStatic;
     try {
-      const raw = localStorage.getItem('solarflow_state');
+      const raw = localStorage.getItem('solarflow_data');
       if (raw) {
         const state = JSON.parse(raw);
         const extras: SolarEdgeSite[] = state.solarEdgeExtraSites || [];
@@ -872,19 +877,26 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
   const dollarsSaved = lifetimeKwh * COST_PER_KWH;
   const specificYield = peakPowerWp > 0 ? lifetimeKwh / peakPowerWp : 0;
 
-  // Fetch energy time-series from SolarEdge API
+  // Fetch energy time-series from SolarEdge API — skip if already cached
   useEffect(() => {
     if (!siteId) return;
+    if (energyCache[graphPeriod]) return; // already fetched for this period
     const fetchEnergy = async () => {
       setLoading(true);
+      setFetchError('');
       try {
+        // NOTE: correct key is 'solarflow_data' (not 'solarflow_state')
         const apiKey = (() => {
           try {
-            const raw = localStorage.getItem('solarflow_state');
-            return raw ? JSON.parse(raw).solarEdgeConfig?.apiKey : '';
+            const raw = localStorage.getItem('solarflow_data');
+            return raw ? JSON.parse(raw).solarEdgeConfig?.apiKey?.trim() : '';
           } catch { return ''; }
         })();
-        if (!apiKey) { setLoading(false); return; }
+        if (!apiKey) {
+          setFetchError('No SolarEdge API key configured. Add it in Settings → SolarEdge.');
+          setLoading(false);
+          return;
+        }
 
         const now = new Date();
         let startDate: string;
@@ -909,9 +921,11 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
         );
         if (resp.ok) {
           const json = await resp.json();
-          const values = json.energy?.values || [];
-          setEnergyData(
-            values
+          if (json.error || json.message) {
+            setFetchError(`SolarEdge: ${json.error || json.message}`);
+          } else {
+            const values = json.energy?.values || [];
+            const points: EnergyDataPoint[] = values
               .filter((v: any) => v.value != null)
               .map((v: any) => ({
                 date: graphPeriod === 'year'
@@ -920,16 +934,21 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
                   ? new Date(v.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
                   : new Date(v.date).toLocaleDateString('en-US', { weekday: 'short' }),
                 kWh: Math.round((v.value || 0) / 1000 * 100) / 100, // Wh → kWh
-              }))
-          );
+              }));
+            setEnergyCache(prev => ({ ...prev, [graphPeriod]: points }));
+          }
+        } else {
+          const body = await resp.json().catch(() => ({}));
+          setFetchError(`API error ${resp.status}: ${body.error || 'check API key'}`);
         }
       } catch (err) {
         console.warn('Failed to fetch energy data:', err);
+        setFetchError('Network error — check connection');
       }
       setLoading(false);
     };
     fetchEnergy();
-  }, [siteId, graphPeriod]);
+  }, [siteId, graphPeriod]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch Xero invoices for this customer
   useEffect(() => {
@@ -1121,7 +1140,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
         <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-200">
           <div className="flex items-center gap-1.5 mb-1">
             <span className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Specific Yield</span>
-            <InfoTooltip text="Energy produced per watt of installed capacity (kWh/Wp). Higher values indicate better system performance relative to size." />
+            <InfoTooltip text="Energy produced per watt of installed capacity (kWh/Wp). Think of it like MPG on a car — the higher the number, the more efficiently your system is turning sunlight into savings." />
           </div>
           <p className="text-2xl font-bold text-slate-900">
             {specificYield.toFixed(2)} <span className="text-sm font-normal text-slate-500">kWh/Wp</span>
@@ -1167,7 +1186,14 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
         </div>
         <div className="h-48">
           {loading ? (
-            <div className="h-full flex items-center justify-center text-sm text-slate-400">Loading energy data…</div>
+            <div className="h-full flex items-center justify-center gap-2 text-sm text-slate-400">
+              <span className="animate-spin inline-block w-4 h-4 border-2 border-orange-300 border-t-orange-500 rounded-full" />
+              Loading energy data…
+            </div>
+          ) : fetchError ? (
+            <div className="h-full flex flex-col items-center justify-center gap-1 text-center px-4">
+              <span className="text-sm font-medium text-red-500">⚠ {fetchError}</span>
+            </div>
           ) : energyData.length > 0 ? (
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={energyData}>
@@ -1179,7 +1205,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                 <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="#94a3b8" />
-                <YAxis tick={{ fontSize: 11 }} stroke="#94a3b8" />
+                <YAxis tick={{ fontSize: 11 }} stroke="#94a3b8" unit=" kWh" />
                 <RechartsTooltip
                   contentStyle={{ borderRadius: 8, fontSize: 12 }}
                   formatter={(value: number) => [`${value.toFixed(1)} kWh`, 'Production']}
@@ -1188,8 +1214,9 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
               </AreaChart>
             </ResponsiveContainer>
           ) : (
-            <div className="h-full flex items-center justify-center text-sm text-slate-400">
-              No production data available. Check SolarEdge API key in Settings.
+            <div className="h-full flex flex-col items-center justify-center gap-1 text-center px-4">
+              <span className="text-sm text-slate-400">No production data returned for this period.</span>
+              <span className="text-xs text-slate-300">Verify the SolarEdge API key is active in Settings.</span>
             </div>
           )}
         </div>
