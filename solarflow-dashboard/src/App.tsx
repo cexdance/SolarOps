@@ -24,6 +24,7 @@ const LeadLobby = lazy(() => import('./components/LeadLobby').then(m => ({ defau
 import { supabase } from './lib/supabase';
 import { syncFromDB } from './lib/db';
 import { loadData, saveData } from './lib/dataStore';
+import { logChange, flushChangeLog } from './lib/changeLog';
 import { processBillingTimers } from './lib/billingService';
 import { loadContractors, saveContractors, loadServiceRates, saveServiceRates, loadContractorJobs, saveContractorJobs, initializeContractorData, findInviteByToken } from './lib/contractorStore';
 import { ContractorInvite as ContractorInviteType } from './types/contractor';
@@ -588,23 +589,28 @@ function App() {
   const [serviceRates, setServiceRates] = useState(() => loadServiceRates());
   const [contractorJobs, setContractorJobs] = useState(() => loadContractorJobs());
 
-  // Sync from Neon on startup (if available), then reload state from localStorage
+  // Sync from Supabase on startup → merge into local state
+  // syncFromDB() merges remote customers/jobs into localStorage, then we reload
   useEffect(() => {
-    // Skip Neon sync on Vercel (frontend-only deployment)
-    if (!window.location.hostname.includes('localhost')) {
-      setData(loadData());
-      setDbReady(true);
-      return;
-    }
-    // On localhost, try to sync from Neon
-    syncFromDB().then(() => {
-      setData(loadData());
-      setDbReady(true);
-    }).catch(() => {
-      // If sync fails, use localStorage
-      setData(loadData());
-      setDbReady(true);
-    });
+    syncFromDB()
+      .then(() => {
+        // Re-read localStorage after remote merge (may have new records from other devices)
+        const merged = loadData();
+        setData(prev => {
+          // Only update if remote actually added records (avoids unnecessary re-renders)
+          if (
+            merged.customers.length !== prev.customers.length ||
+            merged.jobs.length     !== prev.jobs.length
+          ) {
+            return merged;
+          }
+          return prev;
+        });
+      })
+      .catch(() => {
+        // Sync failed (offline / not logged in) — local data is already loaded
+      })
+      .finally(() => setDbReady(true));
   }, []);
 
   // Save data whenever it changes (debounced 500ms)
@@ -721,6 +727,8 @@ function App() {
         fetchStaffUsers().then(users => {
           if (users.length > 0) setData(prev => ({ ...prev, users }));
         });
+        // Flush any change log entries that were queued while offline
+        flushChangeLog().catch(() => {});
         // Restore dual-role contractor link on session resume
         const allContractors = loadContractors();
         const linked = allContractors.find(
@@ -999,14 +1007,27 @@ function App() {
       solarEdgeSiteId: customer.solarEdgeSiteId,
       createdAt: customer.createdAt || new Date().toISOString(),
     };
-    setData({ ...data, customers: [...data.customers, newCustomer] });
+    // Log before state update — append-only audit trail
+    logChange('customer.create', 'customer', newCustomer.id, newCustomer,
+      data.currentUser?.email ?? 'unknown');
+
+    // Use prev => pattern to avoid stale-closure data loss
+    setData(prev => {
+      const next = { ...prev, customers: [...prev.customers, newCustomer] };
+      // Immediate synchronous save — never rely solely on the 500ms debounce
+      saveData(next);
+      return next;
+    });
   };
 
   const handleUpdateCustomer = (updatedCustomer: Customer) => {
-    setData({
-      ...data,
-      customers: data.customers.map((c) => (c.id === updatedCustomer.id ? updatedCustomer : c)),
-    });
+    logChange('customer.update', 'customer', updatedCustomer.id, updatedCustomer,
+      data.currentUser?.email ?? 'unknown');
+
+    setData(prev => ({
+      ...prev,
+      customers: prev.customers.map((c) => (c.id === updatedCustomer.id ? updatedCustomer : c)),
+    }));
   };
 
   const handleDeleteCustomer = (customerId: string) => {

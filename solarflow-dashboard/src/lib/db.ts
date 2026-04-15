@@ -1,14 +1,12 @@
-// Thin client for Netlify/Neon store function
-// Wraps localStorage: Neon is source of truth, localStorage is in-session cache
-
-import { supabase } from './supabase';
-
-const BASE = '/api/store';
-
-async function getAuthHeader(): Promise<string> {
-  const { data: { session } } = await supabase.auth.getSession();
-  return session?.access_token ? `Bearer ${session.access_token}` : '';
-}
+/**
+ * SolarOps — Database Client (Supabase-backed)
+ *
+ * Previously called /api/store (Neon) which was DISABLED on Vercel,
+ * meaning zero cloud backup in production. Now routes through Supabase
+ * app_data table — works on ALL environments, every deploy.
+ */
+import { pushToSupabase, pullFromSupabase, mergeRemote } from './syncEngine';
+import type { AppState } from '../types';
 
 export const ALL_KEYS = [
   'solarflow_data',
@@ -27,48 +25,38 @@ export const ALL_KEYS = [
   'solarops_projects',
 ];
 
-export async function dbGet(key: string): Promise<unknown | null> {
-  try {
-    const res = await fetch(`${BASE}?key=${encodeURIComponent(key)}`, {
-      headers: { Authorization: await getAuthHeader() },
-    });
-    if (!res.ok) return null;
-    const text = await res.text();
-    return text === 'null' ? null : JSON.parse(text);
-  } catch {
-    return null;
-  }
-}
-
+/**
+ * Persist a value. For the main app state blob, syncs to Supabase.
+ * localStorage is always written first by the caller (dataStore.saveData).
+ */
 export async function dbSet(key: string, data: unknown): Promise<void> {
-  // Skip Neon sync on Vercel (frontend-only deployment, no backend API)
-  if (!window.location.hostname.includes('localhost')) return;
-
-  try {
-    await fetch(`${BASE}?key=${encodeURIComponent(key)}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: await getAuthHeader(),
-      },
-      body: JSON.stringify(data),
-    });
-  } catch {
-    // silent — localStorage already saved
+  if (key === 'solarflow_data' && data && typeof data === 'object') {
+    // Fire-and-forget — never block the UI
+    pushToSupabase(data as AppState).catch(() => {});
   }
 }
 
-// On app startup: pull all keys from Neon → seed localStorage
-export async function syncFromDB(): Promise<void> {
-  // Skip on Vercel (frontend-only deployment)
-  if (!window.location.hostname.includes('localhost')) return;
+/** @deprecated — generic get not used in new sync flow. Kept for compat. */
+export async function dbGet(_key: string): Promise<unknown | null> {
+  return null;
+}
 
-  await Promise.all(
-    ALL_KEYS.map(async (key) => {
-      const data = await dbGet(key);
-      if (data !== null) {
-        localStorage.setItem(key, JSON.stringify(data));
-      }
-    })
-  );
+/**
+ * On app startup: pull from Supabase → merge into localStorage.
+ * After this returns, `loadData()` will read the merged result.
+ */
+export async function syncFromDB(): Promise<void> {
+  try {
+    const remote = await pullFromSupabase();
+    if (!remote) return;
+
+    const raw = localStorage.getItem('solarflow_data');
+    if (!raw) return;
+
+    const local = JSON.parse(raw) as AppState;
+    const merged = mergeRemote(local, remote);
+    localStorage.setItem('solarflow_data', JSON.stringify(merged));
+  } catch {
+    // Network error or parse error — local data is untouched
+  }
 }
