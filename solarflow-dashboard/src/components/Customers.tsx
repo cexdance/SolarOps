@@ -1482,12 +1482,19 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
   }, [showEditModal, customer]);
 
   // Parse @mentions from note text and resolve to user IDs
+  // Resolve @username or @Name mentions → user IDs
   const parseMentions = (text: string): string[] => {
     const mentioned: string[] = [];
-    const matches = text.match(/@([\w\s]+?)(?=\s@|\s[^@\w]|$)/g) || [];
+    // Match @word (username) or @First Last style — stop at whitespace-then-non-word or end
+    const matches = text.match(/@([\w.]+)/g) || [];
     matches.forEach(m => {
-      const name = m.slice(1).trim();
-      const user = users.find(u => u.name.toLowerCase() === name.toLowerCase());
+      const handle = m.slice(1).trim().toLowerCase();
+      // Try matching by username first, then by name (first word match)
+      const user = users.find(u =>
+        (u.username && u.username.toLowerCase() === handle) ||
+        u.name.toLowerCase().replace(/\s+/g, '') === handle ||
+        u.name.toLowerCase() === handle
+      );
       if (user && !mentioned.includes(user.id)) mentioned.push(user.id);
     });
     return mentioned;
@@ -1508,26 +1515,35 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
     }
   };
 
+  // Insert @username when a user is selected from the dropdown
   const handleMentionSelect = (user: User) => {
     const before = notes.slice(0, mentionStartIndex);
     const after = notes.slice(textareaRef.current?.selectionStart ?? notes.length);
-    const inserted = `@${user.name} `;
+    const handle = user.username?.trim() || user.name.replace(/\s+/g, '').toLowerCase();
+    const inserted = `@${handle} `;
     setNotes(before + inserted + after);
     setShowMentionDropdown(false);
     setTimeout(() => textareaRef.current?.focus(), 0);
   };
 
   const filteredMentionUsers = mentionQuery
-    ? users.filter(u => u.name.toLowerCase().startsWith(mentionQuery.toLowerCase()))
+    ? users.filter(u => {
+        const q = mentionQuery.toLowerCase();
+        return (
+          (u.username && u.username.toLowerCase().startsWith(q)) ||
+          u.name.toLowerCase().startsWith(q)
+        );
+      })
     : users;
 
   const handleSaveNote = () => {
     if (!notes.trim()) return;
     const mentionedIds = parseMentions(notes);
+    const noteText = notes.trim();
     const newActivity: Activity = {
       id: `activity-${Date.now()}`,
       type: 'note_added',
-      description: notes.trim(),
+      description: noteText,
       timestamp: new Date().toISOString(),
       userId: currentUser?.id,
       userName: currentUser?.name,
@@ -1541,6 +1557,29 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
     setNotes('');
     setNoteSaved(true);
     setTimeout(() => setNoteSaved(false), 2000);
+
+    // Fire @mention notifications (async, non-blocking)
+    if (mentionedIds.length > 0) {
+      import('../lib/supabase').then(({ supabase }) => {
+        supabase.auth.getSession().then(({ data: { session } }) => {
+          if (!session?.access_token) return;
+          fetch('/api/notify', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${session.access_token}`,
+            },
+            body: JSON.stringify({
+              mentionedUserIds: mentionedIds,
+              notifierName: currentUser?.name || 'A teammate',
+              customerName: customer.name,
+              customerId: customer.id,
+              message: noteText,
+            }),
+          }).catch(() => {});
+        });
+      });
+    }
   };
 
   const handleSaveEdit = () => {
@@ -1775,21 +1814,27 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                   />
                   {/* @ Mention dropdown */}
                   {showMentionDropdown && filteredMentionUsers.length > 0 && (
-                    <div className="absolute left-0 bottom-full mb-1 w-56 bg-white border border-slate-200 rounded-xl shadow-lg z-50 overflow-hidden">
+                    <div className="absolute left-0 bottom-full mb-1 w-64 bg-white border border-slate-200 rounded-xl shadow-lg z-50 overflow-hidden">
                       <p className="text-[10px] text-slate-400 px-3 pt-2 pb-1 uppercase tracking-wide font-medium">Mention a teammate</p>
-                      {filteredMentionUsers.map(u => (
-                        <button
-                          key={u.id}
-                          onMouseDown={(e) => { e.preventDefault(); handleMentionSelect(u); }}
-                          className="w-full flex items-center gap-2 px-3 py-2 hover:bg-orange-50 text-left text-sm"
-                        >
-                          <div className="w-6 h-6 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center text-xs font-bold shrink-0">
-                            {u.name.charAt(0)}
-                          </div>
-                          <span className="font-medium text-slate-800">{u.name}</span>
-                          <span className="text-xs text-slate-400 capitalize ml-auto">{u.role}</span>
-                        </button>
-                      ))}
+                      {filteredMentionUsers.map(u => {
+                        const handle = u.username?.trim() || u.name.replace(/\s+/g, '').toLowerCase();
+                        return (
+                          <button
+                            key={u.id}
+                            onMouseDown={(e) => { e.preventDefault(); handleMentionSelect(u); }}
+                            className="w-full flex items-center gap-2 px-3 py-2 hover:bg-orange-50 text-left text-sm"
+                          >
+                            <div className="w-7 h-7 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center text-xs font-bold shrink-0">
+                              {u.name.charAt(0)}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="font-medium text-slate-800 text-sm truncate">{u.name}</div>
+                              <div className="text-xs text-orange-500 font-mono">@{handle}</div>
+                            </div>
+                            <span className="text-xs text-slate-400 capitalize shrink-0">{u.role}</span>
+                          </button>
+                        );
+                      })}
                     </div>
                   )}
                 </div>

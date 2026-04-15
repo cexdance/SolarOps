@@ -25,6 +25,7 @@ import { supabase } from './lib/supabase';
 import { syncFromDB } from './lib/db';
 import { loadData, saveData } from './lib/dataStore';
 import { logChange, flushChangeLog } from './lib/changeLog';
+import { fetchMyNotifications, markNotificationReadRemote, markAllNotificationsReadRemote, startNotificationPolling, stopNotificationPolling } from './lib/notifications';
 import { processBillingTimers } from './lib/billingService';
 import { loadContractors, saveContractors, loadServiceRates, saveServiceRates, loadContractorJobs, saveContractorJobs, initializeContractorData, findInviteByToken } from './lib/contractorStore';
 import { ContractorInvite as ContractorInviteType } from './types/contractor';
@@ -729,6 +730,11 @@ function App() {
         });
         // Flush any change log entries that were queued while offline
         flushChangeLog().catch(() => {});
+        // Load Supabase notifications and start polling
+        fetchMyNotifications().then(notifs => {
+          if (notifs.length > 0) mergeRemoteNotifications(notifs);
+        });
+        startNotificationPolling(mergeRemoteNotifications);
         // Restore dual-role contractor link on session resume
         const allContractors = loadContractors();
         const linked = allContractors.find(
@@ -746,12 +752,16 @@ function App() {
         setIsContractorMode(false);
         setCurrentContractor(null);
         setCurrentView('dashboard');
+        stopNotificationPolling();
       } else if (event === 'TOKEN_REFRESHED' && session) {
         // Session refreshed silently — no action needed
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      subscription.unsubscribe();
+      stopNotificationPolling();
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -831,6 +841,7 @@ function App() {
       ...prev,
       notifications: prev.notifications.map(n => n.id === id ? { ...n, read: true } : n),
     }));
+    markNotificationReadRemote(id).catch(() => {});
   };
 
   const handleMarkAllNotificationsRead = () => {
@@ -838,6 +849,22 @@ function App() {
       ...prev,
       notifications: prev.notifications.map(n => ({ ...n, read: true })),
     }));
+    markAllNotificationsReadRemote().catch(() => {});
+  };
+
+  // Merge Supabase notifications into local state (dedup by id)
+  const mergeRemoteNotifications = (remoteNotifs: AppNotification[]) => {
+    setData(prev => {
+      const localIds = new Set(prev.notifications.map(n => n.id));
+      const newOnes = remoteNotifs.filter(n => !localIds.has(n.id));
+      // Also update read status for existing ones that were marked read remotely
+      const updated = prev.notifications.map(n => {
+        const remote = remoteNotifs.find(r => r.id === n.id);
+        return remote && remote.read && !n.read ? { ...n, read: true } : n;
+      });
+      if (newOnes.length === 0 && updated.every((n, i) => n === prev.notifications[i])) return prev;
+      return { ...prev, notifications: [...newOnes, ...updated] };
+    });
   };
 
   const handleContractorRegister = (contractor: Contractor) => {
