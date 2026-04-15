@@ -1115,6 +1115,14 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
     const systemSize  = siteData?.peakPower?.toFixed(1) || (peakPowerKw > 0 ? peakPowerKw.toFixed(1) : null);
     const reportDate  = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 
+    /* SVG icon helpers — inline so no external requests */
+    const svgBolt     = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f97316" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`;
+    const svgDollar   = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>`;
+    const svgGauge    = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 12L8 8"/><circle cx="12" cy="12" r="2"/></svg>`;
+    const svgLeaf     = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10z"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/></svg>`;
+    const svgStar     = `<svg width="22" height="22" viewBox="0 0 24 24" fill="#f59e0b" stroke="#f59e0b" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`;
+    const svgCalendar = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`;
+
     const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1122,85 +1130,110 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Solar Production Report — ${customer.name}</title>
   <style>
-    * { box-sizing: border-box; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-      margin: 0; padding: 24px 16px; background: #f1f5f9; color: #1e293b;
+      background: #f1f5f9; color: #1e293b; padding: 32px 16px;
+      -webkit-font-smoothing: antialiased;
     }
-    .wrap { max-width: 620px; margin: 0 auto; }
+    .wrap { max-width: 600px; margin: 0 auto; }
 
-    /* ── Brand bar ─────────────────────────────────── */
+    /* ── Brand bar ── */
     .brand-bar {
-      background: #0f172a;
-      padding: 18px 28px;
-      border-radius: 12px 12px 0 0;
-      display: flex; align-items: center; justify-content: space-between;
+      background: #0f172a; border-radius: 14px 14px 0 0;
+      padding: 20px 32px; display: flex; align-items: center; justify-content: space-between;
     }
-    .brand-bar img { height: 28px; filter: brightness(0) invert(1); }
-    .brand-bar .date { font-size: 11px; color: #94a3b8; letter-spacing: 0.3px; }
+    .brand-bar img { height: 26px; filter: brightness(0) invert(1); display: block; }
+    .brand-bar .tag { font-size: 10px; color: #475569; letter-spacing: 1.2px; text-transform: uppercase; font-weight: 600; }
 
-    /* ── Hero ──────────────────────────────────────── */
-    .hero {
-      background: linear-gradient(135deg, #f97316 0%, #ea580c 60%, #c2410c 100%);
-      padding: 32px 28px 28px;
-      color: white;
+    /* ── Hero ── */
+    .hero { background: #f97316; padding: 44px 32px 40px; position: relative; overflow: hidden; }
+    .hero::before {
+      content: ''; position: absolute; right: -40px; top: -40px;
+      width: 220px; height: 220px; border-radius: 50%;
+      background: rgba(255,255,255,0.06);
     }
-    .hero .eyebrow { font-size: 11px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; opacity: 0.75; margin-bottom: 6px; }
-    .hero h1 { margin: 0 0 6px; font-size: 26px; font-weight: 700; line-height: 1.2; }
-    .hero .sub { font-size: 14px; opacity: 0.85; margin: 0; }
-    .hero .period-badge {
-      display: inline-block; margin-top: 14px;
-      background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.3);
-      border-radius: 20px; padding: 4px 14px; font-size: 12px; font-weight: 600;
+    .hero::after {
+      content: ''; position: absolute; right: 30px; bottom: -60px;
+      width: 160px; height: 160px; border-radius: 50%;
+      background: rgba(255,255,255,0.04);
+    }
+    .hero .label { font-size: 10px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: rgba(255,255,255,0.65); margin-bottom: 10px; }
+    .hero h1 { font-size: 28px; font-weight: 800; color: #fff; line-height: 1.15; letter-spacing: -0.3px; }
+    .hero .site { font-size: 13px; color: rgba(255,255,255,0.75); margin-top: 6px; font-weight: 400; }
+    .hero .period {
+      display: inline-flex; align-items: center; gap: 5px;
+      margin-top: 20px; background: rgba(255,255,255,0.15);
+      border: 1px solid rgba(255,255,255,0.25); border-radius: 6px;
+      padding: 5px 12px; font-size: 11px; font-weight: 600; color: #fff;
     }
 
-    /* ── Metrics grid ──────────────────────────────── */
-    .metrics { background: #ffffff; padding: 24px 28px 8px; }
-    .metrics-title { font-size: 11px; font-weight: 700; color: #94a3b8; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 16px; }
-    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
-    .metric-card {
-      background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px;
-      padding: 18px 16px; text-align: center;
-    }
-    .metric-card .icon { font-size: 22px; margin-bottom: 8px; }
-    .metric-card .val { font-size: 26px; font-weight: 800; color: #0f172a; line-height: 1; }
-    .metric-card .val.green { color: #16a34a; }
-    .metric-card .val.blue  { color: #2563eb; }
-    .metric-card .val.purple{ color: #7c3aed; }
-    .metric-card .lbl { font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 6px; }
-    .metric-card .sub-lbl { font-size: 10px; color: #94a3b8; margin-top: 2px; }
+    /* ── White body ── */
+    .body { background: #ffffff; }
 
-    /* ── Divider ───────────────────────────────────── */
-    .divider { height: 1px; background: #e2e8f0; margin: 4px 0; }
+    /* ── Metrics ── */
+    .metrics-wrap { padding: 36px 32px 28px; }
+    .section-label { font-size: 10px; font-weight: 700; letter-spacing: 1.8px; text-transform: uppercase; color: #94a3b8; margin-bottom: 20px; }
+    .metrics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .metric-card { border: 1px solid #e2e8f0; border-radius: 10px; padding: 22px 20px; }
+    .metric-card .m-icon { margin-bottom: 14px; }
+    .metric-card .m-val { font-size: 28px; font-weight: 800; line-height: 1; color: #0f172a; }
+    .metric-card .m-val .m-unit { font-size: 13px; font-weight: 500; color: #94a3b8; margin-left: 2px; }
+    .metric-card .m-label { font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.6px; margin-top: 6px; }
+    .metric-card .m-sub { font-size: 10px; color: #cbd5e1; margin-top: 3px; }
+    .metric-card.green .m-val { color: #16a34a; }
+    .metric-card.blue  .m-val { color: #2563eb; }
+    .metric-card.teal  .m-val { color: #059669; }
 
-    /* ── Sections ──────────────────────────────────── */
-    .body-section { background: #ffffff; padding: 20px 28px; }
-    .section-title {
-      font-size: 11px; font-weight: 700; color: #f97316;
-      letter-spacing: 1px; text-transform: uppercase;
-      margin: 0 0 12px; padding-bottom: 8px;
-      border-bottom: 2px solid #fed7aa;
+    /* ── Lifetime banner ── */
+    .lifetime-row {
+      margin-top: 16px; border: 1px solid #e2e8f0; border-radius: 10px;
+      padding: 16px 20px; display: flex; align-items: center; justify-content: space-between;
     }
-    .detail-row { display: flex; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid #f1f5f9; font-size: 13px; }
+    .lifetime-row .lt-left { font-size: 12px; color: #64748b; font-weight: 500; }
+    .lifetime-row .lt-left strong { display: block; font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: #94a3b8; margin-bottom: 2px; }
+    .lifetime-row .lt-val { font-size: 20px; font-weight: 800; color: #f97316; }
+
+    /* ── Ruled separator ── */
+    .ruled { height: 1px; background: #f1f5f9; margin: 0 32px; }
+
+    /* ── System details ── */
+    .details-wrap { padding: 28px 32px; }
+    .detail-row { display: flex; justify-content: space-between; align-items: center; padding: 9px 0; border-bottom: 1px solid #f8fafc; font-size: 13px; }
     .detail-row:last-child { border-bottom: none; }
-    .detail-label { color: #64748b; }
-    .detail-value { font-weight: 600; color: #1e293b; text-align: right; }
+    .dl { color: #94a3b8; font-weight: 500; }
+    .dv { font-weight: 600; color: #1e293b; }
 
-    /* ── Notes ─────────────────────────────────────── */
-    .notes-box { background: #f8fafc; border-left: 3px solid #f97316; border-radius: 0 8px 8px 0; padding: 14px 16px; font-size: 13px; color: #475569; line-height: 1.7; }
+    /* ── Notes ── */
+    .notes-wrap { padding: 0 32px 28px; }
+    .notes-body { border-left: 3px solid #f97316; padding: 12px 16px; font-size: 13px; color: #475569; line-height: 1.75; background: #fafafa; border-radius: 0 8px 8px 0; }
 
-    /* ── Alert ─────────────────────────────────────── */
-    .alert-box { background: #fffbeb; border: 1px solid #f59e0b; border-radius: 10px; padding: 18px; margin-bottom: 4px; }
-    .alert-box p { margin: 0; font-size: 13px; color: #92400e; line-height: 1.6; }
-    .btn { display: inline-block; margin-top: 12px; padding: 10px 22px; background: #f97316; color: #fff !important; text-decoration: none; border-radius: 8px; font-weight: 700; font-size: 13px; }
+    /* ── Invoice alert ── */
+    .alert-wrap { padding: 0 32px 28px; }
+    .alert-inner { border: 1px solid #fcd34d; border-radius: 10px; padding: 20px 22px; background: #fffbeb; }
+    .alert-title { font-size: 12px; font-weight: 700; color: #92400e; letter-spacing: 0.5px; text-transform: uppercase; margin-bottom: 8px; }
+    .alert-body { font-size: 13px; color: #78350f; line-height: 1.65; }
+    .alert-btn { display: inline-block; margin-top: 14px; padding: 10px 24px; background: #f97316; color: #fff !important; text-decoration: none; border-radius: 7px; font-size: 12px; font-weight: 700; letter-spacing: 0.3px; }
 
-    /* ── Footer ────────────────────────────────────── */
-    .footer {
-      background: #0f172a; border-radius: 0 0 12px 12px;
-      padding: 24px 28px; text-align: center;
+    /* ── Google Review CTA ── */
+    .review-wrap { padding: 0 32px 36px; }
+    .review-card {
+      background: #0f172a; border-radius: 10px; padding: 28px 24px; text-align: center;
     }
-    .footer img { height: 22px; filter: brightness(0) invert(1); margin-bottom: 10px; }
-    .footer p { margin: 0; font-size: 11px; color: #64748b; line-height: 1.8; }
+    .review-stars { display: flex; justify-content: center; gap: 4px; margin-bottom: 14px; }
+    .review-headline { font-size: 16px; font-weight: 700; color: #fff; margin-bottom: 8px; letter-spacing: -0.2px; }
+    .review-sub { font-size: 12px; color: #94a3b8; line-height: 1.6; margin-bottom: 20px; }
+    .review-btn {
+      display: inline-block; padding: 12px 28px;
+      background: #fff; color: #0f172a !important;
+      text-decoration: none; border-radius: 7px;
+      font-size: 13px; font-weight: 700; letter-spacing: 0.2px;
+    }
+
+    /* ── Footer ── */
+    .footer { background: #f8fafc; border-radius: 0 0 14px 14px; padding: 28px 32px; text-align: center; border-top: 1px solid #e2e8f0; }
+    .footer img { height: 20px; margin-bottom: 12px; display: block; margin-left: auto; margin-right: auto; }
+    .footer p { font-size: 11px; color: #94a3b8; line-height: 1.9; }
     .footer a { color: #f97316 !important; text-decoration: none; font-weight: 600; }
   </style>
 </head>
@@ -1210,96 +1243,118 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
   <!-- Brand bar -->
   <div class="brand-bar">
     <img src="https://solarflow-dashboard-sooty.vercel.app/conexsol-logo.png" alt="Conexsol" />
-    <span class="date">${reportDate}</span>
+    <span class="tag">Production Report</span>
   </div>
 
   <!-- Hero -->
   <div class="hero">
-    <p class="eyebrow">Solar Production Report</p>
+    <p class="label">Solar Energy Performance</p>
     <h1>${customer.name}</h1>
-    <p class="sub">${siteData?.siteName || 'SolarEdge System'}${siteId ? ' · Site #' + siteId : ''}</p>
-    <span class="period-badge">📅 ${periodLabel}</span>
+    <p class="site">${siteData?.siteName || 'SolarEdge System'}${siteId ? '&nbsp;&nbsp;·&nbsp;&nbsp;Site #' + siteId : ''}</p>
+    <span class="period">${svgCalendar}&nbsp;${periodLabel}&nbsp;&nbsp;·&nbsp;&nbsp;${reportDate}</span>
   </div>
 
-  <!-- Metrics -->
-  <div class="metrics">
-    <p class="metrics-title">Performance Summary</p>
-    <div class="grid-2">
-      <div class="metric-card">
-        <div class="icon">⚡</div>
-        <div class="val">${displayKwh >= 1000 ? (displayKwh / 1000).toFixed(2) + '<span style="font-size:14px;font-weight:500;color:#64748b"> MWh</span>' : Math.round(displayKwh) + '<span style="font-size:14px;font-weight:500;color:#64748b"> kWh</span>'}</div>
-        <div class="lbl">Energy Produced</div>
-        <div class="sub-lbl">${periodLabel}</div>
+  <div class="body">
+
+    <!-- Metrics -->
+    <div class="metrics-wrap">
+      <p class="section-label">Performance Summary</p>
+      <div class="metrics-grid">
+
+        <div class="metric-card">
+          <div class="m-icon">${svgBolt}</div>
+          <div class="m-val">${displayKwh >= 1000 ? (displayKwh / 1000).toFixed(2) : Math.round(displayKwh)}<span class="m-unit">${displayKwh >= 1000 ? 'MWh' : 'kWh'}</span></div>
+          <div class="m-label">Energy Produced</div>
+          <div class="m-sub">${periodLabel}</div>
+        </div>
+
+        <div class="metric-card green">
+          <div class="m-icon">${svgDollar}</div>
+          <div class="m-val">$${dollarsSaved.toLocaleString('en-US', { maximumFractionDigits: 0 })}<span class="m-unit"></span></div>
+          <div class="m-label">Est. Savings</div>
+          <div class="m-sub">@ $${COST_PER_KWH} / kWh</div>
+        </div>
+
+        <div class="metric-card blue">
+          <div class="m-icon">${svgGauge}</div>
+          <div class="m-val">${specificYield > 0 ? specificYield.toFixed(2) : '—'}<span class="m-unit">${specificYield > 0 ? 'kWh/Wp' : ''}</span></div>
+          <div class="m-label">Specific Yield</div>
+          <div class="m-sub">Efficiency rating</div>
+        </div>
+
+        <div class="metric-card teal">
+          <div class="m-icon">${svgLeaf}</div>
+          <div class="m-val">${co2Tons > 0 ? co2Tons.toFixed(2) : '—'}<span class="m-unit">${co2Tons > 0 ? 'tons' : ''}</span></div>
+          <div class="m-label">CO&#x2082; Offset</div>
+          <div class="m-sub">${periodLabel}</div>
+        </div>
+
       </div>
-      <div class="metric-card">
-        <div class="icon">💰</div>
-        <div class="val green">$${dollarsSaved.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</div>
-        <div class="lbl">Estimated Savings</div>
-        <div class="sub-lbl">@ $${COST_PER_KWH}/kWh</div>
-      </div>
-      <div class="metric-card">
-        <div class="icon">📊</div>
-        <div class="val blue">${specificYield > 0 ? specificYield.toFixed(2) : '—'}<span style="font-size:13px;font-weight:500;color:#64748b"> kWh/Wp</span></div>
-        <div class="lbl">Specific Yield</div>
-        <div class="sub-lbl">Efficiency rating</div>
-      </div>
-      <div class="metric-card">
-        <div class="icon">🌱</div>
-        <div class="val purple">${co2Tons > 0 ? co2Tons.toFixed(2) : '—'}<span style="font-size:13px;font-weight:500;color:#64748b"> tons</span></div>
-        <div class="lbl">CO₂ Offset</div>
-        <div class="sub-lbl">${periodLabel}</div>
-      </div>
+
+      ${lifetimeKwh > 0 ? `
+      <div class="lifetime-row">
+        <div class="lt-left">
+          <strong>Lifetime Total</strong>
+          Since ${siteData?.installDate || 'installation'}
+        </div>
+        <div class="lt-val">${lifetimeKwh >= 1000 ? (lifetimeKwh / 1000).toFixed(1) + ' MWh' : lifetimeKwh.toFixed(0) + ' kWh'}</div>
+      </div>` : ''}
     </div>
-    ${lifetimeKwh > 0 ? `
-    <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:12px 16px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;">
-      <span style="font-size:12px;color:#92400e;font-weight:600;">☀️ Total Lifetime Production</span>
-      <span style="font-size:16px;font-weight:800;color:#ea580c;">${lifetimeKwh >= 1000 ? (lifetimeKwh / 1000).toFixed(1) + ' MWh' : lifetimeKwh.toFixed(0) + ' kWh'}</span>
+
+    <div class="ruled"></div>
+
+    <!-- System Details -->
+    <div class="details-wrap">
+      <p class="section-label">System Details</p>
+      ${systemSize ? `<div class="detail-row"><span class="dl">System Size</span><span class="dv">${systemSize} kW</span></div>` : ''}
+      ${siteData?.installDate ? `<div class="detail-row"><span class="dl">Install Date</span><span class="dv">${siteData.installDate}</span></div>` : ''}
+      <div class="detail-row"><span class="dl">System Type</span><span class="dv">${siteData?.systemType || 'SolarEdge'}</span></div>
+      ${siteData?.module ? `<div class="detail-row"><span class="dl">Module</span><span class="dv">${siteData.module}</span></div>` : ''}
+      <div class="detail-row"><span class="dl">Site ID</span><span class="dv">${siteId}</span></div>
+      ${customer.city || customer.state ? `<div class="detail-row"><span class="dl">Location</span><span class="dv">${[customer.city, customer.state].filter(Boolean).join(', ')}</span></div>` : ''}
+    </div>
+
+    ${reportNotes ? `
+    <div class="ruled"></div>
+    <div class="notes-wrap" style="padding-top:28px;">
+      <p class="section-label">Notes from Your Service Team</p>
+      <div class="notes-body">${reportNotes.replace(/\n/g, '<br/>')}</div>
     </div>` : ''}
-  </div>
 
-  <div class="divider"></div>
+    ${hasOverdue ? `
+    <div class="ruled"></div>
+    <div class="alert-wrap" style="padding-top:28px;">
+      <div class="alert-inner">
+        <div class="alert-title">Balance Reminder</div>
+        <div class="alert-body">We noticed an open balance on your account. To ensure uninterrupted service monitoring and support, please submit payment at your earliest convenience.</div>
+        <a href="https://solarflow-dashboard-sooty.vercel.app/api/track?event=click&target=invoice&id=${tid}&redirect=${encodeURIComponent(overdueInvs[0]?.InvoiceID ? 'https://invoicing.xero.com/view/' + overdueInvs[0].InvoiceID : '#')}" class="alert-btn">View Invoice</a>
+      </div>
+    </div>` : ''}
 
-  <!-- System Details -->
-  <div class="body-section">
-    <p class="section-title">System Details</p>
-    <div class="detail-row"><span class="detail-label">System Size</span><span class="detail-value">${systemSize ? systemSize + ' kW' : '—'}</span></div>
-    <div class="detail-row"><span class="detail-label">Install Date</span><span class="detail-value">${siteData?.installDate || 'N/A'}</span></div>
-    <div class="detail-row"><span class="detail-label">System Type</span><span class="detail-value">${siteData?.systemType || 'SolarEdge'}</span></div>
-    ${siteData?.module ? `<div class="detail-row"><span class="detail-label">Module</span><span class="detail-value">${siteData.module}</span></div>` : ''}
-    <div class="detail-row"><span class="detail-label">Site ID</span><span class="detail-value">${siteId}</span></div>
-    <div class="detail-row"><span class="detail-label">Location</span><span class="detail-value">${[customer.city, customer.state].filter(Boolean).join(', ') || '—'}</span></div>
-  </div>
+    <div class="ruled"></div>
 
-  <div class="divider"></div>
-
-  ${reportNotes ? `
-  <!-- Notes -->
-  <div class="body-section">
-    <p class="section-title">Notes from Your Service Team</p>
-    <div class="notes-box">${reportNotes.replace(/\n/g, '<br/>')}</div>
-  </div>
-  <div class="divider"></div>
-  ` : ''}
-
-  ${hasOverdue ? `
-  <!-- Payment reminder -->
-  <div class="body-section">
-    <div class="alert-box">
-      <p><strong>⚠️ Friendly Reminder</strong><br/>We noticed an open balance on your account. To avoid any interruptions in service monitoring, please submit payment at your earliest convenience.</p>
-      <a href="https://solarflow-dashboard-sooty.vercel.app/api/track?event=click&target=invoice&id=${tid}&redirect=${encodeURIComponent(overdueInvs[0]?.InvoiceID ? 'https://invoicing.xero.com/view/' + overdueInvs[0].InvoiceID : '#')}" class="btn">View Invoice →</a>
+    <!-- Google Review CTA -->
+    <div class="review-wrap" style="padding-top:32px;">
+      <div class="review-card">
+        <div class="review-stars">
+          ${svgStar}${svgStar}${svgStar}${svgStar}${svgStar}
+        </div>
+        <div class="review-headline">Enjoying the savings?</div>
+        <div class="review-sub">Your feedback helps us grow and serve more homeowners<br/>in your community. It takes less than 60 seconds.</div>
+        <a href="https://solarflow-dashboard-sooty.vercel.app/api/track?event=click&target=review&id=${tid}&redirect=${encodeURIComponent('https://g.page/r/conexsol/review')}" class="review-btn">Leave Us a Google Review</a>
+      </div>
     </div>
-  </div>
-  <div class="divider"></div>
-  ` : ''}
+
+  </div><!-- /body -->
 
   <!-- Footer -->
   <div class="footer">
     <img src="https://solarflow-dashboard-sooty.vercel.app/conexsol-logo.png" alt="Conexsol" />
-    <p>Your Solar Service Partner<br/>
-    <a href="https://solarflow-dashboard-sooty.vercel.app/api/track?event=click&target=website&id=${tid}&redirect=${encodeURIComponent('https://conexsol.us')}">conexsol.us</a> · Florida Solar Operations</p>
-    <p style="margin-top:12px;font-size:10px;color:#334155;">
-      This report was generated by Conexsol SolarOps · ${reportDate}<br/>
-      To unsubscribe from production reports, reply to this email.
+    <p>
+      <a href="https://solarflow-dashboard-sooty.vercel.app/api/track?event=click&target=website&id=${tid}&redirect=${encodeURIComponent('https://conexsol.us')}">conexsol.us</a>
+      &nbsp;&nbsp;·&nbsp;&nbsp;Florida Solar Service<br/>
+      Report generated ${reportDate}<br/>
+      <span style="color:#cbd5e1;">To stop receiving reports, reply to this email.</span>
     </p>
   </div>
 
