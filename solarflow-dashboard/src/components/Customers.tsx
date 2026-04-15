@@ -45,7 +45,7 @@ import {
   FileBarChart,
 } from 'lucide-react';
 import * as _recharts from 'recharts';
-const { AreaChart, Area, XAxis, YAxis, Tooltip: RechartsTooltip, ResponsiveContainer, CartesianGrid } = _recharts as any;
+const { ComposedChart, Bar, Line, XAxis, YAxis, Tooltip: RechartsTooltip, ResponsiveContainer, CartesianGrid, Legend } = _recharts as any;
 import { Customer, Job, ClientStatus, Activity, User, CustomerCategory, SolarEdgeAlert } from '../types';
 import { ServiceRate } from '../types/contractor';
 import { loadServiceRates } from '../lib/contractorStore';
@@ -836,16 +836,23 @@ const COST_PER_KWH = 0.16;
 
 interface EnergyDataPoint {
   date: string;
+  rawDate: string; // YYYY-MM-DD — used to merge UV data
   kWh: number;
+  uv?: number;     // UV index max for that day
 }
 
 const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
   const siteId = customer.solarEdgeSiteId;
   const [graphPeriod, setGraphPeriod] = useState<'week' | 'quarter' | 'year'>('week');
-  // Cache energy data per period so toggling tabs doesn't consume extra API calls
+  // Cache energy+UV data per period — toggling tabs never re-fetches
   const [energyCache, setEnergyCache] = useState<Record<string, EnergyDataPoint[]>>({});
   const [loading, setLoading] = useState(false);
   const [fetchError, setFetchError] = useState('');
+  // Live data from SolarEdge API (overrides the 0-filled FL_SITES static data)
+  const [siteOverview, setSiteOverview] = useState<{
+    lifetimeKwh: number; yearKwh: number; monthKwh: number; todayKwh: number;
+  } | null>(null);
+  const [siteDetails, setSiteDetails] = useState<{ peakPower: number } | null>(null);
   const [reportNotes, setReportNotes] = useState('');
   const [sendingReport, setSendingReport] = useState(false);
   const [reportSent, setReportSent] = useState(false);
@@ -856,7 +863,6 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
   const energyData = energyCache[graphPeriod] || [];
 
   // Find site data from FL_SITES or localStorage extras
-  // NOTE: correct key is 'solarflow_data' (not 'solarflow_state')
   const siteData = React.useMemo(() => {
     const fromStatic = FL_SITES.find(s => s.siteId === siteId);
     if (fromStatic) return fromStatic;
@@ -871,29 +877,105 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
     return null;
   }, [siteId]);
 
-  // Production metrics
-  const lifetimeKwh = siteData?.lifetimeKwh || 0;
-  const peakPowerWp = (siteData?.peakPower || 0) * 1000; // kW → Wp
+  // Helper: read SolarEdge API key from localStorage
+  const getApiKey = () => {
+    try {
+      const raw = localStorage.getItem('solarflow_data');
+      return raw ? JSON.parse(raw).solarEdgeConfig?.apiKey?.trim() : '';
+    } catch { return ''; }
+  };
+
+  // Production metrics — prefer live API data over the 0-filled static FL_SITES values
+  const lifetimeKwh = siteOverview?.lifetimeKwh || siteData?.lifetimeKwh || 0;
+  const peakPowerKw  = siteDetails?.peakPower    || siteData?.peakPower    || 0;
+  const peakPowerWp  = peakPowerKw * 1000;
   const dollarsSaved = lifetimeKwh * COST_PER_KWH;
   const specificYield = peakPowerWp > 0 ? lifetimeKwh / peakPowerWp : 0;
 
-  // Fetch energy time-series from SolarEdge API — skip if already cached
+  // ── Fetch site overview + details (widgets) ───────────────────────────────
   useEffect(() => {
     if (!siteId) return;
-    if (energyCache[graphPeriod]) return; // already fetched for this period
+    const apiKey = getApiKey();
+    if (!apiKey) return;
+
+    // Overview: lifetime / year / month / today kWh
+    fetch(`/api/solaredge?path=/site/${siteId}/overview&api_key=${encodeURIComponent(apiKey)}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(json => {
+        if (!json || json.error) return;
+        const ov = json.overview;
+        setSiteOverview({
+          lifetimeKwh: (ov?.lifeTimeData?.energy   || 0) / 1000,
+          yearKwh:     (ov?.lastYearData?.energy    || 0) / 1000,
+          monthKwh:    (ov?.lastMonthData?.energy   || 0) / 1000,
+          todayKwh:    (ov?.lastDayData?.energy     || 0) / 1000,
+        });
+      })
+      .catch(() => {});
+
+    // Details: peak power (kW)
+    fetch(`/api/solaredge?path=/site/${siteId}/details&api_key=${encodeURIComponent(apiKey)}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(json => {
+        if (!json || json.error) return;
+        setSiteDetails({ peakPower: json.details?.peakPower || 0 });
+      })
+      .catch(() => {});
+  }, [siteId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Fetch UV index from Open-Meteo (free, no API key) ────────────────────
+  // Merges UV data into cached energy points for the current period
+  useEffect(() => {
+    if (!siteId) return;
+    const fetchUv = async () => {
+      try {
+        const now = new Date();
+        let startDate: string;
+        let baseUrl: string;
+
+        if (graphPeriod === 'year') {
+          // Archive API for historical yearly data
+          const d = new Date(now); d.setFullYear(d.getFullYear() - 1);
+          startDate = d.toISOString().slice(0, 10);
+          const endDate = now.toISOString().slice(0, 10);
+          baseUrl = `https://archive-api.open-meteo.com/v1/archive?latitude=26.0&longitude=-80.2&start_date=${startDate}&end_date=${endDate}&daily=uv_index_max&timezone=America%2FNew_York`;
+        } else {
+          const pastDays = graphPeriod === 'quarter' ? 90 : 7;
+          baseUrl = `https://api.open-meteo.com/v1/forecast?latitude=26.0&longitude=-80.2&daily=uv_index_max&timezone=America%2FNew_York&past_days=${pastDays}&forecast_days=0`;
+        }
+
+        const resp = await fetch(baseUrl);
+        if (!resp.ok) return;
+        const json = await resp.json();
+        const times: string[] = json.daily?.time || [];
+        const uvs: number[]   = json.daily?.uv_index_max || [];
+        // Build date → uv map
+        const uvMap: Record<string, number> = {};
+        times.forEach((t, i) => { uvMap[t] = uvs[i]; });
+
+        // Merge into existing cached energy points
+        setEnergyCache(prev => {
+          const points = prev[graphPeriod];
+          if (!points || points.length === 0) return prev;
+          const merged = points.map(p => ({ ...p, uv: uvMap[p.rawDate] ?? p.uv }));
+          return { ...prev, [graphPeriod]: merged };
+        });
+      } catch { /* UV is supplemental — silently skip on error */ }
+    };
+    fetchUv();
+  }, [siteId, graphPeriod]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Fetch energy time-series — skip if already cached ────────────────────
+  useEffect(() => {
+    if (!siteId) return;
+    if (energyCache[graphPeriod]) return;
     const fetchEnergy = async () => {
       setLoading(true);
       setFetchError('');
       try {
-        // NOTE: correct key is 'solarflow_data' (not 'solarflow_state')
-        const apiKey = (() => {
-          try {
-            const raw = localStorage.getItem('solarflow_data');
-            return raw ? JSON.parse(raw).solarEdgeConfig?.apiKey?.trim() : '';
-          } catch { return ''; }
-        })();
+        const apiKey = getApiKey();
         if (!apiKey) {
-          setFetchError('No SolarEdge API key configured. Add it in Settings → SolarEdge.');
+          setFetchError('No SolarEdge API key — add it in Settings → SolarEdge.');
           setLoading(false);
           return;
         }
@@ -927,14 +1009,18 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
             const values = json.energy?.values || [];
             const points: EnergyDataPoint[] = values
               .filter((v: any) => v.value != null)
-              .map((v: any) => ({
-                date: graphPeriod === 'year'
-                  ? new Date(v.date).toLocaleDateString('en-US', { month: 'short' })
-                  : graphPeriod === 'quarter'
-                  ? new Date(v.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-                  : new Date(v.date).toLocaleDateString('en-US', { weekday: 'short' }),
-                kWh: Math.round((v.value || 0) / 1000 * 100) / 100, // Wh → kWh
-              }));
+              .map((v: any) => {
+                const raw = (v.date as string).slice(0, 10); // YYYY-MM-DD
+                return {
+                  rawDate: raw,
+                  date: graphPeriod === 'year'
+                    ? new Date(v.date).toLocaleDateString('en-US', { month: 'short' })
+                    : graphPeriod === 'quarter'
+                    ? new Date(v.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                    : new Date(v.date).toLocaleDateString('en-US', { weekday: 'short' }),
+                  kWh: Math.round((v.value || 0) / 1000 * 100) / 100,
+                };
+              });
             setEnergyCache(prev => ({ ...prev, [graphPeriod]: points }));
           }
         } else {
@@ -1121,7 +1207,9 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
             <InfoTooltip text="Total energy produced by this solar system since installation, measured at the inverter level." />
           </div>
           <p className="text-2xl font-bold text-slate-900">
-            {lifetimeKwh >= 1000 ? `${(lifetimeKwh / 1000).toFixed(1)} MWh` : `${lifetimeKwh.toFixed(0)} kWh`}
+            {lifetimeKwh > 0
+              ? (lifetimeKwh >= 1000 ? `${(lifetimeKwh / 1000).toFixed(1)} MWh` : `${lifetimeKwh.toFixed(0)} kWh`)
+              : <span className="text-slate-400 text-lg">Loading…</span>}
           </p>
           <p className="text-xs text-amber-600 mt-1">Since {siteData?.installDate || 'install'}</p>
         </div>
@@ -1132,7 +1220,9 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
             <InfoTooltip text={`Estimated savings based on $${COST_PER_KWH}/kWh average utility rate × lifetime production.`} />
           </div>
           <p className="text-2xl font-bold text-green-700">
-            ${dollarsSaved.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+            {dollarsSaved > 0
+              ? `$${dollarsSaved.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+              : <span className="text-slate-400 text-lg">Loading…</span>}
           </p>
           <p className="text-xs text-green-600 mt-1">@ ${COST_PER_KWH}/kWh</p>
         </div>
@@ -1143,9 +1233,9 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
             <InfoTooltip text="Energy produced per watt of installed capacity (kWh/Wp). Think of it like MPG on a car — the higher the number, the more efficiently your system is turning sunlight into savings." />
           </div>
           <p className="text-2xl font-bold text-slate-900">
-            {specificYield.toFixed(2)} <span className="text-sm font-normal text-slate-500">kWh/Wp</span>
+            {specificYield > 0 ? <>{specificYield.toFixed(2)} <span className="text-sm font-normal text-slate-500">kWh/Wp</span></> : <span className="text-slate-400 text-lg">—</span>}
           </p>
-          <p className="text-xs text-blue-600 mt-1">System: {siteData?.peakPower?.toFixed(1) || '—'} kW</p>
+          <p className="text-xs text-blue-600 mt-1">System: {peakPowerKw > 0 ? `${peakPowerKw.toFixed(1)} kW` : '—'}</p>
         </div>
 
         <div className="bg-gradient-to-br from-purple-50 to-fuchsia-50 rounded-xl p-4 border border-purple-200">
@@ -1154,7 +1244,9 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
             <InfoTooltip text="CO₂ offset estimate based on 0.42 kg CO₂ per kWh (US average grid emission factor)." />
           </div>
           <p className="text-2xl font-bold text-slate-900">
-            {((lifetimeKwh * 0.42) / 1000).toFixed(1)} <span className="text-sm font-normal text-slate-500">tons CO₂</span>
+            {lifetimeKwh > 0
+              ? <>{((lifetimeKwh * 0.42) / 1000).toFixed(1)} <span className="text-sm font-normal text-slate-500">tons CO₂</span></>
+              : <span className="text-slate-400 text-lg">—</span>}
           </p>
           <p className="text-xs text-purple-600 mt-1 flex items-center gap-1"><Leaf className="w-3 h-3" /> Offset</p>
         </div>
@@ -1166,7 +1258,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
           <h3 className="font-semibold text-slate-900 flex items-center gap-2">
             <BarChart3 className="w-4 h-4 text-orange-500" />
             Production History
-            <InfoTooltip text="Energy production over time from SolarEdge monitoring. Switch between weekly, quarterly, and yearly views." />
+            <InfoTooltip text="Energy production (bars) and daily UV index (line) over time. UV index gives an estimate of solar irradiance — higher UV generally means more production." />
           </h3>
           <div className="flex gap-1">
             {(['week', 'quarter', 'year'] as const).map(p => (
@@ -1184,7 +1276,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
             ))}
           </div>
         </div>
-        <div className="h-48">
+        <div className="h-56">
           {loading ? (
             <div className="h-full flex items-center justify-center gap-2 text-sm text-slate-400">
               <span className="animate-spin inline-block w-4 h-4 border-2 border-orange-300 border-t-orange-500 rounded-full" />
@@ -1196,22 +1288,51 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
             </div>
           ) : energyData.length > 0 ? (
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={energyData}>
-                <defs>
-                  <linearGradient id="prodGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#f97316" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#f97316" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
+              <ComposedChart data={energyData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="#94a3b8" />
-                <YAxis tick={{ fontSize: 11 }} stroke="#94a3b8" unit=" kWh" />
+                <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="#94a3b8" />
+                {/* Left axis: kWh production */}
+                <YAxis
+                  yAxisId="kwh"
+                  tick={{ fontSize: 10 }}
+                  stroke="#f97316"
+                  unit=" kWh"
+                  width={52}
+                />
+                {/* Right axis: UV index */}
+                <YAxis
+                  yAxisId="uv"
+                  orientation="right"
+                  domain={[0, 14]}
+                  tick={{ fontSize: 10 }}
+                  stroke="#818cf8"
+                  unit=""
+                  width={28}
+                />
                 <RechartsTooltip
                   contentStyle={{ borderRadius: 8, fontSize: 12 }}
-                  formatter={(value: number) => [`${value.toFixed(1)} kWh`, 'Production']}
+                  formatter={(value: number, name: string) =>
+                    name === 'uv'
+                      ? [`${value?.toFixed(1)}`, 'UV Index']
+                      : [`${value?.toFixed(1)} kWh`, 'Production']
+                  }
                 />
-                <Area type="monotone" dataKey="kWh" stroke="#f97316" strokeWidth={2} fill="url(#prodGrad)" />
-              </AreaChart>
+                <Legend
+                  wrapperStyle={{ fontSize: 11, paddingTop: 4 }}
+                  formatter={(val: string) => val === 'uv' ? 'UV Index' : 'Production (kWh)'}
+                />
+                <Bar yAxisId="kwh" dataKey="kWh" fill="#f97316" opacity={0.85} radius={[3, 3, 0, 0]} name="kWh" />
+                <Line
+                  yAxisId="uv"
+                  type="monotone"
+                  dataKey="uv"
+                  stroke="#818cf8"
+                  strokeWidth={2}
+                  dot={{ r: 2, fill: '#818cf8' }}
+                  connectNulls
+                  name="uv"
+                />
+              </ComposedChart>
             </ResponsiveContainer>
           ) : (
             <div className="h-full flex flex-col items-center justify-center gap-1 text-center px-4">
@@ -1220,12 +1341,12 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
             </div>
           )}
         </div>
-        {/* Quick stats row */}
-        {siteData && (
+        {/* Quick stats row — use live API data when available */}
+        {(siteOverview || siteData) && (
           <div className="flex gap-4 mt-3 pt-3 border-t border-slate-100 text-xs text-slate-500">
-            <span>Today: <strong className="text-slate-700">{siteData.todayKwh?.toFixed(1) || 0} kWh</strong></span>
-            <span>Month: <strong className="text-slate-700">{siteData.monthKwh?.toFixed(1) || 0} kWh</strong></span>
-            <span>Year: <strong className="text-slate-700">{(siteData.yearKwh / 1000)?.toFixed(1) || 0} MWh</strong></span>
+            <span>Today: <strong className="text-slate-700">{(siteOverview?.todayKwh ?? siteData?.todayKwh ?? 0).toFixed(1)} kWh</strong></span>
+            <span>Month: <strong className="text-slate-700">{(siteOverview?.monthKwh ?? siteData?.monthKwh ?? 0).toFixed(1)} kWh</strong></span>
+            <span>Year: <strong className="text-slate-700">{((siteOverview?.yearKwh ?? siteData?.yearKwh ?? 0) / 1000).toFixed(1)} MWh</strong></span>
           </div>
         )}
       </div>
