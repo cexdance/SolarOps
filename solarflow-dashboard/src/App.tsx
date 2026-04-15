@@ -1433,32 +1433,56 @@ function App() {
   const handleImportApply = (accepted: import('./components/SolarEdgeImportModal').DiffItem[]) => {
     setData(prev => {
       let customers = [...prev.customers];
+      const flSiteIds = new Set(FL_SITES.map(s => s.siteId));
+      const existingExtraIds = new Set((prev.solarEdgeExtraSites ?? []).map(s => s.siteId));
+      const newExtraSites: SolarEdgeExtraSite[] = [];
 
       for (const item of accepted) {
         if (item.type === 'new' && item.site) {
           const s = item.site;
-          const loc = (s.location ?? {}) as { address?: string; city?: string; zip?: string };
+          const loc = (s.location ?? {}) as { address?: string; city?: string; zip?: string; state?: string };
+          const siteId = String(s.id);
           const newC: Customer = {
             id: `cust-se-${s.id}-${Date.now()}`,
             name: s.name,
             email: '', phone: '',
             address: loc.address || '',
             city:    loc.city    || '',
-            state:   'FL',
+            state:   loc.state   || 'FL',
             zip:     loc.zip     || '',
             type: 'residential' as const,
             notes: `Imported from SolarEdge on ${new Date().toLocaleDateString()}`,
-            solarEdgeSiteId: String(s.id),
+            solarEdgeSiteId: siteId,
             systemType: 'SolarEdge' as any,
             clientStatus: s.status === 'Active' ? 'O&M' as any : 'Standby' as any,
             createdAt: s.installationDate ? new Date(s.installationDate).toISOString() : new Date().toISOString(),
           };
           customers.push(newC);
+
+          // Also add to extraSites so the site appears in the monitoring table.
+          // ALL_SITES = FL_SITES + extraSites — imported customers without an
+          // extraSites entry never show up in the monitoring list.
+          if (!flSiteIds.has(siteId) && !existingExtraIds.has(siteId)) {
+            const clientId = s.name?.match(/^(US[\s-]\d+)/i)?.[1] || '';
+            newExtraSites.push({
+              siteId,
+              clientId,
+              siteName:    s.name || '',
+              address:     [loc.address, loc.city, loc.state || 'FL', loc.zip].filter(Boolean).join(', '),
+              status:      s.status || 'Active',
+              peakPower:   s.peakPower || 0,
+              installDate: s.installationDate || '',
+              ptoDate:     s.ptoDate || '',
+              alerts: 0, highestImpact: '0', systemType: 'SolarEdge', module: '',
+              todayKwh: 0, monthKwh: 0, yearKwh: 0, lifetimeKwh: 0,
+              lastUpdate: new Date().toISOString(),
+            } as SolarEdgeExtraSite);
+            existingExtraIds.add(siteId); // prevent duplicates within same batch
+          }
         }
 
         if (item.type === 'updated' && item.site && item.customer && item.changes) {
-          const s = item.site;
-          const loc = (s.location ?? {}) as { address?: string; city?: string; zip?: string };
+          const loc = (item.site.location ?? {}) as { address?: string; city?: string; zip?: string };
           customers = customers.map(c => {
             if (c.id !== item.customer!.id) return c;
             const updates: Partial<Customer> = {};
@@ -1477,7 +1501,11 @@ function App() {
         }
       }
 
-      const next = { ...prev, customers };
+      const next = {
+        ...prev,
+        customers,
+        solarEdgeExtraSites: [...(prev.solarEdgeExtraSites ?? []), ...newExtraSites],
+      };
       saveData(next);
       return next;
     });

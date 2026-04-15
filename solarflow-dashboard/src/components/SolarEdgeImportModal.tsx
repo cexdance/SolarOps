@@ -73,10 +73,14 @@ async function fetchAllSites(apiKey?: string): Promise<LiveSite[]> {
     if (page.length < PAGE || all.length >= totalCount) break;
     start += PAGE;
   }
-  // Accept all sites in this account — it IS the Conexsol Florida group.
-  // Previously filtered state === 'Florida' (exact), which dropped sites where the
-  // API returns state as 'FL' (abbreviated) or leaves state blank.
-  return all;
+  // Florida filter — accept full name OR abbreviation OR US-NNNNN naming convention
+  return all.filter(s => {
+    const state = (s.location?.state || '').trim();
+    if (state === 'Florida' || state === 'FL') return true;
+    // US-NNNNN prefix is the Conexsol Florida naming convention
+    if (/^US[\s-]\d+/i.test(s.name || '')) return true;
+    return false;
+  });
 }
 
 function fmtAddress(site: LiveSite): string {
