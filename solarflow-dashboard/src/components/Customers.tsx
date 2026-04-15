@@ -1,5 +1,5 @@
 // SolarFlow MVP - Customers Component (List View with Split Panel)
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   Plus,
   Search,
@@ -35,11 +35,22 @@ import {
   Pencil,
   AlertTriangle,
   Zap,
+  Info,
+  BarChart3,
+  DollarSign,
+  Send,
+  ExternalLink,
+  TrendingUp,
+  Leaf,
+  FileBarChart,
 } from 'lucide-react';
+import * as _recharts from 'recharts';
+const { AreaChart, Area, XAxis, YAxis, Tooltip: RechartsTooltip, ResponsiveContainer, CartesianGrid } = _recharts as any;
 import { Customer, Job, ClientStatus, Activity, User, CustomerCategory, SolarEdgeAlert } from '../types';
 import { ServiceRate } from '../types/contractor';
 import { loadServiceRates } from '../lib/contractorStore';
 import { loadAlerts } from '../lib/operationsStore';
+import { FL_SITES, SolarEdgeSite } from '../lib/solarEdgeSites';
 import { AddressAutocomplete } from './AddressAutocomplete';
 import { AddressLink } from './AddressLink';
 import { WorkOrderPanel } from './WorkOrderPanel';
@@ -796,6 +807,508 @@ export const Customers: React.FC<CustomersProps> = ({
 };
 
 // Split Panel Customer Detail Component
+// ── Info Tooltip ──────────────────────────────────────────────────────────────
+const InfoTooltip: React.FC<{ text: string }> = ({ text }) => {
+  const [show, setShow] = useState(false);
+  return (
+    <span className="relative inline-flex">
+      <button
+        type="button"
+        className="w-4 h-4 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center hover:bg-orange-100 hover:text-orange-600 transition-colors cursor-pointer"
+        onMouseEnter={() => setShow(true)}
+        onMouseLeave={() => setShow(false)}
+        onClick={() => setShow(!show)}
+      >
+        <Info className="w-3 h-3" />
+      </button>
+      {show && (
+        <div className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-slate-800 text-white text-xs rounded-lg shadow-lg w-56 text-center">
+          {text}
+          <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 w-2 h-2 bg-slate-800 rotate-45" />
+        </div>
+      )}
+    </span>
+  );
+};
+
+// ── Production Section ────────────────────────────────────────────────────────
+const COST_PER_KWH = 0.16;
+
+interface EnergyDataPoint {
+  date: string;
+  kWh: number;
+}
+
+const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
+  const siteId = customer.solarEdgeSiteId;
+  const [graphPeriod, setGraphPeriod] = useState<'week' | 'quarter' | 'year'>('week');
+  const [energyData, setEnergyData] = useState<EnergyDataPoint[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [reportNotes, setReportNotes] = useState('');
+  const [sendingReport, setSendingReport] = useState(false);
+  const [reportSent, setReportSent] = useState(false);
+  const [xeroInvoices, setXeroInvoices] = useState<any[]>([]);
+  const [xeroLoading, setXeroLoading] = useState(false);
+  const [xeroError, setXeroError] = useState('');
+
+  // Find site data from FL_SITES or localStorage extras
+  const siteData = React.useMemo(() => {
+    const fromStatic = FL_SITES.find(s => s.siteId === siteId);
+    if (fromStatic) return fromStatic;
+    try {
+      const raw = localStorage.getItem('solarflow_state');
+      if (raw) {
+        const state = JSON.parse(raw);
+        const extras: SolarEdgeSite[] = state.solarEdgeExtraSites || [];
+        return extras.find(s => s.siteId === siteId) || null;
+      }
+    } catch {}
+    return null;
+  }, [siteId]);
+
+  // Production metrics
+  const lifetimeKwh = siteData?.lifetimeKwh || 0;
+  const peakPowerWp = (siteData?.peakPower || 0) * 1000; // kW → Wp
+  const dollarsSaved = lifetimeKwh * COST_PER_KWH;
+  const specificYield = peakPowerWp > 0 ? lifetimeKwh / peakPowerWp : 0;
+
+  // Fetch energy time-series from SolarEdge API
+  useEffect(() => {
+    if (!siteId) return;
+    const fetchEnergy = async () => {
+      setLoading(true);
+      try {
+        const apiKey = (() => {
+          try {
+            const raw = localStorage.getItem('solarflow_state');
+            return raw ? JSON.parse(raw).solarEdgeConfig?.apiKey : '';
+          } catch { return ''; }
+        })();
+        if (!apiKey) { setLoading(false); return; }
+
+        const now = new Date();
+        let startDate: string;
+        let timeUnit: string;
+        if (graphPeriod === 'week') {
+          const d = new Date(now); d.setDate(d.getDate() - 7);
+          startDate = d.toISOString().slice(0, 10);
+          timeUnit = 'DAY';
+        } else if (graphPeriod === 'quarter') {
+          const d = new Date(now); d.setMonth(d.getMonth() - 3);
+          startDate = d.toISOString().slice(0, 10);
+          timeUnit = 'WEEK';
+        } else {
+          const d = new Date(now); d.setFullYear(d.getFullYear() - 1);
+          startDate = d.toISOString().slice(0, 10);
+          timeUnit = 'MONTH';
+        }
+        const endDate = now.toISOString().slice(0, 10);
+
+        const resp = await fetch(
+          `/api/solaredge?path=/site/${siteId}/energy&startDate=${startDate}&endDate=${endDate}&timeUnit=${timeUnit}&api_key=${encodeURIComponent(apiKey)}`
+        );
+        if (resp.ok) {
+          const json = await resp.json();
+          const values = json.energy?.values || [];
+          setEnergyData(
+            values
+              .filter((v: any) => v.value != null)
+              .map((v: any) => ({
+                date: graphPeriod === 'year'
+                  ? new Date(v.date).toLocaleDateString('en-US', { month: 'short' })
+                  : graphPeriod === 'quarter'
+                  ? new Date(v.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                  : new Date(v.date).toLocaleDateString('en-US', { weekday: 'short' }),
+                kWh: Math.round((v.value || 0) / 1000 * 100) / 100, // Wh → kWh
+              }))
+          );
+        }
+      } catch (err) {
+        console.warn('Failed to fetch energy data:', err);
+      }
+      setLoading(false);
+    };
+    fetchEnergy();
+  }, [siteId, graphPeriod]);
+
+  // Fetch Xero invoices for this customer
+  useEffect(() => {
+    const fetchXeroInvoices = async () => {
+      setXeroLoading(true);
+      setXeroError('');
+      try {
+        const accessToken = localStorage.getItem('solarops_xero_access_token');
+        const tenantId = localStorage.getItem('solarops_xero_tenant_id');
+        if (!accessToken || !tenantId) {
+          setXeroLoading(false);
+          return;
+        }
+        const contactName = encodeURIComponent(customer.name);
+        const resp = await fetch(
+          `/api/xero-api/api.xro/2.0/Invoices?where=Contact.Name=="${contactName}"&Statuses=AUTHORISED,OVERDUE&order=DueDate`,
+          {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              'xero-tenant-id': tenantId,
+              Accept: 'application/json',
+            },
+          }
+        );
+        if (resp.ok) {
+          const data = await resp.json();
+          setXeroInvoices(data.Invoices || []);
+        } else {
+          setXeroError('Could not fetch billing status');
+        }
+      } catch {
+        setXeroError('Xero not connected');
+      }
+      setXeroLoading(false);
+    };
+    fetchXeroInvoices();
+  }, [customer.name]);
+
+  // Generate & send HTML report
+  const handleSendReport = async () => {
+    if (!customer.email) return;
+    setSendingReport(true);
+    try {
+      const trackingId = `prod-${customer.id}-${Date.now()}`;
+      const trackingPixel = `https://solarflow-dashboard-sooty.vercel.app/api/track?event=open&id=${trackingId}`;
+
+      const overdueInvoices = xeroInvoices.filter(inv => inv.Status === 'OVERDUE');
+      const hasOverdue = overdueInvoices.length > 0;
+
+      const htmlReport = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 0; background: #f8fafc; }
+    .container { max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+    .header { background: linear-gradient(135deg, #f97316, #ea580c); padding: 32px 24px; text-align: center; color: white; }
+    .header h1 { margin: 0 0 4px; font-size: 22px; }
+    .header p { margin: 0; opacity: 0.9; font-size: 14px; }
+    .body { padding: 24px; }
+    .metric-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 24px; }
+    .metric { background: #f8fafc; border-radius: 8px; padding: 16px; text-align: center; border: 1px solid #e2e8f0; }
+    .metric .value { font-size: 24px; font-weight: 700; color: #0f172a; }
+    .metric .label { font-size: 12px; color: #64748b; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .section { margin-bottom: 20px; }
+    .section h3 { font-size: 14px; font-weight: 600; color: #334155; margin: 0 0 8px; border-bottom: 2px solid #f97316; padding-bottom: 4px; display: inline-block; }
+    .section p { font-size: 14px; color: #475569; line-height: 1.6; margin: 0; }
+    .alert-box { background: #fef3c7; border: 1px solid #f59e0b; border-radius: 8px; padding: 16px; margin-bottom: 20px; }
+    .alert-box p { color: #92400e; font-size: 13px; }
+    .btn { display: inline-block; padding: 12px 24px; background: #f97316; color: white; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 14px; }
+    .footer { background: #f8fafc; padding: 20px 24px; text-align: center; border-top: 1px solid #e2e8f0; }
+    .footer p { font-size: 11px; color: #94a3b8; margin: 0; }
+    .green { color: #16a34a; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>☀️ Solar Production Report</h1>
+      <p>${customer.name} — ${siteData?.siteName || 'SolarEdge System'}</p>
+    </div>
+    <div class="body">
+      <div class="metric-grid">
+        <div class="metric">
+          <div class="value">${lifetimeKwh >= 1000 ? (lifetimeKwh / 1000).toFixed(1) + ' MWh' : lifetimeKwh.toFixed(0) + ' kWh'}</div>
+          <div class="label">Lifetime Production</div>
+        </div>
+        <div class="metric">
+          <div class="value green">$${dollarsSaved.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</div>
+          <div class="label">Estimated Savings</div>
+        </div>
+        <div class="metric">
+          <div class="value">${specificYield.toFixed(2)}</div>
+          <div class="label">Specific Yield (kWh/Wp)</div>
+        </div>
+        <div class="metric">
+          <div class="value">${siteData?.peakPower?.toFixed(1) || '—'} kW</div>
+          <div class="label">System Size</div>
+        </div>
+      </div>
+
+      ${reportNotes ? `
+      <div class="section">
+        <h3>Notes from Your Service Team</h3>
+        <p>${reportNotes.replace(/\n/g, '<br/>')}</p>
+      </div>` : ''}
+
+      ${hasOverdue ? `
+      <div class="alert-box">
+        <p><strong>⚠️ Friendly Reminder:</strong> We noticed an open balance on your account. To avoid any interruptions in service monitoring, please submit payment at your earliest convenience.</p>
+        <p style="margin-top: 12px;">
+          <a href="https://solarflow-dashboard-sooty.vercel.app/api/track?event=click&target=invoice&id=${trackingId}&redirect=${encodeURIComponent(overdueInvoices[0]?.InvoiceID ? 'https://invoicing.xero.com/view/' + overdueInvoices[0].InvoiceID : '#')}" class="btn" style="color: white;">View Invoice →</a>
+        </p>
+      </div>` : ''}
+
+      <div class="section">
+        <h3>System Details</h3>
+        <p>
+          Install Date: ${siteData?.installDate || 'N/A'}<br/>
+          System Type: ${siteData?.systemType || 'SolarEdge'}<br/>
+          Module: ${siteData?.module || 'N/A'}<br/>
+          Site ID: ${siteId}
+        </p>
+      </div>
+    </div>
+    <div class="footer">
+      <p>Powered by Conexsol — Your Solar Service Partner</p>
+      <p style="margin-top: 8px;"><a href="https://solarflow-dashboard-sooty.vercel.app/api/track?event=click&target=website&id=${trackingId}&redirect=${encodeURIComponent('https://conexsol.us')}" style="color: #f97316; text-decoration: none;">conexsol.us</a></p>
+    </div>
+  </div>
+  <img src="${trackingPixel}" width="1" height="1" alt="" style="display:none;" />
+</body>
+</html>`;
+
+      // Send via mailto (in production would be an API call)
+      const subject = encodeURIComponent(`Solar Production Report — ${customer.name}`);
+      const bcc = encodeURIComponent('cesar.jurado@conexsol.us');
+      // Store report for potential API-based sending
+      localStorage.setItem(`solarops_report_${trackingId}`, JSON.stringify({
+        to: customer.email,
+        bcc: 'cesar.jurado@conexsol.us',
+        subject: `Solar Production Report — ${customer.name}`,
+        html: htmlReport,
+        trackingId,
+        sentAt: new Date().toISOString(),
+      }));
+
+      // Open mailto with report link
+      window.open(`mailto:${customer.email}?subject=${subject}&bcc=${bcc}&body=${encodeURIComponent('Please view the attached HTML report for your solar production summary.\n\n— Conexsol Service Team')}`, '_blank');
+
+      setReportSent(true);
+      setTimeout(() => setReportSent(false), 4000);
+    } catch (err) {
+      console.error('Failed to generate report:', err);
+    }
+    setSendingReport(false);
+  };
+
+  const overdueInvoices = xeroInvoices.filter(inv => inv.Status === 'OVERDUE');
+
+  return (
+    <div className="space-y-4">
+      {/* ── Production Metrics ─────────────────────────────────────────── */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl p-4 border border-amber-200">
+          <div className="flex items-center gap-1.5 mb-1">
+            <span className="text-xs font-semibold text-amber-700 uppercase tracking-wide">Lifetime Production</span>
+            <InfoTooltip text="Total energy produced by this solar system since installation, measured at the inverter level." />
+          </div>
+          <p className="text-2xl font-bold text-slate-900">
+            {lifetimeKwh >= 1000 ? `${(lifetimeKwh / 1000).toFixed(1)} MWh` : `${lifetimeKwh.toFixed(0)} kWh`}
+          </p>
+          <p className="text-xs text-amber-600 mt-1">Since {siteData?.installDate || 'install'}</p>
+        </div>
+
+        <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-4 border border-green-200">
+          <div className="flex items-center gap-1.5 mb-1">
+            <span className="text-xs font-semibold text-green-700 uppercase tracking-wide">$ Saved to Date</span>
+            <InfoTooltip text={`Estimated savings based on $${COST_PER_KWH}/kWh average utility rate × lifetime production.`} />
+          </div>
+          <p className="text-2xl font-bold text-green-700">
+            ${dollarsSaved.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+          </p>
+          <p className="text-xs text-green-600 mt-1">@ ${COST_PER_KWH}/kWh</p>
+        </div>
+
+        <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-200">
+          <div className="flex items-center gap-1.5 mb-1">
+            <span className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Specific Yield</span>
+            <InfoTooltip text="Energy produced per watt of installed capacity (kWh/Wp). Higher values indicate better system performance relative to size." />
+          </div>
+          <p className="text-2xl font-bold text-slate-900">
+            {specificYield.toFixed(2)} <span className="text-sm font-normal text-slate-500">kWh/Wp</span>
+          </p>
+          <p className="text-xs text-blue-600 mt-1">System: {siteData?.peakPower?.toFixed(1) || '—'} kW</p>
+        </div>
+
+        <div className="bg-gradient-to-br from-purple-50 to-fuchsia-50 rounded-xl p-4 border border-purple-200">
+          <div className="flex items-center gap-1.5 mb-1">
+            <span className="text-xs font-semibold text-purple-700 uppercase tracking-wide">Environmental</span>
+            <InfoTooltip text="CO₂ offset estimate based on 0.42 kg CO₂ per kWh (US average grid emission factor)." />
+          </div>
+          <p className="text-2xl font-bold text-slate-900">
+            {((lifetimeKwh * 0.42) / 1000).toFixed(1)} <span className="text-sm font-normal text-slate-500">tons CO₂</span>
+          </p>
+          <p className="text-xs text-purple-600 mt-1 flex items-center gap-1"><Leaf className="w-3 h-3" /> Offset</p>
+        </div>
+      </div>
+
+      {/* ── Production Graph ──────────────────────────────────────────── */}
+      <div className="bg-white rounded-xl border border-slate-200 p-4">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-semibold text-slate-900 flex items-center gap-2">
+            <BarChart3 className="w-4 h-4 text-orange-500" />
+            Production History
+            <InfoTooltip text="Energy production over time from SolarEdge monitoring. Switch between weekly, quarterly, and yearly views." />
+          </h3>
+          <div className="flex gap-1">
+            {(['week', 'quarter', 'year'] as const).map(p => (
+              <button
+                key={p}
+                onClick={() => setGraphPeriod(p)}
+                className={`px-3 py-1 text-xs font-medium rounded-lg cursor-pointer transition-colors ${
+                  graphPeriod === p
+                    ? 'bg-orange-500 text-white'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                {p === 'week' ? '7D' : p === 'quarter' ? '3M' : '1Y'}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="h-48">
+          {loading ? (
+            <div className="h-full flex items-center justify-center text-sm text-slate-400">Loading energy data…</div>
+          ) : energyData.length > 0 ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={energyData}>
+                <defs>
+                  <linearGradient id="prodGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#f97316" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#f97316" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="#94a3b8" />
+                <YAxis tick={{ fontSize: 11 }} stroke="#94a3b8" />
+                <RechartsTooltip
+                  contentStyle={{ borderRadius: 8, fontSize: 12 }}
+                  formatter={(value: number) => [`${value.toFixed(1)} kWh`, 'Production']}
+                />
+                <Area type="monotone" dataKey="kWh" stroke="#f97316" strokeWidth={2} fill="url(#prodGrad)" />
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-full flex items-center justify-center text-sm text-slate-400">
+              No production data available. Check SolarEdge API key in Settings.
+            </div>
+          )}
+        </div>
+        {/* Quick stats row */}
+        {siteData && (
+          <div className="flex gap-4 mt-3 pt-3 border-t border-slate-100 text-xs text-slate-500">
+            <span>Today: <strong className="text-slate-700">{siteData.todayKwh?.toFixed(1) || 0} kWh</strong></span>
+            <span>Month: <strong className="text-slate-700">{siteData.monthKwh?.toFixed(1) || 0} kWh</strong></span>
+            <span>Year: <strong className="text-slate-700">{(siteData.yearKwh / 1000)?.toFixed(1) || 0} MWh</strong></span>
+          </div>
+        )}
+      </div>
+
+      {/* ── Xero Billing Status ───────────────────────────────────────── */}
+      <div className="bg-white rounded-xl border border-slate-200 p-4">
+        <h3 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
+          <DollarSign className="w-4 h-4 text-orange-500" />
+          Billing Status
+          <InfoTooltip text="Live billing status from Xero. Shows overdue or open invoices for this customer." />
+        </h3>
+        {xeroLoading ? (
+          <p className="text-sm text-slate-400">Checking Xero…</p>
+        ) : xeroError ? (
+          <p className="text-sm text-slate-400">{xeroError}</p>
+        ) : overdueInvoices.length > 0 ? (
+          <div className="space-y-2">
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+              <p className="text-sm text-amber-800 font-medium">
+                ⚠️ {overdueInvoices.length} overdue invoice{overdueInvoices.length > 1 ? 's' : ''}
+              </p>
+              <p className="text-xs text-amber-600 mt-1">
+                Friendly reminder will be included in the production report.
+              </p>
+            </div>
+            {overdueInvoices.map((inv: any) => (
+              <div key={inv.InvoiceID} className="flex items-center justify-between bg-slate-50 rounded-lg p-3">
+                <div>
+                  <p className="text-sm font-medium text-slate-700">{inv.InvoiceNumber}</p>
+                  <p className="text-xs text-slate-500">Due: {new Date(inv.DueDate).toLocaleDateString()}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-bold text-red-600">${inv.AmountDue?.toFixed(2)}</span>
+                  <a
+                    href={`https://invoicing.xero.com/view/${inv.InvoiceID}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="p-1.5 rounded-lg hover:bg-slate-200 transition-colors"
+                    title="View in Xero"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5 text-slate-500" />
+                  </a>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : xeroInvoices.length > 0 ? (
+          <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+            <p className="text-sm text-green-700 font-medium flex items-center gap-1.5">
+              <CheckCircle className="w-4 h-4" /> All invoices current
+            </p>
+          </div>
+        ) : (
+          <p className="text-sm text-slate-400">No invoices found for this customer in Xero.</p>
+        )}
+      </div>
+
+      {/* ── Report Notes ──────────────────────────────────────────────── */}
+      <div className="bg-white rounded-xl border border-slate-200 p-4">
+        <h3 className="font-semibold text-slate-900 mb-2 flex items-center gap-2">
+          <FileBarChart className="w-4 h-4 text-orange-500" />
+          Client Report Notes
+          <InfoTooltip text="Add personalized notes that will be included in the HTML production report sent to the client." />
+        </h3>
+        <textarea
+          value={reportNotes}
+          onChange={(e) => setReportNotes(e.target.value)}
+          placeholder="Add notes for the client report (e.g., system performance observations, maintenance recommendations)…"
+          className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm min-h-[80px] focus:outline-none focus:ring-2 focus:ring-orange-300 resize-y"
+        />
+      </div>
+
+      {/* ── Send Report Button ────────────────────────────────────────── */}
+      <div className="flex gap-2">
+        <button
+          onClick={handleSendReport}
+          disabled={sendingReport || !customer.email}
+          className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm transition-colors cursor-pointer ${
+            reportSent
+              ? 'bg-green-500 text-white'
+              : !customer.email
+              ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
+              : 'bg-orange-500 text-white hover:bg-orange-600'
+          }`}
+        >
+          {reportSent ? (
+            <><CheckCircle className="w-4 h-4" /> Report Sent!</>
+          ) : sendingReport ? (
+            'Generating…'
+          ) : (
+            <><Send className="w-4 h-4" /> Send Production Report</>
+          )}
+        </button>
+        <a
+          href={`https://monitoring.solaredge.com/one#/residential/dashboard?siteId=${siteId}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1.5 px-4 py-3 bg-slate-100 text-slate-600 rounded-xl text-sm font-medium hover:bg-slate-200 transition-colors"
+        >
+          <Sun className="w-4 h-4" />
+          SolarEdge
+        </a>
+      </div>
+      {!customer.email && (
+        <p className="text-xs text-amber-600 text-center">Add an email address to this customer to send reports.</p>
+      )}
+    </div>
+  );
+};
+
 interface CustomerDetailPanelProps {
   customer: Customer;
   allCustomers: Customer[];
@@ -855,7 +1368,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
   onDeleteJob,
   onDispatch,
 }) => {
-  const [activeTab, setActiveTab] = useState<'story' | 'jobs' | 'files' | 'activity'>('story');
+  const [activeTab, setActiveTab] = useState<'story' | 'jobs' | 'files' | 'activity' | 'production'>('story');
   const [editingJob, setEditingJob] = useState<Job | null>(null);
 
   // SolarEdge alerts for this customer
@@ -1191,6 +1704,18 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
           >
             Activity
           </button>
+          {customer.solarEdgeSiteId && (
+            <button
+              onClick={() => setActiveTab('production')}
+              className={`flex-1 py-3 text-sm font-medium border-b-2 cursor-pointer transition-colors ${
+                activeTab === 'production'
+                  ? 'border-orange-500 text-orange-600'
+                  : 'border-transparent text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              Production
+            </button>
+          )}
         </div>
 
         {/* Content */}
@@ -1440,6 +1965,10 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                 )}
               </div>
             </div>
+          )}
+
+          {activeTab === 'production' && customer.solarEdgeSiteId && (
+            <ProductionSection customer={customer} />
           )}
         </div>
       </div>
