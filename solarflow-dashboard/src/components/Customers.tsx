@@ -859,8 +859,11 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
   const [sendingReport, setSendingReport] = useState(false);
   const [reportSent, setReportSent] = useState(false);
   const [showReportPreview, setShowReportPreview] = useState(false);
-  const [previewHtml, setPreviewHtml] = useState('');
   const [previewTrackingId, setPreviewTrackingId] = useState('');
+  const [previewDowntimeDays, setPreviewDowntimeDays] = useState(0);
+  const [previewServiceCalls, setPreviewServiceCalls] = useState(0);
+  const [previewGreeting, setPreviewGreeting] = useState('');
+  const [previewAccountUpdates, setPreviewAccountUpdates] = useState('');
   const [xeroInvoices, setXeroInvoices] = useState<any[]>([]);
   const [xeroLoading, setXeroLoading] = useState(false);
   const [xeroError, setXeroError] = useState('');
@@ -1105,8 +1108,29 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
   }, [customer.name]);
 
   // Build the HTML report and open the preview modal
+  // NLP-crafted greeting generator
+  const buildGreeting = (kWh: number, savings: number) => {
+    const firstName = customer.name?.split(' ')[0] || customer.name;
+    const pLabel = graphPeriod === 'week' ? 'last 7 days' : graphPeriod === 'month' ? 'past 30 days' : graphPeriod === 'quarter' ? 'last 3 months' : 'past year';
+    const kwFmt = kWh >= 1000 ? `${(kWh / 1000).toFixed(1)} MWh` : `${Math.round(kWh).toLocaleString('en-US')} kWh`;
+    const savFmt = `$${Math.round(savings).toLocaleString('en-US')}`;
+    return `Hi ${firstName} — thank you for being a Conexsol customer. We're pleased to share your solar production summary for the ${pLabel}. Your system generated ${kwFmt} of clean energy, delivering an estimated ${savFmt} in utility savings. We're proud to support your energy independence and remain committed to keeping your system performing at its best. Please review the highlights below and don't hesitate to reach out with any questions.`;
+  };
+
   const handleOpenPreview = () => {
     const tid = `prod-${customer.id}-${Date.now()}`;
+    setPreviewTrackingId(tid);
+    setPreviewGreeting(buildGreeting(displayKwh, dollarsSaved));
+    setPreviewAccountUpdates(reportNotes);
+    setPreviewDowntimeDays(0);
+    setPreviewServiceCalls(0);
+    setShowReportPreview(true);
+  };
+
+  // Live HTML generation — recomputes whenever any editable field changes
+  const previewHtmlComputed = React.useMemo(() => {
+    if (!showReportPreview || !previewTrackingId) return '';
+    const tid = previewTrackingId;
     const trackingPixel = `https://solarflow-dashboard-sooty.vercel.app/api/track?event=open&id=${tid}`;
     const overdueInvs = xeroInvoices.filter(inv => inv.Status === 'OVERDUE');
     const hasOverdue = overdueInvs.length > 0;
@@ -1137,6 +1161,42 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
       -webkit-font-smoothing: antialiased;
     }
     .wrap { max-width: 600px; margin: 0 auto; }
+
+    /* ── Greeting ── */
+    .greeting-wrap { padding: 28px 32px 0; }
+    .greeting-text {
+      font-size: 13.5px; color: #475569; line-height: 1.85;
+      border-left: 3px solid #e2e8f0; padding: 14px 18px;
+      background: #f8fafc; border-radius: 0 10px 10px 0;
+    }
+
+    /* ── Service Summary ── */
+    .service-wrap { padding: 24px 32px 0; }
+    .service-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 14px; }
+    .service-card {
+      border: 1px solid #e2e8f0; border-radius: 10px; padding: 18px 16px;
+      text-align: center; background: #fafafa;
+    }
+    .sc-val { font-size: 30px; font-weight: 800; color: #0f172a; line-height: 1; }
+    .sc-label { font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.6px; margin-top: 6px; }
+    .sc-sub { font-size: 10px; color: #cbd5e1; margin-top: 3px; }
+    .sc-val.green { color: #16a34a; }
+    .sc-val.amber { color: #d97706; }
+
+    /* ── Account Updates ── */
+    .updates-wrap { padding: 0 32px 28px; }
+    .updates-inner {
+      border: 1px solid #fed7aa; border-radius: 12px; overflow: hidden;
+    }
+    .updates-header {
+      background: #fff7ed; padding: 14px 20px; display: flex; align-items: center; gap: 10px;
+      border-bottom: 1px solid #fed7aa;
+    }
+    .updates-title { font-size: 12px; font-weight: 700; color: #9a3412; letter-spacing: 0.8px; text-transform: uppercase; }
+    .updates-body {
+      padding: 16px 20px; font-size: 13.5px; color: #374151; line-height: 1.8;
+      background: #fffbf7;
+    }
 
     /* ── Brand bar ── */
     .brand-bar {
@@ -1204,7 +1264,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
     .dl { color: #94a3b8; font-weight: 500; }
     .dv { font-weight: 600; color: #1e293b; }
 
-    /* ── Notes ── */
+    /* ── Notes (legacy, kept for compat) ── */
     .notes-wrap { padding: 0 32px 28px; }
     .notes-body { border-left: 3px solid #f97316; padding: 12px 16px; font-size: 13px; color: #475569; line-height: 1.75; background: #fafafa; border-radius: 0 8px 8px 0; }
 
@@ -1254,6 +1314,9 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
     <span class="period">${svgCalendar}&nbsp;${periodLabel}&nbsp;&nbsp;·&nbsp;&nbsp;${reportDate}</span>
   </div>
 
+  <!-- Greeting -->
+  ${previewGreeting ? `<div class="greeting-wrap"><p class="greeting-text">${previewGreeting.replace(/\n/g, '<br/>')}</p></div>` : ''}
+
   <div class="body">
 
     <!-- Metrics -->
@@ -1301,6 +1364,24 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
       </div>` : ''}
     </div>
 
+    <!-- Service Summary -->
+    <div class="service-wrap">
+      <p class="section-label" style="padding:0 0 0 0;">Service Summary</p>
+      <div class="service-grid">
+        <div class="service-card">
+          <div class="sc-val green">${previewServiceCalls}</div>
+          <div class="sc-label">Service Calls</div>
+          <div class="sc-sub">${periodLabel}</div>
+        </div>
+        <div class="service-card">
+          <div class="sc-val${previewDowntimeDays > 0 ? ' amber' : ''}">${previewDowntimeDays}</div>
+          <div class="sc-label">Downtime Days</div>
+          <div class="sc-sub">${periodLabel}</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="height:24px;"></div>
     <div class="ruled"></div>
 
     <!-- System Details -->
@@ -1314,11 +1395,16 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
       ${customer.city || customer.state ? `<div class="detail-row"><span class="dl">Location</span><span class="dv">${[customer.city, customer.state].filter(Boolean).join(', ')}</span></div>` : ''}
     </div>
 
-    ${reportNotes ? `
+    ${previewAccountUpdates ? `
     <div class="ruled"></div>
-    <div class="notes-wrap" style="padding-top:28px;">
-      <p class="section-label">Notes from Your Service Team</p>
-      <div class="notes-body">${reportNotes.replace(/\n/g, '<br/>')}</div>
+    <div class="updates-wrap" style="padding-top:28px;">
+      <div class="updates-inner">
+        <div class="updates-header">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#9a3412" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <span class="updates-title">Account Updates</span>
+        </div>
+        <div class="updates-body">${previewAccountUpdates.replace(/\n/g, '<br/>')}</div>
+      </div>
     </div>` : ''}
 
     ${hasOverdue ? `
@@ -1363,14 +1449,13 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
 </body>
 </html>`;
 
-    setPreviewHtml(html);
-    setPreviewTrackingId(tid);
-    setShowReportPreview(true);
-  };
+    return html;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showReportPreview, previewTrackingId, previewGreeting, previewAccountUpdates, previewDowntimeDays, previewServiceCalls, xeroInvoices, displayKwh, dollarsSaved, specificYield, co2Tons, lifetimeKwh, graphPeriod, peakPowerKw, siteId, siteData, customer]);
 
   // Approve & Send — called from inside the preview modal
   const handleSendReport = async () => {
-    if (!customer.email || !previewHtml) return;
+    if (!customer.email || !previewHtmlComputed) return;
     setSendingReport(true);
     try {
       const subject = encodeURIComponent(`Solar Production Report — ${customer.name}`);
@@ -1379,7 +1464,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
         to: customer.email,
         bcc: 'cesar.jurado@conexsol.us',
         subject: `Solar Production Report — ${customer.name}`,
-        html: previewHtml,
+        html: previewHtmlComputed,
         trackingId: previewTrackingId,
         sentAt: new Date().toISOString(),
       }));
@@ -1666,7 +1751,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
         >
           <div
             className="bg-white w-full max-w-2xl rounded-2xl overflow-hidden shadow-2xl flex flex-col my-auto"
-            style={{ minHeight: '80vh', maxHeight: '92vh' }}
+            style={{ maxHeight: '95vh' }}
             onClick={e => e.stopPropagation()}
           >
             {/* Modal header */}
@@ -1674,24 +1759,68 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
               <div className="flex items-center gap-2">
                 <FileBarChart className="w-4 h-4 text-orange-400" />
                 <span className="font-semibold text-sm">Report Preview</span>
-                <span className="text-xs text-slate-400">— exactly as the client will see it</span>
+                <span className="text-xs text-slate-400">— edit before sending</span>
               </div>
-              <button
-                onClick={() => setShowReportPreview(false)}
-                className="p-1.5 hover:bg-slate-800 rounded-lg transition-colors"
-              >
+              <button onClick={() => setShowReportPreview(false)} className="p-1.5 hover:bg-slate-800 rounded-lg transition-colors">
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            {/* iframe renders the exact HTML email */}
-            <div className="flex-1 overflow-hidden">
+            {/* Editable fields panel */}
+            <div className="flex-shrink-0 border-b border-slate-200 bg-slate-50 px-4 py-3 space-y-2.5">
+              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-1">Editable Fields — changes update the preview live</p>
+              {/* Greeting */}
+              <div>
+                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide block mb-1">Greeting</label>
+                <textarea
+                  value={previewGreeting}
+                  onChange={e => setPreviewGreeting(e.target.value)}
+                  rows={3}
+                  className="w-full text-xs text-slate-700 border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-300 resize-none bg-white"
+                />
+              </div>
+              {/* Account Updates */}
+              <div>
+                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide block mb-1">Account Updates</label>
+                <textarea
+                  value={previewAccountUpdates}
+                  onChange={e => setPreviewAccountUpdates(e.target.value)}
+                  rows={2}
+                  placeholder="Add account updates, observations, or recommendations…"
+                  className="w-full text-xs text-slate-700 border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-300 resize-none bg-white"
+                />
+              </div>
+              {/* Service / Downtime */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide block mb-1">Service Calls</label>
+                  <input
+                    type="number" min={0}
+                    value={previewServiceCalls}
+                    onChange={e => setPreviewServiceCalls(Math.max(0, parseInt(e.target.value) || 0))}
+                    className="w-full text-sm font-semibold text-slate-800 border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-300 bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide block mb-1">Downtime Days</label>
+                  <input
+                    type="number" min={0}
+                    value={previewDowntimeDays}
+                    onChange={e => setPreviewDowntimeDays(Math.max(0, parseInt(e.target.value) || 0))}
+                    className="w-full text-sm font-semibold text-slate-800 border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-300 bg-white"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* iframe renders the live HTML email */}
+            <div className="flex-1 overflow-hidden" style={{ minHeight: '340px' }}>
               <iframe
-                srcDoc={previewHtml}
+                srcDoc={previewHtmlComputed}
                 className="w-full h-full border-0"
                 title="Report Preview"
                 sandbox="allow-same-origin"
-                style={{ minHeight: 'calc(80vh - 112px)' }}
+                style={{ minHeight: '340px' }}
               />
             </div>
 
@@ -1712,10 +1841,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
                   disabled={sendingReport}
                   className="flex items-center gap-2 px-4 py-2 text-sm text-white bg-orange-500 hover:bg-orange-600 rounded-lg font-semibold transition-colors disabled:opacity-50 cursor-pointer"
                 >
-                  {sendingReport
-                    ? 'Sending…'
-                    : <><Send className="w-3.5 h-3.5" /> Approve &amp; Send</>
-                  }
+                  {sendingReport ? 'Sending…' : <><Send className="w-3.5 h-3.5" /> Approve &amp; Send</>}
                 </button>
               </div>
             </div>
