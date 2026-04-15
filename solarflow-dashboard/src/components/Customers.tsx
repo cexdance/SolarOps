@@ -843,7 +843,8 @@ interface EnergyDataPoint {
 
 const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
   const siteId = customer.solarEdgeSiteId;
-  const [graphPeriod, setGraphPeriod] = useState<'week' | 'quarter' | 'year'>('week');
+  // Single period toggle drives BOTH widgets and graph
+  const [graphPeriod, setGraphPeriod] = useState<'week' | 'month' | 'quarter' | 'year'>('month');
   // Cache energy+UV data per period — toggling tabs never re-fetches
   const [energyCache, setEnergyCache] = useState<Record<string, EnergyDataPoint[]>>({});
   const [loading, setLoading] = useState(false);
@@ -885,12 +886,32 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
     } catch { return ''; }
   };
 
-  // Production metrics — prefer live API data over the 0-filled static FL_SITES values
+  // Peak power — from live API or static FL_SITES
+  const peakPowerKw = siteDetails?.peakPower || siteData?.peakPower || 0;
+  const peakPowerWp = peakPowerKw * 1000;
+
+  // Period kWh = sum of energy data already loaded for the selected period.
+  // This drives ALL four widgets so everything stays in sync with the graph.
+  const periodKwh = React.useMemo(() => {
+    const pts = energyCache[graphPeriod] || [];
+    return pts.reduce((s, p) => s + p.kWh, 0);
+  }, [energyCache, graphPeriod]);
+
+  // Fallback when graph data isn't loaded yet — use siteOverview bucket values
+  const fallbackKwh = React.useMemo(() => {
+    if (graphPeriod === 'year')    return siteOverview?.yearKwh  || 0;
+    if (graphPeriod === 'month')   return siteOverview?.monthKwh || 0;
+    if (graphPeriod === 'week')    return siteOverview?.todayKwh !== undefined ? 0 : 0; // no week bucket in overview
+    return 0;
+  }, [graphPeriod, siteOverview]);
+
+  const displayKwh    = periodKwh > 0 ? periodKwh : fallbackKwh;
+  const dollarsSaved  = displayKwh * COST_PER_KWH;
+  const specificYield = peakPowerWp > 0 ? displayKwh / peakPowerWp : 0;
+  const co2Tons       = (displayKwh * 0.42) / 1000;
+
+  // Still need lifetime for the HTML report
   const lifetimeKwh = siteOverview?.lifetimeKwh || siteData?.lifetimeKwh || 0;
-  const peakPowerKw  = siteDetails?.peakPower    || siteData?.peakPower    || 0;
-  const peakPowerWp  = peakPowerKw * 1000;
-  const dollarsSaved = lifetimeKwh * COST_PER_KWH;
-  const specificYield = peakPowerWp > 0 ? lifetimeKwh / peakPowerWp : 0;
 
   // ── Fetch site overview + details (widgets) ───────────────────────────────
   useEffect(() => {
@@ -940,7 +961,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
           const endDate = now.toISOString().slice(0, 10);
           baseUrl = `https://archive-api.open-meteo.com/v1/archive?latitude=26.0&longitude=-80.2&start_date=${startDate}&end_date=${endDate}&daily=uv_index_max&timezone=America%2FNew_York`;
         } else {
-          const pastDays = graphPeriod === 'quarter' ? 90 : 7;
+          const pastDays = graphPeriod === 'quarter' ? 90 : graphPeriod === 'month' ? 30 : 7;
           baseUrl = `https://api.open-meteo.com/v1/forecast?latitude=26.0&longitude=-80.2&daily=uv_index_max&timezone=America%2FNew_York&past_days=${pastDays}&forecast_days=0`;
         }
 
@@ -987,6 +1008,10 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
           const d = new Date(now); d.setDate(d.getDate() - 7);
           startDate = d.toISOString().slice(0, 10);
           timeUnit = 'DAY';
+        } else if (graphPeriod === 'month') {
+          const d = new Date(now); d.setDate(d.getDate() - 30);
+          startDate = d.toISOString().slice(0, 10);
+          timeUnit = 'DAY';
         } else if (graphPeriod === 'quarter') {
           const d = new Date(now); d.setMonth(d.getMonth() - 3);
           startDate = d.toISOString().slice(0, 10);
@@ -1016,6 +1041,8 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
                   date: graphPeriod === 'year'
                     ? new Date(v.date).toLocaleDateString('en-US', { month: 'short' })
                     : graphPeriod === 'quarter'
+                    ? new Date(v.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                    : graphPeriod === 'month'
                     ? new Date(v.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
                     : new Date(v.date).toLocaleDateString('en-US', { weekday: 'short' }),
                   kWh: Math.round((v.value || 0) / 1000 * 100) / 100,
@@ -1203,15 +1230,19 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
       <div className="grid grid-cols-2 gap-3">
         <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl p-4 border border-amber-200">
           <div className="flex items-center gap-1.5 mb-1">
-            <span className="text-xs font-semibold text-amber-700 uppercase tracking-wide">Lifetime Production</span>
-            <InfoTooltip text="Total energy produced by this solar system since installation, measured at the inverter level." />
+            <span className="text-xs font-semibold text-amber-700 uppercase tracking-wide">
+              {graphPeriod === 'week' ? '7-Day Production' : graphPeriod === 'month' ? '30-Day Production' : graphPeriod === 'quarter' ? '3-Month Production' : 'Annual Production'}
+            </span>
+            <InfoTooltip text="Total energy produced by this solar system for the selected time period, measured at the inverter level." />
           </div>
           <p className="text-2xl font-bold text-slate-900">
-            {lifetimeKwh > 0
-              ? (lifetimeKwh >= 1000 ? `${(lifetimeKwh / 1000).toFixed(1)} MWh` : `${lifetimeKwh.toFixed(0)} kWh`)
+            {displayKwh > 0
+              ? (displayKwh >= 1000 ? `${(displayKwh / 1000).toFixed(1)} MWh` : `${displayKwh.toFixed(0)} kWh`)
               : <span className="text-slate-400 text-lg">Loading…</span>}
           </p>
-          <p className="text-xs text-amber-600 mt-1">Since {siteData?.installDate || 'install'}</p>
+          <p className="text-xs text-amber-600 mt-1">
+            {graphPeriod === 'week' ? 'Last 7 days' : graphPeriod === 'month' ? 'Last 30 days' : graphPeriod === 'quarter' ? 'Last 3 months' : 'Last 12 months'}
+          </p>
         </div>
 
         <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-4 border border-green-200">
@@ -1240,15 +1271,15 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
 
         <div className="bg-gradient-to-br from-purple-50 to-fuchsia-50 rounded-xl p-4 border border-purple-200">
           <div className="flex items-center gap-1.5 mb-1">
-            <span className="text-xs font-semibold text-purple-700 uppercase tracking-wide">Environmental</span>
-            <InfoTooltip text="CO₂ offset estimate based on 0.42 kg CO₂ per kWh (US average grid emission factor)." />
+            <span className="text-xs font-semibold text-purple-700 uppercase tracking-wide">CO₂ Offset</span>
+            <InfoTooltip text="CO₂ offset estimate for the selected period based on 0.42 kg CO₂ per kWh (US average grid emission factor)." />
           </div>
           <p className="text-2xl font-bold text-slate-900">
-            {lifetimeKwh > 0
-              ? <>{((lifetimeKwh * 0.42) / 1000).toFixed(1)} <span className="text-sm font-normal text-slate-500">tons CO₂</span></>
+            {co2Tons > 0
+              ? <>{co2Tons.toFixed(2)} <span className="text-sm font-normal text-slate-500">tons CO₂</span></>
               : <span className="text-slate-400 text-lg">—</span>}
           </p>
-          <p className="text-xs text-purple-600 mt-1 flex items-center gap-1"><Leaf className="w-3 h-3" /> Offset</p>
+          <p className="text-xs text-purple-600 mt-1 flex items-center gap-1"><Leaf className="w-3 h-3" /> Period offset</p>
         </div>
       </div>
 
@@ -1261,7 +1292,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
             <InfoTooltip text="Energy production (bars) and daily UV index (line) over time. UV index gives an estimate of solar irradiance — higher UV generally means more production." />
           </h3>
           <div className="flex gap-1">
-            {(['week', 'quarter', 'year'] as const).map(p => (
+            {(['week', 'month', 'quarter', 'year'] as const).map(p => (
               <button
                 key={p}
                 onClick={() => setGraphPeriod(p)}
@@ -1271,7 +1302,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
                     : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                 }`}
               >
-                {p === 'week' ? '7D' : p === 'quarter' ? '3M' : '1Y'}
+                {p === 'week' ? '7D' : p === 'month' ? '30D' : p === 'quarter' ? '3M' : '1Y'}
               </button>
             ))}
           </div>
@@ -1304,8 +1335,8 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
                   yAxisId="uv"
                   orientation="right"
                   domain={[0, 14]}
-                  tick={{ fontSize: 10 }}
-                  stroke="#818cf8"
+                  tick={{ fontSize: 10, fill: '#d97706' }}
+                  stroke="#fbbf24"
                   unit=""
                   width={28}
                 />
@@ -1326,9 +1357,10 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
                   yAxisId="uv"
                   type="monotone"
                   dataKey="uv"
-                  stroke="#818cf8"
-                  strokeWidth={2}
-                  dot={{ r: 2, fill: '#818cf8' }}
+                  stroke="#fbbf24"
+                  strokeWidth={2.5}
+                  dot={{ r: 3, fill: '#f59e0b', stroke: '#d97706', strokeWidth: 1 }}
+                  activeDot={{ r: 5, fill: '#f59e0b' }}
                   connectNulls
                   name="uv"
                 />
@@ -1341,12 +1373,12 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
             </div>
           )}
         </div>
-        {/* Quick stats row — use live API data when available */}
+        {/* Quick stats row — reference values from live API */}
         {(siteOverview || siteData) && (
           <div className="flex gap-4 mt-3 pt-3 border-t border-slate-100 text-xs text-slate-500">
             <span>Today: <strong className="text-slate-700">{(siteOverview?.todayKwh ?? siteData?.todayKwh ?? 0).toFixed(1)} kWh</strong></span>
-            <span>Month: <strong className="text-slate-700">{(siteOverview?.monthKwh ?? siteData?.monthKwh ?? 0).toFixed(1)} kWh</strong></span>
-            <span>Year: <strong className="text-slate-700">{((siteOverview?.yearKwh ?? siteData?.yearKwh ?? 0) / 1000).toFixed(1)} MWh</strong></span>
+            <span>This Month: <strong className="text-slate-700">{(siteOverview?.monthKwh ?? siteData?.monthKwh ?? 0).toFixed(1)} kWh</strong></span>
+            <span>Lifetime: <strong className="text-slate-700">{lifetimeKwh >= 1000 ? `${(lifetimeKwh / 1000).toFixed(1)} MWh` : `${lifetimeKwh.toFixed(0)} kWh`}</strong></span>
           </div>
         )}
       </div>
