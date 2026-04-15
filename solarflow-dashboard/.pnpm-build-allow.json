@@ -1,0 +1,1 @@
+["esbuild", "sharp", "canvas", "@swc/core", "better-sqlite3", "node-gyp"]
