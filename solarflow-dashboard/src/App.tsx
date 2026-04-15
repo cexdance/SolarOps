@@ -1004,9 +1004,10 @@ function App() {
   };
 
   const handleDeleteJob = (jobId: string) => {
-    setData({
-      ...data,
-      jobs: data.jobs.filter((j) => j.id !== jobId),
+    setData(prev => {
+      const next = { ...prev, jobs: prev.jobs.filter((j) => j.id !== jobId) };
+      saveData(next);
+      return next;
     });
   };
 
@@ -1149,12 +1150,16 @@ function App() {
 
   // SolarEdge API handlers
   const handleSaveSolarEdgeApiKey = (apiKey: string) => {
-    setData({
-      ...data,
-      solarEdgeConfig: {
-        ...data.solarEdgeConfig,
-        apiKey,
-      },
+    setData(prev => {
+      const next = {
+        ...prev,
+        solarEdgeConfig: {
+          ...prev.solarEdgeConfig,
+          apiKey,
+        },
+      };
+      saveData(next);
+      return next;
     });
   };
 
@@ -1310,18 +1315,22 @@ function App() {
         }));
 
       // Update customers and solarEdgeConfig
-      setData({
-        ...data,
-        customers: [...updatedCustomers, ...newCustomersFromSync],
-        solarEdgeExtraSites: [...(data.solarEdgeExtraSites ?? []), ...newExtraSites],
-        solarEdgeConfig: {
-          ...data.solarEdgeConfig,
-          lastSync: syncedAt.toISOString(),
-          siteCount: sites.length,
-          nextSyncAllowed: new Date(syncedAt.getTime() + SE_SYNC_COOLDOWN_MS).toISOString(),
-          dailyCallCount: newDailyCount,
-          dailyCallDate: syncedDateUTC,
-        },
+      setData(prev => {
+        const next = {
+          ...prev,
+          customers: [...updatedCustomers, ...newCustomersFromSync],
+          solarEdgeExtraSites: [...(prev.solarEdgeExtraSites ?? []), ...newExtraSites],
+          solarEdgeConfig: {
+            ...prev.solarEdgeConfig,
+            lastSync: syncedAt.toISOString(),
+            siteCount: sites.length,
+            nextSyncAllowed: new Date(syncedAt.getTime() + SE_SYNC_COOLDOWN_MS).toISOString(),
+            dailyCallCount: newDailyCount,
+            dailyCallDate: syncedDateUTC,
+          },
+        };
+        saveData(next);
+        return next;
       });
 
       const remaining = SE_DAILY_LIMIT - newDailyCount;
