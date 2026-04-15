@@ -13,7 +13,7 @@ import { supabase } from './supabase';
 import type { AppState } from '../types';
 
 // Keys synced to Supabase app_data table
-const SYNC_KEYS = ['customers', 'jobs'] as const;
+const SYNC_KEYS = ['customers', 'jobs', 'solarEdgeExtraSites'] as const;
 
 // ── Push ─────────────────────────────────────────────────────────────────────
 
@@ -25,10 +25,17 @@ export async function pushToSupabase(state: AppState): Promise<void> {
 
     const deletedIds = Array.from(getDeletedCustomerIds());
 
+    const valueFor = (key: string) => {
+      if (key === 'customers')          return state.customers;
+      if (key === 'jobs')               return state.jobs;
+      if (key === 'solarEdgeExtraSites') return state.solarEdgeExtraSites ?? [];
+      return null;
+    };
+
     const rows = [
       ...SYNC_KEYS.map(key => ({
         key,
-        value: key === 'customers' ? state.customers : state.jobs,
+        value: valueFor(key),
         updated_at: new Date().toISOString(),
       })),
       // Push tombstones so other devices respect deletions
@@ -66,8 +73,9 @@ export async function pullFromSupabase(): Promise<Partial<AppState> | null> {
 
     const result: Partial<AppState> = {};
     for (const row of data) {
-      if (row.key === 'customers' && Array.isArray(row.value)) result.customers = row.value;
-      if (row.key === 'jobs'      && Array.isArray(row.value)) result.jobs      = row.value;
+      if (row.key === 'customers'           && Array.isArray(row.value)) result.customers           = row.value;
+      if (row.key === 'jobs'                && Array.isArray(row.value)) result.jobs                = row.value;
+      if (row.key === 'solarEdgeExtraSites' && Array.isArray(row.value)) result.solarEdgeExtraSites = row.value;
       // Merge remote tombstones into local tombstone list
       if (row.key === 'deleted_customer_ids' && Array.isArray(row.value)) {
         try {
@@ -124,7 +132,15 @@ export function mergeRemote(local: AppState, remote: Partial<AppState>): AppStat
     jobs = jobs.filter(j => !deletedIds.has(j.customerId));
   }
 
-  return { ...local, customers, jobs };
+  // Merge solarEdgeExtraSites — remote wins, local-only preserved
+  let solarEdgeExtraSites = local.solarEdgeExtraSites ?? [];
+  if (remote.solarEdgeExtraSites && remote.solarEdgeExtraSites.length > 0) {
+    const remoteMap = new Map(remote.solarEdgeExtraSites.map(s => [s.siteId, s]));
+    const localOnly = solarEdgeExtraSites.filter(s => !remoteMap.has(s.siteId));
+    solarEdgeExtraSites = [...remote.solarEdgeExtraSites, ...localOnly];
+  }
+
+  return { ...local, customers, jobs, solarEdgeExtraSites };
 }
 
 // ── Full sync (login / reconnect) ─────────────────────────────────────────────

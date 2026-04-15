@@ -1414,11 +1414,15 @@ function App() {
       }));
 
     if (newCustomers.length > 0 || newExtraSites.length > 0) {
-      setData((prev) => ({
-        ...prev,
-        customers: [...prev.customers, ...newCustomers],
-        solarEdgeExtraSites: [...(prev.solarEdgeExtraSites ?? []), ...newExtraSites],
-      }));
+      setData((prev) => {
+        const next = {
+          ...prev,
+          customers: [...prev.customers, ...newCustomers],
+          solarEdgeExtraSites: [...(prev.solarEdgeExtraSites ?? []), ...newExtraSites],
+        };
+        saveData(next);
+        return next;
+      });
     }
 
     return { newCount: newExtraSites.length, total: sites.length };
@@ -1473,7 +1477,9 @@ function App() {
         }
       }
 
-      return { ...prev, customers };
+      const next = { ...prev, customers };
+      saveData(next);
+      return next;
     });
   };
 
@@ -1533,12 +1539,16 @@ function App() {
     // 6. Clear removed-sites cache so no sites are hidden
     localStorage.removeItem('solarops_removed_sites');
 
-    // 7. Commit to state (and Neon via setData)
-    setData((prev) => ({
-      ...prev,
-      customers: [...manualCustomers, ...freshCustomers],
-      solarEdgeExtraSites: freshExtraSites,
-    }));
+    // 7. Commit to state + persist to localStorage and Supabase
+    setData((prev) => {
+      const next = {
+        ...prev,
+        customers: [...manualCustomers, ...freshCustomers],
+        solarEdgeExtraSites: freshExtraSites,
+      };
+      saveData(next);
+      return next;
+    });
 
     // 8. Build report of all imported sites
     const importedSites = sites.map((s: any) => ({
