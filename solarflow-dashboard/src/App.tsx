@@ -1051,18 +1051,40 @@ function App() {
     logChange('customer.update', 'customer', updatedCustomer.id, updatedCustomer,
       data.currentUser?.email ?? 'unknown');
 
-    setData(prev => ({
-      ...prev,
-      customers: prev.customers.map((c) => (c.id === updatedCustomer.id ? updatedCustomer : c)),
-    }));
+    setData(prev => {
+      const next = {
+        ...prev,
+        customers: prev.customers.map((c) => (c.id === updatedCustomer.id ? updatedCustomer : c)),
+      };
+      saveData(next);
+      return next;
+    });
   };
 
   const handleDeleteCustomer = (customerId: string) => {
-    setData(prev => ({
-      ...prev,
-      customers: prev.customers.filter((c) => c.id !== customerId),
-      jobs: prev.jobs.filter((j) => j.customerId !== customerId),
-    }));
+    // Log deletion to the audit trail
+    logChange('customer.delete', 'customer', customerId, { deleted: true },
+      data.currentUser?.email ?? 'unknown');
+
+    // Track deleted IDs so sync/migration never resurrects them
+    try {
+      const key = 'solarflow_deleted_customer_ids';
+      const deleted: string[] = JSON.parse(localStorage.getItem(key) || '[]');
+      if (!deleted.includes(customerId)) {
+        deleted.push(customerId);
+        localStorage.setItem(key, JSON.stringify(deleted));
+      }
+    } catch {}
+
+    setData(prev => {
+      const next = {
+        ...prev,
+        customers: prev.customers.filter((c) => c.id !== customerId),
+        jobs: prev.jobs.filter((j) => j.customerId !== customerId),
+      };
+      saveData(next);
+      return next;
+    });
   };
 
   const handleMergeCustomers = (primaryId: string, secondaryId: string, resolvedFields?: Partial<Customer>) => {

@@ -63,17 +63,28 @@ const generateDefaultState = (): AppState => ({
   notifications: [],
 });
 
+// ── Tombstone list — customers explicitly deleted by the user ──────────────────
+function getDeletedCustomerIds(): Set<string> {
+  try {
+    return new Set(JSON.parse(localStorage.getItem('solarflow_deleted_customer_ids') || '[]'));
+  } catch { return new Set(); }
+}
+
 // ── Safe version migration ────────────────────────────────────────────────────
 //
 // When DATA_VERSION changes, we ADD new seed customers that don't already exist
 // in stored data. We NEVER remove records the user has created or edited.
+// We NEVER re-add records the user has explicitly deleted (tombstone check).
 
 function applySafeMigration(stored: AppState): AppState {
   const seedCustomers = buildSeedCustomers();
   const storedIds     = new Set(stored.customers.map(c => c.id));
+  const deletedIds    = getDeletedCustomerIds();
 
-  // Only add seed customers that are completely new (not already in stored data)
-  const newSeedCustomers = seedCustomers.filter(c => !storedIds.has(c.id));
+  // Only add seed customers that are completely new AND not previously deleted
+  const newSeedCustomers = seedCustomers.filter(
+    c => !storedIds.has(c.id) && !deletedIds.has(c.id)
+  );
 
   if (newSeedCustomers.length > 0) {
     console.info(`[DataStore] Migration: adding ${newSeedCustomers.length} new seed customers`);
@@ -108,11 +119,15 @@ export const loadData = (): AppState => {
       const seConfig       = (state.solarEdgeConfig || {}) as Record<string, any>;
       const apiKey         = (seConfig.apiKey as string | undefined)?.trim() ?? '';
 
-      // Ensure customers list is populated
-      const customers =
+      // Ensure customers list is populated, filter out deleted records
+      const deletedIds = getDeletedCustomerIds();
+      const rawCustomers =
         Array.isArray(state.customers) && state.customers.length > 0
           ? state.customers
           : defaults.customers;
+      const customers = deletedIds.size > 0
+        ? rawCustomers.filter(c => !deletedIds.has(c.id))
+        : rawCustomers;
 
       return {
         ...defaults,
