@@ -43,6 +43,7 @@ import {
   TrendingUp,
   Leaf,
   FileBarChart,
+  Eye,
 } from 'lucide-react';
 import * as _recharts from 'recharts';
 const { ComposedChart, Bar, Line, XAxis, YAxis, Tooltip: RechartsTooltip, ResponsiveContainer, CartesianGrid, Legend } = _recharts as any;
@@ -857,6 +858,9 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
   const [reportNotes, setReportNotes] = useState('');
   const [sendingReport, setSendingReport] = useState(false);
   const [reportSent, setReportSent] = useState(false);
+  const [showReportPreview, setShowReportPreview] = useState(false);
+  const [previewHtml, setPreviewHtml] = useState('');
+  const [previewTrackingId, setPreviewTrackingId] = useState('');
   const [xeroInvoices, setXeroInvoices] = useState<any[]>([]);
   const [xeroLoading, setXeroLoading] = useState(false);
   const [xeroError, setXeroError] = useState('');
@@ -1100,25 +1104,20 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
     fetchXeroInvoices();
   }, [customer.name]);
 
-  // Generate & send HTML report
-  const handleSendReport = async () => {
-    if (!customer.email) return;
-    setSendingReport(true);
-    try {
-      const trackingId = `prod-${customer.id}-${Date.now()}`;
-      const trackingPixel = `https://solarflow-dashboard-sooty.vercel.app/api/track?event=open&id=${trackingId}`;
+  // Build the HTML report and open the preview modal
+  const handleOpenPreview = () => {
+    const tid = `prod-${customer.id}-${Date.now()}`;
+    const trackingPixel = `https://solarflow-dashboard-sooty.vercel.app/api/track?event=open&id=${tid}`;
+    const overdueInvs = xeroInvoices.filter(inv => inv.Status === 'OVERDUE');
+    const hasOverdue = overdueInvs.length > 0;
 
-      const overdueInvoices = xeroInvoices.filter(inv => inv.Status === 'OVERDUE');
-      const hasOverdue = overdueInvoices.length > 0;
-
-      const htmlReport = `
-<!DOCTYPE html>
+    const html = `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 0; background: #f8fafc; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 16px; background: #f8fafc; }
     .container { max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
     .header { background: linear-gradient(135deg, #f97316, #ea580c); padding: 32px 24px; text-align: center; color: white; }
     .header h1 { margin: 0 0 4px; font-size: 22px; }
@@ -1160,7 +1159,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
           <div class="label">Specific Yield (kWh/Wp)</div>
         </div>
         <div class="metric">
-          <div class="value">${siteData?.peakPower?.toFixed(1) || '—'} kW</div>
+          <div class="value">${siteData?.peakPower?.toFixed(1) || (peakPowerKw > 0 ? peakPowerKw.toFixed(1) : '—')} kW</div>
           <div class="label">System Size</div>
         </div>
       </div>
@@ -1175,7 +1174,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
       <div class="alert-box">
         <p><strong>⚠️ Friendly Reminder:</strong> We noticed an open balance on your account. To avoid any interruptions in service monitoring, please submit payment at your earliest convenience.</p>
         <p style="margin-top: 12px;">
-          <a href="https://solarflow-dashboard-sooty.vercel.app/api/track?event=click&target=invoice&id=${trackingId}&redirect=${encodeURIComponent(overdueInvoices[0]?.InvoiceID ? 'https://invoicing.xero.com/view/' + overdueInvoices[0].InvoiceID : '#')}" class="btn" style="color: white;">View Invoice →</a>
+          <a href="https://solarflow-dashboard-sooty.vercel.app/api/track?event=click&target=invoice&id=${tid}&redirect=${encodeURIComponent(overdueInvs[0]?.InvoiceID ? 'https://invoicing.xero.com/view/' + overdueInvs[0].InvoiceID : '#')}" class="btn" style="color: white;">View Invoice →</a>
         </p>
       </div>` : ''}
 
@@ -1191,33 +1190,42 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
     </div>
     <div class="footer">
       <p>Powered by Conexsol — Your Solar Service Partner</p>
-      <p style="margin-top: 8px;"><a href="https://solarflow-dashboard-sooty.vercel.app/api/track?event=click&target=website&id=${trackingId}&redirect=${encodeURIComponent('https://conexsol.us')}" style="color: #f97316; text-decoration: none;">conexsol.us</a></p>
+      <p style="margin-top: 8px;"><a href="https://solarflow-dashboard-sooty.vercel.app/api/track?event=click&target=website&id=${tid}&redirect=${encodeURIComponent('https://conexsol.us')}" style="color: #f97316; text-decoration: none;">conexsol.us</a></p>
     </div>
   </div>
   <img src="${trackingPixel}" width="1" height="1" alt="" style="display:none;" />
 </body>
 </html>`;
 
-      // Send via mailto (in production would be an API call)
+    setPreviewHtml(html);
+    setPreviewTrackingId(tid);
+    setShowReportPreview(true);
+  };
+
+  // Approve & Send — called from inside the preview modal
+  const handleSendReport = async () => {
+    if (!customer.email || !previewHtml) return;
+    setSendingReport(true);
+    try {
       const subject = encodeURIComponent(`Solar Production Report — ${customer.name}`);
       const bcc = encodeURIComponent('cesar.jurado@conexsol.us');
-      // Store report for potential API-based sending
-      localStorage.setItem(`solarops_report_${trackingId}`, JSON.stringify({
+      localStorage.setItem(`solarops_report_${previewTrackingId}`, JSON.stringify({
         to: customer.email,
         bcc: 'cesar.jurado@conexsol.us',
         subject: `Solar Production Report — ${customer.name}`,
-        html: htmlReport,
-        trackingId,
+        html: previewHtml,
+        trackingId: previewTrackingId,
         sentAt: new Date().toISOString(),
       }));
-
-      // Open mailto with report link
-      window.open(`mailto:${customer.email}?subject=${subject}&bcc=${bcc}&body=${encodeURIComponent('Please view the attached HTML report for your solar production summary.\n\n— Conexsol Service Team')}`, '_blank');
-
+      window.open(
+        `mailto:${customer.email}?subject=${subject}&bcc=${bcc}&body=${encodeURIComponent('Please view the attached HTML report for your solar production summary.\n\n— Conexsol Service Team')}`,
+        '_blank'
+      );
+      setShowReportPreview(false);
       setReportSent(true);
       setTimeout(() => setReportSent(false), 4000);
     } catch (err) {
-      console.error('Failed to generate report:', err);
+      console.error('Failed to send report:', err);
     }
     setSendingReport(false);
   };
@@ -1451,11 +1459,11 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
         />
       </div>
 
-      {/* ── Send Report Button ────────────────────────────────────────── */}
+      {/* ── Report Preview Button ──────────────────────────────────── */}
       <div className="flex gap-2">
         <button
-          onClick={handleSendReport}
-          disabled={sendingReport || !customer.email}
+          onClick={handleOpenPreview}
+          disabled={!customer.email}
           className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm transition-colors cursor-pointer ${
             reportSent
               ? 'bg-green-500 text-white'
@@ -1466,10 +1474,8 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
         >
           {reportSent ? (
             <><CheckCircle className="w-4 h-4" /> Report Sent!</>
-          ) : sendingReport ? (
-            'Generating…'
           ) : (
-            <><Send className="w-4 h-4" /> Send Production Report</>
+            <><Eye className="w-4 h-4" /> Report Preview</>
           )}
         </button>
         <a
@@ -1484,6 +1490,71 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
       </div>
       {!customer.email && (
         <p className="text-xs text-amber-600 text-center">Add an email address to this customer to send reports.</p>
+      )}
+
+      {/* ── Report Preview Modal ───────────────────────────────────── */}
+      {showReportPreview && (
+        <div
+          className="fixed inset-0 z-[200] bg-black/70 flex items-start justify-center p-4 overflow-y-auto"
+          onClick={() => setShowReportPreview(false)}
+        >
+          <div
+            className="bg-white w-full max-w-2xl rounded-2xl overflow-hidden shadow-2xl flex flex-col my-auto"
+            style={{ minHeight: '80vh', maxHeight: '92vh' }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Modal header */}
+            <div className="flex items-center justify-between px-4 py-3 bg-slate-900 text-white flex-shrink-0">
+              <div className="flex items-center gap-2">
+                <FileBarChart className="w-4 h-4 text-orange-400" />
+                <span className="font-semibold text-sm">Report Preview</span>
+                <span className="text-xs text-slate-400">— exactly as the client will see it</span>
+              </div>
+              <button
+                onClick={() => setShowReportPreview(false)}
+                className="p-1.5 hover:bg-slate-800 rounded-lg transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* iframe renders the exact HTML email */}
+            <div className="flex-1 overflow-hidden">
+              <iframe
+                srcDoc={previewHtml}
+                className="w-full h-full border-0"
+                title="Report Preview"
+                sandbox="allow-same-origin"
+                style={{ minHeight: 'calc(80vh - 112px)' }}
+              />
+            </div>
+
+            {/* Footer: recipient info + actions */}
+            <div className="flex items-center justify-between px-4 py-3 border-t border-slate-200 bg-slate-50 flex-shrink-0">
+              <p className="text-xs text-slate-500">
+                To: <strong className="text-slate-700">{customer.email}</strong>
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowReportPreview(false)}
+                  className="px-4 py-2 text-sm text-slate-600 bg-slate-200 hover:bg-slate-300 rounded-lg font-medium transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSendReport}
+                  disabled={sendingReport}
+                  className="flex items-center gap-2 px-4 py-2 text-sm text-white bg-orange-500 hover:bg-orange-600 rounded-lg font-semibold transition-colors disabled:opacity-50 cursor-pointer"
+                >
+                  {sendingReport
+                    ? 'Sending…'
+                    : <><Send className="w-3.5 h-3.5" /> Approve &amp; Send</>
+                  }
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
