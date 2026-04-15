@@ -2469,32 +2469,143 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                   <p className="text-slate-500">No work orders yet</p>
                 </div>
               ) : (
-                jobs.map((job) => (
-                  <div key={job.id} className="bg-slate-50 rounded-lg p-3 flex items-center justify-between">
-                    <div>
-                      <p className="font-medium text-slate-900">{job.title || job.serviceType}</p>
-                      <p className="text-xs text-slate-500">{job.scheduledDate?.split('T')[0] ?? job.scheduledDate}</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className={`px-2 py-1 text-xs rounded-full font-medium ${
-                        job.status === 'completed' || job.status === 'paid'
-                          ? 'bg-green-100 text-green-700'
-                          : job.status === 'new' || job.status === 'assigned'
-                          ? 'bg-amber-100 text-amber-700'
-                          : 'bg-slate-100 text-slate-700'
-                      }`}>
-                        {formatStatus(job.status)}
-                      </span>
-                      <button
-                        onClick={() => setEditingJob(job)}
-                        className="p-1.5 text-slate-400 hover:text-orange-500 hover:bg-orange-50 rounded-lg transition-colors"
-                        title="Edit work order"
-                      >
-                        <Pencil className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                ))
+                (() => {
+                  const WO_PIPELINE = [
+                    { key: 'draft',          label: 'Draft',        short: 'Draft',    getDate: (j: Job) => j.createdAt,         action: 'Send quote to client' },
+                    { key: 'quote_sent',     label: 'Quote Sent',   short: 'Q.Sent',   getDate: (j: Job) => j.quoteSentAt,       action: 'Follow up on quote' },
+                    { key: 'quote_approved', label: 'Approved',     short: 'Apprvd',   getDate: (j: Job) => j.quoteApprovedAt,   action: 'Schedule a technician' },
+                    { key: 'scheduled',      label: 'Scheduled',    short: 'Sched.',   getDate: (j: Job) => j.scheduledDate,     action: 'Begin service call' },
+                    { key: 'in_progress',    label: 'In Progress',  short: 'Active',   getDate: (j: Job) => j.startedAt,         action: 'Complete & submit report' },
+                    { key: 'completed',      label: 'Completed',    short: 'Done',     getDate: (j: Job) => j.completedAt,       action: 'Send invoice to client' },
+                    { key: 'invoiced',       label: 'Invoiced',     short: 'Invcd.',   getDate: (j: Job) => j.invoicedAt,        action: 'Follow up on payment' },
+                    { key: 'paid',           label: 'Paid',         short: 'Paid',     getDate: (j: Job) => j.clientPaidAt,      action: '' },
+                  ] as const;
+                  const stageOrder = WO_PIPELINE.map(s => s.key);
+                  const fmtD = (s: string | undefined) => {
+                    if (!s) return null;
+                    try { return new Date(s).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }); } catch { return null; }
+                  };
+                  const woStatusColor = (ws: string | undefined) =>
+                    ws === 'paid'           ? 'bg-green-100 text-green-700'
+                    : ws === 'invoiced'     ? 'bg-blue-100 text-blue-700'
+                    : ws === 'completed'    ? 'bg-teal-100 text-teal-700'
+                    : ws === 'in_progress'  ? 'bg-orange-100 text-orange-700'
+                    : ws === 'scheduled'    ? 'bg-purple-100 text-purple-700'
+                    : ws === 'quote_approved' ? 'bg-cyan-100 text-cyan-700'
+                    : ws === 'quote_sent'   ? 'bg-indigo-100 text-indigo-700'
+                    : 'bg-slate-100 text-slate-600';
+                  return jobs.map((job) => {
+                    const ws = job.woStatus ?? 'draft';
+                    const curIdx = Math.max(0, stageOrder.indexOf(ws as typeof stageOrder[number]));
+                    const isDone = ws === 'paid';
+                    const nextAction = !isDone ? WO_PIPELINE[curIdx]?.action : '';
+                    const wsLabel = WO_PIPELINE[curIdx]?.label ?? formatStatus(job.status);
+                    const addr = job.siteAddress || customer.address;
+                    const amount = (job.quoteAmount || job.totalAmount) || 0;
+                    return (
+                      <div key={job.id} className="bg-white rounded-xl border border-slate-200 overflow-hidden hover:shadow-md transition-shadow">
+
+                        {/* ── Header ──────────────────────────────────── */}
+                        <div className="flex items-start justify-between px-4 pt-4 pb-2">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap mb-1">
+                              {job.woNumber && (
+                                <span className="text-[10px] font-bold text-slate-400 tracking-widest uppercase">{job.woNumber}</span>
+                              )}
+                              <span className={`px-2 py-0.5 text-[10px] rounded-full font-semibold ${woStatusColor(ws)}`}>{wsLabel}</span>
+                            </div>
+                            <p className="font-semibold text-slate-900 text-sm leading-tight">{job.title || job.serviceType}</p>
+                            {addr && (
+                              <p className="flex items-center gap-1 text-xs text-slate-500 mt-1 truncate">
+                                <MapPin className="w-3 h-3 flex-shrink-0 text-slate-400" />
+                                {addr}
+                              </p>
+                            )}
+                          </div>
+                          <button
+                            onClick={() => setEditingJob(job)}
+                            className="ml-3 p-1.5 text-slate-400 hover:text-orange-500 hover:bg-orange-50 rounded-lg transition-colors flex-shrink-0"
+                            title="Open work order"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+
+                        {/* ── Meta row ────────────────────────────────── */}
+                        <div className="flex items-center gap-4 px-4 pb-3 text-xs text-slate-500 flex-wrap">
+                          {amount > 0 && (
+                            <span className="flex items-center gap-1 font-semibold text-emerald-700">
+                              <DollarSign className="w-3 h-3" />
+                              ${amount.toLocaleString('en-US', { maximumFractionDigits: 0 })}
+                            </span>
+                          )}
+                          {job.laborHours > 0 && (
+                            <span className="flex items-center gap-1">
+                              <Clock className="w-3 h-3" />{job.laborHours}h
+                            </span>
+                          )}
+                          {job.scheduledDate && (
+                            <span className="flex items-center gap-1">
+                              <Calendar className="w-3 h-3" />{job.scheduledDate.split('T')[0]}
+                            </span>
+                          )}
+                          {job.travelMiles && job.travelMiles > 0 ? (
+                            <span className="flex items-center gap-1">
+                              <ArrowRight className="w-3 h-3" />{job.travelMiles} mi
+                            </span>
+                          ) : null}
+                        </div>
+
+                        {/* ── Stage pipeline ──────────────────────────── */}
+                        <div className="px-3 pb-3 border-t border-slate-50 pt-3">
+                          <div className="flex items-start">
+                            {WO_PIPELINE.map((stage, i) => {
+                              const done  = i < curIdx;
+                              const active = i === curIdx;
+                              const dateStr = (done || active) ? fmtD(stage.getDate(job)) : null;
+                              return (
+                                <React.Fragment key={stage.key}>
+                                  {i > 0 && (
+                                    <div className={`flex-1 h-[2px] mt-[8px] transition-colors ${i <= curIdx ? 'bg-orange-400' : 'bg-slate-200'}`} />
+                                  )}
+                                  <div className="flex flex-col items-center" style={{ flexShrink: 0, minWidth: 0 }}>
+                                    <div className={`w-[18px] h-[18px] rounded-full border-2 flex items-center justify-center text-[8px] font-bold transition-all ${
+                                      done  ? 'bg-orange-500 border-orange-500 text-white'
+                                      : active ? 'bg-white border-orange-500 text-orange-600 ring-2 ring-orange-100'
+                                      : 'bg-white border-slate-200 text-slate-300'
+                                    }`}>
+                                      {done ? '✓' : i + 1}
+                                    </div>
+                                    <span className={`text-[7px] mt-[2px] font-medium leading-tight text-center ${active ? 'text-orange-600' : done ? 'text-slate-500' : 'text-slate-300'}`}>
+                                      {stage.short}
+                                    </span>
+                                    {dateStr ? (
+                                      <span className="text-[7px] text-slate-400 leading-tight text-center">{dateStr}</span>
+                                    ) : <span className="text-[7px] leading-tight">&nbsp;</span>}
+                                  </div>
+                                </React.Fragment>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* ── Next action ─────────────────────────────── */}
+                        {!isDone && nextAction && (
+                          <div className="flex items-center gap-2 px-4 py-2.5 bg-amber-50 border-t border-amber-100">
+                            <ArrowRight className="w-3 h-3 text-amber-600 flex-shrink-0" />
+                            <span className="text-xs font-semibold text-amber-800">{nextAction}</span>
+                          </div>
+                        )}
+                        {isDone && (
+                          <div className="flex items-center gap-2 px-4 py-2.5 bg-green-50 border-t border-green-100">
+                            <CheckCircle className="w-3 h-3 text-green-600 flex-shrink-0" />
+                            <span className="text-xs font-semibold text-green-700">Work order complete — paid in full</span>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  });
+                })()
               )}
             </div>
           )}
