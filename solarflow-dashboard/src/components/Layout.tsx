@@ -438,8 +438,8 @@ export const Layout: React.FC<LayoutProps> = ({
       </main>
 
       {/* Version badge — fixed bottom-right */}
-      <div className={`fixed right-3 z-30 text-[10px] text-slate-400 bg-white/80 backdrop-blur-sm border border-slate-200 rounded-md px-2 py-1 pointer-events-none select-none ${isMobile ? 'bottom-16' : 'bottom-3'}`}>
-        SolarOps {APP_VERSION}
+      <div className={`fixed left-3 z-30 text-[10px] text-slate-400 bg-white/80 backdrop-blur-sm border border-slate-200 rounded-md px-2 py-1 pointer-events-none select-none ${isMobile ? 'bottom-16' : 'bottom-3'}`}>
+        {APP_VERSION}
       </div>
 
       {/* Mobile Bottom Navigation */}
