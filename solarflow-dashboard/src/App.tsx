@@ -1274,7 +1274,7 @@ function App() {
         !existingSiteIds.has(String(s.id))
       );
       const newCustomersFromSync: Customer[] = unmatchedSites.map((s: any) => ({
-        id: `cust-se-${s.id}-${Date.now()}`,
+        id: `cust-se-${s.id}`,
         name: s.name || `SolarEdge Site ${s.id}`,
         firstName: '',
         lastName: '',
@@ -1443,6 +1443,7 @@ function App() {
     setData(prev => {
       let customers = [...prev.customers];
       const flSiteIds = new Set(FL_SITES.map(s => s.siteId));
+      // Track ALL extra site IDs (existing + newly added this batch)
       const existingExtraIds = new Set((prev.solarEdgeExtraSites ?? []).map(s => s.siteId));
       const newExtraSites: SolarEdgeExtraSite[] = [];
 
@@ -1451,26 +1452,32 @@ function App() {
           const s = item.site;
           const loc = (s.location ?? {}) as { address?: string; city?: string; zip?: string; state?: string };
           const siteId = String(s.id);
-          const newC: Customer = {
-            id: `cust-se-${s.id}-${Date.now()}`,
-            name: s.name,
-            email: '', phone: '',
-            address: loc.address || '',
-            city:    loc.city    || '',
-            state:   loc.state   || 'FL',
-            zip:     loc.zip     || '',
-            type: 'residential' as const,
-            notes: `Imported from SolarEdge on ${new Date().toLocaleDateString()}`,
-            solarEdgeSiteId: siteId,
-            systemType: 'SolarEdge' as any,
-            clientStatus: s.status === 'Active' ? 'O&M' as any : 'Standby' as any,
-            createdAt: s.installationDate ? new Date(s.installationDate).toISOString() : new Date().toISOString(),
-          };
-          customers.push(newC);
 
-          // Also add to extraSites so the site appears in the monitoring table.
-          // ALL_SITES = FL_SITES + extraSites — imported customers without an
-          // extraSites entry never show up in the monitoring list.
+          // ── Dedup guard: skip if any customer already owns this siteId ─────
+          // (catches edge cases where buildDiff missed a prior import)
+          const alreadyLinked = customers.some(c => c.solarEdgeSiteId === siteId);
+          if (!alreadyLinked) {
+            // Stable ID — no Date.now() suffix so re-importing never duplicates
+            const newC: Customer = {
+              id: `cust-se-${s.id}`,
+              name: s.name,
+              email: '', phone: '',
+              address: loc.address || '',
+              city:    loc.city    || '',
+              state:   loc.state   || 'FL',
+              zip:     loc.zip     || '',
+              type: 'residential' as const,
+              notes: `Imported from SolarEdge on ${new Date().toLocaleDateString()}`,
+              solarEdgeSiteId: siteId,
+              systemType: 'SolarEdge' as any,
+              clientStatus: s.status === 'Active' ? 'O&M' as any : 'Standby' as any,
+              createdAt: s.installationDate ? new Date(s.installationDate).toISOString() : new Date().toISOString(),
+            };
+            customers.push(newC);
+          }
+
+          // ── Always ensure extraSites entry so site appears in monitoring ──
+          // (even if customer already existed from a pre-fix import that missed this)
           if (!flSiteIds.has(siteId) && !existingExtraIds.has(siteId)) {
             const clientId = s.name?.match(/^(US[\s-]\d+)/i)?.[1] || '';
             newExtraSites.push({
@@ -1486,7 +1493,7 @@ function App() {
               todayKwh: 0, monthKwh: 0, yearKwh: 0, lifetimeKwh: 0,
               lastUpdate: new Date().toISOString(),
             } as SolarEdgeExtraSite);
-            existingExtraIds.add(siteId); // prevent duplicates within same batch
+            existingExtraIds.add(siteId);
           }
         }
 
@@ -1510,10 +1517,28 @@ function App() {
         }
       }
 
+      // ── Deduplicate customers: if multiple cust-se-* share a siteId, keep newest ─
+      const seenSiteIds = new Set<string>();
+      const dedupedCustomers = [...customers].reverse().filter(c => {
+        if (!c.solarEdgeSiteId) return true;
+        if (seenSiteIds.has(c.solarEdgeSiteId)) return false;
+        seenSiteIds.add(c.solarEdgeSiteId);
+        return true;
+      }).reverse();
+
+      // ── Deduplicate extraSites by siteId ──────────────────────────────────
+      const allExtra = [...(prev.solarEdgeExtraSites ?? []), ...newExtraSites];
+      const seenExtra = new Set<string>();
+      const dedupedExtra = allExtra.filter(s => {
+        if (seenExtra.has(s.siteId)) return false;
+        seenExtra.add(s.siteId);
+        return true;
+      });
+
       const next = {
         ...prev,
-        customers,
-        solarEdgeExtraSites: [...(prev.solarEdgeExtraSites ?? []), ...newExtraSites],
+        customers: dedupedCustomers,
+        solarEdgeExtraSites: dedupedExtra,
       };
       saveData(next);
       return next;
@@ -1539,7 +1564,7 @@ function App() {
 
     // 4. Build fresh customer records for all matching sites
     const freshCustomers: Customer[] = sites.map((s: any) => ({
-      id: `cust-se-${s.id}-${Date.now()}`,
+      id: `cust-se-${s.id}`,
       name: s.name || `SolarEdge Site ${s.id}`,
       firstName: '', lastName: '', email: '', phone: '',
       address: s.location?.address || '',

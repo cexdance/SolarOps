@@ -1111,89 +1111,200 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
     const overdueInvs = xeroInvoices.filter(inv => inv.Status === 'OVERDUE');
     const hasOverdue = overdueInvs.length > 0;
 
+    const periodLabel = graphPeriod === 'week' ? 'Last 7 Days' : graphPeriod === 'month' ? 'Last 30 Days' : graphPeriod === 'quarter' ? 'Last 3 Months' : 'Last 12 Months';
+    const systemSize  = siteData?.peakPower?.toFixed(1) || (peakPowerKw > 0 ? peakPowerKw.toFixed(1) : null);
+    const reportDate  = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+
     const html = `<!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Solar Production Report — ${customer.name}</title>
   <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 16px; background: #f8fafc; }
-    .container { max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
-    .header { background: linear-gradient(135deg, #f97316, #ea580c); padding: 32px 24px; text-align: center; color: white; }
-    .header h1 { margin: 0 0 4px; font-size: 22px; }
-    .header p { margin: 0; opacity: 0.9; font-size: 14px; }
-    .body { padding: 24px; }
-    .metric-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 24px; }
-    .metric { background: #f8fafc; border-radius: 8px; padding: 16px; text-align: center; border: 1px solid #e2e8f0; }
-    .metric .value { font-size: 24px; font-weight: 700; color: #0f172a; }
-    .metric .label { font-size: 12px; color: #64748b; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
-    .section { margin-bottom: 20px; }
-    .section h3 { font-size: 14px; font-weight: 600; color: #334155; margin: 0 0 8px; border-bottom: 2px solid #f97316; padding-bottom: 4px; display: inline-block; }
-    .section p { font-size: 14px; color: #475569; line-height: 1.6; margin: 0; }
-    .alert-box { background: #fef3c7; border: 1px solid #f59e0b; border-radius: 8px; padding: 16px; margin-bottom: 20px; }
-    .alert-box p { color: #92400e; font-size: 13px; }
-    .btn { display: inline-block; padding: 12px 24px; background: #f97316; color: white; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 14px; }
-    .footer { background: #f8fafc; padding: 20px 24px; text-align: center; border-top: 1px solid #e2e8f0; }
-    .footer p { font-size: 11px; color: #94a3b8; margin: 0; }
-    .green { color: #16a34a; }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      margin: 0; padding: 24px 16px; background: #f1f5f9; color: #1e293b;
+    }
+    .wrap { max-width: 620px; margin: 0 auto; }
+
+    /* ── Brand bar ─────────────────────────────────── */
+    .brand-bar {
+      background: #0f172a;
+      padding: 18px 28px;
+      border-radius: 12px 12px 0 0;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .brand-bar img { height: 28px; filter: brightness(0) invert(1); }
+    .brand-bar .date { font-size: 11px; color: #94a3b8; letter-spacing: 0.3px; }
+
+    /* ── Hero ──────────────────────────────────────── */
+    .hero {
+      background: linear-gradient(135deg, #f97316 0%, #ea580c 60%, #c2410c 100%);
+      padding: 32px 28px 28px;
+      color: white;
+    }
+    .hero .eyebrow { font-size: 11px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; opacity: 0.75; margin-bottom: 6px; }
+    .hero h1 { margin: 0 0 6px; font-size: 26px; font-weight: 700; line-height: 1.2; }
+    .hero .sub { font-size: 14px; opacity: 0.85; margin: 0; }
+    .hero .period-badge {
+      display: inline-block; margin-top: 14px;
+      background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.3);
+      border-radius: 20px; padding: 4px 14px; font-size: 12px; font-weight: 600;
+    }
+
+    /* ── Metrics grid ──────────────────────────────── */
+    .metrics { background: #ffffff; padding: 24px 28px 8px; }
+    .metrics-title { font-size: 11px; font-weight: 700; color: #94a3b8; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 16px; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+    .metric-card {
+      background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px;
+      padding: 18px 16px; text-align: center;
+    }
+    .metric-card .icon { font-size: 22px; margin-bottom: 8px; }
+    .metric-card .val { font-size: 26px; font-weight: 800; color: #0f172a; line-height: 1; }
+    .metric-card .val.green { color: #16a34a; }
+    .metric-card .val.blue  { color: #2563eb; }
+    .metric-card .val.purple{ color: #7c3aed; }
+    .metric-card .lbl { font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 6px; }
+    .metric-card .sub-lbl { font-size: 10px; color: #94a3b8; margin-top: 2px; }
+
+    /* ── Divider ───────────────────────────────────── */
+    .divider { height: 1px; background: #e2e8f0; margin: 4px 0; }
+
+    /* ── Sections ──────────────────────────────────── */
+    .body-section { background: #ffffff; padding: 20px 28px; }
+    .section-title {
+      font-size: 11px; font-weight: 700; color: #f97316;
+      letter-spacing: 1px; text-transform: uppercase;
+      margin: 0 0 12px; padding-bottom: 8px;
+      border-bottom: 2px solid #fed7aa;
+    }
+    .detail-row { display: flex; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid #f1f5f9; font-size: 13px; }
+    .detail-row:last-child { border-bottom: none; }
+    .detail-label { color: #64748b; }
+    .detail-value { font-weight: 600; color: #1e293b; text-align: right; }
+
+    /* ── Notes ─────────────────────────────────────── */
+    .notes-box { background: #f8fafc; border-left: 3px solid #f97316; border-radius: 0 8px 8px 0; padding: 14px 16px; font-size: 13px; color: #475569; line-height: 1.7; }
+
+    /* ── Alert ─────────────────────────────────────── */
+    .alert-box { background: #fffbeb; border: 1px solid #f59e0b; border-radius: 10px; padding: 18px; margin-bottom: 4px; }
+    .alert-box p { margin: 0; font-size: 13px; color: #92400e; line-height: 1.6; }
+    .btn { display: inline-block; margin-top: 12px; padding: 10px 22px; background: #f97316; color: #fff !important; text-decoration: none; border-radius: 8px; font-weight: 700; font-size: 13px; }
+
+    /* ── Footer ────────────────────────────────────── */
+    .footer {
+      background: #0f172a; border-radius: 0 0 12px 12px;
+      padding: 24px 28px; text-align: center;
+    }
+    .footer img { height: 22px; filter: brightness(0) invert(1); margin-bottom: 10px; }
+    .footer p { margin: 0; font-size: 11px; color: #64748b; line-height: 1.8; }
+    .footer a { color: #f97316 !important; text-decoration: none; font-weight: 600; }
   </style>
 </head>
 <body>
-  <div class="container">
-    <div class="header">
-      <h1>☀️ Solar Production Report</h1>
-      <p>${customer.name} — ${siteData?.siteName || 'SolarEdge System'}</p>
-    </div>
-    <div class="body">
-      <div class="metric-grid">
-        <div class="metric">
-          <div class="value">${lifetimeKwh >= 1000 ? (lifetimeKwh / 1000).toFixed(1) + ' MWh' : lifetimeKwh.toFixed(0) + ' kWh'}</div>
-          <div class="label">Lifetime Production</div>
-        </div>
-        <div class="metric">
-          <div class="value green">$${dollarsSaved.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</div>
-          <div class="label">Estimated Savings</div>
-        </div>
-        <div class="metric">
-          <div class="value">${specificYield.toFixed(2)}</div>
-          <div class="label">Specific Yield (kWh/Wp)</div>
-        </div>
-        <div class="metric">
-          <div class="value">${siteData?.peakPower?.toFixed(1) || (peakPowerKw > 0 ? peakPowerKw.toFixed(1) : '—')} kW</div>
-          <div class="label">System Size</div>
-        </div>
+<div class="wrap">
+
+  <!-- Brand bar -->
+  <div class="brand-bar">
+    <img src="https://solarflow-dashboard-sooty.vercel.app/conexsol-logo.png" alt="Conexsol" />
+    <span class="date">${reportDate}</span>
+  </div>
+
+  <!-- Hero -->
+  <div class="hero">
+    <p class="eyebrow">Solar Production Report</p>
+    <h1>${customer.name}</h1>
+    <p class="sub">${siteData?.siteName || 'SolarEdge System'}${siteId ? ' · Site #' + siteId : ''}</p>
+    <span class="period-badge">📅 ${periodLabel}</span>
+  </div>
+
+  <!-- Metrics -->
+  <div class="metrics">
+    <p class="metrics-title">Performance Summary</p>
+    <div class="grid-2">
+      <div class="metric-card">
+        <div class="icon">⚡</div>
+        <div class="val">${displayKwh >= 1000 ? (displayKwh / 1000).toFixed(2) + '<span style="font-size:14px;font-weight:500;color:#64748b"> MWh</span>' : Math.round(displayKwh) + '<span style="font-size:14px;font-weight:500;color:#64748b"> kWh</span>'}</div>
+        <div class="lbl">Energy Produced</div>
+        <div class="sub-lbl">${periodLabel}</div>
       </div>
-
-      ${reportNotes ? `
-      <div class="section">
-        <h3>Notes from Your Service Team</h3>
-        <p>${reportNotes.replace(/\n/g, '<br/>')}</p>
-      </div>` : ''}
-
-      ${hasOverdue ? `
-      <div class="alert-box">
-        <p><strong>⚠️ Friendly Reminder:</strong> We noticed an open balance on your account. To avoid any interruptions in service monitoring, please submit payment at your earliest convenience.</p>
-        <p style="margin-top: 12px;">
-          <a href="https://solarflow-dashboard-sooty.vercel.app/api/track?event=click&target=invoice&id=${tid}&redirect=${encodeURIComponent(overdueInvs[0]?.InvoiceID ? 'https://invoicing.xero.com/view/' + overdueInvs[0].InvoiceID : '#')}" class="btn" style="color: white;">View Invoice →</a>
-        </p>
-      </div>` : ''}
-
-      <div class="section">
-        <h3>System Details</h3>
-        <p>
-          Install Date: ${siteData?.installDate || 'N/A'}<br/>
-          System Type: ${siteData?.systemType || 'SolarEdge'}<br/>
-          Module: ${siteData?.module || 'N/A'}<br/>
-          Site ID: ${siteId}
-        </p>
+      <div class="metric-card">
+        <div class="icon">💰</div>
+        <div class="val green">$${dollarsSaved.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</div>
+        <div class="lbl">Estimated Savings</div>
+        <div class="sub-lbl">@ $${COST_PER_KWH}/kWh</div>
+      </div>
+      <div class="metric-card">
+        <div class="icon">📊</div>
+        <div class="val blue">${specificYield > 0 ? specificYield.toFixed(2) : '—'}<span style="font-size:13px;font-weight:500;color:#64748b"> kWh/Wp</span></div>
+        <div class="lbl">Specific Yield</div>
+        <div class="sub-lbl">Efficiency rating</div>
+      </div>
+      <div class="metric-card">
+        <div class="icon">🌱</div>
+        <div class="val purple">${co2Tons > 0 ? co2Tons.toFixed(2) : '—'}<span style="font-size:13px;font-weight:500;color:#64748b"> tons</span></div>
+        <div class="lbl">CO₂ Offset</div>
+        <div class="sub-lbl">${periodLabel}</div>
       </div>
     </div>
-    <div class="footer">
-      <p>Powered by Conexsol — Your Solar Service Partner</p>
-      <p style="margin-top: 8px;"><a href="https://solarflow-dashboard-sooty.vercel.app/api/track?event=click&target=website&id=${tid}&redirect=${encodeURIComponent('https://conexsol.us')}" style="color: #f97316; text-decoration: none;">conexsol.us</a></p>
+    ${lifetimeKwh > 0 ? `
+    <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:12px 16px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;">
+      <span style="font-size:12px;color:#92400e;font-weight:600;">☀️ Total Lifetime Production</span>
+      <span style="font-size:16px;font-weight:800;color:#ea580c;">${lifetimeKwh >= 1000 ? (lifetimeKwh / 1000).toFixed(1) + ' MWh' : lifetimeKwh.toFixed(0) + ' kWh'}</span>
+    </div>` : ''}
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- System Details -->
+  <div class="body-section">
+    <p class="section-title">System Details</p>
+    <div class="detail-row"><span class="detail-label">System Size</span><span class="detail-value">${systemSize ? systemSize + ' kW' : '—'}</span></div>
+    <div class="detail-row"><span class="detail-label">Install Date</span><span class="detail-value">${siteData?.installDate || 'N/A'}</span></div>
+    <div class="detail-row"><span class="detail-label">System Type</span><span class="detail-value">${siteData?.systemType || 'SolarEdge'}</span></div>
+    ${siteData?.module ? `<div class="detail-row"><span class="detail-label">Module</span><span class="detail-value">${siteData.module}</span></div>` : ''}
+    <div class="detail-row"><span class="detail-label">Site ID</span><span class="detail-value">${siteId}</span></div>
+    <div class="detail-row"><span class="detail-label">Location</span><span class="detail-value">${[customer.city, customer.state].filter(Boolean).join(', ') || '—'}</span></div>
+  </div>
+
+  <div class="divider"></div>
+
+  ${reportNotes ? `
+  <!-- Notes -->
+  <div class="body-section">
+    <p class="section-title">Notes from Your Service Team</p>
+    <div class="notes-box">${reportNotes.replace(/\n/g, '<br/>')}</div>
+  </div>
+  <div class="divider"></div>
+  ` : ''}
+
+  ${hasOverdue ? `
+  <!-- Payment reminder -->
+  <div class="body-section">
+    <div class="alert-box">
+      <p><strong>⚠️ Friendly Reminder</strong><br/>We noticed an open balance on your account. To avoid any interruptions in service monitoring, please submit payment at your earliest convenience.</p>
+      <a href="https://solarflow-dashboard-sooty.vercel.app/api/track?event=click&target=invoice&id=${tid}&redirect=${encodeURIComponent(overdueInvs[0]?.InvoiceID ? 'https://invoicing.xero.com/view/' + overdueInvs[0].InvoiceID : '#')}" class="btn">View Invoice →</a>
     </div>
   </div>
-  <img src="${trackingPixel}" width="1" height="1" alt="" style="display:none;" />
+  <div class="divider"></div>
+  ` : ''}
+
+  <!-- Footer -->
+  <div class="footer">
+    <img src="https://solarflow-dashboard-sooty.vercel.app/conexsol-logo.png" alt="Conexsol" />
+    <p>Your Solar Service Partner<br/>
+    <a href="https://solarflow-dashboard-sooty.vercel.app/api/track?event=click&target=website&id=${tid}&redirect=${encodeURIComponent('https://conexsol.us')}">conexsol.us</a> · Florida Solar Operations</p>
+    <p style="margin-top:12px;font-size:10px;color:#334155;">
+      This report was generated by Conexsol SolarOps · ${reportDate}<br/>
+      To unsubscribe from production reports, reply to this email.
+    </p>
+  </div>
+
+</div>
+<img src="${trackingPixel}" width="1" height="1" alt="" style="display:none;" />
 </body>
 </html>`;
 
