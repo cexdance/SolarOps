@@ -1482,10 +1482,10 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
               </div>
 
               {/* Travel Miles */}
-              <div className="bg-slate-50 rounded-xl border border-slate-200 p-4">
+              <div className="bg-white rounded-xl border border-slate-200 p-4">
                 <div className="flex items-center justify-between mb-3">
                   <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
-                    <Navigation className="w-3.5 h-3.5" />
+                    <Navigation className="w-3.5 h-3.5 text-orange-500" />
                     Travel Miles
                   </p>
                   {travelCalcStatus === 'loading' && (
@@ -1493,51 +1493,58 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />Calculating…
                     </span>
                   )}
+                  {travelCalcStatus === 'done' && (
+                    <span className="text-xs text-green-600 font-medium">Auto-calculated</span>
+                  )}
                   {travelCalcStatus === 'error' && (
-                    <button
-                      onClick={() => { setTravelCalcStatus('idle'); }}
-                      className="text-xs text-orange-600 hover:underline cursor-pointer"
-                    >Retry</button>
+                    <span className="text-xs text-slate-400">Enter manually or
+                      <button onClick={() => setTravelCalcStatus('idle')} className="text-orange-500 hover:underline cursor-pointer ml-1">retry</button>
+                    </span>
                   )}
                 </div>
-                <div className="space-y-2">
+
+                {/* Primary: large manual input — always accessible */}
+                <div className="flex items-center gap-3 mb-3">
+                  <input
+                    type="number"
+                    min={0}
+                    step={1}
+                    value={travelMiles || ''}
+                    placeholder="0"
+                    onChange={e => { setTravelMiles(Math.max(0, Number(e.target.value))); setTravelCalcStatus('done'); }}
+                    className="w-28 px-3 py-2 text-sm font-semibold border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-300 text-center bg-slate-50"
+                  />
+                  <span className="text-sm text-slate-500 font-medium">miles</span>
+                  {siteAddress && travelCalcStatus !== 'loading' && (
+                    <button
+                      onClick={() => { setTravelCalcStatus('idle'); setTravelMiles(0); }}
+                      title="Auto-calculate from address"
+                      className="ml-auto flex items-center gap-1.5 text-xs text-orange-500 hover:text-orange-700 cursor-pointer font-medium"
+                    >
+                      <RefreshCw className="w-3 h-3" />
+                      Auto-calc
+                    </button>
+                  )}
+                </div>
+
+                {/* Secondary: From / To for auto-calc */}
+                <div className="space-y-1.5 pt-2 border-t border-slate-100">
                   <div className="flex items-center gap-2 text-xs text-slate-500">
-                    <span className="font-medium text-slate-700 shrink-0">From:</span>
+                    <span className="font-medium text-slate-600 shrink-0 w-7">From</span>
                     <AddressAutocomplete
                       value={travelFromAddress}
                       onChange={setTravelFromAddress}
                       onAddressSelect={r => setTravelFromAddress([r.address, r.city, r.state, r.zip].filter(Boolean).join(', '))}
                       placeholder="HQ — 814 Ponce de Leon Blvd"
-                      className="flex-1 px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-orange-400"
+                      className="flex-1 px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-orange-400 bg-white"
                     />
                   </div>
                   {siteAddress && (
                     <div className="flex items-center gap-2 text-xs">
-                      <span className="font-medium text-slate-700 shrink-0">To:</span>
+                      <span className="font-medium text-slate-600 shrink-0 w-7">To</span>
                       <AddressLink compact fullAddress={siteAddress} className="flex-1 min-w-0" />
                     </div>
                   )}
-                  <div className="flex items-center gap-2 pt-1">
-                    <label className="text-xs font-semibold text-slate-600 shrink-0">Miles:</label>
-                    <input
-                      type="number"
-                      min={0}
-                      step={1}
-                      value={travelMiles}
-                      onChange={e => setTravelMiles(Math.max(0, Number(e.target.value)))}
-                      className="w-20 px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-orange-400 text-center"
-                    />
-                    <span className="text-xs text-slate-400">mi</span>
-                    {siteAddress && travelCalcStatus !== 'loading' && (
-                      <button
-                        onClick={() => { setTravelCalcStatus('idle'); setTravelMiles(0); }}
-                        title="Recalculate"
-                        className="text-orange-500 hover:text-orange-700 cursor-pointer ml-auto"
-                      >
-                        <RefreshCw className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                  </div>
                 </div>
               </div>
 
