@@ -862,6 +862,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
   const [previewTrackingId, setPreviewTrackingId] = useState('');
   const [previewDowntimeDays, setPreviewDowntimeDays] = useState(0);
   const [previewServiceCalls, setPreviewServiceCalls] = useState(0);
+  const [previewUptime, setPreviewUptime] = useState(100);
   const [previewGreeting, setPreviewGreeting] = useState('');
   const [previewAccountUpdates, setPreviewAccountUpdates] = useState('');
   const [xeroInvoices, setXeroInvoices] = useState<any[]>([]);
@@ -1108,19 +1109,31 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
   }, [customer.name]);
 
   // Build the HTML report and open the preview modal
-  // NLP-crafted greeting generator
-  const buildGreeting = (kWh: number, savings: number) => {
+  // NLP-crafted greeting generator with timeframe and system state
+  const buildGreeting = (kWh: number, savings: number, uptime: number) => {
     const firstName = customer.name?.split(' ')[0] || customer.name;
     const pLabel = graphPeriod === 'week' ? 'last 7 days' : graphPeriod === 'month' ? 'past 30 days' : graphPeriod === 'quarter' ? 'last 3 months' : 'past year';
     const kwFmt = kWh >= 1000 ? `${(kWh / 1000).toFixed(1)} MWh` : `${Math.round(kWh).toLocaleString('en-US')} kWh`;
     const savFmt = `$${Math.round(savings).toLocaleString('en-US')}`;
-    return `Hi ${firstName} — thank you for being a Conexsol customer. We're pleased to share your solar production summary for the ${pLabel}. Your system generated ${kwFmt} of clean energy, delivering an estimated ${savFmt} in utility savings. We're proud to support your energy independence and remain committed to keeping your system performing at its best. Please review the highlights below and don't hesitate to reach out with any questions.`;
+    const systemState = uptime >= 95 ? 'operating at peak efficiency' : uptime >= 85 ? 'performing well' : 'requiring attention';
+    return `Dear ${firstName},\n\nWe're pleased to present your solar system performance report for the ${pLabel}. Your system is currently ${systemState}, with ${uptime.toFixed(0)}% uptime and generated ${kwFmt} of clean energy during this period, delivering an estimated ${savFmt} in utility savings.\n\nThis report provides a complete overview of your system's production, efficiency metrics, and performance summary. We remain committed to keeping your system operating optimally and supporting your energy independence goals.`;
   };
 
   const handleOpenPreview = () => {
     const tid = `prod-${customer.id}-${Date.now()}`;
     setPreviewTrackingId(tid);
-    setPreviewGreeting(buildGreeting(displayKwh, dollarsSaved));
+
+    // Calculate uptime: percentage of days with production in the period
+    let totalDays = 30;
+    if (graphPeriod === 'week') totalDays = 7;
+    else if (graphPeriod === 'quarter') totalDays = 90;
+    else if (graphPeriod === 'year') totalDays = 365;
+
+    const daysWithProduction = energyData.filter(d => d.kWh > 0).length;
+    const uptime = energyData.length > 0 ? (daysWithProduction / energyData.length) * 100 : 100;
+
+    setPreviewUptime(uptime);
+    setPreviewGreeting(buildGreeting(displayKwh, dollarsSaved, uptime));
     setPreviewAccountUpdates(reportNotes);
     setPreviewDowntimeDays(0);
     setPreviewServiceCalls(0);
@@ -1340,9 +1353,9 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
 
         <div class="metric-card blue">
           <div class="m-icon">${svgGauge}</div>
-          <div class="m-val">${specificYield > 0 ? specificYield.toFixed(2) : '—'}<span class="m-unit">${specificYield > 0 ? 'kWh/Wp' : ''}</span></div>
+          <div class="m-val">${specificYield > 0 ? specificYield.toFixed(2) : '—'}<span class="m-unit">${specificYield > 0 ? 'kWh/kWp' : ''}</span></div>
           <div class="m-label">Specific Yield</div>
-          <div class="m-sub">Efficiency rating</div>
+          <div class="m-sub">${periodLabel} per kWp installed</div>
         </div>
 
         <div class="metric-card teal">
@@ -1366,8 +1379,13 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
 
     <!-- Service Summary -->
     <div class="service-wrap">
-      <p class="section-label" style="padding:0 0 0 0;">Service Summary</p>
-      <div class="service-grid">
+      <p class="section-label" style="padding:0 0 0 0;">System Availability & Service</p>
+      <div class="service-grid" style="grid-template-columns: 1fr 1fr 1fr;">
+        <div class="service-card">
+          <div class="sc-val green">${previewUptime.toFixed(0)}<span style="font-size:14px;color:#94a3b8;">%</span></div>
+          <div class="sc-label">System Uptime</div>
+          <div class="sc-sub">Days with production</div>
+        </div>
         <div class="service-card">
           <div class="sc-val green">${previewServiceCalls}</div>
           <div class="sc-label">Service Calls</div>
@@ -1451,7 +1469,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
 
     return html;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showReportPreview, previewTrackingId, previewGreeting, previewAccountUpdates, previewDowntimeDays, previewServiceCalls, xeroInvoices, displayKwh, dollarsSaved, specificYield, co2Tons, lifetimeKwh, graphPeriod, peakPowerKw, siteId, siteData, customer]);
+  }, [showReportPreview, previewTrackingId, previewGreeting, previewAccountUpdates, previewDowntimeDays, previewServiceCalls, previewUptime, xeroInvoices, displayKwh, dollarsSaved, specificYield, co2Tons, lifetimeKwh, graphPeriod, peakPowerKw, siteId, siteData, customer]);
 
   // Approve & Send — called from inside the preview modal
   const handleSendReport = async () => {
@@ -1750,8 +1768,8 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
           onClick={() => setShowReportPreview(false)}
         >
           <div
-            className="bg-white w-full max-w-2xl rounded-2xl overflow-hidden shadow-2xl flex flex-col my-auto"
-            style={{ maxHeight: '95vh' }}
+            className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col my-auto"
+            style={{ maxHeight: '95vh', overflow: 'hidden' }}
             onClick={e => e.stopPropagation()}
           >
             {/* Modal header */}
@@ -1767,7 +1785,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
             </div>
 
             {/* Editable fields panel */}
-            <div className="flex-shrink-0 border-b border-slate-200 bg-slate-50 px-4 py-3 space-y-2.5">
+            <div className="flex-shrink-0 border-b border-slate-200 bg-slate-50 px-4 py-3 space-y-2.5" style={{ maxHeight: '260px', overflowY: 'auto' }}>
               <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-1">Editable Fields — changes update the preview live</p>
               {/* Greeting */}
               <div>
@@ -1814,13 +1832,13 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
             </div>
 
             {/* iframe renders the live HTML email */}
-            <div className="flex-1 overflow-hidden" style={{ minHeight: '340px' }}>
+            <div className="flex-1 overflow-hidden min-h-0" style={{ minHeight: '250px' }}>
               <iframe
                 srcDoc={previewHtmlComputed}
                 className="w-full h-full border-0"
                 title="Report Preview"
                 sandbox="allow-same-origin"
-                style={{ minHeight: '340px' }}
+                style={{ minHeight: '250px' }}
               />
             </div>
 
