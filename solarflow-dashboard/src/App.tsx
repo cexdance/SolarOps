@@ -24,6 +24,8 @@ const LeadLobby = lazy(() => import('./components/LeadLobby').then(m => ({ defau
 import { supabase } from './lib/supabase';
 import { APP_VERSION } from './lib/versionConfig';
 import { syncFromDB } from './lib/db';
+import { drainOutbox } from './lib/outbox';
+import { pullAndMerge } from './lib/syncEngine';
 import { loadData, saveData } from './lib/dataStore';
 import { logChange, flushChangeLog } from './lib/changeLog';
 import { fetchMyNotifications, markNotificationReadRemote, markAllNotificationsReadRemote, startNotificationPolling, stopNotificationPolling } from './lib/notifications';
@@ -626,6 +628,54 @@ function App() {
   // Initialize sync status listeners
   useEffect(() => {
     initSyncStatusListeners();
+  }, []);
+
+  // ── Sync poll: drain outbox + pull remote on focus / online / 30s ─────────
+  //
+  // Why this matters (shared DB, offline-first):
+  //   1. Drain outbox first — push any changes that failed while offline
+  //   2. Pull remote — pick up changes made by other staff on other devices
+  //   3. Apply to React state — UI refreshes without a page reload
+  //
+  // Convergence guarantee: any two devices sharing the same DB will see
+  // each other's changes within 30 seconds max, instantly on tab focus.
+  useEffect(() => {
+    let mounted = true;
+
+    const syncCycle = async () => {
+      // Step 1: flush any pending offline edits first
+      await drainOutbox();
+
+      // Step 2: pull latest remote state and merge into localStorage
+      const merged = await pullAndMerge();
+      if (!mounted || !merged) return;
+
+      // Step 3: update React state only if something actually changed
+      setData(prev => {
+        const customersChanged = merged.customers?.length !== prev.customers.length ||
+          merged.customers?.some((c, i) => c.id !== prev.customers[i]?.id || JSON.stringify(c) !== JSON.stringify(prev.customers[i]));
+        const jobsChanged = merged.jobs?.length !== prev.jobs.length ||
+          merged.jobs?.some((j, i) => j.id !== prev.jobs[i]?.id || JSON.stringify(j) !== JSON.stringify(prev.jobs[i]));
+
+        if (!customersChanged && !jobsChanged) return prev; // no-op — avoid re-render
+        return { ...prev, ...merged };
+      });
+    };
+
+    const interval = setInterval(syncCycle, 30_000);      // every 30 seconds
+    const onFocus  = () => syncCycle();                   // instant on tab focus
+    const onOnline = () => syncCycle();                   // instant on reconnect
+
+    window.addEventListener('focus',  onFocus);
+    window.addEventListener('online', onOnline);
+
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+      window.removeEventListener('focus',  onFocus);
+      window.removeEventListener('online', onOnline);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── Version poll: detect new deploys in open tabs ─────────────────────────

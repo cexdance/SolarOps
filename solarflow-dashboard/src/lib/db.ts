@@ -1,9 +1,8 @@
 /**
- * SolarOps — Database Client (Supabase-backed)
+ * SolarOps — Database Client (Supabase-backed, Phase 1)
  *
- * Previously called /api/store (Neon) which was DISABLED on Vercel,
- * meaning zero cloud backup in production. Now routes through Supabase
- * app_data table — works on ALL environments, every deploy.
+ * pushToSupabase is no longer fire-and-forget. Failures are recorded in
+ * the outbox (src/lib/outbox.ts) and retried on the next drain trigger.
  */
 import { pushToSupabase, pullFromSupabase, mergeRemote } from './syncEngine';
 import type { AppState } from '../types';
@@ -27,12 +26,16 @@ export const ALL_KEYS = [
 
 /**
  * Persist a value. For the main app state blob, syncs to Supabase.
- * localStorage is always written first by the caller (dataStore.saveData).
+ *
+ * Phase 1: awaits the push and records failure in the outbox if it fails.
+ * This replaces the old fire-and-forget .catch(() => {}) pattern.
  */
 export async function dbSet(key: string, data: unknown): Promise<void> {
   if (key === 'solarflow_data' && data && typeof data === 'object') {
-    // Fire-and-forget — never block the UI
-    pushToSupabase(data as AppState).catch(() => {});
+    // pushToSupabase now handles outbox marking internally on failure
+    await pushToSupabase(data as AppState).catch(() => {
+      // outbox is already updated inside pushToSupabase's catch block
+    });
   }
 }
 
@@ -53,7 +56,7 @@ export async function syncFromDB(): Promise<void> {
     const raw = localStorage.getItem('solarflow_data');
     if (!raw) return;
 
-    const local = JSON.parse(raw) as AppState;
+    const local  = JSON.parse(raw) as AppState;
     const merged = mergeRemote(local, remote);
     localStorage.setItem('solarflow_data', JSON.stringify(merged));
   } catch {
