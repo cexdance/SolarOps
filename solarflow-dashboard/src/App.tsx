@@ -22,6 +22,7 @@ const SolarEdgeMonitoring = lazy(() => import('./components/SolarEdgeMonitoring'
 const DispatchDashboard = lazy(() => import('./components/DispatchDashboard').then(m => ({ default: m.DispatchDashboard })));
 const LeadLobby = lazy(() => import('./components/LeadLobby').then(m => ({ default: m.LeadLobby })));
 import { supabase } from './lib/supabase';
+import { APP_VERSION } from './lib/versionConfig';
 import { syncFromDB } from './lib/db';
 import { loadData, saveData } from './lib/dataStore';
 import { logChange, flushChangeLog } from './lib/changeLog';
@@ -625,6 +626,41 @@ function App() {
   // Initialize sync status listeners
   useEffect(() => {
     initSyncStatusListeners();
+  }, []);
+
+  // ── Version poll: detect new deploys in open tabs ─────────────────────────
+  // Every 5 minutes (and on tab focus), fetch /version.json (no-cache).
+  // If the server version differs from what this JS bundle was built with,
+  // show a non-intrusive "Update available" banner so the user can reload.
+  const [updateAvailable, setUpdateAvailable] = useState(false);
+  useEffect(() => {
+    // APP_VERSION is baked in at build time; /version.json reflects the live deploy
+    const BUILT_VERSION = APP_VERSION; // imported from versionConfig
+    let mounted = true;
+
+    const checkVersion = async () => {
+      try {
+        const res = await fetch('/version.json', { cache: 'no-store' });
+        if (!res.ok) return;
+        const { version } = await res.json() as { version: string };
+        if (mounted && version && version !== BUILT_VERSION) {
+          setUpdateAvailable(true);
+        }
+      } catch {
+        // offline or endpoint missing — ignore
+      }
+    };
+
+    checkVersion();
+    const interval = setInterval(checkVersion, 5 * 60 * 1000); // every 5 min
+    const onFocus = () => checkVersion();
+    window.addEventListener('focus', onFocus);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Handle Xero OAuth callback (?code=...) and restore existing Xero connection
@@ -2103,6 +2139,25 @@ function App() {
         {renderView()}
       </Layout>
       <SyncStatusToast />
+      {/* Update available banner — shown when a new deploy is detected */}
+      {updateAvailable && (
+        <div className="fixed bottom-16 left-1/2 -translate-x-1/2 z-[9999] flex items-center gap-3 bg-orange-500 text-white text-sm font-medium px-4 py-2.5 rounded-full shadow-lg shadow-orange-900/30 animate-bounce-once">
+          <span>🚀 New version available</span>
+          <button
+            onClick={() => window.location.reload()}
+            className="bg-white/20 hover:bg-white/30 transition-colors rounded-full px-3 py-0.5 text-xs font-semibold"
+          >
+            Update now
+          </button>
+          <button
+            onClick={() => setUpdateAvailable(false)}
+            className="ml-1 opacity-70 hover:opacity-100 transition-opacity text-base leading-none"
+            aria-label="Dismiss"
+          >
+            ×
+          </button>
+        </div>
+      )}
     </Suspense>
   );
 }
