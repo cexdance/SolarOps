@@ -1462,7 +1462,7 @@ export const DispatchDashboard: React.FC<DispatchDashboardProps> = ({ customers,
     );
   }, [layout]);
 
-  const cols = isMobile ? 2 : 4;
+  const cols = isMobile ? 1 : 4;
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
@@ -1480,7 +1480,7 @@ export const DispatchDashboard: React.FC<DispatchDashboardProps> = ({ customers,
       )}
 
       {/* Top bar */}
-      <div className="border-b border-slate-800 px-6 py-4">
+      <div className="border-b border-slate-800 px-4 md:px-6 py-3 md:py-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg bg-orange-500 flex items-center justify-center">
@@ -1537,7 +1537,7 @@ export const DispatchDashboard: React.FC<DispatchDashboardProps> = ({ customers,
       )}
 
       {/* 4 × 3 Grid */}
-      <div className="p-6">
+      <div className="p-3 md:p-6">
         <div className="grid gap-4" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)` }}>
           {layout.map((config, i) => (
             <WidgetSlot
