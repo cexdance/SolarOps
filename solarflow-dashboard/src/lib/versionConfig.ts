@@ -6,6 +6,6 @@
  */
 
 export const APP_VERSION = 'v1.6.0';
-export const DB_VERSION = 'db-2026-04-15';
+export const DB_VERSION = '04-21';
 
-export const getVersionString = (): string => `${APP_VERSION} • ${DB_VERSION}`;
+export const getVersionString = (): string => `${APP_VERSION} • db ${DB_VERSION}`;
