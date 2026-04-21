@@ -68,7 +68,12 @@ export interface Customer {
   howFound?: string;
   isPowerCare?: boolean;
   powerCareCaseNumber?: string;   // SolarEdge PowerCare case number
-  powerCareTrackingNumber?: string; // UPS/FedEx tracking number for parts shipment
+  powerCareTrackingNumber?: string; // UPS tracking number for parts shipment
+  powerCareShipDate?: string;      // ISO date when parts shipped
+  powerCareETA?: string;           // ISO date estimated arrival
+  powercarePOD?: string;           // ISO date proof of delivery
+  powerCareDeliveryStatus?: 'pending' | 'delivered' | 'error'; // UPS sync status
+  powerCareLastStatusCheck?: number; // timestamp of last UPS API call
   activityHistory?: Activity[];
   solarEdgeSiteId?: string; // SolarEdge site ID for cross-referencing
   trelloBackupUrl?: string; // Trello board backup link (from column B hyperlinks)
@@ -83,6 +88,7 @@ export type UrgencyLevel = 'low' | 'medium' | 'high' | 'critical';
 export type WOStatus =
   | 'draft'
   | 'quote_sent'
+  | 'contact_client'   // PowerCare: skip approval, go straight to scheduling
   | 'quote_approved'
   | 'scheduled'
   | 'in_progress'
@@ -94,6 +100,7 @@ export type WOStatus =
 export const WO_TO_JOB_STATUS: Record<WOStatus, JobStatus> = {
   draft:          'new',
   quote_sent:     'new',
+  contact_client: 'new',           // PowerCare: pre-execution, treated as new
   quote_approved: 'new',
   scheduled:      'assigned',
   in_progress:    'in_progress',

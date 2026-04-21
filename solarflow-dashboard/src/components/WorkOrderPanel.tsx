@@ -38,6 +38,7 @@ const STAGE_INDEX: Record<WOStatus, number> = Object.fromEntries(
 const ACTION_CONFIG: Record<WOStatus, { label: string; color: string } | null> = {
   draft:          { label: 'Send Quote',          color: 'bg-blue-600 hover:bg-blue-700' },
   quote_sent:     { label: 'Mark Quote Approved', color: 'bg-violet-600 hover:bg-violet-700' },
+  contact_client: { label: 'Contact Client',      color: 'bg-cyan-600 hover:bg-cyan-700' },
   quote_approved: { label: 'Schedule & Assign',   color: 'bg-orange-600 hover:bg-orange-700' },
   scheduled:      { label: 'Start Work',          color: 'bg-amber-500 hover:bg-amber-600' },
   in_progress:    { label: 'Mark Complete',       color: 'bg-green-600 hover:bg-green-700' },
@@ -50,6 +51,7 @@ const ACTION_CONFIG: Record<WOStatus, { label: string; color: string } | null> =
 const SERVICE_ACCOUNT_ACTIONS: Record<WOStatus, { label: string; color: string; adminOnly?: boolean } | null> = {
   draft:          { label: 'Submit for Admin Approval', color: 'bg-blue-600 hover:bg-blue-700' },
   quote_sent:     { label: 'Approve Expense',           color: 'bg-violet-600 hover:bg-violet-700', adminOnly: true },
+  contact_client: { label: 'Contact Client',            color: 'bg-cyan-600 hover:bg-cyan-700' },
   quote_approved: { label: 'Schedule',                  color: 'bg-orange-600 hover:bg-orange-700' },
   scheduled:      { label: 'Start Work',                color: 'bg-amber-500 hover:bg-amber-600' },
   in_progress:    { label: 'Mark Complete',             color: 'bg-green-600 hover:bg-green-700' },
@@ -63,6 +65,7 @@ const SE_COMP_SERVICE_TYPES = new Set(['repair', 'maintenance']); // expand as n
 const NEXT_STATUS: Record<WOStatus, WOStatus | null> = {
   draft:          'quote_sent',
   quote_sent:     'quote_approved',
+  contact_client: 'scheduled',
   quote_approved: 'scheduled',
   scheduled:      'in_progress',
   in_progress:    'completed',
@@ -1813,13 +1816,15 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
             >
               Cancel
             </button>
-            <button
-              onClick={() => setShowQuotePreview(true)}
-              className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer"
-            >
-              <FileText className="w-4 h-4" />
-              Preview Quote
-            </button>
+            {job?.status === 'in_progress' && (
+              <button
+                onClick={() => setShowQuotePreview(true)}
+                className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer"
+              >
+                <FileText className="w-4 h-4" />
+                Preview Report
+              </button>
+            )}
             {!isNew && onDeleteJob && (
               deleteStep === 0 ? (
                 <button
@@ -1864,17 +1869,15 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
         </div>
       </div>
 
-      {/* ── Quote Preview Modal ─────────────────────────────────────────── */}
+      {/* ── Report Preview Modal (Procore-style Daily Report) ───────────── */}
       {showQuotePreview && (() => {
-        const { labor, parts, total } = sumLineItems(lineItems);
-        const effectiveTotal = quoteAmount > 0 ? quoteAmount : total;
         const today = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
               {/* Modal header */}
               <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
-                <h2 className="text-lg font-bold text-slate-900">Quote Preview</h2>
+                <h2 className="text-lg font-bold text-slate-900">Daily Report</h2>
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => window.print()}
@@ -1889,88 +1892,82 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                 </div>
               </div>
 
-              {/* Printable content */}
-              <div className="overflow-y-auto p-8 space-y-6 print:p-0" id="quote-print-area">
-                {/* Company + WO header */}
-                <div className="flex items-start justify-between">
-                  <div>
-                    <p className="text-xl font-bold text-slate-900">Conexsol</p>
-                    <p className="text-sm text-slate-500">Solar Operations</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-2xl font-bold text-orange-500">QUOTE</p>
-                    {job?.woNumber && <p className="text-sm text-slate-500 mt-0.5">{job.woNumber}</p>}
-                    <p className="text-sm text-slate-500">{today}</p>
+              {/* Printable content — Procore-style Daily Report */}
+              <div className="overflow-y-auto p-6 md:p-8 space-y-6 print:p-0" id="report-print-area">
+                {/* Header: Client & Site Info */}
+                <div>
+                  <div className="bg-slate-900 text-white rounded-lg p-4 mb-4">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-300">Client</p>
+                        <p className="text-lg font-bold truncate">{siteName || customer?.name || 'Unknown Client'}</p>
+                        {siteAddress && <p className="text-sm text-slate-300 mt-1">{siteAddress}</p>}
+                        {customer?.phone && <p className="text-xs text-slate-400 mt-1">{customer.phone}</p>}
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-300">Work Order</p>
+                        <p className="text-xl font-bold text-orange-400">{job?.woNumber || 'N/A'}</p>
+                        <p className="text-xs text-slate-300 mt-1">{today}</p>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
-                {/* Client info */}
-                <div className="bg-slate-50 rounded-xl p-4">
-                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Prepared for</p>
-                  <p className="font-semibold text-slate-900">{siteName}</p>
-                  {siteAddress && <p className="text-sm text-slate-600">{siteAddress}</p>}
+                {/* Status & Description */}
+                <div className="border-l-4 border-orange-500 pl-4">
+                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Status</p>
+                  <div className="flex items-center gap-2 mb-3">
+                    <WOStatusBadge status={job?.woStatus || 'draft'} />
+                  </div>
+                  {(title || serviceType || notes) && (
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900 mb-1">{title || serviceType || 'Service'}</p>
+                      {notes && <p className="text-sm text-slate-600 whitespace-pre-wrap">{notes}</p>}
+                    </div>
+                  )}
                 </div>
 
-                {/* Service info */}
-                {(title || serviceType) && (
-                  <div>
-                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Service</p>
-                    <p className="text-sm font-medium text-slate-800">{title || serviceType}</p>
-                    {notes && <p className="text-sm text-slate-500 mt-1 whitespace-pre-wrap">{notes}</p>}
-                  </div>
-                )}
-
-                {/* Line items */}
+                {/* Parts & Equipment / Serial Numbers */}
                 {lineItems.length > 0 && (
-                  <div className="overflow-x-auto">
-                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Line Items</p>
-                    <table className="w-full min-w-[360px] text-sm">
-                      <thead>
-                        <tr className="border-b border-slate-200 text-left">
-                          <th className="pb-2 text-xs font-semibold text-slate-500 uppercase">Description</th>
-                          <th className="pb-2 text-xs font-semibold text-slate-500 uppercase text-right">Qty</th>
-                          <th className="pb-2 text-xs font-semibold text-slate-500 uppercase text-right">Unit</th>
-                          <th className="pb-2 text-xs font-semibold text-slate-500 uppercase text-right">Total</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {lineItems.map(item => (
-                          <tr key={item.id} className="border-b border-slate-100">
-                            <td className="py-2 text-slate-800">
-                              {item.description}
-                              <span className="ml-2 text-xs text-slate-400 capitalize">({item.type})</span>
-                            </td>
-                            <td className="py-2 text-right text-slate-600">{item.quantity}</td>
-                            <td className="py-2 text-right text-slate-600">${item.unitCost.toFixed(2)}</td>
-                            <td className="py-2 text-right font-medium text-slate-800">${item.totalCost.toFixed(2)}</td>
+                  <div>
+                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">Parts & Equipment</p>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-slate-200">
+                            <th className="pb-2 text-left text-xs font-semibold text-slate-600">Part / Description</th>
+                            <th className="pb-2 text-right text-xs font-semibold text-slate-600">Qty</th>
+                            <th className="pb-2 text-right text-xs font-semibold text-slate-600">Cost</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody>
+                          {lineItems.map(item => (
+                            <tr key={item.id} className="border-b border-slate-100 hover:bg-slate-50">
+                              <td className="py-2 text-slate-800">{item.description}</td>
+                              <td className="py-2 text-right text-slate-600">{item.quantity}</td>
+                              <td className="py-2 text-right font-medium text-slate-800">${item.totalCost.toFixed(2)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 )}
 
-                {/* Totals */}
-                <div className="border-t border-slate-200 pt-4 space-y-1.5">
-                  {labor > 0 && (
-                    <div className="flex justify-between text-sm text-slate-600">
-                      <span>Labor</span><span>${labor.toFixed(2)}</span>
+                {/* Photos */}
+                {job?.woPhotos && job.woPhotos.length > 0 && (
+                  <div>
+                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">Media & Documentation</p>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      {job.woPhotos.map((photo) => (
+                        <div key={photo.id} className="bg-slate-100 rounded-lg overflow-hidden aspect-square">
+                          <img src={photo.dataUrl} alt={photo.name} className="w-full h-full object-cover" />
+                          <p className="text-xs text-slate-500 mt-1">{photo.category}</p>
+                        </div>
+                      ))}
                     </div>
-                  )}
-                  {parts > 0 && (
-                    <div className="flex justify-between text-sm text-slate-600">
-                      <span>Parts & Materials</span><span>${parts.toFixed(2)}</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between text-base font-bold text-slate-900 pt-1 border-t border-slate-200">
-                    <span>Total</span>
-                    <span className="text-orange-600">${effectiveTotal.toFixed(2)}</span>
                   </div>
-                </div>
-
-                <p className="text-xs text-slate-400 text-center pt-2">
-                  This quote is valid for 30 days. Contact us to schedule service.
-                </p>
+                )}
               </div>
             </div>
           </div>
@@ -1986,6 +1983,7 @@ export const WOStatusBadge: React.FC<{ status: WOStatus }> = ({ status }) => {
   const cfg: Record<WOStatus, { label: string; cls: string }> = {
     draft:          { label: 'Draft',           cls: 'bg-slate-500/20 text-slate-300' },
     quote_sent:     { label: 'Quote Sent',       cls: 'bg-blue-500/20 text-blue-300' },
+    contact_client: { label: 'Contact Client',   cls: 'bg-cyan-500/20 text-cyan-300' },
     quote_approved: { label: 'Quote Approved',   cls: 'bg-violet-500/20 text-violet-300' },
     scheduled:      { label: 'Scheduled',        cls: 'bg-amber-500/20 text-amber-300' },
     in_progress:    { label: 'In Progress',      cls: 'bg-orange-500/20 text-orange-300' },

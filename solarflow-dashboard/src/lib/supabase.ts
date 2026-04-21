@@ -11,7 +11,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     persistSession: true,
     storageKey: 'solarflow_auth',
-    storage: sessionStorage,
+    storage: localStorage,
     autoRefreshToken: true,
     detectSessionInUrl: true,
   },

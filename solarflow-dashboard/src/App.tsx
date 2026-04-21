@@ -47,6 +47,8 @@ import {
   authenticateWithPasskey,
 } from './lib/passkey';
 import { ContractorLoginScreen } from './components/contractor/ContractorLoginScreen';
+import { SyncStatusToast } from './components/SyncStatusIndicator';
+import { initSyncStatusListeners } from './lib/supabaseErrors';
 
 // ── Login Screen ──────────────────────────────────────────────────────────────
 
@@ -619,6 +621,11 @@ function App() {
     const timer = setTimeout(() => saveData(data), 500);
     return () => clearTimeout(timer);
   }, [data]);
+
+  // Initialize sync status listeners
+  useEffect(() => {
+    initSyncStatusListeners();
+  }, []);
 
   // Handle Xero OAuth callback (?code=...) and restore existing Xero connection
   useEffect(() => {
@@ -2095,6 +2102,7 @@ function App() {
       >
         {renderView()}
       </Layout>
+      <SyncStatusToast />
     </Suspense>
   );
 }

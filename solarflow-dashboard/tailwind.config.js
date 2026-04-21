@@ -22,33 +22,58 @@ module.exports = {
 				ring: 'hsl(var(--ring))',
 				background: 'hsl(var(--background))',
 				foreground: 'hsl(var(--foreground))',
+				// ConexSol Brand Colors (from style-guide.md)
 				primary: {
-					DEFAULT: '#2B5D3A',
-					foreground: 'hsl(var(--primary-foreground))',
+					DEFAULT: '#F5A623', // Solar Gold
+					foreground: '#0D1B2A',
 				},
 				secondary: {
-					DEFAULT: '#4A90E2',
-					foreground: 'hsl(var(--secondary-foreground))',
+					DEFAULT: '#00B4CC', // Teal Cyan
+					foreground: '#FFFFFF',
 				},
 				accent: {
-					DEFAULT: '#F5A623',
-					foreground: 'hsl(var(--accent-foreground))',
+					DEFAULT: '#F5A623', // Solar Gold
+					foreground: '#0D1B2A',
 				},
 				destructive: {
-					DEFAULT: 'hsl(var(--destructive))',
-					foreground: 'hsl(var(--destructive-foreground))',
+					DEFAULT: '#EF4444', // Ember Red
+					foreground: '#FFFFFF',
 				},
 				muted: {
 					DEFAULT: 'hsl(var(--muted))',
 					foreground: 'hsl(var(--muted-foreground))',
 				},
 				popover: {
-					DEFAULT: 'hsl(var(--popover))',
-					foreground: 'hsl(var(--popover-foreground))',
+					DEFAULT: '#1C2E42', // Slate Blue
+					foreground: '#FFFFFF',
 				},
 				card: {
-					DEFAULT: 'hsl(var(--card))',
-					foreground: 'hsl(var(--card-foreground))',
+					DEFAULT: '#1C2E42', // Slate Blue
+					foreground: '#FFFFFF',
+				},
+				// Semantic/Surface colors
+				surface: {
+					dark: '#0D1B2A',     // Deep Navy
+					mid: '#1C2E42',      // Slate Blue
+					light: '#2A3F56',    // Muted Steel
+				},
+				status: {
+					success: '#22C55E',  // Leaf Green
+					warning: '#F59E0B',  // Amber
+					error: '#EF4444',    // Ember Red
+					info: '#38BDF8',     // Sky Blue
+					inactive: '#4B6280', // Graphite
+				},
+				// Text colors
+				text: {
+					primary: '#FFFFFF',
+					secondary: '#A8BDD0',   // Cool Gray
+					muted: '#5A7490',       // Dim Slate
+				},
+				// Border/Divider
+				panel: {
+					border: '#1E3148',
+					divider: '#162737',
 				},
 			},
 			borderRadius: {

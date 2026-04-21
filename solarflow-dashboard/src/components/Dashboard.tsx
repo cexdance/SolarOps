@@ -321,7 +321,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
       </div>
 
       {/* ── Stat Cards ────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
         {config.metrics.map((key, idx) => {
           const { label, Icon, bg, fg } = METRIC_META[key];
           const result = metrics[key];
@@ -596,7 +596,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
       {/* ── WO Status ─────────────────────────────────────────────────────── */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-4">
         <h3 className="font-semibold text-slate-900 mb-3 text-sm">Work Order Status</h3>
-        <div className="grid grid-cols-3 sm:grid-cols-6 gap-y-2 gap-x-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 md:grid-cols-6 gap-y-2 gap-x-3">
           {Object.entries(jobsByStatus).map(([status, count]) => (
             <button
               key={status}
@@ -693,7 +693,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
       </div>
 
       {/* ── Quick Actions ─────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
         <button
           onClick={() => onViewChange('jobs')}
           className="p-3 md:p-4 bg-orange-500 text-white rounded-xl hover:bg-orange-600 transition-colors flex items-center gap-2.5"

@@ -187,3 +187,76 @@ export const clearData = (): void => {
   localStorage.removeItem(STORAGE_KEY);
   localStorage.removeItem(VERSION_KEY);
 };
+
+// ── PowerCare UPS Tracking Sync ────────────────────────────────────────────────
+
+export interface UPSTrackingResponse {
+  status: 'pending' | 'delivered' | 'error';
+  trackingNumber: string;
+  estimatedDelivery?: string;
+  lastDeliveryAttempt?: string;
+  signature?: string;
+  message?: string;
+}
+
+/**
+ * Sync PowerCare delivery status from UPS API
+ * Updates customer state with delivery status, POD date, and last check timestamp
+ */
+export const syncPowerCareDeliveryStatus = async (customer: Customer): Promise<void> => {
+  if (!customer.powerCareTrackingNumber) {
+    return; // No tracking number to check
+  }
+
+  try {
+    // Call UPS tracking API
+    const response = await fetch('/api/ups-tracking', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ trackingNumber: customer.powerCareTrackingNumber }),
+    });
+
+    if (!response.ok) {
+      console.error('[PowerCare Sync] UPS API error:', response.status);
+      updatePowerCareStatus(customer.id, 'error', undefined, Date.now());
+      return;
+    }
+
+    const upsData: UPSTrackingResponse = await response.json();
+
+    // Update customer state with delivery info
+    if (upsData.status === 'delivered' && upsData.lastDeliveryAttempt) {
+      updatePowerCareStatus(customer.id, 'delivered', upsData.lastDeliveryAttempt, Date.now());
+    } else if (upsData.status === 'pending') {
+      updatePowerCareStatus(customer.id, 'pending', undefined, Date.now());
+    } else {
+      updatePowerCareStatus(customer.id, 'error', undefined, Date.now());
+    }
+
+  } catch (error) {
+    console.error('[PowerCare Sync] Error checking UPS status:', error);
+    updatePowerCareStatus(customer.id, 'error', undefined, Date.now());
+  }
+};
+
+/**
+ * Helper: Update PowerCare delivery status in app state
+ */
+function updatePowerCareStatus(
+  customerId: string,
+  status: 'pending' | 'delivered' | 'error',
+  podDate: string | undefined,
+  lastCheck: number
+): void {
+  const state = loadData();
+  const customer = state.customers.find(c => c.id === customerId);
+  if (!customer) return;
+
+  customer.powerCareDeliveryStatus = status;
+  if (podDate && status === 'delivered') {
+    customer.powercarePOD = podDate;
+  }
+  customer.powerCareLastStatusCheck = lastCheck;
+
+  saveData(state);
+}

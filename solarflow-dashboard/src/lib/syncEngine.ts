@@ -50,9 +50,21 @@ export async function pushToSupabase(state: AppState): Promise<void> {
       .from('app_data')
       .upsert(rows, { onConflict: 'key' });
 
-    if (error) console.warn('[SyncEngine] push failed:', error.message);
+    if (error) {
+      console.warn('[SyncEngine] push failed:', error.message);
+      // Dispatch custom event for UI to show sync error
+      window.dispatchEvent(new CustomEvent('supabase-sync-error', { 
+        detail: { message: 'Failed to sync to cloud. Will retry automatically.', error: error.message }
+      }));
+    } else {
+      // Dispatch success event
+      window.dispatchEvent(new CustomEvent('supabase-sync-success'));
+    }
   } catch (err) {
     console.warn('[SyncEngine] push error:', err);
+    window.dispatchEvent(new CustomEvent('supabase-sync-error', { 
+      detail: { message: 'Connection lost. Working offline...', error: String(err) }
+    }));
   }
 }
 

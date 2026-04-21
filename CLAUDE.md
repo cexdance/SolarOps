@@ -4,8 +4,8 @@
 
 This section provides links to reference documents for maintaining visual consistency.
 
-- **Comprehensive design checklist:** Located at `/context/design-principles.md`.
-- **Brand style guide:** Located at `/context/style-guide.md`.
+- **Comprehensive design checklist:** Located at [[design-principles]].
+- **Brand style guide:** Located at [[style-guide]].
 - **Instruction:** Always refer to these files when making visual (front-end, UI/UX) changes.
 
 ## Quick Visual Check
@@ -51,9 +51,43 @@ This section lists the primary functionalities of the SolarOps platform:
 - **Inventory** — Equipment, tools, and provider management.
 - **Billing** — Invoice creation, payment tracking, and Xero integration.
 
+## Obsidian & Memory Integration
+
+This section defines how Claude leverages persistent memory and knowledge organization across sessions.
+
+- **Memory Storage:** `~/.claude/projects/-Users-cex-SolarOps-/memory/` persists across all sessions
+- **Memory Files:** Reference [[project_ui_skill]], [[project_responsive_fixes]], [[project_kiniela]] for patterns and decisions
+- **Context Convention:** This CLAUDE.md loads automatically at session start; update monthly with new patterns discovered
+- **Wiki Links:** Use `[[ComponentName]]`, `[[FeatureName]]` to establish backlinks—helps Claude find related context
+- **Never Pollute Vault:** Keep generated plans and logs in ~/.claude/, not in code
+
+## Common Development Workflows
+
+### Daily Development Session
+1. Check memory files for responsive patterns ([[project_responsive_fixes]]) and UI patterns ([[project_ui_skill]])
+2. Review recent commits to understand branch state
+3. Reference [[design-principles]] and [[style-guide]] before any UI changes
+4. After changes: run Quick Visual Check (7-step process above)
+
+### Feature Implementation
+1. Create feature note in memory: `feature_[feature-name].md` with architecture sketch
+2. Link to affected components using wiki-style `[[Dashboard]]`, `[[WorkOrderPanel]]`, etc.
+3. Save implementation insights to memory for future refactoring
+4. Tag memory entries with `#completed` when feature ships
+
+### Bug Triage & Fixes
+1. Document reproduction steps and context
+2. Reference related memory files and responsive patterns
+3. Update memory files if fix reveals new patterns (e.g., new responsive grid fix)
+
+### Integration Work (Xero, SolarEdge, etc.)
+1. Save technical research to memory with links to source APIs
+2. Document gotchas and workarounds discovered
+3. Create wiki links to related code files for future reference
+
 ## Automated UI Testing
 
-A Playwright-based test agent is defined at `/context/playwright-agent.md`.
+A Playwright-based test agent is defined at [[playwright-agent]].
 
 - **Trigger:** Run after any front-end change to verify buttons, links, and navigation work correctly.
 - **Tool:** Uses `mcp__playwright__browser_*` tools to interact with the live dev server at `http://localhost:5173`.

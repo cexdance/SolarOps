@@ -1,6 +1,6 @@
 // SolarFlow MVP - Layout Component
 import React, { useState, useRef, useEffect } from 'react';
-const APP_VERSION = 'v1.6.0';
+import { getVersionString } from '../lib/versionConfig';
 import {
   LayoutDashboard,
   Wrench,
@@ -437,9 +437,9 @@ export const Layout: React.FC<LayoutProps> = ({
         {children}
       </main>
 
-      {/* Version badge — fixed bottom-right */}
+      {/* Version badge — fixed bottom-left */}
       <div className={`fixed left-3 z-30 text-[10px] text-slate-400 bg-white/80 backdrop-blur-sm border border-slate-200 rounded-md px-2 py-1 pointer-events-none select-none ${isMobile ? 'bottom-16' : 'bottom-3'}`}>
-        {APP_VERSION}
+        {getVersionString()}
       </div>
 
       {/* Mobile Bottom Navigation */}
