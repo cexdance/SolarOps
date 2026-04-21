@@ -45,6 +45,8 @@ interface DispatchDashboardProps {
   contractors: Contractor[];
   isMobile: boolean;
   currentUserId: string;
+  onViewCustomer: (customerId: string) => void;
+  onViewChange: (view: string, id?: string) => void;
 }
 
 // ── Widget catalog ─────────────────────────────────────────────────────────────
@@ -235,7 +237,7 @@ const generateHourlyData = (site: SolarEdgeSite) => {
 
 // ── Individual Widgets ─────────────────────────────────────────────────────────
 
-const AlertStateWidget: React.FC<{ customers: Customer[] }> = ({ customers }) => {
+const AlertStateWidget: React.FC<{ customers: Customer[]; onViewCustomer: (id: string) => void }> = ({ customers, onViewCustomer }) => {
   const custBySiteId = useMemo(() => {
     const m = new Map<string, Customer>();
     customers.forEach(c => { if (c.solarEdgeSiteId) m.set(c.solarEdgeSiteId, c); });
@@ -266,15 +268,19 @@ const AlertStateWidget: React.FC<{ customers: Customer[] }> = ({ customers }) =>
               const cust = custBySiteId.get(site.siteId);
               const impact = Number(site.highestImpact);
               return (
-                <div key={site.siteId} className="flex items-center gap-2 py-1.5 px-2 rounded-lg bg-slate-50 hover:bg-white border border-transparent hover:border-slate-200 transition-all">
+                <button
+                  key={site.siteId}
+                  onClick={() => cust && onViewCustomer(cust.id)}
+                  className={`w-full flex items-center gap-2 py-1.5 px-2 rounded-lg bg-slate-50 border border-transparent transition-all text-left ${cust ? 'hover:bg-orange-50 hover:border-orange-200 cursor-pointer' : 'cursor-default'}`}
+                >
                   <div className={`w-2 h-2 rounded-full flex-shrink-0 ${impact >= 4 ? 'bg-red-500' : impact >= 3 ? 'bg-orange-400' : 'bg-yellow-400'}`} />
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium text-slate-800 truncate leading-tight">{cust?.name || site.siteName}</p>
-                    {cust?.clientId && <p className="text-[10px] font-mono text-orange-600 leading-tight">{cust.clientId}</p>}
+                    <p className={`text-xs font-medium truncate leading-tight ${cust ? 'text-orange-700' : 'text-slate-800'}`}>{cust?.name || site.siteName}</p>
+                    {cust?.clientId && <p className="text-[10px] font-mono text-orange-500 leading-tight">{cust.clientId}</p>}
                   </div>
                   <span className={`flex-shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${IMPACT_COLORS[site.highestImpact] || 'bg-red-100 text-red-700'}`}>{site.alerts}</span>
                   <span className={`flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded-full font-medium ${site.status === 'Active' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{site.status}</span>
-                </div>
+                </button>
               );
             })
         }
@@ -334,7 +340,7 @@ const FleetProductionWidget: React.FC = () => {
   );
 };
 
-const AllWorkOrdersWidget: React.FC<{ jobs: Job[]; customers: Customer[] }> = ({ jobs, customers }) => {
+const AllWorkOrdersWidget: React.FC<{ jobs: Job[]; customers: Customer[]; onViewCustomer: (id: string) => void; onViewChange: (view: string, id?: string) => void }> = ({ jobs, customers, onViewCustomer, onViewChange }) => {
   const custById = useMemo(() => { const m = new Map<string, Customer>(); customers.forEach(c => m.set(c.id, c)); return m; }, [customers]);
   const active = useMemo(() =>
     jobs.filter(j => j.status !== 'paid')
@@ -354,11 +360,18 @@ const AllWorkOrdersWidget: React.FC<{ jobs: Job[]; customers: Customer[] }> = ({
           : active.map(job => {
               const cust = custById.get(job.customerId);
               return (
-                <div key={job.id} className="py-1.5 px-2 rounded-lg bg-slate-50 hover:bg-white border border-transparent hover:border-slate-200 transition-all">
+                <button
+                  key={job.id}
+                  onClick={() => onViewChange('jobDetail', job.id)}
+                  className="w-full text-left py-1.5 px-2 rounded-lg bg-slate-50 hover:bg-orange-50 border border-transparent hover:border-orange-200 transition-all cursor-pointer"
+                >
                   <div className="flex items-center gap-2 mb-0.5">
                     <div className="flex items-center gap-1.5 flex-1 min-w-0">
                       {cust?.clientId && <span className="text-[10px] font-mono text-orange-600 bg-orange-50 px-1 rounded flex-shrink-0">{cust.clientId}</span>}
-                      <span className="text-xs font-semibold text-slate-800 truncate">{cust?.name || job.clientName || 'Unknown'}</span>
+                      <span
+                        className="text-xs font-semibold text-orange-700 truncate hover:underline"
+                        onClick={e => { e.stopPropagation(); cust && onViewCustomer(cust.id); }}
+                      >{cust?.name || job.clientName || 'Unknown'}</span>
                     </div>
                     <span className={`flex-shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${JOB_STATUS_COLORS[job.status] || 'bg-slate-100 text-slate-500'}`}>{JOB_STATUS_LABEL[job.status] || job.status}</span>
                   </div>
@@ -366,7 +379,7 @@ const AllWorkOrdersWidget: React.FC<{ jobs: Job[]; customers: Customer[] }> = ({
                     <div className="flex items-center gap-1 min-w-0"><MapPin className="w-3 h-3 text-slate-400 flex-shrink-0" /><span className="text-[10px] text-slate-400 truncate">{cust?.city ? `${cust.city}, ${cust.state}` : cust?.address || job.siteAddress || '—'}</span></div>
                     <div className="flex items-center gap-1 flex-shrink-0"><Clock className="w-3 h-3 text-slate-300" /><span className="text-[10px] text-slate-400">{fmtDate(job.scheduledDate || job.date)}</span></div>
                   </div>
-                </div>
+                </button>
               );
             })
         }
@@ -375,7 +388,7 @@ const AllWorkOrdersWidget: React.FC<{ jobs: Job[]; customers: Customer[] }> = ({
   );
 };
 
-const SingleWOWidget: React.FC<{ jobId: string; jobs: Job[]; customers: Customer[] }> = ({ jobId, jobs, customers }) => {
+const SingleWOWidget: React.FC<{ jobId: string; jobs: Job[]; customers: Customer[]; onViewCustomer: (id: string) => void; onViewChange: (view: string, id?: string) => void }> = ({ jobId, jobs, customers, onViewCustomer, onViewChange }) => {
   const job  = jobs.find(j => j.id === jobId);
   const cust = job ? customers.find(c => c.id === job.customerId) : null;
 
@@ -398,11 +411,14 @@ const SingleWOWidget: React.FC<{ jobId: string; jobs: Job[]; customers: Customer
         </div>
         <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${JOB_STATUS_COLORS[job.status] || 'bg-slate-100 text-slate-500'}`}>{JOB_STATUS_LABEL[job.status] || job.status}</span>
       </div>
-      {/* Customer */}
-      <div className="mb-2 flex-shrink-0">
-        {cust?.clientId && <p className="text-[10px] font-mono text-orange-600 leading-tight">{cust.clientId}</p>}
-        <p className="text-sm font-bold text-slate-900 leading-tight">{cust?.name || job.clientName || 'Unknown Customer'}</p>
-      </div>
+      {/* Customer — clickable → profile */}
+      <button
+        onClick={() => cust && onViewCustomer(cust.id)}
+        className={`mb-2 flex-shrink-0 text-left w-full rounded-lg px-1 -mx-1 py-0.5 transition-colors ${cust ? 'hover:bg-orange-50 cursor-pointer' : 'cursor-default'}`}
+      >
+        {cust?.clientId && <p className="text-[10px] font-mono text-orange-500 leading-tight">{cust.clientId}</p>}
+        <p className={`text-sm font-bold leading-tight ${cust ? 'text-orange-700 hover:underline' : 'text-slate-900'}`}>{cust?.name || job.clientName || 'Unknown Customer'}</p>
+      </button>
       {/* Details */}
       <div className="space-y-1.5 flex-1">
         <div className="flex items-start gap-1.5">
@@ -419,26 +435,37 @@ const SingleWOWidget: React.FC<{ jobId: string; jobs: Job[]; customers: Customer
           {priority && (
             <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full capitalize ${PRIORITY_COLORS[priority] || 'bg-slate-100 text-slate-500'}`}>{priority}</span>
           )}
-          {dateStr && (
-            <div className="flex items-center gap-1 ml-auto">
-              <Clock className="w-3 h-3 text-slate-300" />
-              <span className="text-[10px] text-slate-400">{fmtDate(dateStr)}</span>
-            </div>
-          )}
+          <div className="flex items-center gap-2 ml-auto">
+            {dateStr && (
+              <div className="flex items-center gap-1">
+                <Clock className="w-3 h-3 text-slate-300" />
+                <span className="text-[10px] text-slate-400">{fmtDate(dateStr)}</span>
+              </div>
+            )}
+            <button
+              onClick={() => onViewChange('jobDetail', job.id)}
+              className="text-[10px] font-semibold text-orange-500 hover:text-orange-700 underline"
+            >
+              Open WO →
+            </button>
+          </div>
         </div>
       </div>
     </div>
   );
 };
 
-const CustomerProductionWidget: React.FC<{ customerId: string; customers: Customer[] }> = ({ customerId, customers }) => {
+const CustomerProductionWidget: React.FC<{ customerId: string; customers: Customer[]; onViewCustomer: (id: string) => void }> = ({ customerId, customers, onViewCustomer }) => {
   const cust = customers.find(c => c.id === customerId);
   const site = cust?.solarEdgeSiteId ? FL_SITES.find(s => s.siteId === cust.solarEdgeSiteId) : null;
 
   if (!cust) return <div className="h-full flex items-center justify-center"><p className="text-xs text-slate-400">Customer not found</p></div>;
   if (!site) return (
     <div className="h-full flex flex-col min-h-0">
-      <div className="flex items-center gap-1.5 mb-2"><Sun className="w-4 h-4 text-orange-400" /><span className="text-xs font-semibold text-slate-900 truncate">{cust.name}</span></div>
+      <button onClick={() => onViewCustomer(cust.id)} className="flex items-center gap-1.5 mb-2 hover:bg-orange-50 rounded-lg px-1 -mx-1 py-0.5 transition-colors text-left">
+        <Sun className="w-4 h-4 text-orange-400 flex-shrink-0" />
+        <span className="text-xs font-semibold text-orange-700 truncate hover:underline">{cust.name}</span>
+      </button>
       <div className="flex-1 flex items-center justify-center"><p className="text-xs text-slate-400">No SolarEdge site linked</p></div>
     </div>
   );
@@ -446,13 +473,13 @@ const CustomerProductionWidget: React.FC<{ customerId: string; customers: Custom
   return (
     <div className="h-full flex flex-col min-h-0">
       <div className="flex items-center justify-between mb-2 flex-shrink-0">
-        <div className="flex items-center gap-1.5 min-w-0">
+        <button onClick={() => onViewCustomer(cust.id)} className="flex items-center gap-1.5 min-w-0 hover:bg-orange-50 rounded-lg px-1 -mx-1 py-0.5 transition-colors text-left">
           <Sun className="w-4 h-4 text-orange-400 flex-shrink-0" />
           <div className="min-w-0">
-            {cust.clientId && <p className="text-[10px] font-mono text-orange-600 leading-tight">{cust.clientId}</p>}
-            <p className="text-xs font-bold text-slate-900 truncate">{cust.name}</p>
+            {cust.clientId && <p className="text-[10px] font-mono text-orange-500 leading-tight">{cust.clientId}</p>}
+            <p className="text-xs font-bold text-orange-700 truncate hover:underline">{cust.name}</p>
           </div>
-        </div>
+        </button>
         <span className={`flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded-full font-medium ${site.status === 'Active' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{site.status}</span>
       </div>
       <div className="flex-1 space-y-2 min-h-0">
@@ -487,7 +514,7 @@ const CustomerProductionWidget: React.FC<{ customerId: string; customers: Custom
   );
 };
 
-const ContractorWOWidget: React.FC<{ contractorId: string; contractors: Contractor[]; jobs: Job[]; customers: Customer[] }> = ({ contractorId, contractors, jobs, customers }) => {
+const ContractorWOWidget: React.FC<{ contractorId: string; contractors: Contractor[]; jobs: Job[]; customers: Customer[]; onViewCustomer: (id: string) => void; onViewChange: (view: string, id?: string) => void }> = ({ contractorId, contractors, jobs, customers, onViewCustomer, onViewChange }) => {
   const contractor = contractors.find(c => c.id === contractorId);
   const custById   = useMemo(() => { const m = new Map<string, Customer>(); customers.forEach(c => m.set(c.id, c)); return m; }, [customers]);
   const openJobs   = useMemo(() =>
@@ -511,11 +538,18 @@ const ContractorWOWidget: React.FC<{ contractorId: string; contractors: Contract
           : openJobs.slice(0, 8).map(job => {
               const cust = custById.get(job.customerId);
               return (
-                <div key={job.id} className="py-1.5 px-2 rounded-lg bg-slate-50 hover:bg-white border border-transparent hover:border-slate-200 transition-all">
+                <button
+                  key={job.id}
+                  onClick={() => onViewChange('jobDetail', job.id)}
+                  className="w-full text-left py-1.5 px-2 rounded-lg bg-slate-50 hover:bg-orange-50 border border-transparent hover:border-orange-200 transition-all cursor-pointer"
+                >
                   <div className="flex items-center gap-2 mb-0.5">
                     <div className="flex items-center gap-1.5 flex-1 min-w-0">
                       {cust?.clientId && <span className="text-[10px] font-mono text-orange-600 bg-orange-50 px-1 rounded flex-shrink-0">{cust.clientId}</span>}
-                      <span className="text-xs font-semibold text-slate-800 truncate">{cust?.name || job.clientName || '—'}</span>
+                      <span
+                        className="text-xs font-semibold text-orange-700 truncate hover:underline"
+                        onClick={e => { e.stopPropagation(); cust && onViewCustomer(cust.id); }}
+                      >{cust?.name || job.clientName || '—'}</span>
                     </div>
                     <span className={`flex-shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${JOB_STATUS_COLORS[job.status] || 'bg-slate-100'}`}>{JOB_STATUS_LABEL[job.status] || job.status}</span>
                   </div>
@@ -523,7 +557,7 @@ const ContractorWOWidget: React.FC<{ contractorId: string; contractors: Contract
                     <div className="flex items-center gap-1 min-w-0"><MapPin className="w-3 h-3 text-slate-400 flex-shrink-0" /><span className="text-[10px] text-slate-400 truncate">{cust?.city ? `${cust.city}, ${cust.state}` : '—'}</span></div>
                     <span className="text-[10px] text-slate-400 flex-shrink-0">{fmtDate(job.scheduledDate || job.date)}</span>
                   </div>
-                </div>
+                </button>
               );
             })
         }
@@ -532,7 +566,7 @@ const ContractorWOWidget: React.FC<{ contractorId: string; contractors: Contract
   );
 };
 
-const DailyProductionGraphWidget: React.FC<{ customerId: string; customers: Customer[] }> = ({ customerId, customers }) => {
+const DailyProductionGraphWidget: React.FC<{ customerId: string; customers: Customer[]; onViewCustomer: (id: string) => void }> = ({ customerId, customers, onViewCustomer }) => {
   const cust = customers.find(c => c.id === customerId);
   const site = cust?.solarEdgeSiteId ? FL_SITES.find(s => s.siteId === cust.solarEdgeSiteId) : null;
   const data = useMemo(() => site ? generateHourlyData(site) : [], [site?.siteId]);
@@ -540,7 +574,10 @@ const DailyProductionGraphWidget: React.FC<{ customerId: string; customers: Cust
   if (!cust) return <div className="h-full flex items-center justify-center"><p className="text-xs text-slate-400">Customer not found</p></div>;
   if (!site) return (
     <div className="h-full flex flex-col min-h-0">
-      <div className="flex items-center gap-1.5 mb-2"><TrendingUp className="w-4 h-4 text-emerald-500" /><span className="text-xs font-semibold text-slate-900 truncate">{cust.name}</span></div>
+      <button onClick={() => onViewCustomer(cust.id)} className="flex items-center gap-1.5 mb-2 hover:bg-orange-50 rounded-lg px-1 -mx-1 py-0.5 transition-colors text-left">
+        <TrendingUp className="w-4 h-4 text-emerald-500" />
+        <span className="text-xs font-semibold text-orange-700 truncate hover:underline">{cust.name}</span>
+      </button>
       <div className="flex-1 flex items-center justify-center"><p className="text-xs text-slate-400">No SolarEdge site linked</p></div>
     </div>
   );
@@ -550,13 +587,13 @@ const DailyProductionGraphWidget: React.FC<{ customerId: string; customers: Cust
   return (
     <div className="h-full flex flex-col min-h-0">
       <div className="flex items-center justify-between mb-1.5 flex-shrink-0">
-        <div className="flex items-center gap-1.5 min-w-0">
+        <button onClick={() => onViewCustomer(cust.id)} className="flex items-center gap-1.5 min-w-0 hover:bg-orange-50 rounded-lg px-1 -mx-1 py-0.5 transition-colors text-left">
           <TrendingUp className="w-4 h-4 text-emerald-500 flex-shrink-0" />
           <div className="min-w-0">
-            {cust.clientId && <p className="text-[10px] font-mono text-orange-600 leading-tight">{cust.clientId}</p>}
-            <p className="text-xs font-bold text-slate-900 truncate">{cust.name}</p>
+            {cust.clientId && <p className="text-[10px] font-mono text-orange-500 leading-tight">{cust.clientId}</p>}
+            <p className="text-xs font-bold text-orange-700 truncate hover:underline">{cust.name}</p>
           </div>
-        </div>
+        </button>
         <div className="text-right flex-shrink-0 ml-2">
           <p className="text-[10px] text-slate-400">Today</p>
           <p className="text-xs font-bold text-emerald-700">{fmtKwh(site.todayKwh)}</p>
@@ -1306,7 +1343,9 @@ const WidgetSlot: React.FC<{
   onDragOver: (e: React.DragEvent, index: number) => void;
   onDragLeave: () => void;
   onDrop: (index: number) => void;
-}> = ({ config, index, customers, jobs, contractors, onOpenAdd, onRemove, editMode, currentUserId, isDragOver, onDragStart, onDragOver, onDragLeave, onDrop }) => {
+  onViewCustomer: (id: string) => void;
+  onViewChange: (view: string, id?: string) => void;
+}> = ({ config, index, customers, jobs, contractors, onOpenAdd, onRemove, editMode, currentUserId, isDragOver, onDragStart, onDragOver, onDragLeave, onDrop, onViewCustomer, onViewChange }) => {
   if (!config) {
     return (
       <div
@@ -1360,13 +1399,13 @@ const WidgetSlot: React.FC<{
       </button>
 
       <WidgetErrorBoundary onRemove={() => onRemove(index)}>
-        {config.type === 'alert-state'            && <AlertStateWidget customers={customers} />}
+        {config.type === 'alert-state'            && <AlertStateWidget customers={customers} onViewCustomer={onViewCustomer} />}
         {config.type === 'current-production'     && <FleetProductionWidget />}
-        {config.type === 'work-order'             && <AllWorkOrdersWidget jobs={jobs} customers={customers} />}
-        {config.type === 'single-wo'              && config.jobId        && <SingleWOWidget jobId={config.jobId} jobs={jobs} customers={customers} />}
-        {config.type === 'customer-production'    && config.customerId   && <CustomerProductionWidget customerId={config.customerId} customers={customers} />}
-        {config.type === 'contractor-wo'          && config.contractorId && <ContractorWOWidget contractorId={config.contractorId} contractors={contractors} jobs={jobs} customers={customers} />}
-        {config.type === 'daily-production-graph' && config.customerId   && <DailyProductionGraphWidget customerId={config.customerId} customers={customers} />}
+        {config.type === 'work-order'             && <AllWorkOrdersWidget jobs={jobs} customers={customers} onViewCustomer={onViewCustomer} onViewChange={onViewChange} />}
+        {config.type === 'single-wo'              && config.jobId        && <SingleWOWidget jobId={config.jobId} jobs={jobs} customers={customers} onViewCustomer={onViewCustomer} onViewChange={onViewChange} />}
+        {config.type === 'customer-production'    && config.customerId   && <CustomerProductionWidget customerId={config.customerId} customers={customers} onViewCustomer={onViewCustomer} />}
+        {config.type === 'contractor-wo'          && config.contractorId && <ContractorWOWidget contractorId={config.contractorId} contractors={contractors} jobs={jobs} customers={customers} onViewCustomer={onViewCustomer} onViewChange={onViewChange} />}
+        {config.type === 'daily-production-graph' && config.customerId   && <DailyProductionGraphWidget customerId={config.customerId} customers={customers} onViewCustomer={onViewCustomer} />}
         {config.type === 'lead-pipeline'          && <LeadPipelineWidget />}
         {config.type === 'single-lead'            && config.leadId       && <SingleLeadWidget leadId={config.leadId} />}
         {config.type === 'todo-list'              && <TodoListWidget userId={currentUserId} />}
@@ -1377,7 +1416,7 @@ const WidgetSlot: React.FC<{
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 
-export const DispatchDashboard: React.FC<DispatchDashboardProps> = ({ customers, jobs, contractors, isMobile, currentUserId }) => {
+export const DispatchDashboard: React.FC<DispatchDashboardProps> = ({ customers, jobs, contractors, isMobile, currentUserId, onViewCustomer, onViewChange }) => {
   const [layout,       setLayout]      = useState<(WidgetConfig | null)[]>(loadLayout);
   const [editMode,     setEditMode]    = useState(false);
   const [addSlot,      setAddSlot]     = useState<number | null>(null);
@@ -1556,6 +1595,8 @@ export const DispatchDashboard: React.FC<DispatchDashboardProps> = ({ customers,
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
+              onViewCustomer={onViewCustomer}
+              onViewChange={onViewChange}
             />
           ))}
         </div>

@@ -1898,6 +1898,11 @@ function App() {
             contractors={contractors}
             isMobile={isMobile}
             currentUserId={data.currentUser?.id || 'user-1'}
+            onViewCustomer={(customerId) => {
+              setSelectedCustomerId(customerId);
+              setCurrentView('customers');
+            }}
+            onViewChange={(view, id) => handleViewChange(view, id)}
           />
         );
 
