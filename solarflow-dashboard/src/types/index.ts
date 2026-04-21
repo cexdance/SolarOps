@@ -206,6 +206,11 @@ export interface Job {
   discountType?: 'repeating_client' | 'military' | 'friends_family';
   // RMA tracking (top-level, separate from line-item rmaNumber)
   rmaEntries?: RMAEntry[];
+  // Serial number tracking (inverter / optimizer swaps)
+  oldSerialNumber?: string;
+  newSerialNumber?: string;
+  snSyncScheduledAt?: string;   // ISO timestamp — SolarEdge API update due by +2h
+  snSyncCompletedAt?: string;
   // Travel
   travelMiles?: number;
   // Audit trail

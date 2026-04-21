@@ -387,6 +387,71 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
   const [contractorPayRate, setContractorPayRate] = useState<number>(job?.contractorPayRate ?? 125);
   const [contractorPayUnit, setContractorPayUnit] = useState<'hour' | 'flat'>(job?.contractorPayUnit ?? 'flat');
 
+  // Serial number tracking (inverter / optimizer swaps)
+  const [sowOldSN, setSowOldSN] = useState(job?.oldSerialNumber ?? '');
+  const [sowNewSN, setSowNewSN] = useState(job?.newSerialNumber ?? '');
+  const snOldCamRef = useRef<HTMLInputElement>(null);
+  const snNewCamRef = useRef<HTMLInputElement>(null);
+
+  // Service-type helpers
+  const isInverterJob  = serviceType.toLowerCase().includes('inverter');
+  const isOptimizerJob = serviceType.toLowerCase().includes('optimizer');
+  const isSerialJob    = isInverterJob || isOptimizerJob;
+
+  // Preset parts by job type (injected when SOW modal opens)
+  const INVERTER_PARTS = [
+    { description: 'Conduit 3/4" Metal Coupling',        quantity: 2, unitCost: 3.50 },
+    { description: 'Liquid Tight 3/4"',                  quantity: 1, unitCost: 12.00 },
+    { description: 'Liquid Tight 3/4" 180° Connector',   quantity: 1, unitCost: 8.50 },
+    { description: '3/4" Liquid Tight 90° Connector',    quantity: 2, unitCost: 7.00 },
+  ];
+  const OPTIMIZER_PARTS = [
+    { description: 'MC4 Connector',                      quantity: 2, unitCost: 2.50 },
+  ];
+
+  const injectPresetParts = () => {
+    const presets = isInverterJob ? INVERTER_PARTS : isOptimizerJob ? OPTIMIZER_PARTS : [];
+    if (presets.length === 0) return;
+    setLineItems(prev => {
+      const existingDescs = new Set(prev.map(i => i.description.toLowerCase()));
+      const toAdd = presets
+        .filter(p => !existingDescs.has(p.description.toLowerCase()))
+        .map(p => ({
+          ...newLineItem(),
+          type: 'part' as WOLineItem['type'],
+          description: p.description,
+          quantity: p.quantity,
+          unitCost: p.unitCost,
+          totalCost: p.quantity * p.unitCost,
+        }));
+      return [...prev, ...toAdd];
+    });
+  };
+
+  // BarcodeDetector QR scan helper (Chrome/Safari native, no library needed)
+  const scanBarcodeFromFile = async (
+    file: File,
+    onResult: (sn: string) => void
+  ) => {
+    if (!('BarcodeDetector' in window)) {
+      alert('QR scanning is not supported in this browser. Enter the serial number manually.');
+      return;
+    }
+    try {
+      const img = await createImageBitmap(file);
+      // @ts-ignore — BarcodeDetector is not yet in TypeScript lib
+      const detector = new window.BarcodeDetector({ formats: ['qr_code', 'code_128', 'data_matrix', 'code_39'] });
+      const barcodes = await detector.detect(img);
+      if (barcodes.length > 0) {
+        onResult(barcodes[0].rawValue);
+      } else {
+        alert('No barcode found in image. Enter the serial number manually.');
+      }
+    } catch {
+      alert('Could not read barcode. Enter the serial number manually.');
+    }
+  };
+
   const approvedContractors = contractors.filter(c => c.status === 'approved');
   const assignedContractor  = approvedContractors.find(c => c.id === assignedContractorId);
 
@@ -671,6 +736,13 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
       requiresAdminApproval: isServiceAccountExpense && !['quote_approved','scheduled','in_progress','completed','invoiced','paid'].includes(effectiveWoStatus),
       rmaEntries,
       travelMiles: travelMiles || undefined,
+      // Serial numbers (inverter / optimizer swaps)
+      oldSerialNumber: sowOldSN || undefined,
+      newSerialNumber: sowNewSN || undefined,
+      // Schedule SolarEdge SN sync within 2hrs when WO closes
+      snSyncScheduledAt: (isSerialJob && sowNewSN && effectiveWoStatus === 'completed')
+        ? (job?.snSyncCompletedAt ? job.snSyncScheduledAt : new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString())
+        : job?.snSyncScheduledAt,
       auditLog: [
         ...auditLog,
         {
@@ -1611,25 +1683,61 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
 
           {/* Photos */}
           {activeTab === 'photos' && (
-            <div className="p-6 space-y-5">
-              {/* Upload controls */}
-              <div className="flex items-center gap-3 flex-wrap">
-                <select
-                  value={uploadCategory}
-                  onChange={e => setUploadCategory(e.target.value as WOPhoto['category'])}
-                  className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none cursor-pointer"
+            <div className="p-4 space-y-4">
+
+              {/* ── Category chips ─────────────────────────────────────────── */}
+              <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
+                {PHOTO_CATEGORIES.map(cat => (
+                  <button
+                    key={cat}
+                    onClick={() => setUploadCategory(cat)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer shrink-0 ${
+                      uploadCategory === cat
+                        ? 'bg-orange-500 text-white shadow-sm'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    {PHOTO_CATEGORY_LABELS[cat]}
+                    {photosByCategory[cat].length > 0 && (
+                      <span className={`text-[10px] px-1 py-0.5 rounded-full font-bold ${
+                        uploadCategory === cat ? 'bg-white/30 text-white' : 'bg-slate-300 text-slate-600'
+                      }`}>
+                        {photosByCategory[cat].length}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+
+              {/* ── Camera-first action buttons ──────────────────────────── */}
+              <div className="grid grid-cols-2 gap-3">
+                {/* Take Photo — opens device camera directly on mobile */}
+                <button
+                  onClick={() => {
+                    const el = document.createElement('input');
+                    el.type = 'file';
+                    el.accept = 'image/*';
+                    el.capture = 'environment';
+                    el.onchange = () => handlePhotoFiles(el.files);
+                    el.click();
+                  }}
+                  className="flex flex-col items-center justify-center gap-2 p-5 bg-orange-500 text-white rounded-2xl hover:bg-orange-600 active:scale-95 transition-all cursor-pointer shadow-sm"
                 >
-                  {PHOTO_CATEGORIES.map(cat => (
-                    <option key={cat} value={cat}>{PHOTO_CATEGORY_LABELS[cat]}</option>
-                  ))}
-                </select>
+                  <Camera className="w-7 h-7" />
+                  <span className="text-sm font-semibold">Take Photo</span>
+                  <span className="text-[10px] opacity-75 capitalize">{PHOTO_CATEGORY_LABELS[uploadCategory]}</span>
+                </button>
+
+                {/* Choose from library */}
                 <button
                   onClick={() => photoInputRef.current?.click()}
-                  className="flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-lg text-sm font-medium hover:bg-orange-600 transition-colors cursor-pointer"
+                  className="flex flex-col items-center justify-center gap-2 p-5 bg-slate-800 text-white rounded-2xl hover:bg-slate-900 active:scale-95 transition-all cursor-pointer shadow-sm"
                 >
-                  <Upload className="w-4 h-4" />
-                  Upload Photos
+                  <Upload className="w-7 h-7" />
+                  <span className="text-sm font-semibold">Choose Files</span>
+                  <span className="text-[10px] opacity-75">Multiple OK</span>
                 </button>
+
                 <input
                   ref={photoInputRef}
                   type="file"
@@ -1640,49 +1748,54 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                 />
               </div>
 
-              {/* Photo grid by category */}
+              {/* ── Drop zone (visible when no photos) ─────────────────── */}
+              {woPhotos.length === 0 && (
+                <div
+                  onDragOver={e => e.preventDefault()}
+                  onDrop={e => { e.preventDefault(); handlePhotoFiles(e.dataTransfer.files); }}
+                  className="border-2 border-dashed border-slate-200 rounded-xl p-8 text-center"
+                >
+                  <p className="text-sm text-slate-400">or drag & drop photos here</p>
+                </div>
+              )}
+
+              {/* ── Photo grid — grouped by category ───────────────────── */}
               {PHOTO_CATEGORIES.map(cat => {
                 const photos = photosByCategory[cat];
                 if (photos.length === 0) return null;
                 return (
                   <div key={cat}>
-                    <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
-                      {PHOTO_CATEGORY_LABELS[cat]} ({photos.length})
+                    <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-2">
+                      {PHOTO_CATEGORY_LABELS[cat]}
+                      <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-full font-bold">{photos.length}</span>
                     </h4>
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                       {photos.map(photo => (
-                        <div key={photo.id} className="relative group aspect-square rounded-lg overflow-hidden border border-slate-200">
-                          <img
-                            src={photo.dataUrl}
-                            alt={photo.name}
-                            className="w-full h-full object-cover"
-                          />
+                        <div key={photo.id} className="relative group aspect-square rounded-xl overflow-hidden border border-slate-200 shadow-sm">
+                          <img src={photo.dataUrl} alt={photo.name} className="w-full h-full object-cover" />
                           <button
                             onClick={() => removePhoto(photo.id)}
-                            className="absolute top-1 right-1 w-6 h-6 bg-black/60 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                            className="absolute top-2 right-2 w-7 h-7 bg-black/70 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
                           >
-                            <X className="w-3 h-3 text-white" />
+                            <X className="w-3.5 h-3.5 text-white" />
                           </button>
-                          <div className="absolute bottom-0 left-0 right-0 bg-black/50 px-2 py-1">
+                          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent px-2 py-2">
                             <p className="text-white text-[10px] truncate">{photo.name}</p>
                           </div>
                         </div>
                       ))}
+                      {/* Inline add button per category */}
+                      <button
+                        onClick={() => { setUploadCategory(cat); photoInputRef.current?.click(); }}
+                        className="aspect-square rounded-xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center gap-1 hover:border-orange-300 hover:bg-orange-50 transition-colors cursor-pointer text-slate-400 hover:text-orange-500"
+                      >
+                        <Plus className="w-5 h-5" />
+                        <span className="text-[10px] font-medium">Add</span>
+                      </button>
                     </div>
                   </div>
                 );
               })}
-
-              {woPhotos.length === 0 && (
-                <div
-                  onDragOver={e => e.preventDefault()}
-                  onDrop={e => { e.preventDefault(); handlePhotoFiles(e.dataTransfer.files); }}
-                  className="border-2 border-dashed border-slate-200 rounded-xl p-12 text-center"
-                >
-                  <Camera className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                  <p className="text-sm text-slate-400">Drag & drop photos here or use the upload button</p>
-                </div>
-              )}
             </div>
           )}
 
@@ -1869,15 +1982,20 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
         </div>
       </div>
 
-      {/* ── Report Preview Modal (Procore-style Daily Report) ───────────── */}
+      {/* ── SOW Report Modal ────────────────────────────────────────────── */}
       {showQuotePreview && (() => {
         const today = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+        const partOnlyItems = lineItems.filter(i => i.type === 'part');
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
+
               {/* Modal header */}
-              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
-                <h2 className="text-lg font-bold text-slate-900">Daily Report</h2>
+              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 shrink-0">
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900">SOW Report</h2>
+                  <p className="text-xs text-slate-400">Scope of Work · {today}</p>
+                </div>
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => window.print()}
@@ -1892,83 +2010,208 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                 </div>
               </div>
 
-              {/* Printable content — Procore-style Daily Report */}
+              {/* Scrollable report body */}
               <div className="overflow-y-auto p-6 md:p-8 space-y-6 print:p-0" id="report-print-area">
-                {/* Header: Client & Site Info */}
-                <div>
-                  <div className="bg-slate-900 text-white rounded-lg p-4 mb-4">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-300">Client</p>
-                        <p className="text-lg font-bold truncate">{siteName || customer?.name || 'Unknown Client'}</p>
-                        {siteAddress && <p className="text-sm text-slate-300 mt-1">{siteAddress}</p>}
-                        {customer?.phone && <p className="text-xs text-slate-400 mt-1">{customer.phone}</p>}
-                      </div>
-                      <div className="text-right shrink-0">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-300">Work Order</p>
-                        <p className="text-xl font-bold text-orange-400">{job?.woNumber || 'N/A'}</p>
-                        <p className="text-xs text-slate-300 mt-1">{today}</p>
-                      </div>
+
+                {/* ── Client & Site Header ─────────────────────────────── */}
+                <div className="bg-slate-900 text-white rounded-xl p-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-1">Client</p>
+                      <p className="text-lg font-bold truncate">{siteName || customer?.name || 'Unknown Client'}</p>
+                      {siteAddress && <p className="text-sm text-slate-300 mt-1">{siteAddress}</p>}
+                      {customer?.phone && <p className="text-xs text-slate-400 mt-1">{customer.phone}</p>}
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-1">Work Order</p>
+                      <p className="text-xl font-bold text-orange-400">{job?.woNumber || 'N/A'}</p>
+                      <p className="text-xs text-slate-300 mt-0.5">{today}</p>
                     </div>
                   </div>
                 </div>
 
-                {/* Status & Description */}
-                <div className="border-l-4 border-orange-500 pl-4">
-                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Status</p>
-                  <div className="flex items-center gap-2 mb-3">
+                {/* ── Status & Scope ───────────────────────────────────── */}
+                <div className="border-l-4 border-orange-500 pl-4 space-y-2">
+                  <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">Scope of Work</p>
+                  <div className="flex items-center gap-2 flex-wrap">
                     <WOStatusBadge status={job?.woStatus || 'draft'} />
+                    {serviceType && (
+                      <span className="text-xs px-2 py-0.5 bg-slate-100 text-slate-600 rounded-full font-medium">{serviceType}</span>
+                    )}
                   </div>
-                  {(title || serviceType || notes) && (
+                  {(title || notes) && (
                     <div>
-                      <p className="text-sm font-semibold text-slate-900 mb-1">{title || serviceType || 'Service'}</p>
-                      {notes && <p className="text-sm text-slate-600 whitespace-pre-wrap">{notes}</p>}
+                      {title && <p className="text-sm font-semibold text-slate-900">{title}</p>}
+                      {notes && <p className="text-sm text-slate-600 whitespace-pre-wrap mt-1">{notes}</p>}
                     </div>
                   )}
                 </div>
 
-                {/* Parts & Equipment / Serial Numbers */}
-                {lineItems.length > 0 && (
-                  <div>
-                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">Parts & Equipment</p>
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="border-b border-slate-200">
-                            <th className="pb-2 text-left text-xs font-semibold text-slate-600">Part / Description</th>
-                            <th className="pb-2 text-right text-xs font-semibold text-slate-600">Qty</th>
-                            <th className="pb-2 text-right text-xs font-semibold text-slate-600">Cost</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {lineItems.map(item => (
-                            <tr key={item.id} className="border-b border-slate-100 hover:bg-slate-50">
-                              <td className="py-2 text-slate-800">{item.description}</td>
-                              <td className="py-2 text-right text-slate-600">{item.quantity}</td>
-                              <td className="py-2 text-right font-medium text-slate-800">${item.totalCost.toFixed(2)}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                {/* ── Serial Numbers (inverter / optimizer only) ────────── */}
+                {isSerialJob && (
+                  <div className="bg-blue-50 rounded-xl p-4 border border-blue-100">
+                    <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-3">
+                      {isInverterJob ? 'Inverter' : 'Optimizer'} Serial Numbers
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {/* Old S/N */}
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-600 mb-1.5">Old Serial Number</label>
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={sowOldSN}
+                            onChange={e => setSowOldSN(e.target.value)}
+                            placeholder="e.g. 7E1234ABCD"
+                            className="flex-1 px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white font-mono"
+                          />
+                          <button
+                            onClick={() => snOldCamRef.current?.click()}
+                            title="Scan QR / barcode"
+                            className="px-3 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors cursor-pointer shrink-0"
+                          >
+                            <Camera className="w-4 h-4" />
+                          </button>
+                          <input
+                            ref={snOldCamRef}
+                            type="file"
+                            accept="image/*"
+                            capture="environment"
+                            className="hidden"
+                            onChange={async e => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              await scanBarcodeFromFile(file, setSowOldSN);
+                            }}
+                          />
+                        </div>
+                        <p className="text-[10px] text-slate-400 mt-1">Scan the label QR or enter manually</p>
+                      </div>
+                      {/* New S/N */}
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-600 mb-1.5">New Serial Number</label>
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={sowNewSN}
+                            onChange={e => setSowNewSN(e.target.value)}
+                            placeholder="e.g. 7E5678WXYZ"
+                            className="flex-1 px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white font-mono"
+                          />
+                          <button
+                            onClick={() => snNewCamRef.current?.click()}
+                            title="Scan QR / barcode"
+                            className="px-3 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors cursor-pointer shrink-0"
+                          >
+                            <Camera className="w-4 h-4" />
+                          </button>
+                          <input
+                            ref={snNewCamRef}
+                            type="file"
+                            accept="image/*"
+                            capture="environment"
+                            className="hidden"
+                            onChange={async e => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              await scanBarcodeFromFile(file, setSowNewSN);
+                            }}
+                          />
+                        </div>
+                        <p className="text-[10px] text-slate-400 mt-1">SolarEdge API update scheduled within 2 hrs of close</p>
+                      </div>
                     </div>
+                    {/* SN sync status */}
+                    {job?.snSyncScheduledAt && (
+                      <div className="mt-3 flex items-center gap-2 text-xs">
+                        {job.snSyncCompletedAt ? (
+                          <span className="flex items-center gap-1 text-green-600 font-medium">
+                            <CheckCircle className="w-3.5 h-3.5" /> SolarEdge SN updated {new Date(job.snSyncCompletedAt).toLocaleTimeString()}
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1 text-amber-600 font-medium">
+                            <Clock className="w-3.5 h-3.5" /> SolarEdge update due by {new Date(job.snSyncScheduledAt).toLocaleTimeString()}
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
 
-                {/* Photos */}
-                {job?.woPhotos && job.woPhotos.length > 0 && (
-                  <div>
-                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">Media & Documentation</p>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                      {job.woPhotos.map((photo) => (
-                        <div key={photo.id} className="bg-slate-100 rounded-lg overflow-hidden aspect-square">
-                          <img src={photo.dataUrl} alt={photo.name} className="w-full h-full object-cover" />
-                          <p className="text-xs text-slate-500 mt-1">{photo.category}</p>
-                        </div>
-                      ))}
+                {/* ── Parts & Equipment ────────────────────────────────── */}
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">Parts & Equipment</p>
+                    {isSerialJob && (
+                      <button
+                        onClick={injectPresetParts}
+                        className="text-xs text-orange-600 hover:text-orange-700 font-medium flex items-center gap-1 cursor-pointer"
+                      >
+                        <Plus className="w-3 h-3" /> Add suggested parts
+                      </button>
+                    )}
+                  </div>
+                  {lineItems.length > 0 ? (
+                    <div className="overflow-x-auto rounded-lg border border-slate-100">
+                      <table className="w-full text-sm">
+                        <thead className="bg-slate-50">
+                          <tr>
+                            <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500">Part / Description</th>
+                            <th className="px-3 py-2 text-right text-xs font-semibold text-slate-500">Qty</th>
+                            <th className="px-3 py-2 text-right text-xs font-semibold text-slate-500">Cost</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-50">
+                          {partOnlyItems.length > 0
+                            ? partOnlyItems.map(item => (
+                              <tr key={item.id}>
+                                <td className="px-3 py-2 text-slate-800">{item.description}</td>
+                                <td className="px-3 py-2 text-right text-slate-600">{item.quantity}</td>
+                                <td className="px-3 py-2 text-right font-medium text-slate-800">${item.totalCost.toFixed(2)}</td>
+                              </tr>
+                            ))
+                            : lineItems.map(item => (
+                              <tr key={item.id}>
+                                <td className="px-3 py-2 text-slate-800">{item.description}</td>
+                                <td className="px-3 py-2 text-right text-slate-600">{item.quantity}</td>
+                                <td className="px-3 py-2 text-right font-medium text-slate-800">${item.totalCost.toFixed(2)}</td>
+                              </tr>
+                            ))
+                          }
+                        </tbody>
+                      </table>
                     </div>
+                  ) : (
+                    <p className="text-sm text-slate-400 italic">
+                      No parts added yet.{isSerialJob ? ' Use "Add suggested parts" above.' : ''}
+                    </p>
+                  )}
+                </div>
+
+                {/* ── Photos ───────────────────────────────────────────── */}
+                {woPhotos.length > 0 && (
+                  <div>
+                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-3">Site Photos</p>
+                    {PHOTO_CATEGORIES.map(cat => {
+                      const catPhotos = woPhotos.filter(p => p.category === cat);
+                      if (catPhotos.length === 0) return null;
+                      return (
+                        <div key={cat} className="mb-4">
+                          <p className="text-xs font-medium text-slate-500 mb-2">{PHOTO_CATEGORY_LABELS[cat]}</p>
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                            {catPhotos.map(photo => (
+                              <div key={photo.id} className="bg-slate-100 rounded-lg overflow-hidden aspect-square">
+                                <img src={photo.dataUrl} alt={photo.name} className="w-full h-full object-cover" />
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
-              </div>
+
+              </div>{/* end scrollable body */}
             </div>
           </div>
         );
