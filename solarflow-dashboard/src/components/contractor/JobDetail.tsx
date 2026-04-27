@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   ArrowLeft, MapPin, Phone, Clock, AlertTriangle, AlertCircle,
-  Play, Camera, CheckCircle, Package, FileText, Send, X, Plus,
+  Play, Pause, Camera, CheckCircle, Package, FileText, Send, X, Plus,
   Trash2, Wrench, Zap, Thermometer, User, Mail, DollarSign,
   Star, MessageSquare, Navigation, ShieldAlert, Image, Check,
   Cloud, CloudRain, Sun, Wind, Sparkles, ChevronDown, ChevronUp,
@@ -14,6 +14,7 @@ import {
   addJobXp, calcJobXpBreakdown, getLevelInfo, getNextLevel,
   getLevelProgress, loadXpData, AddXpResult, addBonusXp,
 } from '../../lib/contractorGamification';
+import { compressImageToDataUrl } from '../../lib/photoCompress';
 
 interface JobDetailProps {
   job: ContractorJob;
@@ -67,22 +68,24 @@ const SERVICE_STATUS_OPTIONS: { id: ServiceStatus; label: string; color: string 
   { id: 'could_not_complete',    label: 'Could Not Complete',    color: 'border-red-400 bg-red-50 text-red-700'            },
 ];
 
-// ─── Live call timer ───────────────────────────────────────────────────────────
-const useElapsedTime = (startedAt?: string) => {
+// ─── Live work-order timer (supports pause) ────────────────────────────────────
+const useElapsedTime = (startedAt?: string, pausedMs = 0, isPaused = false, pauseStartTime?: number) => {
   const [elapsed, setElapsed] = useState('0:00');
   useEffect(() => {
     if (!startedAt) return;
     const tick = () => {
-      const secs = Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000);
+      const extra = isPaused && pauseStartTime ? Date.now() - pauseStartTime : 0;
+      const secs = Math.max(0, Math.floor((Date.now() - new Date(startedAt).getTime() - pausedMs - extra) / 1000));
       const h = Math.floor(secs / 3600);
       const m = Math.floor((secs % 3600) / 60);
       const s = secs % 60;
       setElapsed(h > 0 ? `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}` : `${m}:${String(s).padStart(2,'0')}`);
     };
     tick();
+    if (isPaused) return;
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
-  }, [startedAt]);
+  }, [startedAt, pausedMs, isPaused, pauseStartTime]);
   return elapsed;
 };
 
@@ -98,11 +101,11 @@ const AfterPhotoSheet: React.FC<{
 
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onloadend = () => setPreview(reader.result as string);
-    reader.readAsDataURL(file);
     e.target.value = '';
+    if (!file) return;
+    compressImageToDataUrl(file)
+      .then(setPreview)
+      .catch(err => console.error('[AfterPhotoSheet] compression failed', err));
   };
 
   return (
@@ -241,8 +244,29 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
     return calcJobXpBreakdown(preview);
   }, [job, photos, serviceStatus, serviceNotes, nextSteps, parts]);
 
+  // Pause/resume timer state (local — doesn't need to persist across refresh)
+  const [isPaused,       setIsPaused]       = useState(false);
+  const [pausedMs,       setPausedMs]       = useState(0);
+  const [pauseStartTime, setPauseStartTime] = useState<number | undefined>(undefined);
+
+  const handlePause = () => {
+    setIsPaused(true);
+    setPauseStartTime(Date.now());
+  };
+
+  const handleResume = () => {
+    if (pauseStartTime) setPausedMs(prev => prev + (Date.now() - pauseStartTime));
+    setPauseStartTime(undefined);
+    setIsPaused(false);
+  };
+
   // Elapsed timer
-  const elapsed = useElapsedTime(phase === 'active' ? job.startedAt : undefined);
+  const elapsed = useElapsedTime(
+    phase === 'active' ? job.startedAt : undefined,
+    pausedMs,
+    isPaused,
+    pauseStartTime,
+  );
 
   // Auto-save photos + notes whenever they change during an active job
   const isMounted = useRef(false);
@@ -263,13 +287,16 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
 
   const handleAdditionalPhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
-    if (!files) return;
-    Array.from(files).forEach(file => {
-      const reader = new FileReader();
-      reader.onloadend = () => addPhoto(activePhotoTab, reader.result as string);
-      reader.readAsDataURL(file);
-    });
     if (addPhotoRef.current) addPhotoRef.current.value = '';
+    if (!files) return;
+    Array.from(files).forEach(async file => {
+      try {
+        const dataUrl = await compressImageToDataUrl(file);
+        addPhoto(activePhotoTab, dataUrl);
+      } catch (err) {
+        console.error('[JobDetail] photo compression failed', err);
+      }
+    });
   };
 
   // ── Start Call: immediately start clock, photo is optional ────────────────
@@ -486,7 +513,7 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
 
           <div className="flex-1 min-w-0">
             <p className={`text-xs font-semibold uppercase tracking-wide ${phase === 'active' ? 'text-orange-200' : 'text-slate-400'}`}>
-              {phase === 'pre_start' ? job.serviceType : phase === 'active' ? 'CALL IN PROGRESS' : 'COMPLETED'}
+              {phase === 'pre_start' ? job.serviceType : phase === 'active' ? 'WORK ORDER IN PROGRESS' : 'COMPLETED'}
             </p>
             <div className="flex items-center gap-2 flex-wrap">
               <h1 className={`font-bold text-sm truncate ${phase === 'active' ? 'text-white' : 'text-slate-900'}`}>
@@ -500,11 +527,23 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
             </div>
           </div>
 
-          {/* Live timer */}
+          {/* Live timer + pause */}
           {phase === 'active' && (
-            <div className="text-right flex-shrink-0">
-              <p className="text-xs text-orange-200">Time on site</p>
-              <p className="text-lg font-bold font-mono text-white">{elapsed}</p>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <div className="text-right">
+                <p className="text-xs text-orange-200">Time on site</p>
+                <p className={`text-lg font-bold font-mono ${isPaused ? 'text-orange-300' : 'text-white'}`}>{elapsed}</p>
+              </div>
+              <button
+                onClick={isPaused ? handleResume : handlePause}
+                className="w-9 h-9 rounded-full bg-orange-700 hover:bg-orange-800 flex items-center justify-center transition-colors flex-shrink-0"
+                title={isPaused ? 'Resume timer' : 'Pause timer'}
+              >
+                {isPaused
+                  ? <Play className="w-4 h-4 text-white" />
+                  : <Pause className="w-4 h-4 text-white" />
+                }
+              </button>
             </div>
           )}
           {phase === 'completed' && (
@@ -1298,7 +1337,7 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
             className="w-full flex items-center justify-center gap-2 py-4 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-xl text-base transition-colors cursor-pointer"
           >
             <Play className="w-6 h-6" />
-            Start Call
+            Start Work Order
           </button>
         )}
 
@@ -1315,7 +1354,7 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
             className="w-full flex items-center justify-center gap-2 py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-base transition-colors cursor-pointer"
           >
             <CheckCircle className="w-6 h-6" />
-            Complete Call
+            Complete Work Order
           </button>
         )}
 

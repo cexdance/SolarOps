@@ -17,6 +17,8 @@ import { loadServiceRates } from '../lib/contractorStore';
 import { searchParts, CatalogPart } from '../lib/partsCatalog';
 import { AddressAutocomplete, GMAPS_KEY_STORAGE, loadGoogleMaps } from './AddressAutocomplete';
 import { AddressLink } from './AddressLink';
+import { MentionTextarea, MentionUser, renderWithMentions, parseMentions, fireMentionNotifications } from './ui/MentionTextarea';
+import { compressImageToDataUrl } from '../lib/photoCompress';
 
 // ─── constants ────────────────────────────────────────────────────────────────
 
@@ -281,6 +283,12 @@ export interface WorkOrderPanelProps {
   xeroConnected?: boolean;
   customer?: import('../types').Customer;
   onQuoteSent?: (quoteId: string, quoteNumber: string, onlineUrl: string) => void;
+  /** Admin-only: navigate to the linked client card. When provided, the
+   *  client name in the WO header + SOW Report becomes a clickable link. */
+  onViewCustomer?: (customerId: string) => void;
+  /** Staff users available for @mention. When provided, textareas show a
+   *  live dropdown and saving fires notifications to mentioned users. */
+  users?: MentionUser[];
 }
 
 // ─── component ────────────────────────────────────────────────────────────────
@@ -305,6 +313,8 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
   xeroConnected,
   customer,
   onQuoteSent,
+  onViewCustomer,
+  users = [],
 }) => {
   const isNew = !job;
   const xeroReady = xeroConnected ?? isXeroConnected();
@@ -639,23 +649,24 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
 
   const removeLineItem = (id: string) => setLineItems(prev => prev.filter(i => i.id !== id));
 
-  // Photo upload
+  // Photo upload — compress before storing so the Job row can sync to Supabase.
   const handlePhotoFiles = useCallback((files: FileList | null) => {
     if (!files) return;
-    Array.from(files).forEach(file => {
+    Array.from(files).forEach(async file => {
       if (!file.type.startsWith('image/')) return;
-      const reader = new FileReader();
-      reader.onload = e => {
+      try {
+        const dataUrl = await compressImageToDataUrl(file);
         const photo: WOPhoto = {
           id: `ph-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
           category: uploadCategory,
           name: file.name,
-          dataUrl: e.target?.result as string,
+          dataUrl,
           createdAt: new Date().toISOString(),
         };
         setWoPhotos(prev => [...prev, photo]);
-      };
-      reader.readAsDataURL(file);
+      } catch (err) {
+        console.error('[WorkOrderPanel] photo compression failed', err);
+      }
     });
   }, [uploadCategory]);
 
@@ -757,6 +768,23 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
       ],
     };
     onSave(partialJob);
+
+    // Fire @mention notifications from all text fields (non-blocking)
+    if (users.length > 0) {
+      const allText = [notes, serviceReport, nextSteps].join('\n');
+      const mentionedIds = parseMentions(allText, users);
+      if (mentionedIds.length > 0) {
+        const woLabel = partialJob.woNumber ?? job?.woNumber ?? 'Work Order';
+        fireMentionNotifications({
+          mentionedUserIds: mentionedIds,
+          notifierName: currentUserName || 'Staff',
+          context: `${siteName} — ${woLabel}`,
+          contextId: siteId,
+          contextType: 'workOrder',
+          message: allText.trim(),
+        });
+      }
+    }
     // Panel always stays open after save — user closes manually
   };
 
@@ -800,7 +828,18 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
               )}
               <WOStatusBadge status={woStatus} />
             </div>
-            <p className="text-white font-semibold text-lg leading-snug truncate">{siteName}</p>
+            {onViewCustomer && siteId ? (
+              <button
+                type="button"
+                onClick={() => onViewCustomer(siteId)}
+                title="Open client card"
+                className="text-white font-semibold text-lg leading-snug truncate text-left hover:text-orange-300 hover:underline transition-colors"
+              >
+                {siteName}
+              </button>
+            ) : (
+              <p className="text-white font-semibold text-lg leading-snug truncate">{siteName}</p>
+            )}
             {siteAddress && (
               <p className="text-slate-400 text-sm mt-0.5 truncate">{siteAddress}</p>
             )}
@@ -1230,10 +1269,14 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
               )}
 
               <div>
-                <label className="block text-xs font-medium text-slate-500 mb-1">Scope of Work / Notes</label>
-                <textarea
+                <label className="block text-xs font-medium text-slate-500 mb-1">
+                  Scope of Work / Notes
+                  {users.length > 0 && <span className="ml-1 text-slate-400 font-normal">— type @ to mention a teammate</span>}
+                </label>
+                <MentionTextarea
                   value={notes}
-                  onChange={e => setNotes(e.target.value)}
+                  onChange={setNotes}
+                  users={users}
                   rows={5}
                   placeholder="Describe the work to be done…"
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 resize-none"
@@ -1825,10 +1868,14 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-500 mb-1">Service Report Notes</label>
-                <textarea
+                <label className="block text-xs font-medium text-slate-500 mb-1">
+                  Service Report Notes
+                  {users.length > 0 && <span className="ml-1 text-slate-400 font-normal">— type @ to mention a teammate</span>}
+                </label>
+                <MentionTextarea
                   value={serviceReport}
-                  onChange={e => setServiceReport(e.target.value)}
+                  onChange={setServiceReport}
+                  users={users}
                   rows={6}
                   placeholder="Describe what was done, findings, and any observations…"
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 resize-none"
@@ -1883,9 +1930,10 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
 
                   <div>
                     <label className="block text-xs font-medium text-slate-500 mb-1">Next Steps</label>
-                    <textarea
+                    <MentionTextarea
                       value={nextSteps}
-                      onChange={e => setNextSteps(e.target.value)}
+                      onChange={setNextSteps}
+                      users={users}
                       rows={3}
                       placeholder="What needs to happen next…"
                       className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 resize-none"
@@ -2018,7 +2066,18 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1 min-w-0">
                       <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-1">Client</p>
-                      <p className="text-lg font-bold truncate">{siteName || customer?.name || 'Unknown Client'}</p>
+                      {onViewCustomer && siteId ? (
+                        <button
+                          type="button"
+                          onClick={() => onViewCustomer(siteId)}
+                          title="Open client card"
+                          className="text-lg font-bold truncate text-left hover:text-orange-300 hover:underline transition-colors print:hover:no-underline print:text-white"
+                        >
+                          {siteName || customer?.name || 'Unknown Client'}
+                        </button>
+                      ) : (
+                        <p className="text-lg font-bold truncate">{siteName || customer?.name || 'Unknown Client'}</p>
+                      )}
                       {siteAddress && <p className="text-sm text-slate-300 mt-1">{siteAddress}</p>}
                       {customer?.phone && <p className="text-xs text-slate-400 mt-1">{customer.phone}</p>}
                     </div>
@@ -2042,7 +2101,11 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                   {(title || notes) && (
                     <div>
                       {title && <p className="text-sm font-semibold text-slate-900">{title}</p>}
-                      {notes && <p className="text-sm text-slate-600 whitespace-pre-wrap mt-1">{notes}</p>}
+                      {notes && (
+                        <p className="text-sm text-slate-600 whitespace-pre-wrap mt-1">
+                          {renderWithMentions(notes)}
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>
