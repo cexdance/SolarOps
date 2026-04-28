@@ -43,7 +43,9 @@ function save(entry: PendingPush | null): void {
     } else {
       localStorage.setItem(OUTBOX_KEY, JSON.stringify(entry));
     }
-  } catch {}
+  } catch (err) {
+    console.warn('[Outbox] Error saving to localStorage:', err);
+  }
 }
 
 // ── Public API ─────────────────────────────────────────────────────────────────
@@ -63,19 +65,27 @@ export function getPendingAttempts(): number {
  * Call this inside the catch block of pushToSupabase().
  */
 export function markPushPending(error?: string): void {
-  const existing = get();
-  save({
-    queuedAt:  existing?.queuedAt ?? new Date().toISOString(),
-    attempts:  (existing?.attempts ?? 0) + 1,
-    lastError: error,
-  });
+  try {
+    const existing = get();
+    save({
+      queuedAt:  existing?.queuedAt ?? new Date().toISOString(),
+      attempts:  (existing?.attempts ?? 0) + 1,
+      lastError: error,
+    });
+  } catch (err) {
+    console.warn('[Outbox] Error marking push pending:', err);
+  }
 }
 
 /**
  * Clear the outbox after a confirmed successful push.
  */
 export function clearPendingPush(): void {
-  save(null);
+  try {
+    save(null);
+  } catch (err) {
+    console.warn('[Outbox] Error clearing outbox:', err);
+  }
 }
 
 /**
@@ -103,7 +113,13 @@ export async function drainOutbox(): Promise<boolean> {
     const { pushToSupabase } = await import('./syncEngine');
     const { loadData }       = await import('./dataStore');
 
-    await pushToSupabase(loadData());
+    const state = loadData();
+    if (!state) {
+      console.warn('[Outbox] No local data to drain');
+      return false;
+    }
+
+    await pushToSupabase(state);
     // clearPendingPush() is called inside pushToSupabase on success,
     // but call it here defensively too.
     clearPendingPush();

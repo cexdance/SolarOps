@@ -60,7 +60,7 @@ function setLastSync(ts: string): void {
   localStorage.setItem(LAST_SYNC_KEY, ts);
 }
 
-// ── Tombstones ────────────────────────────────────────────────────────────────
+// ── Tombstones ─────────────────────────────────────────────────────────────
 
 function getDeletedCustomerIds(): Set<string> {
   try {
@@ -144,7 +144,10 @@ export async function pushJob(job: Job): Promise<void> {
 export async function pushKeyValue(key: string, value: unknown): Promise<void> {
   try {
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return;
+    if (!session) {
+      console.warn(`[SyncEngine] pushKeyValue(${key}) failed: No active session`);
+      return;
+    }
 
     const { error } = await supabase
       .from('app_data')
@@ -175,7 +178,10 @@ export async function pushKeyValue(key: string, value: unknown): Promise<void> {
 export async function pushToSupabase(state: AppState): Promise<void> {
   try {
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return;
+    if (!session) {
+      console.warn('[SyncEngine] pushToSupabase failed: No active session');
+      throw new Error('No active session');
+    }
 
     const deletedIds = Array.from(getDeletedCustomerIds());
 
@@ -202,6 +208,10 @@ export async function pushToSupabase(state: AppState): Promise<void> {
     }
     if (failedJobs.length > 0) {
       console.warn('[SyncEngine] some job rows failed to push:', failedJobs);
+      // Re-throw the first error to mark the entire push as failed
+      if (failedJobs.length > 0) {
+        throw new Error(`Failed to push ${failedJobs.length} job rows: ${failedJobs[0].error}`);
+      }
     }
 
     // ── Legacy blobs (backward compat) ───────────────────────────────────────
@@ -223,6 +233,7 @@ export async function pushToSupabase(state: AppState): Promise<void> {
       window.dispatchEvent(new CustomEvent('supabase-sync-error', {
         detail: { message: 'Failed to sync to cloud. Will retry automatically.', error: error.message },
       }));
+      throw error;
     } else {
       clearPendingPush();
       setLastSync(now);
@@ -234,6 +245,7 @@ export async function pushToSupabase(state: AppState): Promise<void> {
     window.dispatchEvent(new CustomEvent('supabase-sync-error', {
       detail: { message: 'Connection lost. Working offline...', error: String(err) },
     }));
+    throw err;
   }
 }
 
@@ -248,16 +260,24 @@ async function pullPrefix<T>(
   prefix: string,
   since: string | null,
 ): Promise<T[]> {
-  let q = supabase
-    .from('app_data')
-    .select('key, value')
-    .like('key', `${prefix}%`);
+  try {
+    let q = supabase
+      .from('app_data')
+      .select('key, value')
+      .like('key', `${prefix}%`);
 
-  if (since) q = q.gt('updated_at', since);
+    if (since) q = q.gt('updated_at', since);
 
-  const { data, error } = await q;
-  if (error || !data) return [];
-  return data.map(r => r.value as T);
+    const { data, error } = await q;
+    if (error || !data) {
+      console.warn(`[SyncEngine] pullPrefix failed for prefix ${prefix}:`, error?.message || 'No data returned');
+      return [];
+    }
+    return data.map(r => r.value as T);
+  } catch (err) {
+    console.warn(`[SyncEngine] pullPrefix error for prefix ${prefix}:`, err);
+    return [];
+  }
 }
 
 /**
@@ -281,10 +301,14 @@ export async function pullFromSupabase(): Promise<Partial<AppState> | null> {
     ]);
 
     // ── Tombstones + standalone KV keys ──────────────────────────────────────
-    const { data: kvData } = await supabase
+    const { data: kvData, error: kvError } = await supabase
       .from('app_data')
       .select('key, value')
       .in('key', ['deleted_customer_ids', ...KV_SYNC_KEYS]);
+
+    if (kvError) {
+      console.warn('[SyncEngine] pullFromSupabase KV data fetch error:', kvError.message);
+    }
 
     const changedKVKeys: string[] = [];
     if (kvData) {
@@ -294,7 +318,9 @@ export async function pullFromSupabase(): Promise<Partial<AppState> | null> {
             const local: string[] = JSON.parse(localStorage.getItem('solarflow_deleted_customer_ids') || '[]');
             const merged = Array.from(new Set([...local, ...row.value]));
             localStorage.setItem('solarflow_deleted_customer_ids', JSON.stringify(merged));
-          } catch {}
+          } catch (err) {
+            console.warn('[SyncEngine] Error updating deleted customer IDs:', err);
+          }
         }
         if (isKVSyncKey(row.key) && row.value != null) {
           try {
@@ -304,7 +330,9 @@ export async function pullFromSupabase(): Promise<Partial<AppState> | null> {
               localStorage.setItem(row.key, next);
               changedKVKeys.push(row.key);
             }
-          } catch {}
+          } catch (err) {
+            console.warn(`[SyncEngine] Error processing KV key ${row.key}:`, err);
+          }
         }
       }
     }
@@ -321,7 +349,8 @@ export async function pullFromSupabase(): Promise<Partial<AppState> | null> {
     if (customers.length > 0) result.customers = customers;
     if (jobs.length > 0)      result.jobs       = jobs;
     return result;
-  } catch {
+  } catch (err) {
+    console.warn('[SyncEngine] pullFromSupabase error:', err);
     return null;
   }
 }
@@ -399,7 +428,8 @@ export async function syncOnLogin(localState: AppState): Promise<AppState> {
       `[SyncEngine] synced — customers: ${merged.customers.length}, jobs: ${merged.jobs.length}`,
     );
     return merged;
-  } catch {
+  } catch (err) {
+    console.warn('[SyncEngine] syncOnLogin error:', err);
     return localState;
   }
 }
@@ -418,7 +448,8 @@ export async function pullAndMerge(): Promise<Partial<AppState> | null> {
     const merged = mergeRemote(local, remote);
     localStorage.setItem('solarflow_data', JSON.stringify(merged));
     return merged;
-  } catch {
+  } catch (err) {
+    console.warn('[SyncEngine] pullAndMerge error:', err);
     return null;
   }
 }
@@ -451,27 +482,31 @@ export function subscribeToChanges(handlers: RealtimeHandlers): () => void {
       'postgres_changes',
       { event: '*', schema: 'public', table: 'app_data' },
       (payload: RealtimePostgresChangesPayload<{ key: string; value: unknown; updated_at: string }>) => {
-        const row = (payload.new ?? payload.old) as { key: string; value: unknown } | undefined;
-        if (!row?.key) return;
+        try {
+          const row = (payload.new ?? payload.old) as { key: string; value: unknown } | undefined;
+          if (!row?.key) return;
 
-        const { key, value } = row;
+          const { key, value } = row;
 
-        if (key.startsWith(PREFIX.customer) && value && payload.eventType !== 'DELETE') {
-          handlers.onCustomer(value as Customer, payload.eventType as 'INSERT' | 'UPDATE');
-        } else if (key.startsWith(PREFIX.customer) && payload.eventType === 'DELETE') {
-          handlers.onCustomer({ id: key.slice(PREFIX.customer.length) } as Customer, 'DELETE');
-        } else if (key.startsWith(PREFIX.job) && value && payload.eventType !== 'DELETE') {
-          handlers.onJob(value as Job, payload.eventType as 'INSERT' | 'UPDATE');
-        } else if (key.startsWith(PREFIX.job) && payload.eventType === 'DELETE') {
-          handlers.onJob({ id: key.slice(PREFIX.job.length) } as Job, 'DELETE');
-        } else if (isKVSyncKey(key) && value != null) {
-          // Write to localStorage and notify App.tsx
-          const next = JSON.stringify(value);
-          const prev = localStorage.getItem(key);
-          if (prev !== next) {
-            localStorage.setItem(key, next);
-            handlers.onKV(key, value);
+          if (key.startsWith(PREFIX.customer) && value && payload.eventType !== 'DELETE') {
+            handlers.onCustomer(value as Customer, payload.eventType as 'INSERT' | 'UPDATE');
+          } else if (key.startsWith(PREFIX.customer) && payload.eventType === 'DELETE') {
+            handlers.onCustomer({ id: key.slice(PREFIX.customer.length) } as Customer, 'DELETE');
+          } else if (key.startsWith(PREFIX.job) && value && payload.eventType !== 'DELETE') {
+            handlers.onJob(value as Job, payload.eventType as 'INSERT' | 'UPDATE');
+          } else if (key.startsWith(PREFIX.job) && payload.eventType === 'DELETE') {
+            handlers.onJob({ id: key.slice(PREFIX.job.length) } as Job, 'DELETE');
+          } else if (isKVSyncKey(key) && value != null) {
+            // Write to localStorage and notify App.tsx
+            const next = JSON.stringify(value);
+            const prev = localStorage.getItem(key);
+            if (prev !== next) {
+              localStorage.setItem(key, next);
+              handlers.onKV(key, value);
+            }
           }
+        } catch (err) {
+          console.warn('[SyncEngine] Realtime handler error:', err);
         }
       },
     )
