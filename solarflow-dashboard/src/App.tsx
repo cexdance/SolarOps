@@ -23,7 +23,7 @@ const InventoryModule    = lazy(() => import('./components/InventoryModule').the
 const SolarProjects      = lazy(() => import('./components/SolarProjects').then(m => ({ default: m.SolarProjects })));
 const CRMDashboard       = lazy(() => import('./components/CRMDashboard').then(m => ({ default: m.CRMDashboard })));
 const CustomerManagement = lazy(() => import('./components/CustomerManagement').then(m => ({ default: m.CustomerManagement })));
-const Operations         = lazy(() => import('./components/Operations').then(m => ({ default: m.Operations })));
+const Operations         = lazy(() => import('./components/Operations'));
 const SolarEdgeMonitoring = lazy(() => import('./components/SolarEdgeMonitoring').then(m => ({ default: m.SolarEdgeMonitoring })));
 const DispatchDashboard  = lazy(() => import('./components/DispatchDashboard').then(m => ({ default: m.DispatchDashboard })));
 const LeadLobby          = lazy(() => import('./components/LeadLobby').then(m => ({ default: m.LeadLobby })));
@@ -639,7 +639,8 @@ function App() {
   useSyncEngine({ setData, setContractors, setServiceRates, setContractorJobs, skipContractorPersist });
 
   // ── Version poll (extracted to hook) ─────────────────────────────────────
-  const updateAvailable = useVersionPoll();
+  const [dismissedUpdate, setDismissedUpdate] = useState(false);
+  const updateAvailable = useVersionPoll() && !dismissedUpdate;
 
   // Handle Xero OAuth callback (?code=...) and restore existing Xero connection
   useEffect(() => {
@@ -810,7 +811,7 @@ function App() {
     [data.jobs],
   );
   const activeJobs = useMemo(
-    () => data.jobs.filter(j => j.status !== 'cancelled'),
+    () => data.jobs.filter(j => (j.status as string) !== 'cancelled'),
     [data.jobs],
   );
   const paidJobs = useMemo(
@@ -2162,7 +2163,7 @@ function App() {
             Update now
           </button>
           <button
-            onClick={() => setUpdateAvailable(false)}
+            onClick={() => setDismissedUpdate(true)}
             className="ml-1 opacity-70 hover:opacity-100 transition-opacity text-base leading-none"
             aria-label="Dismiss"
           >

@@ -19,7 +19,7 @@ const InventoryModule    = lazy(() => import('./InventoryModule').then(m => ({ d
 const SolarProjects      = lazy(() => import('./SolarProjects').then(m => ({ default: m.SolarProjects })));
 const CRMDashboard       = lazy(() => import('./CRMDashboard').then(m => ({ default: m.CRMDashboard })));
 const CustomerManagement = lazy(() => import('./CustomerManagement').then(m => ({ default: m.CustomerManagement })));
-const Operations         = lazy(() => import('./Operations').then(m => ({ default: m.Operations })));
+const Operations         = lazy(() => import('./Operations'));
 const SolarEdgeMonitoring = lazy(() => import('./SolarEdgeMonitoring').then(m => ({ default: m.SolarEdgeMonitoring })));
 const DispatchDashboard  = lazy(() => import('./DispatchDashboard').then(m => ({ default: m.DispatchDashboard })));
 const LeadLobby          = lazy(() => import('./LeadLobby').then(m => ({ default: m.LeadLobby })));
@@ -95,6 +95,8 @@ export function AppRouter({
   onDispatch,
   onSetLinkedContractor,
   onSetContractors,
+  serviceRates,
+  onSetServiceRates,
   onConnectXero,
   onXeroDisconnect,
   onSaveSolarEdgeApiKey,
@@ -133,7 +135,7 @@ export function AppRouter({
       return <Operations currentUserId={currentUser?.id ?? 'user-1'} currentUserRole={currentUser?.role} />;
 
     case 'rates':
-      return <RateManagement rates={data.serviceRates as any} onSaveRates={onSetServiceRates as any} />;
+      return <RateManagement rates={serviceRates as any} onSaveRates={onSetServiceRates as any} />;
 
     case 'contractors':
       return (
