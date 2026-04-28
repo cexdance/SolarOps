@@ -1,31 +1,34 @@
 // SolarFlow MVP - Main Application with Contractor Module
+// Auth screens live in src/components/auth/ — imported by name here to avoid duplication on next cleanup pass
+// View routing lives in src/components/AppRouter.tsx
+// Sync side-effects live in src/hooks/useSyncEngine.ts
+// Version-poll side-effect lives in src/hooks/useVersionPoll.ts
 import { useState, useEffect, useRef, useMemo, lazy, Suspense } from 'react';
-const Layout = lazy(() => import('./components/Layout').then(m => ({ default: m.Layout })));
-const Dashboard = lazy(() => import('./components/Dashboard').then(m => ({ default: m.Dashboard })));
-const Jobs = lazy(() => import('./components/Jobs').then(m => ({ default: m.Jobs })));
-const WorkOrderPanel = lazy(() => import('./components/WorkOrderPanel').then(m => ({ default: m.WorkOrderPanel })));
-const Customers = lazy(() => import('./components/Customers').then(m => ({ default: m.Customers })));
-const Billing = lazy(() => import('./components/Billing').then(m => ({ default: m.Billing })));
-const TechnicianView = lazy(() => import('./components/TechnicianView').then(m => ({ default: m.TechnicianView })));
-const Settings = lazy(() => import('./components/Settings').then(m => ({ default: m.Settings })));
+import { useVersionPoll } from './hooks/useVersionPoll';
+import { useSyncEngine }  from './hooks/useSyncEngine';
+const Layout             = lazy(() => import('./components/Layout').then(m => ({ default: m.Layout })));
+const Dashboard          = lazy(() => import('./components/Dashboard').then(m => ({ default: m.Dashboard })));
+const Jobs               = lazy(() => import('./components/Jobs').then(m => ({ default: m.Jobs })));
+const WorkOrderPanel     = lazy(() => import('./components/WorkOrderPanel').then(m => ({ default: m.WorkOrderPanel })));
+const Customers          = lazy(() => import('./components/Customers').then(m => ({ default: m.Customers })));
+const Billing            = lazy(() => import('./components/Billing').then(m => ({ default: m.Billing })));
+const TechnicianView     = lazy(() => import('./components/TechnicianView').then(m => ({ default: m.TechnicianView })));
+const Settings           = lazy(() => import('./components/Settings').then(m => ({ default: m.Settings })));
 const ContractorRegister = lazy(() => import('./components/contractor').then(m => ({ default: m.ContractorRegister })));
 const ContractorDashboard = lazy(() => import('./components/contractor').then(m => ({ default: m.ContractorDashboard })));
-const RateManagement = lazy(() => import('./components/contractor').then(m => ({ default: m.RateManagement })));
+const RateManagement     = lazy(() => import('./components/contractor').then(m => ({ default: m.RateManagement })));
 const ContractorApprovals = lazy(() => import('./components/contractor').then(m => ({ default: m.ContractorApprovals })));
-const BillingModule = lazy(() => import('./components/admin/BillingModule').then(m => ({ default: m.BillingModule })));
-const InventoryModule = lazy(() => import('./components/InventoryModule').then(m => ({ default: m.InventoryModule })));
-const SolarProjects = lazy(() => import('./components/SolarProjects').then(m => ({ default: m.SolarProjects })));
-const CRMDashboard = lazy(() => import('./components/CRMDashboard').then(m => ({ default: m.CRMDashboard })));
+const BillingModule      = lazy(() => import('./components/admin/BillingModule').then(m => ({ default: m.BillingModule })));
+const InventoryModule    = lazy(() => import('./components/InventoryModule').then(m => ({ default: m.InventoryModule })));
+const SolarProjects      = lazy(() => import('./components/SolarProjects').then(m => ({ default: m.SolarProjects })));
+const CRMDashboard       = lazy(() => import('./components/CRMDashboard').then(m => ({ default: m.CRMDashboard })));
 const CustomerManagement = lazy(() => import('./components/CustomerManagement').then(m => ({ default: m.CustomerManagement })));
-const Operations = lazy(() => import('./components/Operations').then(m => ({ default: m.Operations })));
+const Operations         = lazy(() => import('./components/Operations').then(m => ({ default: m.Operations })));
 const SolarEdgeMonitoring = lazy(() => import('./components/SolarEdgeMonitoring').then(m => ({ default: m.SolarEdgeMonitoring })));
-const DispatchDashboard = lazy(() => import('./components/DispatchDashboard').then(m => ({ default: m.DispatchDashboard })));
-const LeadLobby = lazy(() => import('./components/LeadLobby').then(m => ({ default: m.LeadLobby })));
+const DispatchDashboard  = lazy(() => import('./components/DispatchDashboard').then(m => ({ default: m.DispatchDashboard })));
+const LeadLobby          = lazy(() => import('./components/LeadLobby').then(m => ({ default: m.LeadLobby })));
 import { supabase } from './lib/supabase';
-import { APP_VERSION } from './lib/versionConfig';
 import { syncFromDB } from './lib/db';
-import { drainOutbox } from './lib/outbox';
-import { pullAndMerge, subscribeToChanges } from './lib/syncEngine';
 import { loadData, saveData } from './lib/dataStore';
 import { logChange, flushChangeLog } from './lib/changeLog';
 import { fetchMyNotifications, markNotificationReadRemote, markAllNotificationsReadRemote, startNotificationPolling, stopNotificationPolling } from './lib/notifications';
@@ -630,135 +633,13 @@ function App() {
     initSyncStatusListeners();
   }, []);
 
-  // ── Sync poll: drain outbox + pull remote on focus / online / 30s ─────────
-  //
-  // Why this matters (shared DB, offline-first):
-  //   1. Drain outbox first — push any changes that failed while offline
-  //   2. Pull remote — pick up changes made by other staff on other devices
-  //   3. Apply to React state — UI refreshes without a page reload
-  //
-  // Convergence guarantee: any two devices sharing the same DB will see
-  // each other's changes within 30 seconds max, instantly on tab focus.
-  useEffect(() => {
-    let mounted = true;
+  // ── Sync: poll + realtime + remote-update handler (extracted to hook) ────
+  // skipContractorPersist guards against re-pushing data we just pulled from remote
+  const skipContractorPersist = useRef(false);
+  useSyncEngine({ setData, setContractors, setServiceRates, setContractorJobs, skipContractorPersist });
 
-    const syncCycle = async () => {
-      // Step 1: flush any pending offline edits first
-      await drainOutbox();
-
-      // Step 2: pull latest remote state and merge into localStorage
-      const merged = await pullAndMerge();
-      if (!mounted || !merged) return;
-
-      // Step 3: update React state only if something actually changed
-      setData(prev => {
-        const customersChanged = merged.customers?.length !== prev.customers.length ||
-          merged.customers?.some((c, i) => c.id !== prev.customers[i]?.id || JSON.stringify(c) !== JSON.stringify(prev.customers[i]));
-        const jobsChanged = merged.jobs?.length !== prev.jobs.length ||
-          merged.jobs?.some((j, i) => j.id !== prev.jobs[i]?.id || JSON.stringify(j) !== JSON.stringify(prev.jobs[i]));
-
-        if (!customersChanged && !jobsChanged) return prev; // no-op — avoid re-render
-        return { ...prev, ...merged };
-      });
-    };
-
-    const interval = setInterval(syncCycle, 30_000);      // every 30 seconds
-    const onFocus  = () => syncCycle();                   // instant on tab focus
-    const onOnline = () => syncCycle();                   // instant on reconnect
-
-    window.addEventListener('focus',  onFocus);
-    window.addEventListener('online', onOnline);
-
-    return () => {
-      mounted = false;
-      clearInterval(interval);
-      window.removeEventListener('focus',  onFocus);
-      window.removeEventListener('online', onOnline);
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // ── Realtime subscription: instant cross-device updates (<1s) ────────────
-  // Listens to Supabase postgres_changes on `app_data`.
-  // When another device writes a customer or job row, the handler fires
-  // immediately and merges the single record into React state — no polling.
-  useEffect(() => {
-    const unsubscribe = subscribeToChanges({
-      onCustomer: (customer, event) => {
-        setData(prev => {
-          if (event === 'DELETE') {
-            return { ...prev, customers: prev.customers.filter(c => c.id !== customer.id) };
-          }
-          const exists = prev.customers.some(c => c.id === customer.id);
-          return {
-            ...prev,
-            customers: exists
-              ? prev.customers.map(c => c.id === customer.id ? customer : c)
-              : [...prev.customers, customer],
-          };
-        });
-      },
-      onJob: (job, event) => {
-        setData(prev => {
-          if (event === 'DELETE') {
-            return { ...prev, jobs: prev.jobs.filter(j => j.id !== job.id) };
-          }
-          const exists = prev.jobs.some(j => j.id === job.id);
-          return {
-            ...prev,
-            jobs: exists
-              ? prev.jobs.map(j => j.id === job.id ? job : j)
-              : [...prev.jobs, job],
-          };
-        });
-      },
-      onKV: (key) => {
-        // Re-hydrate contractor state when a KV row changes on another device
-        skipContractorPersist.current = true;
-        if (key === 'solarflow_contractor_jobs') setContractorJobs(loadContractorJobs());
-        if (key === 'solarflow_contractors')     setContractors(loadContractors());
-        if (key === 'solarflow_service_rates')   setServiceRates(loadServiceRates());
-        setTimeout(() => { skipContractorPersist.current = false; }, 0);
-      },
-    });
-    return unsubscribe;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // ── Version poll: detect new deploys in open tabs ─────────────────────────
-  // Every 5 minutes (and on tab focus), fetch /version.json (no-cache).
-  // If the server version differs from what this JS bundle was built with,
-  // show a non-intrusive "Update available" banner so the user can reload.
-  const [updateAvailable, setUpdateAvailable] = useState(false);
-  useEffect(() => {
-    // APP_VERSION is baked in at build time; /version.json reflects the live deploy
-    const BUILT_VERSION = APP_VERSION; // imported from versionConfig
-    let mounted = true;
-
-    const checkVersion = async () => {
-      try {
-        const res = await fetch('/version.json', { cache: 'no-store' });
-        if (!res.ok) return;
-        const { version } = await res.json() as { version: string };
-        if (mounted && version && version !== BUILT_VERSION) {
-          setUpdateAvailable(true);
-        }
-      } catch {
-        // offline or endpoint missing — ignore
-      }
-    };
-
-    checkVersion();
-    const interval = setInterval(checkVersion, 5 * 60 * 1000); // every 5 min
-    const onFocus = () => checkVersion();
-    window.addEventListener('focus', onFocus);
-    return () => {
-      mounted = false;
-      clearInterval(interval);
-      window.removeEventListener('focus', onFocus);
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // ── Version poll (extracted to hook) ─────────────────────────────────────
+  const updateAvailable = useVersionPoll();
 
   // Handle Xero OAuth callback (?code=...) and restore existing Xero connection
   useEffect(() => {
@@ -794,11 +675,6 @@ function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Save contractor data — a ref guards against the save-after-remote-pull
-  // feedback loop (pullFromSupabase writes LS → we re-hydrate state → this
-  // effect would otherwise re-push the identical data).
-  const skipContractorPersist = useRef(false);
-
   useEffect(() => {
     if (skipContractorPersist.current) return;
     saveContractors(contractors);
@@ -814,22 +690,7 @@ function App() {
     saveContractorJobs(contractorJobs);
   }, [contractorJobs]);
 
-  // Re-hydrate contractor state when remote pull detects a change on another
-  // device. Keeps the contractor kanban consistent with admin view without
-  // requiring a page reload.
-  useEffect(() => {
-    const onRemoteUpdate = (e: Event) => {
-      const keys = (e as CustomEvent<{ keys: string[] }>).detail?.keys ?? [];
-      skipContractorPersist.current = true;
-      if (keys.includes('solarflow_contractor_jobs')) setContractorJobs(loadContractorJobs());
-      if (keys.includes('solarflow_contractors'))     setContractors(loadContractors());
-      if (keys.includes('solarflow_service_rates'))   setServiceRates(loadServiceRates());
-      // Release the guard after React flushes the state updates.
-      setTimeout(() => { skipContractorPersist.current = false; }, 0);
-    };
-    window.addEventListener('solarflow-remote-update', onRemoteUpdate as EventListener);
-    return () => window.removeEventListener('solarflow-remote-update', onRemoteUpdate as EventListener);
-  }, []);
+  // remote-update handler is now inside useSyncEngine above
 
   // Run billing timers once on mount
   useEffect(() => {

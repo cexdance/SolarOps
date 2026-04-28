@@ -424,6 +424,11 @@ export const Layout: React.FC<LayoutProps> = ({
               </div>
             </div>
           )}
+
+          {/* Version badge — always visible at sidebar bottom */}
+          <div className="px-4 py-1.5 text-[9px] text-slate-600 text-center pointer-events-none select-none border-t border-slate-800/60">
+            {getVersionString()}
+          </div>
         </div>
       </aside>
 
@@ -436,11 +441,6 @@ export const Layout: React.FC<LayoutProps> = ({
       >
         {children}
       </main>
-
-      {/* Version badge — fixed bottom-left */}
-      <div className={`fixed left-3 z-30 text-[10px] text-slate-400 bg-white/80 backdrop-blur-sm border border-slate-200 rounded-md px-2 py-1 pointer-events-none select-none ${isMobile ? 'bottom-16' : 'bottom-3'}`}>
-        {getVersionString()}
-      </div>
 
       {/* Mobile Bottom Navigation */}
       {isMobile && (
