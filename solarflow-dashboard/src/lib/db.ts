@@ -1,10 +1,12 @@
 /**
- * SolarOps — Database Client (Supabase-backed, Phase 1)
+ * SolarOps — Database Client (Phase 2)
  *
- * pushToSupabase is no longer fire-and-forget. Failures are recorded in
- * the outbox (src/lib/outbox.ts) and retried on the next drain trigger.
+ * Routes saves through the new per-record sync engine:
+ *   solarflow_data  → pushToSupabase (full blob + per-record rows)
+ *   KV sync keys    → pushKeyValue (single row per key)
+ *   all others      → localStorage only (not synced)
  */
-import { pushToSupabase, pullFromSupabase, mergeRemote } from './syncEngine';
+import { pushToSupabase, pushKeyValue, pullFromSupabase, mergeRemote, isKVSyncKey } from './syncEngine';
 import type { AppState } from '../types';
 
 export const ALL_KEYS = [
@@ -25,17 +27,19 @@ export const ALL_KEYS = [
 ];
 
 /**
- * Persist a value. For the main app state blob, syncs to Supabase.
+ * Persist a value and sync to Supabase when applicable.
  *
- * Phase 1: awaits the push and records failure in the outbox if it fails.
- * This replaces the old fire-and-forget .catch(() => {}) pattern.
+ * solarflow_data   → pushToSupabase (per-record + legacy blob, outbox on fail)
+ * KV sync keys     → pushKeyValue (single row upsert, outbox on fail)
+ * everything else  → no-op (localStorage only, not shared across devices)
  */
 export async function dbSet(key: string, data: unknown): Promise<void> {
   if (key === 'solarflow_data' && data && typeof data === 'object') {
-    // pushToSupabase now handles outbox marking internally on failure
-    await pushToSupabase(data as AppState).catch(() => {
-      // outbox is already updated inside pushToSupabase's catch block
-    });
+    await pushToSupabase(data as AppState).catch(() => {});
+    return;
+  }
+  if (isKVSyncKey(key)) {
+    await pushKeyValue(key, data).catch(() => {});
   }
 }
 
@@ -46,7 +50,7 @@ export async function dbGet(_key: string): Promise<unknown | null> {
 
 /**
  * On app startup: pull from Supabase → merge into localStorage.
- * After this returns, `loadData()` will read the merged result.
+ * Phase 2 pull is incremental (only records changed since last sync).
  */
 export async function syncFromDB(): Promise<void> {
   try {

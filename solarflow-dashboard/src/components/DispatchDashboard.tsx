@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useCallback, useRef } from 'react';
 import {
   Crosshair, AlertTriangle, Zap, Wrench, Plus, X, Sun,
-  Clock, MapPin, LayoutGrid, Search, ChevronRight,
+  Clock, MapPin, LayoutGrid, Search, ChevronRight, ChevronUp, ChevronDown,
   TrendingUp, UserCog, ClipboardList, User, Check, Inbox,
   Phone, Mail, CheckSquare, Trash2, Calendar, GripVertical,
 } from 'lucide-react';
@@ -1128,7 +1128,11 @@ const LeadPipelineWidget: React.FC = () => {
 
 // ── To-Do List Widget ─────────────────────────────────────────────────────────
 
-const TodoListWidget: React.FC<{ userId: string }> = ({ userId }) => {
+const TodoListWidget: React.FC<{
+  userId: string;
+  customers: Customer[];
+  onViewCustomer: (id: string) => void;
+}> = ({ userId, customers, onViewCustomer }) => {
   const [todos, setTodos] = useState<TodoItem[]>(() => loadTodos(userId));
   const [taskInput, setTaskInput] = useState('');
   const [dueDateInput, setDueDateInput] = useState('');
@@ -1162,15 +1166,45 @@ const TodoListWidget: React.FC<{ userId: string }> = ({ userId }) => {
     persist(todos.filter(t => t.id !== id));
   };
 
+  const handleMove = (id: string, dir: -1 | 1) => {
+    const undone = todos.filter(t => !t.done);
+    const done = todos.filter(t => t.done);
+    const idx = undone.findIndex(t => t.id === id);
+    if (idx < 0) return;
+    const newIdx = idx + dir;
+    if (newIdx < 0 || newIdx >= undone.length) return;
+    const next = [...undone];
+    [next[idx], next[newIdx]] = [next[newIdx], next[idx]];
+    persist([...next, ...done]);
+  };
+
+  const renderTaskText = (text: string) => {
+    const parts = text.split(/(US-\d{4,6})/gi);
+    return parts.map((part, i) => {
+      if (/^US-\d{4,6}$/i.test(part)) {
+        const cust = customers.find(c => c.clientId?.toUpperCase() === part.toUpperCase());
+        if (cust) {
+          return (
+            <button
+              key={i}
+              onClick={e => { e.stopPropagation(); onViewCustomer(cust.id); }}
+              className="text-indigo-600 hover:text-indigo-800 underline font-semibold"
+            >
+              {part}
+            </button>
+          );
+        }
+      }
+      return <span key={i}>{part}</span>;
+    });
+  };
+
+  // Open items keep manual order; done items sink to bottom
   const sorted = [
-    ...todos.filter(t => !t.done).sort((a, b) => {
-      if (!a.dueDate && !b.dueDate) return 0;
-      if (!a.dueDate) return 1;
-      if (!b.dueDate) return -1;
-      return a.dueDate.localeCompare(b.dueDate);
-    }),
+    ...todos.filter(t => !t.done),
     ...todos.filter(t => t.done),
   ];
+  const undoneCount = todos.filter(t => !t.done).length;
 
   const today = new Date().toISOString().slice(0, 10);
   const overdue = (t: TodoItem) => !t.done && t.dueDate && t.dueDate < today;
@@ -1249,7 +1283,9 @@ const TodoListWidget: React.FC<{ userId: string }> = ({ userId }) => {
               + Add your first task
             </button>
           </div>
-        ) : sorted.map(todo => (
+        ) : sorted.map((todo, sortIdx) => {
+          const undoneIdx = todo.done ? -1 : sortIdx;
+          return (
           <div
             key={todo.id}
             className={`flex items-start gap-2 px-2.5 py-2 rounded-lg transition-colors group ${
@@ -1269,7 +1305,7 @@ const TodoListWidget: React.FC<{ userId: string }> = ({ userId }) => {
             {/* Content */}
             <div className="flex-1 min-w-0">
               <p className={`text-xs leading-snug ${todo.done ? 'line-through text-slate-400' : 'text-slate-800 font-medium'}`}>
-                {todo.task}
+                {renderTaskText(todo.task)}
               </p>
               {todo.dueDate && (
                 <div className="flex items-center gap-1 mt-0.5">
@@ -1282,6 +1318,26 @@ const TodoListWidget: React.FC<{ userId: string }> = ({ userId }) => {
               )}
             </div>
 
+            {/* Priority arrows — only for open items */}
+            {!todo.done && (
+              <div className="flex flex-col gap-0.5 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button
+                  onClick={() => handleMove(todo.id, -1)}
+                  disabled={undoneIdx === 0}
+                  className="p-0.5 text-slate-300 hover:text-indigo-500 disabled:opacity-20 disabled:cursor-not-allowed"
+                >
+                  <ChevronUp className="w-3 h-3" />
+                </button>
+                <button
+                  onClick={() => handleMove(todo.id, 1)}
+                  disabled={undoneIdx === undoneCount - 1}
+                  className="p-0.5 text-slate-300 hover:text-indigo-500 disabled:opacity-20 disabled:cursor-not-allowed"
+                >
+                  <ChevronDown className="w-3 h-3" />
+                </button>
+              </div>
+            )}
+
             {/* Delete */}
             <button
               onClick={() => handleDelete(todo.id)}
@@ -1290,7 +1346,8 @@ const TodoListWidget: React.FC<{ userId: string }> = ({ userId }) => {
               <Trash2 className="w-3 h-3" />
             </button>
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -1389,14 +1446,20 @@ const WidgetSlot: React.FC<{
         <GripVertical className="w-4 h-4 text-slate-300" />
       </div>
 
-      {/* Delete button — always visible on hover, no edit mode required */}
-      <button
-        onClick={e => { e.stopPropagation(); onRemove(index); }}
-        title="Remove widget"
-        className="absolute top-2 right-2 w-6 h-6 rounded-full bg-white border border-slate-200 hover:bg-red-500 hover:border-red-500 flex items-center justify-center transition-all z-10 cursor-pointer opacity-0 group-hover:opacity-100 shadow-sm"
-      >
-        <X className="w-3 h-3 text-slate-400 group-hover:text-white" style={{ color: 'inherit' }} />
-      </button>
+      {/* Delete button — floats in the top-right corner, outside the widget content area */}
+      <div className="absolute -top-2 -right-2 z-20 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="relative group/del">
+          <button
+            onClick={e => { e.stopPropagation(); onRemove(index); }}
+            className="w-6 h-6 rounded-full bg-white border border-slate-300 hover:bg-red-500 hover:border-red-500 flex items-center justify-center transition-all cursor-pointer shadow-md"
+          >
+            <X className="w-3 h-3 text-slate-500 group-hover/del:text-white" style={{ color: 'inherit' }} />
+          </button>
+          <span className="pointer-events-none absolute bottom-full right-0 mb-1.5 whitespace-nowrap rounded-md bg-slate-800 px-2 py-1 text-[10px] text-white opacity-0 group-hover/del:opacity-100 transition-opacity shadow-lg">
+            Remove widget
+          </span>
+        </div>
+      </div>
 
       <WidgetErrorBoundary onRemove={() => onRemove(index)}>
         {config.type === 'alert-state'            && <AlertStateWidget customers={customers} onViewCustomer={onViewCustomer} />}
@@ -1408,7 +1471,7 @@ const WidgetSlot: React.FC<{
         {config.type === 'daily-production-graph' && config.customerId   && <DailyProductionGraphWidget customerId={config.customerId} customers={customers} onViewCustomer={onViewCustomer} />}
         {config.type === 'lead-pipeline'          && <LeadPipelineWidget />}
         {config.type === 'single-lead'            && config.leadId       && <SingleLeadWidget leadId={config.leadId} />}
-        {config.type === 'todo-list'              && <TodoListWidget userId={currentUserId} />}
+        {config.type === 'todo-list'              && <TodoListWidget userId={currentUserId} customers={customers} onViewCustomer={onViewCustomer} />}
       </WidgetErrorBoundary>
     </div>
   );

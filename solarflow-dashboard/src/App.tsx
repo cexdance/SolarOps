@@ -1,5 +1,5 @@
 // SolarFlow MVP - Main Application with Contractor Module
-import { useState, useEffect, lazy, Suspense } from 'react';
+import { useState, useEffect, useRef, useMemo, lazy, Suspense } from 'react';
 const Layout = lazy(() => import('./components/Layout').then(m => ({ default: m.Layout })));
 const Dashboard = lazy(() => import('./components/Dashboard').then(m => ({ default: m.Dashboard })));
 const Jobs = lazy(() => import('./components/Jobs').then(m => ({ default: m.Jobs })));
@@ -25,7 +25,7 @@ import { supabase } from './lib/supabase';
 import { APP_VERSION } from './lib/versionConfig';
 import { syncFromDB } from './lib/db';
 import { drainOutbox } from './lib/outbox';
-import { pullAndMerge } from './lib/syncEngine';
+import { pullAndMerge, subscribeToChanges } from './lib/syncEngine';
 import { loadData, saveData } from './lib/dataStore';
 import { logChange, flushChangeLog } from './lib/changeLog';
 import { fetchMyNotifications, markNotificationReadRemote, markAllNotificationsReadRemote, startNotificationPolling, stopNotificationPolling } from './lib/notifications';
@@ -678,6 +678,53 @@ function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ── Realtime subscription: instant cross-device updates (<1s) ────────────
+  // Listens to Supabase postgres_changes on `app_data`.
+  // When another device writes a customer or job row, the handler fires
+  // immediately and merges the single record into React state — no polling.
+  useEffect(() => {
+    const unsubscribe = subscribeToChanges({
+      onCustomer: (customer, event) => {
+        setData(prev => {
+          if (event === 'DELETE') {
+            return { ...prev, customers: prev.customers.filter(c => c.id !== customer.id) };
+          }
+          const exists = prev.customers.some(c => c.id === customer.id);
+          return {
+            ...prev,
+            customers: exists
+              ? prev.customers.map(c => c.id === customer.id ? customer : c)
+              : [...prev.customers, customer],
+          };
+        });
+      },
+      onJob: (job, event) => {
+        setData(prev => {
+          if (event === 'DELETE') {
+            return { ...prev, jobs: prev.jobs.filter(j => j.id !== job.id) };
+          }
+          const exists = prev.jobs.some(j => j.id === job.id);
+          return {
+            ...prev,
+            jobs: exists
+              ? prev.jobs.map(j => j.id === job.id ? job : j)
+              : [...prev.jobs, job],
+          };
+        });
+      },
+      onKV: (key) => {
+        // Re-hydrate contractor state when a KV row changes on another device
+        skipContractorPersist.current = true;
+        if (key === 'solarflow_contractor_jobs') setContractorJobs(loadContractorJobs());
+        if (key === 'solarflow_contractors')     setContractors(loadContractors());
+        if (key === 'solarflow_service_rates')   setServiceRates(loadServiceRates());
+        setTimeout(() => { skipContractorPersist.current = false; }, 0);
+      },
+    });
+    return unsubscribe;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // ── Version poll: detect new deploys in open tabs ─────────────────────────
   // Every 5 minutes (and on tab focus), fetch /version.json (no-cache).
   // If the server version differs from what this JS bundle was built with,
@@ -747,18 +794,42 @@ function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Save contractor data
+  // Save contractor data — a ref guards against the save-after-remote-pull
+  // feedback loop (pullFromSupabase writes LS → we re-hydrate state → this
+  // effect would otherwise re-push the identical data).
+  const skipContractorPersist = useRef(false);
+
   useEffect(() => {
+    if (skipContractorPersist.current) return;
     saveContractors(contractors);
   }, [contractors]);
 
   useEffect(() => {
+    if (skipContractorPersist.current) return;
     saveServiceRates(serviceRates);
   }, [serviceRates]);
 
   useEffect(() => {
+    if (skipContractorPersist.current) return;
     saveContractorJobs(contractorJobs);
   }, [contractorJobs]);
+
+  // Re-hydrate contractor state when remote pull detects a change on another
+  // device. Keeps the contractor kanban consistent with admin view without
+  // requiring a page reload.
+  useEffect(() => {
+    const onRemoteUpdate = (e: Event) => {
+      const keys = (e as CustomEvent<{ keys: string[] }>).detail?.keys ?? [];
+      skipContractorPersist.current = true;
+      if (keys.includes('solarflow_contractor_jobs')) setContractorJobs(loadContractorJobs());
+      if (keys.includes('solarflow_contractors'))     setContractors(loadContractors());
+      if (keys.includes('solarflow_service_rates'))   setServiceRates(loadServiceRates());
+      // Release the guard after React flushes the state updates.
+      setTimeout(() => { skipContractorPersist.current = false; }, 0);
+    };
+    window.addEventListener('solarflow-remote-update', onRemoteUpdate as EventListener);
+    return () => window.removeEventListener('solarflow-remote-update', onRemoteUpdate as EventListener);
+  }, []);
 
   // Run billing timers once on mount
   useEffect(() => {
@@ -869,7 +940,26 @@ function App() {
 
   // Computed values
   const currentUser = data.currentUser;
-  const unbilledCount = data.jobs.filter((j) => j.status === 'completed').length;
+
+  // Memoized heavy filters — recompute only when the source arrays change.
+  // With 400+ customers and frequent re-renders, these were running on every
+  // keystroke in search boxes and every kanban drag.
+  const unbilledCount = useMemo(
+    () => data.jobs.filter(j => j.status === 'completed').length,
+    [data.jobs],
+  );
+  const activeJobs = useMemo(
+    () => data.jobs.filter(j => j.status !== 'cancelled'),
+    [data.jobs],
+  );
+  const paidJobs = useMemo(
+    () => data.jobs.filter(j => j.status === 'paid' || j.status === 'invoiced'),
+    [data.jobs],
+  );
+  const nonSeedCustomers = useMemo(
+    () => data.customers.filter(c => !c.id.startsWith('cust-se-')),
+    [data.customers],
+  );
 
   // Get selected job details
   const selectedJob = selectedJobId
@@ -1959,6 +2049,7 @@ function App() {
               clientPaidJobCount={clientPaidCount}
               contractors={contractors}
               technicians={data.users.filter(u => u.role === 'technician' || u.role === 'coo').map(u => ({ id: u.id, name: u.name }))}
+              users={data.users.map(u => ({ id: u.id, name: u.name, username: u.username }))}
               currentUserName={currentUser?.name}
               currentUserRole={currentUser?.role}
               xeroConnected={data.xeroConfig.connected}
@@ -2001,6 +2092,11 @@ function App() {
                   );
                   saveInteractions(updated);
                 }
+              }}
+              onViewCustomer={(customerId) => {
+                setSelectedJobId(null);
+                setSelectedCustomerId(customerId);
+                setCurrentView('customers');
               }}
             />
           );

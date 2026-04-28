@@ -44,6 +44,9 @@ import {
   Leaf,
   FileBarChart,
   Eye,
+  Download,
+  Link2,
+  CheckCircle2,
 } from 'lucide-react';
 import * as _recharts from 'recharts';
 const { ComposedChart, Bar, Line, XAxis, YAxis, Tooltip: RechartsTooltip, ResponsiveContainer, CartesianGrid, Legend } = _recharts as any;
@@ -51,6 +54,7 @@ import { Customer, Job, ClientStatus, Activity, User, CustomerCategory, SolarEdg
 import { ServiceRate } from '../types/contractor';
 import { loadServiceRates } from '../lib/contractorStore';
 import { loadAlerts } from '../lib/operationsStore';
+import { importTrelloCard, TrelloImportResult } from '../lib/trelloImporter';
 import { FL_SITES, SolarEdgeSite } from '../lib/solarEdgeSites';
 import { AddressAutocomplete } from './AddressAutocomplete';
 import { AddressLink } from './AddressLink';
@@ -859,6 +863,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
   const [sendingReport, setSendingReport] = useState(false);
   const [reportSent, setReportSent] = useState(false);
   const [showReportPreview, setShowReportPreview] = useState(false);
+  const [showEditPanel, setShowEditPanel] = useState(false);
   const [previewTrackingId, setPreviewTrackingId] = useState('');
   const [previewDowntimeDays, setPreviewDowntimeDays] = useState(0);
   const [previewServiceCalls, setPreviewServiceCalls] = useState(0);
@@ -1764,102 +1769,255 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
       {/* ── Report Preview Modal ───────────────────────────────────── */}
       {showReportPreview && (
         <div
-          className="fixed inset-0 z-[200] bg-black/70 flex items-start justify-center p-4 overflow-y-auto"
+          className="fixed inset-0 z-[200] bg-black/70 flex items-start justify-center p-2 sm:p-4 overflow-y-auto"
           onClick={() => setShowReportPreview(false)}
         >
           <div
-            className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col my-auto"
-            style={{ maxHeight: '95vh', overflow: 'hidden' }}
+            className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col my-4"
             onClick={e => e.stopPropagation()}
           >
-            {/* Modal header */}
-            <div className="flex items-center justify-between px-4 py-3 bg-slate-900 text-white flex-shrink-0">
+            {/* ── Modal Header ── */}
+            <div className="flex items-center justify-between px-4 py-3 bg-slate-900 text-white rounded-t-2xl flex-shrink-0">
               <div className="flex items-center gap-2">
                 <FileBarChart className="w-4 h-4 text-orange-400" />
-                <span className="font-semibold text-sm">Report Preview</span>
-                <span className="text-xs text-slate-400">— edit before sending</span>
+                <span className="font-semibold text-sm">Production Report</span>
+                <span className="text-xs text-slate-400 hidden sm:inline">— {new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</span>
               </div>
-              <button onClick={() => setShowReportPreview(false)} className="p-1.5 hover:bg-slate-800 rounded-lg transition-colors">
-                <X className="w-4 h-4" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowEditPanel(v => !v)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors"
+                >
+                  <Pencil className="w-3 h-3" />
+                  Edit Fields
+                  {showEditPanel ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                </button>
+                <button onClick={() => setShowReportPreview(false)} className="p-1.5 hover:bg-slate-800 rounded-lg transition-colors">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
             </div>
 
-            {/* Editable fields panel */}
-            <div className="flex-shrink-0 border-b border-slate-200 bg-slate-50 px-4 py-3 space-y-2.5" style={{ maxHeight: '260px', overflowY: 'auto' }}>
-              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-1">Editable Fields — changes update the preview live</p>
-              {/* Greeting */}
-              <div>
-                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide block mb-1">Greeting</label>
-                <textarea
-                  value={previewGreeting}
-                  onChange={e => setPreviewGreeting(e.target.value)}
-                  rows={3}
-                  className="w-full text-xs text-slate-700 border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-300 resize-none bg-white"
-                />
-              </div>
-              {/* Account Updates */}
-              <div>
-                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide block mb-1">Account Updates</label>
-                <textarea
-                  value={previewAccountUpdates}
-                  onChange={e => setPreviewAccountUpdates(e.target.value)}
-                  rows={2}
-                  placeholder="Add account updates, observations, or recommendations…"
-                  className="w-full text-xs text-slate-700 border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-300 resize-none bg-white"
-                />
-              </div>
-              {/* Service / Downtime */}
-              <div className="grid grid-cols-2 gap-3">
+            {/* ── Collapsible Edit Panel ── */}
+            {showEditPanel && (
+              <div className="border-b border-orange-200 bg-orange-50 px-4 py-3 space-y-3 flex-shrink-0">
+                <p className="text-[10px] font-bold text-orange-700 uppercase tracking-widest">Edit Fields — live preview updates below</p>
                 <div>
-                  <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide block mb-1">Service Calls</label>
-                  <input
-                    type="number" min={0}
-                    value={previewServiceCalls}
-                    onChange={e => setPreviewServiceCalls(Math.max(0, parseInt(e.target.value) || 0))}
-                    className="w-full text-sm font-semibold text-slate-800 border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-300 bg-white"
+                  <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide block mb-1">Greeting Message</label>
+                  <textarea
+                    value={previewGreeting}
+                    onChange={e => setPreviewGreeting(e.target.value)}
+                    rows={3}
+                    className="w-full text-xs text-slate-700 border border-orange-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-300 resize-none bg-white"
                   />
                 </div>
                 <div>
-                  <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide block mb-1">Downtime Days</label>
-                  <input
-                    type="number" min={0}
-                    value={previewDowntimeDays}
-                    onChange={e => setPreviewDowntimeDays(Math.max(0, parseInt(e.target.value) || 0))}
-                    className="w-full text-sm font-semibold text-slate-800 border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-300 bg-white"
+                  <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide block mb-1">Account Updates / Notes</label>
+                  <textarea
+                    value={previewAccountUpdates}
+                    onChange={e => setPreviewAccountUpdates(e.target.value)}
+                    rows={2}
+                    placeholder="Add observations, recommendations, or updates…"
+                    className="w-full text-xs text-slate-700 border border-orange-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-300 resize-none bg-white"
                   />
                 </div>
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide block mb-1">Service Calls</label>
+                    <input type="number" min={0} value={previewServiceCalls}
+                      onChange={e => setPreviewServiceCalls(Math.max(0, parseInt(e.target.value) || 0))}
+                      className="w-full text-sm font-semibold text-slate-800 border border-orange-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-300 bg-white" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide block mb-1">Downtime Days</label>
+                    <input type="number" min={0} value={previewDowntimeDays}
+                      onChange={e => setPreviewDowntimeDays(Math.max(0, parseInt(e.target.value) || 0))}
+                      className="w-full text-sm font-semibold text-slate-800 border border-orange-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-300 bg-white" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide block mb-1">Uptime %</label>
+                    <input type="number" min={0} max={100} value={Math.round(previewUptime)}
+                      onChange={e => setPreviewUptime(Math.min(100, Math.max(0, parseInt(e.target.value) || 0)))}
+                      className="w-full text-sm font-semibold text-slate-800 border border-orange-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-300 bg-white" />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── Native Report Preview (scrollable) ── */}
+            <div className="flex-1 overflow-y-auto bg-slate-50" style={{ maxHeight: '72vh' }}>
+
+              {/* 1 — Client Info Header */}
+              <div className="bg-slate-900 px-5 py-5 flex flex-col sm:flex-row sm:items-start gap-4">
+                <div className="flex-1 min-w-0">
+                  <p className="text-[10px] font-bold text-orange-400 uppercase tracking-widest mb-1">Solar Production Report</p>
+                  <h2 className="text-xl font-bold text-white leading-tight mb-0.5">{customer.name}</h2>
+                  {(customer.address || customer.city) && (
+                    <p className="text-sm text-slate-300 flex items-center gap-1.5 mt-1">
+                      <MapPin className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                      {[customer.address, customer.city, customer.state].filter(Boolean).join(', ')}
+                    </p>
+                  )}
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2">
+                    {customer.phone && (
+                      <span className="text-xs text-slate-400 flex items-center gap-1">
+                        <Phone className="w-3 h-3" />{customer.phone}
+                      </span>
+                    )}
+                    {customer.email && (
+                      <span className="text-xs text-slate-400 flex items-center gap-1">
+                        <Mail className="w-3 h-3" />{customer.email}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex-shrink-0 bg-slate-800 rounded-xl px-4 py-3 text-right min-w-[140px]">
+                  {peakPowerKw > 0 && (
+                    <div className="mb-2">
+                      <p className="text-2xl font-bold text-orange-400 leading-none">{peakPowerKw.toFixed(1)}<span className="text-sm font-medium text-orange-300 ml-0.5">kW</span></p>
+                      <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wide mt-0.5">System Size</p>
+                    </div>
+                  )}
+                  {siteId && (
+                    <div className="mb-1.5">
+                      <p className="text-xs font-bold text-slate-200">#{siteId}</p>
+                      <p className="text-[10px] text-slate-500 uppercase tracking-wide">Site ID</p>
+                    </div>
+                  )}
+                  {siteData?.installDate && (
+                    <div>
+                      <p className="text-xs font-medium text-slate-300">{new Date(siteData.installDate).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}</p>
+                      <p className="text-[10px] text-slate-500 uppercase tracking-wide">Installed</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Period badge */}
+              <div className="px-5 pt-4 pb-1">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-orange-100 text-orange-700 rounded-full text-xs font-semibold">
+                  <Sun className="w-3.5 h-3.5" />
+                  {graphPeriod === 'week' ? 'Last 7 Days' : graphPeriod === 'month' ? 'Last 30 Days' : graphPeriod === 'quarter' ? 'Last 3 Months' : 'Last 12 Months'} Performance
+                </span>
+              </div>
+
+              {/* 2 — Production Metrics */}
+              <div className="px-5 pt-3 pb-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {[
+                  { icon: <Zap className="w-4 h-4 text-orange-500" />, value: displayKwh >= 1000 ? `${(displayKwh/1000).toFixed(1)} MWh` : `${Math.round(displayKwh).toLocaleString()} kWh`, label: 'Energy Generated', color: 'orange' },
+                  { icon: <DollarSign className="w-4 h-4 text-green-600" />, value: `$${Math.round(dollarsSaved).toLocaleString()}`, label: 'Est. Savings', color: 'green' },
+                  { icon: <BarChart3 className="w-4 h-4 text-blue-500" />, value: specificYield > 0 ? `${specificYield.toFixed(2)}` : '—', label: 'Specific Yield', color: 'blue' },
+                  { icon: <Leaf className="w-4 h-4 text-emerald-600" />, value: `${co2Tons.toFixed(2)} t`, label: 'CO₂ Offset', color: 'emerald' },
+                ].map(({ icon, value, label, color }) => (
+                  <div key={label} className="bg-white border border-slate-100 rounded-xl p-3 text-center shadow-sm">
+                    <div className="flex justify-center mb-1.5">{icon}</div>
+                    <p className={`text-lg font-bold leading-none text-${color}-600`}>{value}</p>
+                    <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wide mt-1">{label}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* 3 — Production Time Graph */}
+              {energyData.length > 0 && (
+                <div className="mx-5 mb-4 bg-white rounded-xl border border-slate-100 shadow-sm p-3">
+                  <p className="text-xs font-semibold text-slate-700 mb-3 flex items-center gap-1.5">
+                    <BarChart3 className="w-3.5 h-3.5 text-orange-500" />
+                    Daily Production History
+                  </p>
+                  <div style={{ height: 160 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <ComposedChart data={energyData} margin={{ top: 2, right: 4, left: 0, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                        <XAxis dataKey="date" tick={{ fontSize: 9 }} stroke="#cbd5e1" interval="preserveStartEnd" />
+                        <YAxis yAxisId="kwh" tick={{ fontSize: 9 }} stroke="#f97316" unit=" kWh" width={48} />
+                        <RechartsTooltip
+                          contentStyle={{ borderRadius: 8, fontSize: 11, padding: '6px 10px' }}
+                          formatter={(value: number, name: string) =>
+                            name === 'uv' ? [`${value?.toFixed(1)}`, 'UV Index'] : [`${value?.toFixed(1)} kWh`, 'Production']
+                          }
+                        />
+                        <Bar yAxisId="kwh" dataKey="kWh" fill="#f97316" opacity={0.85} radius={[3, 3, 0, 0]} name="kWh" />
+                        {energyData.some(d => d.uv) && (
+                          <Line yAxisId="kwh" type="monotone" dataKey="uv" stroke="#fbbf24" strokeWidth={2}
+                            dot={false} connectNulls name="uv" />
+                        )}
+                      </ComposedChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              )}
+
+              {/* 4 — Service Summary */}
+              <div className="mx-5 mb-4 grid grid-cols-3 gap-3">
+                {[
+                  { value: `${Math.round(previewUptime)}%`, label: 'System Uptime', ok: previewUptime >= 95 },
+                  { value: previewDowntimeDays, label: 'Downtime Days', ok: previewDowntimeDays === 0 },
+                  { value: previewServiceCalls, label: 'Service Calls', ok: previewServiceCalls === 0 },
+                ].map(({ value, label, ok }) => (
+                  <div key={label} className="bg-white border border-slate-100 rounded-xl p-3 text-center shadow-sm">
+                    <p className={`text-xl font-bold ${ok ? 'text-green-600' : 'text-amber-600'}`}>{value}</p>
+                    <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wide mt-0.5">{label}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* 5 — Greeting */}
+              {previewGreeting && (
+                <div className="mx-5 mb-4 bg-white rounded-xl border border-slate-100 shadow-sm">
+                  <div className="px-4 pt-3 pb-1 border-b border-slate-100">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Message to Client</p>
+                  </div>
+                  <div className="px-4 py-3">
+                    {previewGreeting.split('\n').map((line, i) => (
+                      <p key={i} className={`text-sm text-slate-600 leading-relaxed ${i > 0 ? 'mt-2' : ''}`}>{line || <br />}</p>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 6 — Account Updates */}
+              {previewAccountUpdates && (
+                <div className="mx-5 mb-5 bg-orange-50 rounded-xl border border-orange-200 shadow-sm overflow-hidden">
+                  <div className="px-4 py-2.5 bg-orange-100 border-b border-orange-200 flex items-center gap-2">
+                    <Info className="w-3.5 h-3.5 text-orange-700" />
+                    <p className="text-[10px] font-bold text-orange-800 uppercase tracking-widest">Account Updates</p>
+                  </div>
+                  <div className="px-4 py-3">
+                    {previewAccountUpdates.split('\n').map((line, i) => (
+                      <p key={i} className={`text-sm text-orange-900 leading-relaxed ${i > 0 ? 'mt-1.5' : ''}`}>{line}</p>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* ConexSol footer bar */}
+              <div className="mx-5 mb-5 rounded-xl bg-slate-800 px-4 py-3 flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-bold text-white">ConexSol</p>
+                  <p className="text-[10px] text-slate-400">Solar Performance Report</p>
+                </div>
+                <p className="text-[10px] text-slate-500">{new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>
               </div>
             </div>
 
-            {/* iframe renders the live HTML email */}
-            <div className="flex-1 overflow-hidden min-h-0" style={{ minHeight: '250px' }}>
-              <iframe
-                srcDoc={previewHtmlComputed}
-                className="w-full h-full border-0"
-                title="Report Preview"
-                sandbox="allow-same-origin"
-                style={{ minHeight: '250px' }}
-              />
-            </div>
-
-            {/* Footer: recipient info + actions */}
-            <div className="flex items-center justify-between px-4 py-3 border-t border-slate-200 bg-slate-50 flex-shrink-0">
-              <p className="text-xs text-slate-500">
-                To: <strong className="text-slate-700">{customer.email}</strong>
+            {/* ── Footer ── */}
+            <div className="flex items-center justify-between px-4 py-3 border-t border-slate-200 bg-white rounded-b-2xl flex-shrink-0">
+              <p className="text-xs text-slate-500 truncate max-w-[50%]">
+                To: <strong className="text-slate-700">{customer.email || 'No email on file'}</strong>
               </p>
               <div className="flex gap-2">
                 <button
                   onClick={() => setShowReportPreview(false)}
-                  className="px-4 py-2 text-sm text-slate-600 bg-slate-200 hover:bg-slate-300 rounded-lg font-medium transition-colors cursor-pointer"
+                  className="px-4 py-2 text-sm text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg font-medium transition-colors cursor-pointer"
                 >
-                  Cancel
+                  Close
                 </button>
                 <button
                   onClick={handleSendReport}
-                  disabled={sendingReport}
+                  disabled={sendingReport || !customer.email}
                   className="flex items-center gap-2 px-4 py-2 text-sm text-white bg-orange-500 hover:bg-orange-600 rounded-lg font-semibold transition-colors disabled:opacity-50 cursor-pointer"
                 >
-                  {sendingReport ? 'Sending…' : <><Send className="w-3.5 h-3.5" /> Approve &amp; Send</>}
+                  {sendingReport ? 'Sending…' : <><Send className="w-3.5 h-3.5" /> Send Report</>}
                 </button>
               </div>
             </div>
@@ -1931,6 +2089,36 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'story' | 'jobs' | 'files' | 'activity' | 'production'>('story');
   const [editingJob, setEditingJob] = useState<Job | null>(null);
+
+  // Trello import modal
+  const [showTrelloModal, setShowTrelloModal]     = useState(false);
+  const [trelloUrl, setTrelloUrl]                 = useState('');
+  const [trelloLoading, setTrelloLoading]         = useState(false);
+  const [trelloError, setTrelloError]             = useState('');
+  const [trelloResult, setTrelloResult]           = useState<TrelloImportResult | null>(null);
+
+  const handleTrelloImport = async () => {
+    if (!trelloUrl.trim()) return;
+    setTrelloLoading(true);
+    setTrelloError('');
+    setTrelloResult(null);
+    try {
+      const result = await importTrelloCard(trelloUrl.trim(), customer, currentUser?.name ?? 'Admin');
+      setTrelloResult(result);
+    } catch (err) {
+      setTrelloError(err instanceof Error ? err.message : 'Failed to fetch card');
+    } finally {
+      setTrelloLoading(false);
+    }
+  };
+
+  const confirmTrelloImport = () => {
+    if (!trelloResult) return;
+    onUpdateCustomer({ ...customer, ...trelloResult.updates });
+    setShowTrelloModal(false);
+    setTrelloUrl('');
+    setTrelloResult(null);
+  };
 
   // SolarEdge alerts for this customer
   const customerAlerts = React.useMemo(() =>
@@ -2254,12 +2442,41 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
             <p className="text-sm text-slate-500 capitalize">{customer.type} Customer</p>
           </div>
           <button
+            onClick={() => { setShowTrelloModal(true); setTrelloUrl(''); setTrelloResult(null); setTrelloError(''); }}
+            className="flex items-center gap-2 px-3 py-2 bg-blue-50 text-blue-600 rounded-lg text-sm font-medium hover:bg-blue-100 cursor-pointer transition-colors"
+            title="Import from Trello card"
+          >
+            <Download className="w-4 h-4" />
+            Trello
+          </button>
+          <button
             onClick={onEdit}
             className="flex items-center gap-2 px-3 py-2 bg-slate-100 text-slate-600 rounded-lg text-sm font-medium hover:bg-slate-200 cursor-pointer transition-colors"
           >
             <Edit className="w-4 h-4" />
             Edit
           </button>
+        </div>
+
+        {/* Contact strip — always visible above tabs */}
+        <div className="flex items-center gap-4 px-1 py-2.5 border-b border-slate-100 flex-shrink-0 flex-wrap">
+          {customer.phone ? (
+            <PhoneLink phone={customer.phone} size="sm" />
+          ) : (
+            <span className="flex items-center gap-1.5 text-xs text-slate-400 italic"><Phone className="w-3.5 h-3.5" />No phone</span>
+          )}
+          {customer.email ? (
+            <a href={`mailto:${customer.email}`} className="flex items-center gap-1.5 text-xs text-slate-600 hover:text-orange-500 truncate">
+              <Mail className="w-3.5 h-3.5 flex-shrink-0" />{customer.email}
+            </a>
+          ) : (
+            <span className="flex items-center gap-1.5 text-xs text-slate-400 italic"><Mail className="w-3.5 h-3.5" />No email</span>
+          )}
+          {customer.address && (
+            <span className="flex items-center gap-1.5 text-xs text-slate-500 truncate">
+              <MapPin className="w-3.5 h-3.5 flex-shrink-0" />{customer.city || customer.address}
+            </span>
+          )}
         </div>
 
         {/* Tabs */}
@@ -2634,19 +2851,53 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                 <h3 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
                   <Image className="w-4 h-4 text-orange-500" />
                   Photos & Documents
+                  {(customer.files?.length ?? 0) > 0 && (
+                    <span className="ml-auto text-xs text-slate-400 font-normal">{customer.files!.length} file{customer.files!.length !== 1 ? 's' : ''}</span>
+                  )}
                 </h3>
-                <div className="grid grid-cols-3 gap-2">
-                  {/* Placeholder for customer photos */}
-                  <div className="aspect-square bg-slate-200 rounded-lg flex items-center justify-center">
-                    <Image className="w-6 h-6 text-slate-400" />
+
+                {(customer.files?.length ?? 0) === 0 ? (
+                  <p className="text-sm text-slate-400 text-center py-6">No files yet. Import a Trello card to pull in attachments.</p>
+                ) : (
+                  <div className="grid grid-cols-3 gap-2">
+                    {customer.files!.map(file => {
+                      const isImage = file.mimeType.startsWith('image/') || /\.(png|jpg|jpeg|webp|gif|heic)$/i.test(file.name);
+                      return (
+                        <a
+                          key={file.id}
+                          href={file.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="group relative aspect-square rounded-lg overflow-hidden border border-slate-200 bg-slate-100 flex items-center justify-center hover:border-orange-400 transition-colors"
+                          title={file.name}
+                        >
+                          {isImage ? (
+                            <>
+                              <img
+                                src={file.url}
+                                alt={file.name}
+                                className="w-full h-full object-cover"
+                                onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                              />
+                              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
+                                <ExternalLink className="w-5 h-5 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                              </div>
+                            </>
+                          ) : (
+                            <div className="flex flex-col items-center gap-1 p-2">
+                              <FileText className="w-8 h-8 text-slate-400" />
+                              <span className="text-[10px] text-slate-500 text-center leading-tight line-clamp-2">{file.name}</span>
+                            </div>
+                          )}
+                          {file.source === 'trello' && (
+                            <span className="absolute top-1 left-1 bg-blue-600 text-white text-[9px] px-1 py-0.5 rounded font-bold">T</span>
+                          )}
+                        </a>
+                      );
+                    })}
                   </div>
-                  <div className="aspect-square bg-slate-200 rounded-lg flex items-center justify-center">
-                    <Image className="w-6 h-6 text-slate-400" />
-                  </div>
-                  <div className="aspect-square bg-slate-200 rounded-lg flex items-center justify-center">
-                    <Image className="w-6 h-6 text-slate-400" />
-                  </div>
-                </div>
+                )}
+
                 <button className="mt-3 w-full py-2 border-2 border-dashed border-slate-300 rounded-lg text-slate-500 text-sm hover:border-orange-500 hover:text-orange-500 cursor-pointer transition-colors">
                   + Upload Files
                 </button>
@@ -3106,6 +3357,125 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                   )}
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Trello Import Modal ─────────────────────────────────────────── */}
+      {showTrelloModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center">
+                  <Link2 className="w-4 h-4 text-white" />
+                </div>
+                <span className="font-semibold text-slate-900">Import from Trello</span>
+              </div>
+              <button onClick={() => setShowTrelloModal(false)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="px-6 py-5 space-y-4">
+              {/* URL input */}
+              {!trelloResult && (
+                <>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1.5">Trello card URL</label>
+                    <input
+                      autoFocus
+                      type="url"
+                      placeholder="https://trello.com/c/xxxxxxxx/..."
+                      value={trelloUrl}
+                      onChange={e => setTrelloUrl(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && handleTrelloImport()}
+                      className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-400 text-slate-900 placeholder:text-slate-400"
+                    />
+                  </div>
+                  {trelloError && (
+                    <p className="text-xs text-red-500 flex items-center gap-1.5">
+                      <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" /> {trelloError}
+                    </p>
+                  )}
+                  <button
+                    onClick={handleTrelloImport}
+                    disabled={!trelloUrl.trim() || trelloLoading}
+                    className="w-full py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+                  >
+                    {trelloLoading ? (
+                      <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Fetching card…</>
+                    ) : (
+                      <><Download className="w-4 h-4" /> Fetch card</>
+                    )}
+                  </button>
+                </>
+              )}
+
+              {/* Preview result */}
+              {trelloResult && (
+                <div className="space-y-3">
+                  <div className="bg-blue-50 rounded-xl p-4 space-y-2">
+                    <p className="text-sm font-semibold text-slate-900">{trelloResult.card.name}</p>
+                    {trelloResult.card.labels.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {trelloResult.card.labels.map(l => (
+                          <span key={l} className="text-[10px] px-2 py-0.5 bg-blue-200 text-blue-800 rounded-full font-medium">{l}</span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="text-xs text-slate-600 space-y-1.5">
+                    <p className="font-semibold text-slate-800 mb-1">What will be imported:</p>
+                    {trelloResult.activities.length > 0 && (
+                      <div className="flex items-start gap-2">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 mt-0.5 flex-shrink-0" />
+                        <span>{trelloResult.activities.length} activity note{trelloResult.activities.length > 1 ? 's' : ''} added to timeline</span>
+                      </div>
+                    )}
+                    {trelloResult.files.length > 0 && (
+                      <div className="flex items-start gap-2">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 mt-0.5 flex-shrink-0" />
+                        <span>{trelloResult.files.length} photo/file{trelloResult.files.length > 1 ? 's' : ''} imported into Files tab</span>
+                      </div>
+                    )}
+                    {trelloResult.updates.phone && (
+                      <div className="flex items-start gap-2">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 mt-0.5 flex-shrink-0" />
+                        <span>Phone updated → {trelloResult.updates.phone}</span>
+                      </div>
+                    )}
+                    {trelloResult.updates.email && (
+                      <div className="flex items-start gap-2">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 mt-0.5 flex-shrink-0" />
+                        <span>Email updated → {trelloResult.updates.email}</span>
+                      </div>
+                    )}
+                    <div className="flex items-start gap-2">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 mt-0.5 flex-shrink-0" />
+                      <span>Trello card URL saved to profile</span>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2 pt-1">
+                    <button
+                      onClick={() => setTrelloResult(null)}
+                      className="flex-1 py-2 text-sm font-medium text-slate-600 bg-slate-100 rounded-xl hover:bg-slate-200 transition-colors"
+                    >
+                      ← Back
+                    </button>
+                    <button
+                      onClick={confirmTrelloImport}
+                      className="flex-1 py-2 text-sm font-semibold text-white bg-emerald-500 rounded-xl hover:bg-emerald-600 transition-colors"
+                    >
+                      Confirm import
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

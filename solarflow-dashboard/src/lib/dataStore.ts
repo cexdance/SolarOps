@@ -179,7 +179,7 @@ export const saveData = (state: AppState): void => {
     }
   }
 
-  // Async cloud backup — fire-and-forget, never blocks UI
+  // Phase 2: async cloud backup via per-record push + legacy blob
   dbSet(STORAGE_KEY, state).catch(() => {});
 };
 

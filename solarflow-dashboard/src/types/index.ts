@@ -75,8 +75,19 @@ export interface Customer {
   powerCareDeliveryStatus?: 'pending' | 'delivered' | 'error'; // UPS sync status
   powerCareLastStatusCheck?: number; // timestamp of last UPS API call
   activityHistory?: Activity[];
+  files?: CustomerFile[];
   solarEdgeSiteId?: string; // SolarEdge site ID for cross-referencing
   trelloBackupUrl?: string; // Trello board backup link (from column B hyperlinks)
+}
+
+export interface CustomerFile {
+  id: string;
+  name: string;
+  url: string;        // authenticated URL — ready to use in <img src> or <a href>
+  mimeType: string;
+  size?: number;
+  source: 'trello' | 'upload';
+  createdAt: string;
 }
 
 export type ServiceType = string;
@@ -440,6 +451,9 @@ export interface Lead {
   description?: string;
   leadType?: 'service' | 'sales';
   customSource?: string; // for user-defined sources beyond the predefined list
+
+  // File attachments
+  attachments?: CRMAttachment[];
 
   // Trello link
   trelloBackupUrl?: string;

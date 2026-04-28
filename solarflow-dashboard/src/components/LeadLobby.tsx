@@ -4,11 +4,12 @@ import React, { useState, useMemo, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import {
   Inbox, Phone, Mail, Plus, Search, ArrowRight, Tag, X, User,
-  Zap, CheckCircle, LayoutGrid, List, ChevronDown, ChevronUp, Upload, Trash2,
+  Zap, CheckCircle, LayoutGrid, List, ChevronDown, ChevronUp, Upload, Trash2, Link2,
 } from 'lucide-react';
 import { loadCRMData, saveCRMData, addLead, CRMData } from '../lib/crmStore';
+import { fetchTrelloCard, extractContactInfo } from '../lib/trelloImporter';
 import { loadData, saveData } from '../lib/dataStore';
-import { Lead, LeadStatus, LeadSource, Job, Customer } from '../types';
+import { Lead, LeadStatus, LeadSource, Job, Customer, CRMAttachment } from '../types';
 
 interface LeadLobbyProps {
   currentUserId: string;
@@ -111,6 +112,7 @@ interface AddFormData {
   leadType: 'service' | 'sales';
   source: LeadSource | 'custom';
   customSourceLabel: string;
+  note: string;
 }
 
 interface ParsedRow {
@@ -222,16 +224,77 @@ export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserId, currentUser
     leadType: 'sales',
     source: 'other',
     customSourceLabel: '',
+    note: '',
   });
+  const [leadAttachments, setLeadAttachments] = useState<CRMAttachment[]>([]);
+  const noteFileRef = useRef<HTMLInputElement>(null);
 
   // Import state
   const [showImport, setShowImport] = useState(false);
-  const [importTab, setImportTab] = useState<'email' | 'excel'>('email');
+  const [importTab, setImportTab] = useState<'email' | 'excel' | 'trello'>('email');
   const [pasteText, setPasteText] = useState('');
   const [parsedPreview, setParsedPreview] = useState<(Partial<AddFormData> & { addressNote?: string }) | null>(null);
   const [excelRows, setExcelRows] = useState<ParsedRow[]>([]);
   const [importStatus, setImportStatus] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Trello import state (leads)
+  const [trelloLeadUrl,     setTrelloLeadUrl]     = useState('');
+  const [trelloLeadLoading, setTrelloLeadLoading] = useState(false);
+  const [trelloLeadError,   setTrelloLeadError]   = useState('');
+  const [trelloLeadPreview, setTrelloLeadPreview] = useState<{
+    cardName: string;
+    firstName: string;
+    lastName: string;
+    phone: string;
+    email: string;
+    description: string;
+  } | null>(null);
+
+  const handleTrelloLeadFetch = async () => {
+    if (!trelloLeadUrl.trim()) return;
+    setTrelloLeadLoading(true);
+    setTrelloLeadError('');
+    setTrelloLeadPreview(null);
+    try {
+      const card = await fetchTrelloCard(trelloLeadUrl.trim());
+      const contact = extractContactInfo(card.desc);
+      // Parse name from card title — strip leading "US-XXXXX " if present
+      const namePart = card.name.replace(/^US-\d+\s*/i, '').trim();
+      const parts = namePart.split(/\s+/);
+      setTrelloLeadPreview({
+        cardName:    card.name,
+        firstName:   parts[0] ?? '',
+        lastName:    parts.slice(1).join(' '),
+        phone:       contact.phone,
+        email:       contact.email,
+        description: card.desc.trim(),
+      });
+    } catch (err) {
+      setTrelloLeadError(err instanceof Error ? err.message : 'Failed to fetch card');
+    } finally {
+      setTrelloLeadLoading(false);
+    }
+  };
+
+  const handleTrelloLeadConfirm = () => {
+    if (!trelloLeadPreview) return;
+    setAddFormData(p => ({
+      ...p,
+      firstName: trelloLeadPreview.firstName,
+      lastName:  trelloLeadPreview.lastName,
+      phone:     trelloLeadPreview.phone,
+      email:     trelloLeadPreview.email,
+      source:    'other' as LeadSource,
+      leadType:  'service',
+    }));
+    if (trelloLeadPreview.description) {
+      setPendingAddressNote(trelloLeadPreview.description.slice(0, 400));
+    }
+    setShowImport(false);
+    setTrelloLeadUrl('');
+    setTrelloLeadPreview(null);
+  };
 
   const canRoute = ['admin', 'coo', 'support'].includes(currentUserRole ?? '');
 
@@ -468,6 +531,7 @@ export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserId, currentUser
     const isCustomPick = source === 'custom' || source.startsWith('custom:');
     const customLabel = source.startsWith('custom:') ? source.slice(7) : customSourceLabel;
     const actualSource: LeadSource = isCustomPick ? 'other' : source as LeadSource;
+    const combinedNote = [pendingAddressNote, addFormData.note].filter(Boolean).join('\n\n');
     const newData = addLead(crmData, {
       firstName,
       lastName: addFormData.lastName,
@@ -478,14 +542,34 @@ export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserId, currentUser
       source: actualSource,
       customSource: isCustomPick ? customLabel : undefined,
       priority: 'medium',
-      notes: pendingAddressNote,
+      notes: combinedNote,
       leadType,
       homeowner: false,
+      attachments: leadAttachments.length > 0 ? leadAttachments : undefined,
     });
     save(newData);
     setShowAddForm(false);
     setPendingAddressNote('');
-    setAddFormData({ firstName: '', lastName: '', phone: '', email: '', leadType: 'sales', source: 'other', customSourceLabel: '' });
+    setLeadAttachments([]);
+    setAddFormData({ firstName: '', lastName: '', phone: '', email: '', leadType: 'sales', source: 'other', customSourceLabel: '', note: '' });
+  };
+
+  const handleAttachFiles = (files: FileList | null) => {
+    if (!files) return;
+    Array.from(files).forEach(file => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        setLeadAttachments(prev => [...prev, {
+          id: `att-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          name: file.name,
+          mimeType: file.type || 'application/octet-stream',
+          dataUrl: reader.result as string,
+          size: file.size,
+          createdAt: new Date().toISOString(),
+        }]);
+      };
+      reader.readAsDataURL(file);
+    });
   };
 
   const handleConvertToCustomer = (lead: Lead, siteId: string) => {
@@ -914,7 +998,7 @@ export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserId, currentUser
                   <Upload className="w-4 h-4" />
                 </button>
               </div>
-              <button onClick={() => { setShowAddForm(false); setShowImport(false); setParsedPreview(null); setExcelRows([]); }}>
+              <button onClick={() => { setShowAddForm(false); setShowImport(false); setParsedPreview(null); setExcelRows([]); setLeadAttachments([]); setAddFormData(p => ({ ...p, note: '' })); }}>
                 <X className="w-5 h-5 text-slate-400" />
               </button>
             </div>
@@ -936,9 +1020,15 @@ export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserId, currentUser
                   >
                     Excel File
                   </button>
+                  <button
+                    onClick={() => { setImportTab('trello'); setParsedPreview(null); setTrelloLeadError(''); setTrelloLeadPreview(null); }}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${importTab === 'trello' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'}`}
+                  >
+                    Trello Card
+                  </button>
                 </div>
 
-                {importTab === 'email' ? (
+                {importTab === 'email' && (
                   <>
                     <p className="text-xs text-slate-500 mb-2">Paste the SolarEdge email body:</p>
                     <textarea
@@ -982,7 +1072,8 @@ export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserId, currentUser
                       </button>
                     </div>
                   </>
-                ) : (
+                )}
+                {importTab === 'excel' && (
                   <>
                     {/* Hidden file input */}
                     <input
@@ -1050,6 +1141,57 @@ export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserId, currentUser
                     )}
                   </>
                 )}
+                {importTab === 'trello' && (
+                  <>
+                    <p className="text-xs text-slate-500 mb-2">Paste a Trello card URL:</p>
+                    <div className="flex gap-2">
+                      <input
+                        type="url"
+                        value={trelloLeadUrl}
+                        onChange={e => { setTrelloLeadUrl(e.target.value); setTrelloLeadError(''); setTrelloLeadPreview(null); }}
+                        placeholder="https://trello.com/c/..."
+                        className="flex-1 px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white"
+                      />
+                      <button
+                        onClick={handleTrelloLeadFetch}
+                        disabled={!trelloLeadUrl.trim() || trelloLeadLoading}
+                        className="px-3 py-2 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center gap-1"
+                      >
+                        {trelloLeadLoading ? (
+                          <span className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                        ) : (
+                          <Link2 className="w-3 h-3" />
+                        )}
+                        Fetch
+                      </button>
+                    </div>
+                    {trelloLeadError && (
+                      <p className="mt-2 text-xs text-red-600">{trelloLeadError}</p>
+                    )}
+                    {trelloLeadPreview && (
+                      <div className="mt-3 p-2.5 bg-green-50 border border-green-200 rounded-lg text-xs text-green-800 space-y-0.5">
+                        <p className="font-semibold text-green-700 mb-1 truncate">{trelloLeadPreview.cardName}</p>
+                        {(trelloLeadPreview.firstName || trelloLeadPreview.lastName) && (
+                          <p>Name: {trelloLeadPreview.firstName} {trelloLeadPreview.lastName}</p>
+                        )}
+                        {trelloLeadPreview.phone && <p>Phone: {trelloLeadPreview.phone}</p>}
+                        {trelloLeadPreview.email && <p>Email: {trelloLeadPreview.email}</p>}
+                        {trelloLeadPreview.description && (
+                          <p className="line-clamp-2 text-green-700/70">{trelloLeadPreview.description.slice(0, 120)}{trelloLeadPreview.description.length > 120 ? '…' : ''}</p>
+                        )}
+                        <button
+                          onClick={handleTrelloLeadConfirm}
+                          className="mt-2 w-full py-1.5 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 transition-colors"
+                        >
+                          Fill Form ↓
+                        </button>
+                      </div>
+                    )}
+                    {!trelloLeadPreview && !trelloLeadLoading && !trelloLeadError && (
+                      <p className="mt-2 text-[11px] text-slate-400">Imports name, phone, email, and card description as a note.</p>
+                    )}
+                  </>
+                )}
               </div>
             )}
 
@@ -1114,6 +1256,54 @@ export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserId, currentUser
                     className="w-full px-3 py-2 text-sm border border-orange-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-orange-400"
                   />
                 )}
+
+                {/* Note */}
+                <textarea
+                  rows={3}
+                  placeholder="Add a note… (optional)"
+                  value={addFormData.note}
+                  onChange={e => setAddFormData(p => ({ ...p, note: e.target.value }))}
+                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-orange-400 resize-none"
+                />
+
+                {/* Attachments */}
+                <div>
+                  <input
+                    ref={noteFileRef}
+                    type="file"
+                    multiple
+                    accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt"
+                    className="hidden"
+                    onChange={e => handleAttachFiles(e.target.files)}
+                  />
+                  <div
+                    onClick={() => noteFileRef.current?.click()}
+                    onDragOver={e => e.preventDefault()}
+                    onDrop={e => { e.preventDefault(); handleAttachFiles(e.dataTransfer.files); }}
+                    className="border-2 border-dashed border-slate-200 rounded-lg px-4 py-3 text-center cursor-pointer hover:border-orange-300 hover:bg-orange-50/40 transition-colors"
+                  >
+                    <p className="text-xs text-slate-400">
+                      📎 Attach photos or documents — <span className="text-orange-500 font-medium">click or drag & drop</span>
+                    </p>
+                  </div>
+                  {leadAttachments.length > 0 && (
+                    <ul className="mt-2 space-y-1">
+                      {leadAttachments.map(a => (
+                        <li key={a.id} className="flex items-center justify-between gap-2 text-xs bg-slate-50 rounded-lg px-3 py-1.5">
+                          <span className="truncate text-slate-700">{a.name}</span>
+                          <button
+                            type="button"
+                            onClick={() => setLeadAttachments(prev => prev.filter(x => x.id !== a.id))}
+                            className="text-slate-400 hover:text-red-500 shrink-0"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+
                 <div className="flex gap-2 pt-1">
                   <button
                     onClick={handleQuickAdd}

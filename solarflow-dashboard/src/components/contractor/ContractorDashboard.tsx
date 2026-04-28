@@ -5,7 +5,7 @@ import {
   Wrench, MapPin, Phone, Clock, CheckCircle,
   List, LogOut, Car, Check, Cloud, CloudRain, Sun, Wind,
   LayoutGrid, Map, Plus, ChevronRight, X, AlertTriangle, Star,
-  Receipt,
+  Receipt, Timer,
 } from 'lucide-react';
 import { Contractor, ContractorJob, JobPriority, JobStatusContractor } from '../../types/contractor';
 import { Lead } from '../../types';
@@ -34,6 +34,30 @@ const PRIORITY_COLORS: Record<JobPriority, string> = {
   high:     'bg-amber-100 text-amber-700 border-amber-200',
   normal:   'bg-blue-100 text-blue-700 border-blue-200',
   low:      'bg-slate-100 text-slate-600 border-slate-200',
+};
+
+// ─── Live timer for In Progress kanban cards ──────────────────────────────────
+const InProgressTimer: React.FC<{ startedAt?: string }> = ({ startedAt }) => {
+  const [elapsed, setElapsed] = React.useState('0:00');
+  React.useEffect(() => {
+    if (!startedAt) return;
+    const tick = () => {
+      const secs = Math.max(0, Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000));
+      const h = Math.floor(secs / 3600);
+      const m = Math.floor((secs % 3600) / 60);
+      const s = secs % 60;
+      setElapsed(h > 0 ? `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}` : `${m}:${String(s).padStart(2,'0')}`);
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [startedAt]);
+  return (
+    <div className="flex items-center gap-1 text-amber-700 font-mono font-bold text-xs">
+      <Timer className="w-3 h-3" />
+      {elapsed}
+    </div>
+  );
 };
 
 // ─── Kanban column config ──────────────────────────────────────────────────────
@@ -66,6 +90,16 @@ const COLUMNS: {
     header: 'text-orange-800',
     badge: 'bg-orange-200 text-orange-700',
     empty: 'Drag jobs here to add to route',
+  },
+  {
+    id: 'in_progress',
+    label: 'In Progress',
+    statuses: ['in_progress', 'documentation'],
+    dropTarget: 'in_progress',
+    bg: 'bg-amber-50 border-amber-200',
+    header: 'text-amber-800',
+    badge: 'bg-amber-200 text-amber-700',
+    empty: 'No active work orders',
   },
   {
     id: 'completed',
@@ -329,9 +363,13 @@ export const ContractorDashboard: React.FC<ContractorDashboardProps> = ({
 
           {/* Time + service */}
           <div className="flex items-center justify-between text-xs text-slate-500">
-            <span className="flex items-center gap-0.5">
-              <Clock className="w-3 h-3" />{job.scheduledTime}
-            </span>
+            {job.status === 'in_progress' || job.status === 'documentation' ? (
+              <InProgressTimer startedAt={job.startedAt} />
+            ) : (
+              <span className="flex items-center gap-0.5">
+                <Clock className="w-3 h-3" />{job.scheduledTime}
+              </span>
+            )}
             <span className="truncate ml-2 text-right">{job.serviceType}</span>
           </div>
 
