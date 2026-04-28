@@ -30,3 +30,4 @@ extracted_package/
 *.jpg
 *.log
 *.zip
+.aider*
