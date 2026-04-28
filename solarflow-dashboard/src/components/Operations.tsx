@@ -115,13 +115,6 @@ const Operations: React.FC<OperationsProps> = ({ alerts }) => {
     );
   };
 
-  // Function to handle client name click - this would need to be connected to actual navigation
-  const handleClientNameClick = (customerId: string) => {
-    console.log('Client name clicked:', customerId);
-    // In a real implementation, this would navigate to the customer details page
-    // window.location.href = `/customers/${customerId}`;
-  };
-
   return (
     <div className="bg-white rounded-lg shadow p-6">
       <div className="flex justify-between items-center mb-6">
