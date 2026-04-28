@@ -19,6 +19,7 @@ import {
 import { GMAPS_KEY_STORAGE } from './AddressAutocomplete';
 import { User as UserType, XeroConfig, SolarEdgeConfig } from '../types';
 import { XERO_CLIENT_ID_KEY, XERO_CLIENT_SECRET_KEY, getXeroClientSecret, setXeroClientSecret } from '../lib/xeroService';
+import { PhotoCleanupCard } from './admin/PhotoCleanupCard';
 
 interface SettingsProps {
   currentUser: UserType | null;
@@ -456,6 +457,13 @@ export const Settings: React.FC<SettingsProps> = ({
           value="System default"
         />
       </div>
+
+      {/* Maintenance — admin only */}
+      {currentUser?.role === 'admin' && (
+        <div className="mb-6">
+          <PhotoCleanupCard />
+        </div>
+      )}
 
       {/* Support */}
       <div className="bg-white rounded-xl border border-slate-200 mb-6">

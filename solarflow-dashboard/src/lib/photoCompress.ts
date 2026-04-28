@@ -71,3 +71,36 @@ function fileToDataUrl(file: File): Promise<string> {
     reader.readAsDataURL(file);
   });
 }
+
+/** Approximate decoded byte length of a data:*;base64 URL. */
+export function estimateDataUrlBytes(dataUrl: string): number {
+  if (!dataUrl.startsWith('data:')) return dataUrl.length;
+  const comma = dataUrl.indexOf(',');
+  if (comma < 0) return dataUrl.length;
+  const b64 = dataUrl.slice(comma + 1);
+  const padding = (b64.endsWith('==') ? 2 : b64.endsWith('=') ? 1 : 0);
+  return Math.max(0, Math.floor(b64.length * 3 / 4) - padding);
+}
+
+/**
+ * Recompress an existing dataURL through the same canvas pipeline.
+ * Returns null if input isn't a recognized base64 image dataURL or if
+ * the compressed result wouldn't be smaller (so callers can skip writes).
+ */
+export async function recompressDataUrl(
+  dataUrl: string,
+  maxEdge = 1600,
+  quality = 0.75,
+): Promise<string | null> {
+  if (!dataUrl.startsWith('data:image/')) return null;
+  try {
+    const res = await fetch(dataUrl);
+    const blob = await res.blob();
+    const file = new File([blob], 'photo', { type: blob.type || 'image/jpeg' });
+    const next = await compressImageToDataUrl(file, maxEdge, quality);
+    if (next.length >= dataUrl.length) return null;
+    return next;
+  } catch {
+    return null;
+  }
+}
