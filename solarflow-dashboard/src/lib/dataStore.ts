@@ -126,6 +126,59 @@ function applyUsIdOmEnrichment(customers: Customer[]): { customers: Customer[]; 
   return { customers: enriched, changed };
 }
 
+// ── One-time dedup: collapse exact duplicates by solarEdgeSiteId / clientId ───
+const DEDUP_FLAG = 'solarops_dedup_v1';
+
+function scoreRecord(c: Customer): number {
+  // Higher = more data filled in → preferred record to keep
+  return [c.name, c.email, c.phone, c.address, c.city, c.zip,
+          c.clientId, c.solarEdgeSiteId, c.category, c.systemType,
+          c.clientStatus, c.notes].filter(v => v && String(v).trim()).length;
+}
+
+function applyDedup(customers: Customer[]): { customers: Customer[]; removed: string[] } {
+  const kept = new Map<string, Customer>(); // id → record to keep
+  const tombstone: string[] = [];
+
+  // Group by solarEdgeSiteId (strongest signal — same physical site)
+  const bySiteId = new Map<string, Customer[]>();
+  customers.forEach(c => {
+    if (c.solarEdgeSiteId) {
+      const g = bySiteId.get(c.solarEdgeSiteId) || [];
+      g.push(c);
+      bySiteId.set(c.solarEdgeSiteId, g);
+    }
+  });
+
+  const dupIds = new Set<string>();
+  bySiteId.forEach(group => {
+    if (group.length < 2) return;
+    const sorted = [...group].sort((a, b) => scoreRecord(b) - scoreRecord(a));
+    sorted.slice(1).forEach(c => { dupIds.add(c.id); tombstone.push(c.id); });
+  });
+
+  // Group remaining (non-siteId-duped) by clientId
+  const byClientId = new Map<string, Customer[]>();
+  customers.filter(c => !dupIds.has(c.id)).forEach(c => {
+    const cid = c.clientId?.trim();
+    if (cid) {
+      const g = byClientId.get(cid) || [];
+      g.push(c);
+      byClientId.set(cid, g);
+    }
+  });
+
+  byClientId.forEach(group => {
+    if (group.length < 2) return;
+    const sorted = [...group].sort((a, b) => scoreRecord(b) - scoreRecord(a));
+    sorted.slice(1).forEach(c => { dupIds.add(c.id); tombstone.push(c.id); });
+  });
+
+  kept; // unused — suppress lint
+  const deduped = customers.filter(c => !dupIds.has(c.id));
+  return { customers: deduped, removed: tombstone };
+}
+
 // ── Safe version migration ────────────────────────────────────────────────────
 //
 // When DATA_VERSION changes, we ADD new seed customers that don't already exist
@@ -204,6 +257,17 @@ export const loadData = (): AppState => {
           console.info(`[DataStore] Enriched ${changed} customers (US-ID / O&M category)`);
         }
         localStorage.setItem(ENRICH_FLAG, '1');
+      }
+
+      // One-time dedup: collapse exact duplicates (same solarEdgeSiteId or clientId)
+      if (!localStorage.getItem(DEDUP_FLAG)) {
+        const { customers: deduped, removed } = applyDedup(customers);
+        if (removed.length > 0) {
+          addToTombstone(removed);
+          customers = deduped;
+          console.info(`[DataStore] Deduped ${removed.length} duplicate records`);
+        }
+        localStorage.setItem(DEDUP_FLAG, '1');
       }
 
       return {
