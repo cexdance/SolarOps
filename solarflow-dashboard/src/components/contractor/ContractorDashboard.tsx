@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   Wrench, MapPin, Phone, Clock, CheckCircle,
-  List, LogOut, Car, Check, Cloud, CloudRain, Sun, Wind,
+  List, LogOut, Car, Check,
   LayoutGrid, Map, Plus, ChevronRight, X, AlertTriangle, Star,
   Receipt, Timer,
 } from 'lucide-react';
@@ -207,7 +207,7 @@ export const ContractorDashboard: React.FC<ContractorDashboardProps> = ({
   useEffect(() => { setXpData(loadXpData(contractorId)); }, [contractorId, jobs]);
   const [draggedJob, setDraggedJob]     = useState<ContractorJob | null>(null);
   const [dragOverCol, setDragOverCol]   = useState<string | null>(null);
-  const [currentWeather, setCurrentWeather] = useState('sunny');
+  const [timeframe, setTimeframe] = useState<'day' | 'week' | 'month' | 'ytd'>('day');
   // Toast for move confirmation
   const [toast, setToast]               = useState<string | null>(null);
   const toastTimeout = useRef<ReturnType<typeof setTimeout>>();
@@ -218,19 +218,37 @@ export const ContractorDashboard: React.FC<ContractorDashboardProps> = ({
     toastTimeout.current = setTimeout(() => setToast(null), 2500);
   };
 
-  const weatherOptions = [
-    { id: 'sunny',  icon: Sun,       label: 'Sunny'  },
-    { id: 'cloudy', icon: Cloud,     label: 'Cloudy' },
-    { id: 'rainy',  icon: CloudRain, label: 'Rainy'  },
-    { id: 'windy',  icon: Wind,      label: 'Windy'  },
+  const timeframeOptions: { id: 'day' | 'week' | 'month' | 'ytd'; label: string }[] = [
+    { id: 'day',   label: 'DAY'   },
+    { id: 'week',  label: 'Week'  },
+    { id: 'month', label: 'Month' },
+    { id: 'ytd',   label: 'YTD'   },
   ];
 
   // Computed stats
   const today         = new Date().toISOString().split('T')[0];
+  const now           = new Date();
+
+  const inTimeframe = (dateStr: string | undefined) => {
+    if (!dateStr) return false;
+    const d = new Date(dateStr);
+    if (timeframe === 'day')   return dateStr === today;
+    if (timeframe === 'week') {
+      const start = new Date(now); start.setDate(now.getDate() - now.getDay());
+      start.setHours(0, 0, 0, 0);
+      return d >= start;
+    }
+    if (timeframe === 'month') return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+    if (timeframe === 'ytd')   return d.getFullYear() === now.getFullYear();
+    return false;
+  };
+
   const todaysJobs    = jobs.filter(j => j.scheduledDate === today);
   const routeJobs     = jobs.filter(j => j.status === 'en_route');
   const completedJobs = jobs.filter(j => j.status === 'completed');
-  const totalEarned   = completedJobs.reduce((s, j) => s + (j.contractorTotalPay ?? 0), 0);
+  const frameJobs     = jobs.filter(j => inTimeframe(j.scheduledDate ?? j.completedAt));
+  const frameCompleted = frameJobs.filter(j => j.status === 'completed');
+  const totalEarned   = frameCompleted.reduce((s, j) => s + (j.contractorTotalPay ?? 0), 0);
 
   // ── Job update helpers ──────────────────────────────────────────────────────
   const moveJob = (job: ContractorJob, target: JobStatusContractor) => {
@@ -322,7 +340,7 @@ export const ContractorDashboard: React.FC<ContractorDashboardProps> = ({
         onUpdateJob={(updated) => { onUpdateJob(updated); setOpenJob(updated); }}
         onXpEarned={() => setXpData(loadXpData(contractorId))}
         onUpsellLead={handleUpsellLead}
-        currentWeather={currentWeather}
+        currentWeather="sunny"
       />
     );
   }
@@ -467,18 +485,17 @@ export const ContractorDashboard: React.FC<ContractorDashboardProps> = ({
             <h1 className="text-base font-bold leading-tight">{contractorName}</h1>
           </div>
           <div className="flex items-center gap-2">
-            {/* Weather */}
-            <div className="flex gap-1 bg-slate-800 rounded-lg p-1">
-              {weatherOptions.map(({ id, icon: Icon, label }) => (
+            {/* Timeframe */}
+            <div className="flex gap-0.5 bg-slate-800 rounded-lg p-1">
+              {timeframeOptions.map(({ id, label }) => (
                 <button
                   key={id}
-                  onClick={() => setCurrentWeather(id)}
-                  title={label}
-                  className={`p-1.5 rounded-md transition-colors cursor-pointer ${
-                    currentWeather === id ? 'bg-slate-600 text-white' : 'text-slate-400 hover:text-white'
+                  onClick={() => setTimeframe(id)}
+                  className={`px-2 py-1 rounded-md text-[11px] font-semibold transition-colors cursor-pointer ${
+                    timeframe === id ? 'bg-orange-500 text-white' : 'text-slate-400 hover:text-white'
                   }`}
                 >
-                  <Icon className="w-4 h-4" />
+                  {label}
                 </button>
               ))}
             </div>
@@ -547,7 +564,7 @@ export const ContractorDashboard: React.FC<ContractorDashboardProps> = ({
           </div>
           <div>
             <p className="text-[10px] text-slate-400 uppercase tracking-wide">Done</p>
-            <p className="text-lg font-bold text-emerald-400">{completedJobs.length}</p>
+            <p className="text-lg font-bold text-emerald-400">{frameCompleted.length}</p>
           </div>
           <div className="ml-auto text-right">
             <p className="text-[10px] text-slate-400 uppercase tracking-wide">Earned</p>
