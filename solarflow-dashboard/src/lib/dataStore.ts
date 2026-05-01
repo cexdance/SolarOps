@@ -126,6 +126,33 @@ function applyUsIdOmEnrichment(customers: Customer[]): { customers: Customer[]; 
   return { customers: enriched, changed };
 }
 
+// ── One-time territory cleanup: remove GT-xxxxx, USP-xxxxx, non-Florida ──────
+// New flag (separate from CLEANUP_FLAG which already ran) so this runs once on
+// every browser that hasn't seen it yet.
+const TERRITORY_FLAG = 'solarops_territory_cleanup_v1';
+
+function applyTerritoryCleanup(customers: Customer[]): { customers: Customer[]; removed: string[] } {
+  const removed: string[] = [];
+  const kept = customers.filter(c => {
+    const name  = (c.name  || '').trim();
+    const state = (c.state || '').trim();
+
+    // Remove other-territory prefix accounts
+    if (/^GT[\s-]/i.test(name))  { removed.push(c.id); return false; }  // Guatemala territory
+    if (/^USP[\s-]/i.test(name)) { removed.push(c.id); return false; }  // USP territory accounts
+
+    // Remove accounts explicitly in a non-Florida US state
+    // (only if state is set — blank state is ambiguous, leave it)
+    if (state && state !== 'FL' && state !== 'Florida') {
+      removed.push(c.id);
+      return false;
+    }
+
+    return true;
+  });
+  return { customers: kept, removed };
+}
+
 // ── One-time dedup: collapse exact duplicates by solarEdgeSiteId / clientId ───
 const DEDUP_FLAG = 'solarops_dedup_v1';
 
@@ -257,6 +284,17 @@ export const loadData = (): AppState => {
           console.info(`[DataStore] Enriched ${changed} customers (US-ID / O&M category)`);
         }
         localStorage.setItem(ENRICH_FLAG, '1');
+      }
+
+      // One-time territory cleanup: remove GT-xxxxx, USP-xxxxx, non-Florida accounts
+      if (!localStorage.getItem(TERRITORY_FLAG)) {
+        const { customers: cleaned, removed } = applyTerritoryCleanup(customers);
+        if (removed.length > 0) {
+          addToTombstone(removed);
+          customers = cleaned;
+          console.info(`[DataStore] Territory cleanup: removed ${removed.length} non-FL/other-territory accounts`);
+        }
+        localStorage.setItem(TERRITORY_FLAG, '1');
       }
 
       // One-time dedup: collapse exact duplicates (same solarEdgeSiteId or clientId)

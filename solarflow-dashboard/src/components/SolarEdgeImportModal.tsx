@@ -79,7 +79,9 @@ async function fetchAllSites(apiKey?: string): Promise<LiveSite[]> {
     const addr  = (s.location?.address || '').trim();
 
     // Hard exclusions — silently drop before any other check
-    if (/^GA[\s-]/i.test(name))      return false;   // Georgia accounts (GA-xxxxx)
+    if (/^GA[\s-]/i.test(name))      return false;   // Georgia/other territory GA-xxxxx
+    if (/^GT[\s-]/i.test(name))      return false;   // Guatemala territory GT-xxxxx
+    if (/^USP[\s-]/i.test(name))     return false;   // USP-xxxxx other territory accounts
     if (/\bDELETE\b/i.test(name))    return false;   // soft-deleted / marked for removal
     if (/\bDELETE\b/i.test(addr))    return false;
 
