@@ -22,11 +22,21 @@ export function isFloridaSite(s: RawSite): boolean {
   const addr  = (s.location?.address  || '').trim();
 
   // ── Hard exclusions ───────────────────────────────────────────────────────
-  if (/^GA[\s-]/i.test(name))   return false;   // Georgia territory GA-xxxxx
-  if (/^GT[\s-]/i.test(name))   return false;   // Guatemala territory GT-xxxxx
-  if (/^USP[\s-]/i.test(name))  return false;   // USP territory accounts
-  if (/\bDELETE\b/i.test(name)) return false;   // soft-deleted / marked for removal
-  if (/\bDELETE\b/i.test(addr)) return false;
+  if (/^GA[\s-]/i.test(name))       return false;  // Georgia territory GA-xxxxx
+  if (/^GT[\s-]/i.test(name))       return false;  // Guatemala territory GT-xxxxx
+  if (/^USP[\s-]/i.test(name))      return false;  // USP territory accounts
+  if (/^Casa\b/i.test(name))        return false;  // non-FL business
+  if (/^Clinica\b/i.test(name))     return false;  // non-FL business
+  if (/^Club\b/i.test(name))        return false;  // non-FL business
+  if (/^Cook\b/i.test(name))        return false;  // non-FL business
+  if (/^Guyoil\b/i.test(name))      return false;  // non-FL business
+  if (/^Industrias\b/i.test(name))  return false;  // non-FL business
+  if (/\bDELETE\b/i.test(name))     return false;  // soft-deleted / marked for removal
+  if (/\bDELETE\b/i.test(addr))     return false;
+  if (/\bDISABLED\b/i.test(name))   return false;  // disabled accounts
+  if (/\(TX\)/i.test(name))         return false;  // Texas accounts
+  if (/\(RD\)/i.test(name))         return false;  // other territory (República Dominicana)
+  if (/\bnull\b/i.test(name))       return false;  // corrupted / placeholder records
 
   // ── Florida allow-list ────────────────────────────────────────────────────
   if (state === 'Florida' || state === 'FL') return true;
