@@ -1,6 +1,6 @@
 {
-  "installCommand": "npm install -g pnpm@9.15.4 && cd solarflow-dashboard && pnpm install --no-frozen-lockfile",
-  "buildCommand": "cd solarflow-dashboard && pnpm run build",
+  "installCommand": "cd solarflow-dashboard && npx --yes pnpm@9.15.4 install --no-frozen-lockfile",
+  "buildCommand": "cd solarflow-dashboard && npx --yes pnpm@9.15.4 run build",
   "outputDirectory": "solarflow-dashboard/dist",
   "framework": "vite",
   "rewrites": [
