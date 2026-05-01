@@ -73,12 +73,19 @@ async function fetchAllSites(apiKey?: string): Promise<LiveSite[]> {
     if (page.length < PAGE || all.length >= totalCount) break;
     start += PAGE;
   }
-  // Florida filter — accept full name OR abbreviation OR US-NNNNN naming convention
   return all.filter(s => {
-    const state = (s.location?.state || '').trim();
+    const name  = (s.name  || '').trim();
+    const state = (s.location?.state   || '').trim();
+    const addr  = (s.location?.address || '').trim();
+
+    // Hard exclusions — silently drop before any other check
+    if (/^GA[\s-]/i.test(name))      return false;   // Georgia accounts (GA-xxxxx)
+    if (/\bDELETE\b/i.test(name))    return false;   // soft-deleted / marked for removal
+    if (/\bDELETE\b/i.test(addr))    return false;
+
+    // Florida only — accept full name, abbreviation, or US-NNNNN Conexsol naming convention
     if (state === 'Florida' || state === 'FL') return true;
-    // US-NNNNN prefix is the Conexsol Florida naming convention
-    if (/^US[\s-]\d+/i.test(s.name || '')) return true;
+    if (/^US[\s-]\d+/i.test(name))            return true;   // Conexsol FL naming
     return false;
   });
 }
