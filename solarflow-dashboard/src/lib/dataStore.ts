@@ -64,7 +64,7 @@ const generateDefaultState = (): AppState => ({
 });
 
 // ── Tombstone list — customers explicitly deleted by the user ──────────────────
-function getDeletedCustomerIds(): Set<string> {
+export function getDeletedCustomerIds(): Set<string> {
   try {
     return new Set(JSON.parse(localStorage.getItem('solarflow_deleted_customer_ids') || '[]'));
   } catch { return new Set(); }

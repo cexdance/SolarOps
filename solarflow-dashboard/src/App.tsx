@@ -37,6 +37,8 @@ import { loadContractors, saveContractors, loadServiceRates, saveServiceRates, l
 import { ContractorInvite as ContractorInviteType } from './types/contractor';
 import { AppState, Job, Customer, User, AppNotification, CRMCustomer, InteractionOutcome, SolarEdgeExtraSite } from './types';
 import { FL_SITES } from './lib/solarEdgeSites';
+import { isFloridaSite } from './lib/solarEdgeSiteFilter';
+import { getDeletedCustomerIds } from './lib/dataStore';
 import { Contractor, ContractorStatus, ContractorJob } from './types/contractor';
 import { addInteraction, loadCustomers, loadInteractions, saveInteractions } from './lib/customerStore';
 import {
@@ -639,8 +641,7 @@ function App() {
   useSyncEngine({ setData, setContractors, setServiceRates, setContractorJobs, skipContractorPersist });
 
   // ── Version poll (extracted to hook) ─────────────────────────────────────
-  const [dismissedUpdate, setDismissedUpdate] = useState(false);
-  const updateAvailable = useVersionPoll() && !dismissedUpdate;
+  const updateAvailable = useVersionPoll();
 
   // Handle Xero OAuth callback (?code=...) and restore existing Xero connection
   useEffect(() => {
@@ -1276,6 +1277,11 @@ function App() {
       }
       console.log(`Fetched ${sites.length} of ${seTotalCount} sites from SolarEdge.`);
 
+      // ── Filter: Florida portfolio only — drop GT-, USP-, GA-, DELETE, non-FL ──
+      const sitesBeforeFilter = sites.length;
+      sites = sites.filter(isFloridaSite);
+      console.log(`Site filter: kept ${sites.length} of ${sitesBeforeFilter} (dropped ${sitesBeforeFilter - sites.length} non-FL/territory sites)`);
+
       // Match sites with customers and update
       let matchedCount = 0;
       const updatedCustomers = data.customers.map((customer) => {
@@ -1315,8 +1321,10 @@ function App() {
       // ── Create new customers for sites with no match ──────────────────────
       const flSiteIds = new Set(FL_SITES.map(s => s.siteId));
       const existingSiteIds = new Set(updatedCustomers.map(c => c.solarEdgeSiteId).filter(Boolean));
+      const tombstonedIds   = getDeletedCustomerIds(); // never re-add manually deleted sites
       const unmatchedSites: any[] = sites.filter((s: any) =>
-        !existingSiteIds.has(String(s.id))
+        !existingSiteIds.has(String(s.id)) &&
+        !tombstonedIds.has(`cust-se-${s.id}`)
       );
       const newCustomersFromSync: Customer[] = unmatchedSites.map((s: any) => ({
         id: `cust-se-${s.id}`,
@@ -2148,29 +2156,12 @@ function App() {
         onMarkNotificationRead={handleMarkNotificationRead}
         onMarkAllNotificationsRead={handleMarkAllNotificationsRead}
         linkedContractorName={linkedContractor?.businessName ?? null}
+        updateAvailable={updateAvailable}
+        onUpdate={() => window.location.reload()}
       >
         {renderView()}
       </Layout>
       <SyncStatusToast />
-      {/* Update available banner — shown when a new deploy is detected */}
-      {updateAvailable && (
-        <div className="fixed bottom-16 left-1/2 -translate-x-1/2 z-[9999] flex items-center gap-3 bg-orange-500 text-white text-sm font-medium px-4 py-2.5 rounded-full shadow-lg shadow-orange-900/30 animate-bounce-once">
-          <span>🚀 New version available</span>
-          <button
-            onClick={() => window.location.reload()}
-            className="bg-white/20 hover:bg-white/30 transition-colors rounded-full px-3 py-0.5 text-xs font-semibold"
-          >
-            Update now
-          </button>
-          <button
-            onClick={() => setDismissedUpdate(true)}
-            className="ml-1 opacity-70 hover:opacity-100 transition-opacity text-base leading-none"
-            aria-label="Dismiss"
-          >
-            ×
-          </button>
-        </div>
-      )}
     </Suspense>
   );
 }

@@ -8,6 +8,7 @@ import {
   Plus, Edit2, Trash2, Check, ChevronDown, ChevronUp, Loader2, Search,
 } from 'lucide-react';
 import { Customer, CustomerCategory } from '../types';
+import { isFloridaSite } from '../lib/solarEdgeSiteFilter';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -73,23 +74,7 @@ async function fetchAllSites(apiKey?: string): Promise<LiveSite[]> {
     if (page.length < PAGE || all.length >= totalCount) break;
     start += PAGE;
   }
-  return all.filter(s => {
-    const name  = (s.name  || '').trim();
-    const state = (s.location?.state   || '').trim();
-    const addr  = (s.location?.address || '').trim();
-
-    // Hard exclusions — silently drop before any other check
-    if (/^GA[\s-]/i.test(name))      return false;   // Georgia/other territory GA-xxxxx
-    if (/^GT[\s-]/i.test(name))      return false;   // Guatemala territory GT-xxxxx
-    if (/^USP[\s-]/i.test(name))     return false;   // USP-xxxxx other territory accounts
-    if (/\bDELETE\b/i.test(name))    return false;   // soft-deleted / marked for removal
-    if (/\bDELETE\b/i.test(addr))    return false;
-
-    // Florida only — accept full name, abbreviation, or US-NNNNN Conexsol naming convention
-    if (state === 'Florida' || state === 'FL') return true;
-    if (/^US[\s-]\d+/i.test(name))            return true;   // Conexsol FL naming
-    return false;
-  });
+  return all.filter(isFloridaSite);
 }
 
 function fmtAddress(site: LiveSite): string {
