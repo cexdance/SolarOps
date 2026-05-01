@@ -23,6 +23,7 @@
 
 import { supabase } from './supabase';
 import { markPushPending, clearPendingPush, hasPendingPush, drainOutbox } from './outbox';
+import { isAllowedCustomer } from './solarEdgeSiteFilter';
 import type { AppState, Customer, Job } from '../types';
 import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 
@@ -391,6 +392,9 @@ export function mergeRemote(local: AppState, remote: Partial<AppState>): AppStat
     }
 
     customers = Array.from(merged.values()).filter(c => !deletedIds.has(c.id));
+
+    // Apply exclusion filter so Supabase can never restore territory/junk accounts
+    customers = customers.filter(isAllowedCustomer);
   }
 
   // ── Jobs ──────────────────────────────────────────────────────────────────

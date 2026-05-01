@@ -9,6 +9,7 @@
 import { AppState, Customer, Job, User, ClientStatus, CustomerCategory } from '../types';
 import { mergedCustomerData } from './mergedCustomers';
 import { dbSet } from './db';
+import { isAllowedCustomer } from './solarEdgeSiteFilter';
 
 const STORAGE_KEY = 'solarflow_data';
 const VERSION_KEY = 'solarflow_data_version';
@@ -87,14 +88,9 @@ function addToTombstone(ids: string[]): void {
 function applyExclusionFilter(customers: Customer[]): { customers: Customer[]; removed: string[] } {
   const removed: string[] = [];
   const kept = customers.filter(c => {
-    const name = (c.name    || '').trim();
-    const addr = (c.address || '').trim();
-    if (/^GA[\s-]/i.test(name))   { removed.push(c.id); return false; }  // GA-xxxxx territory
-    if (/^GT[\s-]/i.test(name))   { removed.push(c.id); return false; }  // GT-xxxxx territory
-    if (/^USP[\s-]/i.test(name))  { removed.push(c.id); return false; }  // USP-xxxxx territory
-    if (/\bDELETE\b/i.test(name)) { removed.push(c.id); return false; }  // marked for removal
-    if (/\bDELETE\b/i.test(addr)) { removed.push(c.id); return false; }
-    return true;
+    if (isAllowedCustomer(c)) return true;
+    removed.push(c.id);
+    return false;
   });
   return { customers: kept, removed };
 }

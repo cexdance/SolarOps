@@ -37,7 +37,7 @@ import { loadContractors, saveContractors, loadServiceRates, saveServiceRates, l
 import { ContractorInvite as ContractorInviteType } from './types/contractor';
 import { AppState, Job, Customer, User, AppNotification, CRMCustomer, InteractionOutcome, SolarEdgeExtraSite } from './types';
 import { FL_SITES } from './lib/solarEdgeSites';
-import { isFloridaSite } from './lib/solarEdgeSiteFilter';
+import { isFloridaSite, isAllowedCustomer } from './lib/solarEdgeSiteFilter';
 import { getDeletedCustomerIds } from './lib/dataStore';
 import { Contractor, ContractorStatus, ContractorJob } from './types/contractor';
 import { addInteraction, loadCustomers, loadInteractions, saveInteractions } from './lib/customerStore';
@@ -1371,7 +1371,7 @@ function App() {
       setData(prev => {
         const next = {
           ...prev,
-          customers: [...updatedCustomers, ...newCustomersFromSync],
+          customers: [...updatedCustomers, ...newCustomersFromSync].filter(isAllowedCustomer),
           solarEdgeExtraSites: [...(prev.solarEdgeExtraSites ?? []), ...newExtraSites],
           solarEdgeConfig: {
             ...prev.solarEdgeConfig,

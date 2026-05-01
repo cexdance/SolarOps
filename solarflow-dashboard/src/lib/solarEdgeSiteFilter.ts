@@ -1,5 +1,5 @@
-// SolarOps — SolarEdge site filter (shared between Update Sites sync and Import Modal)
-// Apply this BEFORE creating or updating any customer records from SolarEdge data.
+// SolarOps — SolarEdge site filter (shared between Update Sites sync, Import Modal,
+// mergeRemote, and the loadData always-on exclusion pass).
 
 export interface RawSite {
   id: string | number;
@@ -34,4 +34,19 @@ export function isFloridaSite(s: RawSite): boolean {
 
   // Anything else (explicit non-FL state, unknown territory) — exclude
   return false;
+}
+
+/**
+ * Customer-record variant — same rules, different field shape.
+ * Use in loadData(), mergeRemote(), and anywhere Customer[] is filtered.
+ */
+export function isAllowedCustomer(c: { name?: string; address?: string }): boolean {
+  const name = (c.name    || '').trim();
+  const addr = (c.address || '').trim();
+  if (/^GA[\s-]/i.test(name))   return false;
+  if (/^GT[\s-]/i.test(name))   return false;
+  if (/^USP[\s-]/i.test(name))  return false;
+  if (/\bDELETE\b/i.test(name)) return false;
+  if (/\bDELETE\b/i.test(addr)) return false;
+  return true;
 }
