@@ -79,22 +79,28 @@ function addToTombstone(ids: string[]): void {
   } catch {}
 }
 
-// ── One-time cleanup: remove GA-xxxxx and DELETE accounts ─────────────────────
-// Runs once per browser, persisted by the migration flag below.
-const CLEANUP_FLAG = 'solarops_ga_delete_cleanup_v1';
+// ── Always-on exclusion filter ────────────────────────────────────────────────
+// Runs on EVERY loadData() — not flag-gated — so bad accounts added by the
+// SolarEdge sync (or any other path) are removed on the next page load.
+// Also tombstones removed IDs so seed/sync migrations can't re-add them.
 
-function applyGaDeleteCleanup(customers: Customer[]): { customers: Customer[]; removed: string[] } {
+function applyExclusionFilter(customers: Customer[]): { customers: Customer[]; removed: string[] } {
   const removed: string[] = [];
   const kept = customers.filter(c => {
-    const name = (c.name || '').trim();
-    if (/^GA[\s-]/i.test(name) || /\bDELETE\b/i.test(name)) {
-      removed.push(c.id);
-      return false;
-    }
+    const name = (c.name    || '').trim();
+    const addr = (c.address || '').trim();
+    if (/^GA[\s-]/i.test(name))   { removed.push(c.id); return false; }  // GA-xxxxx territory
+    if (/^GT[\s-]/i.test(name))   { removed.push(c.id); return false; }  // GT-xxxxx territory
+    if (/^USP[\s-]/i.test(name))  { removed.push(c.id); return false; }  // USP-xxxxx territory
+    if (/\bDELETE\b/i.test(name)) { removed.push(c.id); return false; }  // marked for removal
+    if (/\bDELETE\b/i.test(addr)) { removed.push(c.id); return false; }
     return true;
   });
   return { customers: kept, removed };
 }
+
+// Keep old flag constant so the flag value in localStorage is not re-used
+const CLEANUP_FLAG    = 'solarops_ga_delete_cleanup_v1';    // legacy — no longer checked
 
 // ── One-time enrichment: US-xxxxx → clientId, solarEdgeSiteId → O&M ─────────
 const ENRICH_FLAG = 'solarops_us_id_om_enrich_v1';
@@ -124,29 +130,6 @@ function applyUsIdOmEnrichment(customers: Customer[]): { customers: Customer[]; 
     return updated;
   });
   return { customers: enriched, changed };
-}
-
-// ── One-time territory cleanup: remove GT-xxxxx, USP-xxxxx, non-Florida ──────
-// New flag (separate from CLEANUP_FLAG which already ran) so this runs once on
-// every browser that hasn't seen it yet.
-const TERRITORY_FLAG = 'solarops_territory_cleanup_v2'; // v2: removed bad state-based rule
-
-function applyTerritoryCleanup(customers: Customer[]): { customers: Customer[]; removed: string[] } {
-  const removed: string[] = [];
-  const kept = customers.filter(c => {
-    const name = (c.name || '').trim();
-
-    // Remove other-territory prefix accounts (reliable signal — SolarEdge naming convention)
-    if (/^GT[\s-]/i.test(name))  { removed.push(c.id); return false; }  // Guatemala territory
-    if (/^USP[\s-]/i.test(name)) { removed.push(c.id); return false; }  // USP territory accounts
-
-    // NOTE: Do NOT filter by customer.state — PowerCare XLSX imports map the RMA
-    // shipping address state (often NV/GA warehouse) into this field, not the
-    // customer's home state. All real customers are in Florida; use prefix rules only.
-
-    return true;
-  });
-  return { customers: kept, removed };
 }
 
 // ── One-time dedup: collapse exact duplicates by solarEdgeSiteId / clientId ───
@@ -261,15 +244,14 @@ export const loadData = (): AppState => {
         ? rawCustomers.filter(c => !deletedIds.has(c.id))
         : rawCustomers;
 
-      // One-time GA-xxxxx / DELETE cleanup — runs once per browser then never again
-      if (!localStorage.getItem(CLEANUP_FLAG)) {
-        const { customers: cleaned, removed } = applyGaDeleteCleanup(customers);
+      // Always-on exclusion filter — runs every load, self-heals after any bad sync
+      {
+        const { customers: cleaned, removed } = applyExclusionFilter(customers);
         if (removed.length > 0) {
           addToTombstone(removed);
           customers = cleaned;
-          console.info(`[DataStore] Cleaned ${removed.length} GA/DELETE accounts:`, removed);
+          console.info(`[DataStore] Excluded ${removed.length} non-FL/territory accounts:`, removed);
         }
-        localStorage.setItem(CLEANUP_FLAG, '1');
       }
 
       // One-time enrichment: US-xxxxx name → clientId, solarEdgeSiteId → O&M category
@@ -280,17 +262,6 @@ export const loadData = (): AppState => {
           console.info(`[DataStore] Enriched ${changed} customers (US-ID / O&M category)`);
         }
         localStorage.setItem(ENRICH_FLAG, '1');
-      }
-
-      // One-time territory cleanup: remove GT-xxxxx, USP-xxxxx, non-Florida accounts
-      if (!localStorage.getItem(TERRITORY_FLAG)) {
-        const { customers: cleaned, removed } = applyTerritoryCleanup(customers);
-        if (removed.length > 0) {
-          addToTombstone(removed);
-          customers = cleaned;
-          console.info(`[DataStore] Territory cleanup: removed ${removed.length} non-FL/other-territory accounts`);
-        }
-        localStorage.setItem(TERRITORY_FLAG, '1');
       }
 
       // One-time dedup: collapse exact duplicates (same solarEdgeSiteId or clientId)
