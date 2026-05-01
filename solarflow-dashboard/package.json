@@ -3,7 +3,10 @@
   "private": true,
   "version": "1.7.0",
   "type": "module",
-  "packageManager": "pnpm@9.15.0",
+  "packageManager": "pnpm@9.15.4",
+  "engines": {
+    "node": "20.x"
+  },
   "scripts": {
     "dev": "pnpm install --prefer-offline && vite",
     "build": "rm -rf node_modules/.vite-temp && tsc -b && vite build",
