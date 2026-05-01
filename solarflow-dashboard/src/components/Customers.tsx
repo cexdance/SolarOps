@@ -233,6 +233,8 @@ export const Customers: React.FC<CustomersProps> = ({
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [showDedupModal, setShowDedupModal] = useState(false);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   // ── Column system ──────────────────────────────────────────────────────────
   type ColId = 'name' | 'clientId' | 'type' | 'category' | 'system' | 'status' | 'location' | 'phone' | 'email' | 'workOrders' | 'powerCare' | 'seAlerts';
@@ -447,11 +449,39 @@ export const Customers: React.FC<CustomersProps> = ({
   React.useEffect(() => { setPage(1); }, [searchQuery, filterType, colFilters]);
 
   const handleRowClick = (customer: Customer) => {
+    if (selectionMode) {
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        next.has(customer.id) ? next.delete(customer.id) : next.add(customer.id);
+        return next;
+      });
+      return;
+    }
     setSelectedCustomer(customer);
   };
 
   const closeDetail = () => {
     setSelectedCustomer(null);
+  };
+
+  const allFilteredSelected = sortedCustomers.length > 0 && sortedCustomers.every(c => selectedIds.has(c.id));
+
+  const toggleSelectAll = () => {
+    if (allFilteredSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(sortedCustomers.map(c => c.id)));
+    }
+  };
+
+  const handleBatchDelete = () => {
+    if (selectedIds.size === 0) return;
+    if (!window.confirm(
+      `Permanently delete ${selectedIds.size} customer${selectedIds.size !== 1 ? 's' : ''}?\n\nThey will be tombstoned and will not be re-imported from SolarEdge.`
+    )) return;
+    Array.from(selectedIds).forEach(id => onDeleteCustomer(id));
+    setSelectedIds(new Set());
+    setSelectionMode(false);
   };
 
   // If a customer is selected, show the split panel view
@@ -577,6 +607,19 @@ export const Customers: React.FC<CustomersProps> = ({
           )}
         </button>
 
+        {/* Batch select toggle */}
+        <button
+          onClick={() => { setSelectionMode(m => !m); setSelectedIds(new Set()); }}
+          className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium border transition-colors cursor-pointer ${
+            selectionMode
+              ? 'bg-slate-800 text-white border-slate-800'
+              : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+          }`}
+        >
+          <CheckCircle2 className="w-4 h-4" />
+          Select
+        </button>
+
         {/* Column picker */}
         <div className="relative">
           <button
@@ -623,6 +666,17 @@ export const Customers: React.FC<CustomersProps> = ({
             <thead>
               {/* Column headers — draggable */}
               <tr className="bg-slate-50 border-b border-slate-200">
+                {selectionMode && (
+                  <th className="px-3 py-2.5 w-10">
+                    <input
+                      type="checkbox"
+                      checked={allFilteredSelected}
+                      onChange={toggleSelectAll}
+                      className="w-4 h-4 accent-orange-500 cursor-pointer"
+                      title="Select all filtered"
+                    />
+                  </th>
+                )}
                 {visibleCols.map(id => {
                   const col = ALL_COLUMNS.find(c => c.id === id)!;
                   const isSort = sortCol === id;
@@ -658,6 +712,7 @@ export const Customers: React.FC<CustomersProps> = ({
               </tr>
               {/* Filter row */}
               <tr className="border-b border-slate-100 bg-white">
+                {selectionMode && <th className="px-3 py-1.5 w-10" />}
                 {visibleCols.map(id => (
                   <th key={id} className="px-3 py-1.5">
                     <input
@@ -689,8 +744,26 @@ export const Customers: React.FC<CustomersProps> = ({
                   <tr
                     key={customer.id}
                     onClick={() => handleRowClick(customer)}
-                    className="hover:bg-orange-50/40 cursor-pointer transition-colors"
+                    className={`cursor-pointer transition-colors ${
+                      selectionMode && selectedIds.has(customer.id)
+                        ? 'bg-orange-50 border-l-2 border-l-orange-400'
+                        : 'hover:bg-orange-50/40'
+                    }`}
                   >
+                    {selectionMode && (
+                      <td className="px-3 py-2.5 w-10" onClick={e => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(customer.id)}
+                          onChange={() => setSelectedIds(prev => {
+                            const next = new Set(prev);
+                            next.has(customer.id) ? next.delete(customer.id) : next.add(customer.id);
+                            return next;
+                          })}
+                          className="w-4 h-4 accent-orange-500 cursor-pointer"
+                        />
+                      </td>
+                    )}
                     {visibleCols.map(id => (
                       <td key={id} className="px-3 py-2.5">
                         {id === 'name' && (
@@ -844,6 +917,42 @@ export const Customers: React.FC<CustomersProps> = ({
           </div>
         )}
       </div>
+
+      {/* ── Batch selection action bar ───────────────────────────────────────── */}
+      {selectionMode && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-5 py-3 bg-slate-900 text-white rounded-2xl shadow-2xl border border-slate-700">
+          <span className="text-sm font-medium">
+            {selectedIds.size === 0
+              ? 'No customers selected'
+              : `${selectedIds.size} customer${selectedIds.size !== 1 ? 's' : ''} selected`}
+          </span>
+          {selectedIds.size > 0 && (
+            <>
+              <span className="w-px h-4 bg-slate-600" />
+              <button
+                onClick={() => setSelectedIds(new Set())}
+                className="text-sm text-slate-400 hover:text-white transition-colors cursor-pointer"
+              >
+                Clear
+              </button>
+              <button
+                onClick={handleBatchDelete}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white text-sm font-medium rounded-lg transition-colors cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Delete {selectedIds.size}
+              </button>
+            </>
+          )}
+          <button
+            onClick={() => { setSelectionMode(false); setSelectedIds(new Set()); }}
+            className="ml-1 text-slate-400 hover:text-white transition-colors cursor-pointer"
+            title="Exit selection mode"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {showCreateModal && (
         <CreateCustomerModal
