@@ -96,6 +96,36 @@ function applyGaDeleteCleanup(customers: Customer[]): { customers: Customer[]; r
   return { customers: kept, removed };
 }
 
+// ── One-time enrichment: US-xxxxx → clientId, solarEdgeSiteId → O&M ─────────
+const ENRICH_FLAG = 'solarops_us_id_om_enrich_v1';
+
+function applyUsIdOmEnrichment(customers: Customer[]): { customers: Customer[]; changed: number } {
+  let changed = 0;
+  const enriched = customers.map(c => {
+    let updated = { ...c };
+    let dirty = false;
+
+    // Extract US-NNNNN from name → clientId (only if clientId is blank)
+    if (!c.clientId?.trim()) {
+      const m = (c.name || '').match(/\bUS[\s-](\d+)/i);
+      if (m) {
+        updated.clientId = `US-${m[1]}`;
+        dirty = true;
+      }
+    }
+
+    // SolarEdge site ID present → category O&M (always — SE = monitored = O&M)
+    if (c.solarEdgeSiteId && c.category !== 'O&M') {
+      updated.category = 'O&M';
+      dirty = true;
+    }
+
+    if (dirty) changed++;
+    return updated;
+  });
+  return { customers: enriched, changed };
+}
+
 // ── Safe version migration ────────────────────────────────────────────────────
 //
 // When DATA_VERSION changes, we ADD new seed customers that don't already exist
@@ -164,6 +194,16 @@ export const loadData = (): AppState => {
           console.info(`[DataStore] Cleaned ${removed.length} GA/DELETE accounts:`, removed);
         }
         localStorage.setItem(CLEANUP_FLAG, '1');
+      }
+
+      // One-time enrichment: US-xxxxx name → clientId, solarEdgeSiteId → O&M category
+      if (!localStorage.getItem(ENRICH_FLAG)) {
+        const { customers: enriched, changed } = applyUsIdOmEnrichment(customers);
+        if (changed > 0) {
+          customers = enriched;
+          console.info(`[DataStore] Enriched ${changed} customers (US-ID / O&M category)`);
+        }
+        localStorage.setItem(ENRICH_FLAG, '1');
       }
 
       return {
