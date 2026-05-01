@@ -3,6 +3,7 @@
 // Credentials are sourced from .env.local (VITE_TRELLO_API_KEY / VITE_TRELLO_TOKEN).
 
 import { Activity, Customer, CustomerFile } from '../types';
+import { uploadTrelloAttachment } from './trelloAttachmentUpload';
 
 const KEY   = import.meta.env.VITE_TRELLO_API_KEY as string;
 const TOKEN = import.meta.env.VITE_TRELLO_TOKEN   as string;
@@ -142,22 +143,43 @@ export async function importTrelloCard(
   const contactInfo = extractContactInfo(card.desc);
   const activities  = buildImportActivities(card, userName);
 
-  // Build CustomerFile records — use preview URL where available, otherwise raw URL + auth
+  // Build CustomerFile records — download each attachment and re-host in Supabase
+  // so the URL is permanent and never blocked by browser CSP or Trello token expiry.
   const base = Date.now();
-  const files: CustomerFile[] = card.attachments.map((a, i) => {
-    const displayUrl = a.previewUrl
-      ? `${a.previewUrl}?key=${KEY}&token=${TOKEN}`
-      : `${a.url}?key=${KEY}&token=${TOKEN}`;
-    return {
-      id:        `trello-file-${base + i}`,
-      name:      a.name,
-      url:       displayUrl,
-      mimeType:  a.mimeType,
-      size:      a.size,
-      source:    'trello' as const,
-      createdAt: new Date().toISOString(),
-    };
-  });
+  const files: CustomerFile[] = await Promise.all(
+    card.attachments.map(async (a, i) => {
+      const fileId    = `trello-file-${base + i}`;
+      const sourceUrl = a.url; // raw Trello attachment URL (no token)
+
+      // Try to upload to Supabase Storage → get a permanent public URL
+      const permanentUrl = await uploadTrelloAttachment({
+        trelloUrl:   sourceUrl,
+        trelloKey:   KEY,
+        trelloToken: TOKEN,
+        customerId:  customer.id,
+        fileId,
+        fileName:    a.name,
+        mimeType:    a.mimeType,
+      });
+
+      // Fall back to Trello URL + auth params if upload failed
+      const url = permanentUrl ?? (
+        a.previewUrl
+          ? `${a.previewUrl}?key=${KEY}&token=${TOKEN}`
+          : `${sourceUrl}?key=${KEY}&token=${TOKEN}`
+      );
+
+      return {
+        id:        fileId,
+        name:      a.name,
+        url,
+        mimeType:  a.mimeType,
+        size:      a.size,
+        source:    'trello' as const,
+        createdAt: new Date().toISOString(),
+      };
+    })
+  );
 
   const existingFiles = customer.files ?? [];
   // Avoid duplicating files already imported from the same card
