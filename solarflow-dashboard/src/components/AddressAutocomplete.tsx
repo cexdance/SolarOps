@@ -193,7 +193,9 @@ export const AddressAutocomplete: React.FC<Props> = ({
         <CheckCircle2 className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-500" />
       )}
       {hasKey && status === 'error' && (
-        <AlertCircle className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-amber-400" title="Maps unavailable — check API key in Settings" />
+        <span className="absolute right-2.5 top-1/2 -translate-y-1/2" title="Maps unavailable — check API key in Settings">
+          <AlertCircle className="w-4 h-4 text-amber-400" />
+        </span>
       )}
     </div>
   );

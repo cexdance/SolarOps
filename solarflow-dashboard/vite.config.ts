@@ -1,10 +1,37 @@
 import path from "path"
+import { execSync } from "node:child_process"
+import { readFileSync, writeFileSync } from "node:fs"
 import react from "@vitejs/plugin-react"
 import { defineConfig } from "vite"
 import sourceIdentifierPlugin from 'vite-plugin-source-identifier'
 
 const isProd = process.env.BUILD_MODE === 'prod'
-export default defineConfig({
+
+// ── Build-info: stamps a unique id into the bundle AND public/version.json ────
+// Same id in both places → useVersionPoll can detect any new deploy reliably.
+function computeBuildInfo() {
+  const pkg = JSON.parse(readFileSync(path.resolve(__dirname, 'package.json'), 'utf8'))
+  const version = `v${pkg.version}`
+  let sha = 'local'
+  try { sha = execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim() } catch { /* not a git repo or git unavailable */ }
+  const builtAt = new Date().toISOString()
+  const buildId = `${version}+${sha}.${Date.now()}`
+  return { version, sha, builtAt, buildId }
+}
+
+export default defineConfig(({ command }) => {
+  const info = computeBuildInfo()
+
+  // Only stamp version.json on production builds — keeps `vite dev` deterministic.
+  if (command === 'build') {
+    writeFileSync(
+      path.resolve(__dirname, 'public/version.json'),
+      JSON.stringify({ version: info.version, build: info.buildId, sha: info.sha, builtAt: info.builtAt }) + '\n',
+    )
+    console.log(`[vite] stamped public/version.json → build=${info.buildId}`)
+  }
+
+  return {
   plugins: [
     react(),
     sourceIdentifierPlugin({
@@ -13,6 +40,11 @@ export default defineConfig({
       includeProps: true,
     })
   ],
+  define: {
+    __APP_VERSION__: JSON.stringify(info.version),
+    __BUILD_ID__: JSON.stringify(command === 'build' ? info.buildId : 'dev'),
+    __BUILT_AT__: JSON.stringify(info.builtAt),
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
@@ -60,4 +92,5 @@ export default defineConfig({
       },
     },
   },
+  }
 })

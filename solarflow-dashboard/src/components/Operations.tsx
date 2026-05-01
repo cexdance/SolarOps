@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { AlertCircle, Clock, CheckCircle, XCircle, AlertTriangle, Activity, Zap, Thermometer, Gauge, Battery } from 'lucide-react';
-import { AlertSeverity, AlertType } from '../types';
+import { AlertSeverity, AlertType, UserRole } from '../types';
 
 interface Alert {
   id: string;
@@ -14,10 +14,12 @@ interface Alert {
 }
 
 interface OperationsProps {
-  alerts: Alert[];
+  alerts?: Alert[];
+  currentUserId?: string;
+  currentUserRole?: UserRole;
 }
 
-const Operations: React.FC<OperationsProps> = ({ alerts }) => {
+const Operations: React.FC<OperationsProps> = ({ alerts = [] }) => {
   const [filteredAlerts, setFilteredAlerts] = useState<Alert[]>(alerts);
   const [activeFilter, setActiveFilter] = useState<'all' | AlertSeverity>('all');
   const [expandedAlertId, setExpandedAlertId] = useState<string | null>(null);

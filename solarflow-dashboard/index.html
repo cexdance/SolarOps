@@ -5,6 +5,75 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>SolarOps - Operations Management</title>
+  <!-- Hard no-cache for all browsers and proxies -->
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+  <script>
+    // ── SolarOps version guard — runs before React mounts ─────────────────────
+    // Covers three stale-cache scenarios:
+    //   1. bfcache: browser back-button restores a frozen page without any fetch
+    //   2. CDN/proxy served a cached index.html despite no-cache headers
+    //   3. Long-running tab that missed a deploy while open
+    (function () {
+      var SK = '__so_build';
+
+      // ── 1. bfcache: reload immediately on back-forward restore ────────────
+      window.addEventListener('pageshow', function (e) {
+        if (e.persisted) {
+          window.location.reload();
+        }
+      });
+
+      function readBuild(d) {
+        return (d && (d.build || d.version)) || null;
+      }
+
+      function fetchVersion() {
+        return fetch('/version.json?t=' + Date.now(), { cache: 'no-store' })
+          .then(function (r) {
+            if (!r.ok) {
+              console.warn('[version-guard] /version.json status', r.status);
+              return null;
+            }
+            return r.json();
+          })
+          .catch(function (err) {
+            console.warn('[version-guard] fetch failed', err);
+            return null;
+          });
+      }
+
+      // ── 2. If we just arrived via our own forced reload, clean the URL ─────
+      var params = new URLSearchParams(window.location.search);
+      if (params.has('_v')) {
+        var clean = new URL(window.location.href);
+        clean.searchParams.delete('_v');
+        history.replaceState(null, '', clean.toString());
+        fetchVersion().then(function (d) {
+          var b = readBuild(d);
+          if (b) sessionStorage.setItem(SK, b);
+        });
+        return;
+      }
+
+      // ── 3. Version check: if remote != last seen, force a hard navigation ──
+      fetchVersion().then(function (d) {
+        var remote = readBuild(d);
+        if (!remote) return;
+        var local = sessionStorage.getItem(SK);
+        sessionStorage.setItem(SK, remote);
+        if (local && local !== remote) {
+          var sep = window.location.search ? '&' : '?';
+          window.location.replace(
+            window.location.pathname +
+            window.location.search + sep + '_v=' + Date.now() +
+            window.location.hash
+          );
+        }
+      });
+    })();
+  </script>
 </head>
 
 <body>
