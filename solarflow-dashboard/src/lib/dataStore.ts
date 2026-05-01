@@ -70,6 +70,32 @@ function getDeletedCustomerIds(): Set<string> {
   } catch { return new Set(); }
 }
 
+function addToTombstone(ids: string[]): void {
+  try {
+    const key = 'solarflow_deleted_customer_ids';
+    const existing: string[] = JSON.parse(localStorage.getItem(key) || '[]');
+    const merged = Array.from(new Set([...existing, ...ids]));
+    localStorage.setItem(key, JSON.stringify(merged));
+  } catch {}
+}
+
+// ── One-time cleanup: remove GA-xxxxx and DELETE accounts ─────────────────────
+// Runs once per browser, persisted by the migration flag below.
+const CLEANUP_FLAG = 'solarops_ga_delete_cleanup_v1';
+
+function applyGaDeleteCleanup(customers: Customer[]): { customers: Customer[]; removed: string[] } {
+  const removed: string[] = [];
+  const kept = customers.filter(c => {
+    const name = (c.name || '').trim();
+    if (/^GA[\s-]/i.test(name) || /\bDELETE\b/i.test(name)) {
+      removed.push(c.id);
+      return false;
+    }
+    return true;
+  });
+  return { customers: kept, removed };
+}
+
 // ── Safe version migration ────────────────────────────────────────────────────
 //
 // When DATA_VERSION changes, we ADD new seed customers that don't already exist
@@ -125,9 +151,20 @@ export const loadData = (): AppState => {
         Array.isArray(state.customers) && state.customers.length > 0
           ? state.customers
           : defaults.customers;
-      const customers = deletedIds.size > 0
+      let customers = deletedIds.size > 0
         ? rawCustomers.filter(c => !deletedIds.has(c.id))
         : rawCustomers;
+
+      // One-time GA-xxxxx / DELETE cleanup — runs once per browser then never again
+      if (!localStorage.getItem(CLEANUP_FLAG)) {
+        const { customers: cleaned, removed } = applyGaDeleteCleanup(customers);
+        if (removed.length > 0) {
+          addToTombstone(removed);
+          customers = cleaned;
+          console.info(`[DataStore] Cleaned ${removed.length} GA/DELETE accounts:`, removed);
+        }
+        localStorage.setItem(CLEANUP_FLAG, '1');
+      }
 
       return {
         ...defaults,
