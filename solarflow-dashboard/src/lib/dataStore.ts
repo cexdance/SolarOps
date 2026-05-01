@@ -129,24 +129,20 @@ function applyUsIdOmEnrichment(customers: Customer[]): { customers: Customer[]; 
 // ── One-time territory cleanup: remove GT-xxxxx, USP-xxxxx, non-Florida ──────
 // New flag (separate from CLEANUP_FLAG which already ran) so this runs once on
 // every browser that hasn't seen it yet.
-const TERRITORY_FLAG = 'solarops_territory_cleanup_v1';
+const TERRITORY_FLAG = 'solarops_territory_cleanup_v2'; // v2: removed bad state-based rule
 
 function applyTerritoryCleanup(customers: Customer[]): { customers: Customer[]; removed: string[] } {
   const removed: string[] = [];
   const kept = customers.filter(c => {
-    const name  = (c.name  || '').trim();
-    const state = (c.state || '').trim();
+    const name = (c.name || '').trim();
 
-    // Remove other-territory prefix accounts
+    // Remove other-territory prefix accounts (reliable signal — SolarEdge naming convention)
     if (/^GT[\s-]/i.test(name))  { removed.push(c.id); return false; }  // Guatemala territory
     if (/^USP[\s-]/i.test(name)) { removed.push(c.id); return false; }  // USP territory accounts
 
-    // Remove accounts explicitly in a non-Florida US state
-    // (only if state is set — blank state is ambiguous, leave it)
-    if (state && state !== 'FL' && state !== 'Florida') {
-      removed.push(c.id);
-      return false;
-    }
+    // NOTE: Do NOT filter by customer.state — PowerCare XLSX imports map the RMA
+    // shipping address state (often NV/GA warehouse) into this field, not the
+    // customer's home state. All real customers are in Florida; use prefix rules only.
 
     return true;
   });

@@ -442,7 +442,7 @@ export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserId, currentUser
           email:     String(r['Site Main Contact Email'] ?? ''),
           address:   String(r['RMA Street'] ?? ''),
           city:      String(r['RMA City'] ?? ''),
-          state:     String(r['RMA State'] ?? ''),
+          state:     'FL',  // RMA State is a shipping/warehouse state, not the customer's home state
           zip:       String(r['RMA Zip/Postal Code'] ?? ''),
           notes:     [
             r['Work Description (Internal comments)'] ? String(r['Work Description (Internal comments)']) : '',
