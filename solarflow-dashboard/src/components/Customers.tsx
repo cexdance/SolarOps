@@ -836,18 +836,43 @@ export const Customers: React.FC<CustomersProps> = ({
                         {id === 'seAlerts' && (() => {
                           const alerts = alertsByCustomer.get(customer.id) ?? [];
                           if (alerts.length === 0) return <span className="text-xs text-slate-300">—</span>;
-                          const hasCritical = alerts.some(a => a.severity === 'critical');
-                          const hasWarning  = alerts.some(a => a.severity === 'warning');
-                          const colorClass  = hasCritical
-                            ? 'bg-red-100 text-red-700 border-red-200'
-                            : hasWarning
-                            ? 'bg-amber-100 text-amber-700 border-amber-200'
-                            : 'bg-blue-100 text-blue-700 border-blue-200';
+
+                          // Sort: critical → warning → info, unacknowledged first
+                          const sevOrder = { critical: 0, warning: 1, info: 2 };
+                          const sorted = [...alerts].sort((a, b) => {
+                            if (a.acknowledged !== b.acknowledged) return a.acknowledged ? 1 : -1;
+                            return (sevOrder[a.severity] ?? 3) - (sevOrder[b.severity] ?? 3);
+                          });
+                          const top = sorted[0];
+                          const rest = sorted.length - 1;
+
+                          const sevStyle = top.severity === 'critical'
+                            ? { dot: 'bg-red-500',    text: 'text-red-700',   badge: 'bg-red-100 text-red-700 border-red-200' }
+                            : top.severity === 'warning'
+                            ? { dot: 'bg-amber-500',  text: 'text-amber-700', badge: 'bg-amber-100 text-amber-700 border-amber-200' }
+                            : { dot: 'bg-blue-400',   text: 'text-blue-700',  badge: 'bg-blue-100 text-blue-700 border-blue-200' };
+
                           return (
-                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold border ${colorClass}`}>
-                              <AlertTriangle className="w-3 h-3" />
-                              {alerts.length}
-                            </span>
+                            <div className="min-w-[160px] max-w-[220px]">
+                              <div className={`flex items-start gap-1.5 ${top.acknowledged ? 'opacity-50' : ''}`}>
+                                <span className={`mt-1 w-2 h-2 rounded-full shrink-0 ${sevStyle.dot}`} />
+                                <div className="min-w-0">
+                                  <p className={`text-xs font-medium leading-tight truncate ${sevStyle.text}`}>
+                                    {top.title}
+                                  </p>
+                                  {top.description && (
+                                    <p className="text-xs text-slate-400 leading-tight truncate mt-0.5">
+                                      {top.description}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                              {rest > 0 && (
+                                <span className={`mt-1 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs font-semibold border ${sevStyle.badge}`}>
+                                  +{rest} more
+                                </span>
+                              )}
+                            </div>
                           );
                         })()}
                       </td>
