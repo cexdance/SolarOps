@@ -208,6 +208,7 @@ interface CustomersProps {
   onDispatch?: (job: import('../types/contractor').ContractorJob) => void;
   onViewCustomer: (customerId: string) => void;
   onSolarEdgeSites?: () => void;
+  solarEdgeSites?: import('../lib/solarEdgeSites').SolarEdgeSite[];
   isMobile: boolean;
   initialCustomerId?: string;
 }
@@ -228,6 +229,7 @@ export const Customers: React.FC<CustomersProps> = ({
   onDispatch,
   onViewCustomer,
   onSolarEdgeSites,
+  solarEdgeSites = [],
   isMobile,
   initialCustomerId,
 }) => {
@@ -298,16 +300,57 @@ export const Customers: React.FC<CustomersProps> = ({
   React.useEffect(() => { saveView({ sortCol }); }, [sortCol]);
   React.useEffect(() => { saveView({ sortDir }); }, [sortDir]);
 
-  // Load SolarEdge alerts and build customerId → alerts map (active/unresolved only)
+  // Build customerId → alerts map from two sources:
+  // 1. Structured SolarEdgeAlert records (solarops_alerts store)
+  // 2. Site-level alert counts from FL_SITES / solarEdgeSites (SE Monitoring data)
   const alertsByCustomer = React.useMemo(() => {
-    const alerts = loadAlerts().filter(a => !a.resolved);
     const map = new Map<string, SolarEdgeAlert[]>();
-    alerts.forEach(a => {
+
+    // Source 1: structured alert records
+    loadAlerts().filter(a => !a.resolved).forEach(a => {
       if (!map.has(a.customerId)) map.set(a.customerId, []);
       map.get(a.customerId)!.push(a);
     });
+
+    // Source 2: site-level counts from SE Monitoring data (FL_SITES + extraSites)
+    // Build siteId → site lookup
+    const siteMap = new Map<string, typeof solarEdgeSites[0]>();
+    solarEdgeSites.forEach(s => siteMap.set(s.siteId, s));
+
+    customers.forEach(customer => {
+      if (!customer.solarEdgeSiteId) return;
+      const site = siteMap.get(customer.solarEdgeSiteId);
+      if (!site || site.alerts === 0) return;
+      // Skip if we already have structured records for this customer
+      if (map.has(customer.id)) return;
+
+      // Map highestImpact score → severity
+      const impact = parseFloat(site.highestImpact) || 0;
+      const severity: 'critical' | 'warning' | 'info' =
+        impact >= 4 ? 'critical' : impact >= 2 ? 'warning' : 'info';
+
+      // Create one synthetic alert representing the site's alert summary
+      map.set(customer.id, [{
+        id:              `site-${site.siteId}`,
+        alertId:         `site-${site.siteId}`,
+        siteId:          site.siteId,
+        siteName:        site.siteName,
+        customerId:      customer.id,
+        customerName:    customer.name,
+        type:            'inverter_error' as const,
+        severity,
+        title:           `${site.alerts} Active Alert${site.alerts !== 1 ? 's' : ''}`,
+        description:     site.highestImpact !== '0' ? `Highest impact level: ${site.highestImpact}` : '',
+        acknowledged:    false,
+        resolved:        false,
+        workOrderCreated: false,
+        occurredAt:      site.lastUpdate || new Date().toISOString(),
+        createdAt:       site.lastUpdate || new Date().toISOString(),
+      }]);
+    });
+
     return map;
-  }, []);
+  }, [customers, solarEdgeSites]);
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(() =>

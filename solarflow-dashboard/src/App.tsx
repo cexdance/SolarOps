@@ -2010,6 +2010,7 @@ function App() {
               console.log('View customer:', customerId);
             }}
             onSolarEdgeSites={() => setCurrentView('solaredge')}
+            solarEdgeSites={[...FL_SITES, ...(data.solarEdgeExtraSites ?? [])]}
             isMobile={isMobile}
             initialCustomerId={selectedCustomerId ?? undefined}
           />
