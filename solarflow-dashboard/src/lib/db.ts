@@ -57,11 +57,22 @@ export async function syncFromDB(): Promise<void> {
     const remote = await pullFromSupabase();
     if (!remote) return;
 
+    // Re-read localStorage immediately before merge+write so we don't clobber
+    // user mutations that happened during the network round-trip.
     const raw = localStorage.getItem('solarflow_data');
     if (!raw) return;
 
     const local  = JSON.parse(raw) as AppState;
     const merged = mergeRemote(local, remote);
+
+    // One more re-read just before write, in case a mutation landed during merge.
+    const fresh = localStorage.getItem('solarflow_data');
+    if (fresh && fresh !== raw) {
+      const freshLocal = JSON.parse(fresh) as AppState;
+      const finalMerged = mergeRemote(freshLocal, remote);
+      localStorage.setItem('solarflow_data', JSON.stringify(finalMerged));
+      return;
+    }
     localStorage.setItem('solarflow_data', JSON.stringify(merged));
   } catch {
     // Network error or parse error — local data is untouched

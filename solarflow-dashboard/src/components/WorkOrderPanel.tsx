@@ -167,7 +167,7 @@ const generateWONumber = (): string => {
 
 const newLineItem = (): WOLineItem => ({
   id: `li-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-  type: 'labor',
+  type: 'part',
   description: '',
   quantity: 1,
   unitCost: 0,
@@ -380,8 +380,30 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
   // Line items
   const [lineItems, setLineItems]   = useState<WOLineItem[]>(job?.lineItems ?? []);
 
-  // Photos
+  // Photos. Some entries may be migrated to the local photoStore (no inline
+  // dataUrl, only a photoStoreId). Hydrate those in the background so <img>
+  // can render. Already-inlined photos pass through untouched.
   const [woPhotos, setWoPhotos]     = useState<WOPhoto[]>(job?.woPhotos ?? []);
+  useEffect(() => {
+    let revoked = false;
+    const created: string[] = [];
+    const needsHydration = (job?.woPhotos ?? []).some(p => !p.dataUrl && p.photoStoreId);
+    if (!needsHydration) return;
+    void (async () => {
+      const { hydrateWoPhotos } = await import('../lib/photoStore');
+      const hydrated = await hydrateWoPhotos(job!.woPhotos as any);
+      if (revoked) return;
+      hydrated.forEach((p, i) => {
+        if (p.dataUrl && !job!.woPhotos![i].dataUrl) created.push(p.dataUrl);
+      });
+      setWoPhotos(hydrated as any);
+    })();
+    return () => {
+      revoked = true;
+      // Free the object URLs we created so they don't leak.
+      for (const url of created) try { URL.revokeObjectURL(url); } catch {}
+    };
+  }, [job?.id]);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const [uploadCategory, setUploadCategory] = useState<WOPhoto['category']>('before');
 
@@ -522,7 +544,10 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
     const totalParts = lineItems.filter(i => i.type !== 'labor').reduce((s, i) => s + i.totalCost, 0);
     const contractorPay = contractorPayUnit === 'flat'
       ? contractorPayRate
-      : contractorPayRate * (lineItems.filter(i => i.type === 'labor').reduce((s, i) => s + i.quantity, 0) || 1);
+      : contractorPayRate * (laborHours || 1);
+    const milesValue = isPowercare ? (travelMiles || 0) : 0;
+    const mileageCost = +(milesValue * 0.54).toFixed(2);
+    const mileageCharge = +(milesValue * 0.89).toFixed(2);
 
     return {
       id: `cj-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -541,7 +566,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
       status: 'assigned',
       isRecurringClient: applyRecurringDiscount,
       urgency: urgency as ContractorJob['urgency'],
-      isPowercare: false,
+      isPowercare,
       scheduledDate,
       scheduledTime,
       estimatedDuration: 120,
@@ -559,13 +584,17 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
       laborAmount: totalLabor,
       partsAmount: totalParts,
       markupPercent: 0,
-      totalAmount: quoteAmount || totalLabor + totalParts,
+      totalAmount: (quoteAmount || totalLabor + totalParts) + mileageCharge,
       contractorPayRate,
       contractorPayUnit,
-      contractorTotalPay: contractorPay,
+      contractorTotalPay: contractorPay + mileageCost,
+      paymentStatus: 'pending',
+      miles: milesValue,
+      mileageCost,
+      mileageCharge,
       payRate: contractorPayRate,
       payUnit: contractorPayUnit,
-      totalPay: contractorPay,
+      totalPay: contractorPay + mileageCost,
     };
   };
 
@@ -989,7 +1018,60 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                 </div>
                 {/* Service — full width, fed from Excel rate table */}
                 <div className="col-span-2">
-                  <label className="block text-xs font-medium text-slate-500 mb-1">Service</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-medium text-slate-500">Service</label>
+                    <button
+                      type="button"
+                      disabled={!serviceCode}
+                      title={serviceCode ? 'Add this service as an additional line item' : 'Select a service first'}
+                      onClick={() => {
+                        const rate = serviceRates.find(r => r.serviceCode === serviceCode);
+                        if (!rate) return;
+                        const additions: WOLineItem[] = [];
+                        // rate.laborCost is the flat total for the job; use quantity 1 so
+                        // the line item adds exactly that amount (not hours × total).
+                        const laborTotal = isPowercare && rate.powercareLaborCost
+                          ? rate.powercareLaborCost
+                          : (rate.laborCost ?? 0);
+                        if (laborTotal > 0) {
+                          additions.push({
+                            id: `li-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                            type: 'labor',
+                            description: rate.serviceName,
+                            quantity: 1,
+                            unitCost: laborTotal,
+                            totalCost: laborTotal,
+                          });
+                        }
+                        if (rate.partsCost && rate.partsCost > 0) {
+                          additions.push({
+                            id: `li-${Date.now()}-${Math.random().toString(36).slice(2, 6)}-p`,
+                            type: 'part',
+                            description: `${rate.serviceName} — parts`,
+                            quantity: 1,
+                            unitCost: rate.partsCost,
+                            totalCost: rate.partsCost,
+                          });
+                        }
+                        if (additions.length > 0) {
+                          setLineItems(prev => [...prev, ...additions]);
+                          // Bump the client quote by the additional client-side rate so revenue keeps pace.
+                          const clientAdd = isPowercare && rate.powercareClientRate
+                            ? rate.powercareClientRate
+                            : (rate.clientRateStandard ?? 0);
+                          if (clientAdd > 0) setQuoteAmount(prev => +(prev + clientAdd).toFixed(2));
+                        }
+                      }}
+                      className={`flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-md transition-colors ${
+                        serviceCode
+                          ? 'bg-orange-50 text-orange-700 border border-orange-200 hover:bg-orange-100 cursor-pointer'
+                          : 'bg-slate-50 text-slate-400 border border-slate-200 cursor-not-allowed'
+                      }`}
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Add Service
+                    </button>
+                  </div>
                   <select
                     value={serviceCode}
                     onChange={e => {
@@ -999,9 +1081,11 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                       if (rate) {
                         setServiceType(rate.serviceName);
                         setLaborHours(rate.estimatedHours || 1);
-                        setContractorPayRate(rate.laborCost || contractorPayRate);
+                        const payRate = isPowercare && rate.powercareLaborCost
+                          ? rate.powercareLaborCost
+                          : rate.laborCost;
+                        setContractorPayRate(payRate || contractorPayRate);
                         if (rate.partsCost) setPartsCostDirect(rate.partsCost);
-                        // Auto-fill client quote amount from Client $ rate
                         const clientRate = isPowercare && rate.powercareClientRate
                           ? rate.powercareClientRate
                           : rate.clientRateStandard;
@@ -1097,7 +1181,21 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                     <input
                       type="checkbox"
                       checked={isPowercare}
-                      onChange={e => setIsPowercare(e.target.checked)}
+                      onChange={e => {
+                        const next = e.target.checked;
+                        setIsPowercare(next);
+                        const rate = serviceRates.find(r => r.serviceCode === serviceCode);
+                        if (rate) {
+                          const payRate = next && rate.powercareLaborCost
+                            ? rate.powercareLaborCost
+                            : rate.laborCost;
+                          if (payRate) setContractorPayRate(payRate);
+                          const clientRate = next && rate.powercareClientRate
+                            ? rate.powercareClientRate
+                            : rate.clientRateStandard;
+                          if (clientRate) setQuoteAmount(clientRate);
+                        }
+                      }}
                       className="w-4 h-4 rounded border-slate-300 accent-orange-500"
                     />
                     <span className="font-medium text-xs">PowerCare Client</span>
@@ -1667,10 +1765,19 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
               </div>
 
               {/* Profit Breakdown Summary */}
-              {lineItems.length > 0 && (() => {
-                const baseRevenue = quoteAmount > 0 ? quoteAmount : total;
-                const revenue    = applyRecurringDiscount ? baseRevenue * 0.9 : baseRevenue;
-                const totalCost  = labor + parts;
+              {(lineItems.length > 0 || contractorPayRate > 0 || quoteAmount > 0) && (() => {
+                // Default contractor labor fee — always counted as cost even without a labor line item.
+                // Labor line items are EXTRA labor on top of the baseline pay.
+                const baseLabor = contractorPayUnit === 'flat'
+                  ? contractorPayRate
+                  : contractorPayRate * (laborHours || 0);
+                const milesValue = isPowercare ? (travelMiles || 0) : 0;
+                const mileageCost = +(milesValue * 0.54).toFixed(2);
+                const mileageCharge = +(milesValue * 0.89).toFixed(2);
+                const totalLabor = baseLabor + labor;
+                const baseRevenue = quoteAmount > 0 ? quoteAmount : (total + baseLabor);
+                const revenue    = (applyRecurringDiscount ? baseRevenue * 0.9 : baseRevenue) + mileageCharge;
+                const totalCost  = totalLabor + parts + mileageCost;
                 const profit     = revenue - totalCost;
                 const margin     = revenue > 0 ? (profit / revenue) * 100 : 0;
                 const netProfit  = profit + seCompTotal;
@@ -1678,13 +1785,22 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                   <div className="bg-slate-50 rounded-xl border border-slate-200 p-4 space-y-1.5">
                     <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Cost Breakdown</p>
                     <div className="flex justify-between text-sm">
-                      <span className="text-slate-500">Labor cost</span>
-                      <span className="font-medium text-slate-700">${labor.toFixed(2)}</span>
+                      <span className="text-slate-500">
+                        Labor cost
+                        {labor > 0 && <span className="ml-1 text-xs text-slate-400">(base ${baseLabor.toFixed(2)} + extra ${labor.toFixed(2)})</span>}
+                      </span>
+                      <span className="font-medium text-slate-700">${totalLabor.toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-slate-500">Parts / consumables</span>
                       <span className="font-medium text-slate-700">${parts.toFixed(2)}</span>
                     </div>
+                    {milesValue > 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-slate-500">Mileage <span className="text-xs text-slate-400">({milesValue} mi × $0.54)</span></span>
+                        <span className="font-medium text-slate-700">${mileageCost.toFixed(2)}</span>
+                      </div>
+                    )}
                     <div className="flex justify-between text-sm font-semibold text-slate-800 border-t border-slate-200 pt-1.5">
                       <span>Total cost</span>
                       <span>${totalCost.toFixed(2)}</span>

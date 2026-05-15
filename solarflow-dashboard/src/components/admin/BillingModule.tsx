@@ -135,10 +135,22 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ jobs, onUpdateJob 
   // Calculate totals with profitability
   const totals = allJobs.reduce((acc, job) => {
     const materialCost = job.partsAmount || 0;
-    const mileageCost = 0; // Could add mileage field to job
-    const laborCost = job.contractorTotalPay;
+    // Mileage: PowerCare jobs reimburse contractor at $0.54/mi and bill client at $0.89/mi.
+    // Fall back to deriving from job.miles when stored fields are missing on legacy jobs.
+    const milesValue = job.miles ?? 0;
+    const mileageCost = job.mileageCost ?? +(milesValue * 0.54).toFixed(2);
+    const mileageCharge = job.mileageCharge ?? +(milesValue * 0.89).toFixed(2);
+    // Labor: prefer stored contractorTotalPay; fall back to rate × hours so legacy WOs that
+    // never wrote the cached total still feed the profitability rollup.
+    const fallbackLabor = job.laborAmount || (job.contractorPayRate ?? 0);
+    const laborCost = job.contractorTotalPay && job.contractorTotalPay > 0
+      ? job.contractorTotalPay
+      : fallbackLabor;
     const totalCost = materialCost + mileageCost + laborCost;
-    const revenue = job.totalAmount;
+    // Revenue: stored totalAmount already includes mileageCharge for new jobs; for legacy jobs
+    // (where totalAmount predates the mileage rollout) add it explicitly.
+    const baseRevenue = job.totalAmount || 0;
+    const revenue = job.mileageCharge != null ? baseRevenue : baseRevenue + mileageCharge;
     const profit = revenue - totalCost;
 
     return {

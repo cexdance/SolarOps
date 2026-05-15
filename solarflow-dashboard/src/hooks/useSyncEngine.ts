@@ -89,10 +89,24 @@ export function useSyncEngine({
       },
       onKV: (key) => {
         skipContractorPersist.current = true;
-        if (key === 'solarflow_contractor_jobs') setContractorJobs(loadContractorJobs());
-        if (key === 'solarflow_contractors')     setContractors(loadContractors());
-        if (key === 'solarflow_service_rates')   setServiceRates(loadServiceRates());
+        if (key === 'solarflow_contractor_jobs') {
+          const remote = loadContractorJobs();
+          setContractorJobs(prev => mergeById(prev, remote));
+        }
+        if (key === 'solarflow_contractors') {
+          const remote = loadContractors();
+          setContractors(prev => mergeById(prev, remote));
+        }
+        if (key === 'solarflow_service_rates') {
+          const remote = loadServiceRates();
+          setServiceRates(prev => mergeById(prev, remote));
+        }
         setTimeout(() => { skipContractorPersist.current = false; }, 0);
+      },
+      onSolarSite: (site) => {
+        // Fanned out by the solaredge-poller Edge Function (Step 1).
+        // Any component (SolarEdgeMonitoring, Dashboard, etc.) can subscribe to this event.
+        window.dispatchEvent(new CustomEvent('solarops-solar-site-update', { detail: site }));
       },
     });
     return unsubscribe;
@@ -104,12 +118,39 @@ export function useSyncEngine({
     const onRemoteUpdate = (e: Event) => {
       const keys = (e as CustomEvent<{ keys: string[] }>).detail?.keys ?? [];
       skipContractorPersist.current = true;
-      if (keys.includes('solarflow_contractor_jobs')) setContractorJobs(loadContractorJobs());
-      if (keys.includes('solarflow_contractors'))     setContractors(loadContractors());
-      if (keys.includes('solarflow_service_rates'))   setServiceRates(loadServiceRates());
+      if (keys.includes('solarflow_contractor_jobs')) {
+        const remote = loadContractorJobs();
+        setContractorJobs(prev => mergeById(prev, remote));
+      }
+      if (keys.includes('solarflow_contractors')) {
+        const remote = loadContractors();
+        setContractors(prev => mergeById(prev, remote));
+      }
+      if (keys.includes('solarflow_service_rates')) {
+        const remote = loadServiceRates();
+        setServiceRates(prev => mergeById(prev, remote));
+      }
       setTimeout(() => { skipContractorPersist.current = false; }, 0);
     };
     window.addEventListener('solarflow-remote-update', onRemoteUpdate as EventListener);
     return () => window.removeEventListener('solarflow-remote-update', onRemoteUpdate as EventListener);
   }, []);
+}
+
+/**
+ * Merge two arrays of records by `id`, preferring REMOTE rows on conflict
+ * but keeping any local-only rows (so in-flight local creates aren't dropped
+ * before they round-trip through Supabase).
+ *
+ * Local-only records are preserved indefinitely until they appear in remote
+ * with the same id (then remote wins) or are explicitly tombstoned by their
+ * domain layer.
+ */
+function mergeById<T extends { id: string }>(local: T[], remote: T[]): T[] {
+  if (!Array.isArray(remote) || remote.length === 0) return local;
+  const byId = new Map<string, T>();
+  for (const r of local) byId.set(r.id, r);
+  // Remote wins on conflict.
+  for (const r of remote) byId.set(r.id, r);
+  return Array.from(byId.values());
 }

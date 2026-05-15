@@ -317,6 +317,11 @@ export interface ContractorJob {
   paymentApprovedAt?: string;
   paymentProcessedAt?: string;
 
+  // Mileage (PowerCare jobs) — cost paid to contractor: $0.54/mi; charged to client: $0.89/mi
+  miles?: number;
+  mileageCost?: number;   // miles × 0.54
+  mileageCharge?: number; // miles × 0.89
+
   // Parts reimbursement — set by contractor, visible to accounting
   partsReimbursementRequested?: boolean;
 

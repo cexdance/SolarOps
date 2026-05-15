@@ -41,6 +41,8 @@ interface LayoutProps {
   onMarkNotificationRead: (id: string) => void;
   onMarkAllNotificationsRead: () => void;
   linkedContractorName?: string | null;
+  updateAvailable?: boolean;
+  onUpdate?: () => void;
 }
 
 const allNavItems = [
@@ -75,6 +77,8 @@ export const Layout: React.FC<LayoutProps> = ({
   onMarkNotificationRead,
   onMarkAllNotificationsRead,
   linkedContractorName,
+  updateAvailable = false,
+  onUpdate,
 }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -425,9 +429,20 @@ export const Layout: React.FC<LayoutProps> = ({
             </div>
           )}
 
-          {/* Version badge — always visible at sidebar bottom */}
-          <div className="px-4 py-1.5 text-[9px] text-slate-600 text-center pointer-events-none select-none border-t border-slate-800/60">
-            {getVersionString()}
+          {/* Version badge — clickable when an update is available */}
+          <div className="px-4 py-1.5 text-center select-none border-t border-slate-800/60">
+            {updateAvailable && onUpdate ? (
+              <button
+                onClick={onUpdate}
+                title="New version available — click to update"
+                className="inline-flex items-center justify-center gap-1.5 text-[9px] font-semibold text-orange-300 hover:text-white hover:bg-orange-500/20 rounded px-2 py-0.5 transition-colors cursor-pointer animate-pulse"
+              >
+                <span>{getVersionString()}</span>
+                <span className="px-1 py-px rounded text-[8px] bg-orange-500 text-white leading-tight">update</span>
+              </button>
+            ) : (
+              <span className="text-[9px] text-slate-600 pointer-events-none">{getVersionString()}</span>
+            )}
           </div>
         </div>
       </aside>

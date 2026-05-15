@@ -69,6 +69,12 @@ function getDeletedCustomerIds(): Set<string> {
   } catch { return new Set(); }
 }
 
+function getDeletedJobIds(): Set<string> {
+  try {
+    return new Set(JSON.parse(localStorage.getItem('solarflow_deleted_job_ids') || '[]'));
+  } catch { return new Set(); }
+}
+
 // ── Per-record push ───────────────────────────────────────────────────────────
 
 /**
@@ -371,8 +377,8 @@ export async function pullFromSupabase(): Promise<Partial<AppState> | null> {
  * We merge by ID so unchanged local records are preserved.
  */
 export function mergeRemote(local: AppState, remote: Partial<AppState>): AppState {
-  const deletedIds  = getDeletedCustomerIds();
-  const pendingPush = hasPendingPush();
+  const deletedIds    = getDeletedCustomerIds();
+  const deletedJobIds = getDeletedJobIds();
 
   // ── Customers ─────────────────────────────────────────────────────────────
   let customers = local.customers;
@@ -380,21 +386,19 @@ export function mergeRemote(local: AppState, remote: Partial<AppState>): AppStat
     const localMap  = new Map(local.customers.map(c => [c.id, c]));
     const remoteMap = new Map(remote.customers.map(c => [c.id, c]));
 
-    // Merge: remote wins on conflict; keep local-only if outbox pending
+    // Merge: remote wins on conflict; keep local-only records (ghost-purge removed
+    // because incremental pulls only return rows changed since `last_sync`, so a
+    // freshly created/pushed record may not come back and would be deleted as a ghost.
+    // Real deletions are handled by the tombstone (deletedIds) filter below.
     const merged = new Map(localMap);
     for (const [id, c] of remoteMap) merged.set(id, c);
 
-    // Drop local-only records when outbox is confirmed empty (ghost records)
-    if (!pendingPush) {
-      for (const id of localMap.keys()) {
-        if (!remoteMap.has(id)) merged.delete(id);
-      }
-    }
-
     customers = Array.from(merged.values()).filter(c => !deletedIds.has(c.id));
 
-    // Apply exclusion filter so Supabase can never restore territory/junk accounts
-    customers = customers.filter(isAllowedCustomer);
+    // Apply exclusion filter ONLY to records that came from remote.
+    // A locally-created customer mid-edit (incomplete address etc.) must NOT be dropped,
+    // otherwise their newly-created jobs would orphan and disappear from the UI.
+    customers = customers.filter(c => localMap.has(c.id) || isAllowedCustomer(c));
   }
 
   // ── Jobs ──────────────────────────────────────────────────────────────────
@@ -406,13 +410,11 @@ export function mergeRemote(local: AppState, remote: Partial<AppState>): AppStat
     const merged = new Map(localMap);
     for (const [id, j] of remoteMap) merged.set(id, j);
 
-    if (!pendingPush) {
-      for (const id of localMap.keys()) {
-        if (!remoteMap.has(id)) merged.delete(id);
-      }
-    }
-
-    jobs = Array.from(merged.values()).filter(j => !deletedIds.has(j.customerId));
+    // Same ghost-purge removal as customers above. Jobs are deleted only via
+    // explicit user action (handleDeleteJob), which records a job-id tombstone.
+    jobs = Array.from(merged.values())
+      .filter(j => !deletedIds.has(j.customerId))
+      .filter(j => !deletedJobIds.has(j.id));
   }
 
   // ── SolarEdge extra sites (still blob — low volume, no Realtime needed) ───
@@ -460,10 +462,21 @@ export async function pullAndMerge(): Promise<Partial<AppState> | null> {
 
 // ── Realtime subscription ─────────────────────────────────────────────────────
 
+export interface SolarSitePayload {
+  siteId: number;
+  siteName: string;
+  status: string;
+  currentPower: number;
+  lastUpdateTime: string;
+  lastPolled: string;
+  alerts: Array<{ type: string; severity: 'info' | 'warning' | 'critical'; message: string }>;
+}
+
 export interface RealtimeHandlers {
   onCustomer: (customer: Customer, event: 'INSERT' | 'UPDATE' | 'DELETE') => void;
   onJob:      (job: Job,      event: 'INSERT' | 'UPDATE' | 'DELETE') => void;
   onKV:       (key: string, value: unknown) => void;
+  onSolarSite?: (site: SolarSitePayload) => void;
 }
 
 let realtimeChannel: ReturnType<typeof supabase.channel> | null = null;
@@ -480,6 +493,36 @@ export function subscribeToChanges(handlers: RealtimeHandlers): () => void {
     realtimeChannel = null;
   }
 
+  // STEP 4: Batch rapid realtime events into a single flush window.
+  // Multiple updates arriving in <200ms collapse to ONE React render pass
+  // (since handler calls all happen in the same setTimeout tick, React 18 auto-batches the setState calls).
+  const pendingEvents: Array<() => void> = [];
+  let flushTimer: ReturnType<typeof setTimeout> | null = null;
+  let batchCount = 0;
+  let eventCount = 0;
+
+  const scheduleFlush = () => {
+    if (flushTimer) return;
+    flushTimer = setTimeout(() => {
+      const events = pendingEvents.slice();
+      pendingEvents.length = 0;
+      flushTimer = null;
+      batchCount++;
+      eventCount += events.length;
+      for (const fn of events) {
+        try { fn(); } catch (err) { console.warn('[SyncEngine] Batched handler error:', err); }
+      }
+      if (batchCount % 50 === 0) {
+        console.info(`[Realtime] Batched ${eventCount} events into ${batchCount} flushes`);
+      }
+    }, 200);
+  };
+
+  const enqueue = (fn: () => void) => {
+    pendingEvents.push(fn);
+    scheduleFlush();
+  };
+
   realtimeChannel = supabase
     .channel('solarops-realtime')
     .on(
@@ -493,20 +536,25 @@ export function subscribeToChanges(handlers: RealtimeHandlers): () => void {
           const { key, value } = row;
 
           if (key.startsWith(PREFIX.customer) && value && payload.eventType !== 'DELETE') {
-            handlers.onCustomer(value as Customer, payload.eventType as 'INSERT' | 'UPDATE');
+            enqueue(() => handlers.onCustomer(value as Customer, payload.eventType as 'INSERT' | 'UPDATE'));
           } else if (key.startsWith(PREFIX.customer) && payload.eventType === 'DELETE') {
-            handlers.onCustomer({ id: key.slice(PREFIX.customer.length) } as Customer, 'DELETE');
+            enqueue(() => handlers.onCustomer({ id: key.slice(PREFIX.customer.length) } as Customer, 'DELETE'));
           } else if (key.startsWith(PREFIX.job) && value && payload.eventType !== 'DELETE') {
-            handlers.onJob(value as Job, payload.eventType as 'INSERT' | 'UPDATE');
+            enqueue(() => handlers.onJob(value as Job, payload.eventType as 'INSERT' | 'UPDATE'));
           } else if (key.startsWith(PREFIX.job) && payload.eventType === 'DELETE') {
-            handlers.onJob({ id: key.slice(PREFIX.job.length) } as Job, 'DELETE');
+            enqueue(() => handlers.onJob({ id: key.slice(PREFIX.job.length) } as Job, 'DELETE'));
+          } else if (key.startsWith(PREFIX.solar) && value && payload.eventType !== 'DELETE') {
+            // Written by the solaredge-poller Edge Function (Step 1)
+            if (handlers.onSolarSite) {
+              enqueue(() => handlers.onSolarSite!(value as SolarSitePayload));
+            }
           } else if (isKVSyncKey(key) && value != null) {
-            // Write to localStorage and notify App.tsx
+            // Write to localStorage and notify App.tsx (batched)
             const next = JSON.stringify(value);
             const prev = localStorage.getItem(key);
             if (prev !== next) {
               localStorage.setItem(key, next);
-              handlers.onKV(key, value);
+              enqueue(() => handlers.onKV(key, value));
             }
           }
         } catch (err) {
@@ -519,6 +567,11 @@ export function subscribeToChanges(handlers: RealtimeHandlers): () => void {
     });
 
   return () => {
+    if (flushTimer) {
+      clearTimeout(flushTimer);
+      flushTimer = null;
+    }
+    pendingEvents.length = 0;
     if (realtimeChannel) {
       supabase.removeChannel(realtimeChannel);
       realtimeChannel = null;

@@ -1,5 +1,5 @@
 // SolarOps — OPS CENTER Dashboard
-// 4 columns × 3 rows = 12 configurable widget slots
+// 2 columns × 2 rows = 4 configurable widget slots
 import React, { useState, useMemo, useCallback, useRef } from 'react';
 import {
   Crosshair, AlertTriangle, Zap, Wrench, Plus, X, Sun,
@@ -151,21 +151,34 @@ const WIDGET_CATALOG: WidgetCatalogEntry[] = [
 
 // ── Layout persistence ─────────────────────────────────────────────────────────
 
-const TOTAL_SLOTS = 12;
-const STORAGE_KEY = 'solarops_dispatch_layout_v2';
+const TOTAL_SLOTS = 4;
+const STORAGE_KEY = 'solarops_dispatch_layout_v3';
 
 const defaultLayout = (): (WidgetConfig | null)[] => {
   const s: (WidgetConfig | null)[] = Array(TOTAL_SLOTS).fill(null);
   s[0] = { type: 'alert-state' };
   s[1] = { type: 'current-production' };
   s[2] = { type: 'work-order' };
+  s[3] = { type: 'todo-list' };
   return s;
 };
 
 const loadLayout = (): (WidgetConfig | null)[] => {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      // Guard: if stored layout has more slots than TOTAL_SLOTS, trim to fit
+      if (Array.isArray(parsed) && parsed.length > TOTAL_SLOTS) {
+        // Keep only the first TOTAL_SLOTS widgets (non-null first, then fill)
+        const nonNull = parsed.filter((c: WidgetConfig | null) => c !== null).slice(0, TOTAL_SLOTS);
+        const result: (WidgetConfig | null)[] = Array(TOTAL_SLOTS).fill(null);
+        nonNull.forEach((c: WidgetConfig, i: number) => { result[i] = c; });
+        saveLayout(result);
+        return result;
+      }
+      return parsed;
+    }
   } catch {}
   return defaultLayout();
 };
@@ -1564,7 +1577,7 @@ export const DispatchDashboard: React.FC<DispatchDashboardProps> = ({ customers,
     );
   }, [layout]);
 
-  const cols = isMobile ? 1 : 4;
+  const cols = isMobile ? 1 : 2;
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
@@ -1638,7 +1651,7 @@ export const DispatchDashboard: React.FC<DispatchDashboardProps> = ({ customers,
         </div>
       )}
 
-      {/* 4 × 3 Grid */}
+      {/* 2 × 2 Grid */}
       <div className="p-3 md:p-6">
         <div className="grid gap-4" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)` }}>
           {layout.map((config, i) => (

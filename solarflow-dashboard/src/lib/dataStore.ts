@@ -80,6 +80,25 @@ function addToTombstone(ids: string[]): void {
   } catch {}
 }
 
+// ── Tombstone list — jobs explicitly deleted by the user ──────────────────────
+// Prevents realtime/sync from resurrecting a job after the user deletes it.
+const DELETED_JOBS_KEY = 'solarflow_deleted_job_ids';
+
+export function getDeletedJobIds(): Set<string> {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(DELETED_JOBS_KEY) || '[]'));
+  } catch { return new Set(); }
+}
+
+export function markJobDeleted(jobId: string): void {
+  try {
+    const existing: string[] = JSON.parse(localStorage.getItem(DELETED_JOBS_KEY) || '[]');
+    if (existing.includes(jobId)) return;
+    existing.push(jobId);
+    localStorage.setItem(DELETED_JOBS_KEY, JSON.stringify(existing));
+  } catch {}
+}
+
 // ── Always-on exclusion filter ────────────────────────────────────────────────
 // Runs on EVERY loadData() — not flag-gated — so bad accounts added by the
 // SolarEdge sync (or any other path) are removed on the next page load.
@@ -304,25 +323,43 @@ export const loadData = (): AppState => {
 // Supabase cloud backup.
 
 export const saveData = (state: AppState): void => {
+  let saved = false;
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    saved = true;
   } catch (e) {
     // QuotaExceededError: localStorage is full.
-    // Try saving a trimmed version without activityHistory to free space.
+    // Try saving a trimmed version without activityHistory + woPhotos to free space.
     try {
       const slim: AppState = {
         ...state,
         customers: state.customers.map(c => ({ ...c, activityHistory: undefined as any })),
+        jobs: state.jobs.map(j => ({ ...j, woPhotos: undefined as any })),
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(slim));
-      console.warn('[DataStore] Saved trimmed state (activity history omitted) due to storage quota');
+      saved = true;
+      console.warn('[DataStore] Saved trimmed state (activity history + woPhotos omitted) due to storage quota');
+      // Surface to the app so a toast/banner can warn the user. Listeners can subscribe to
+      // 'solarops:storage-warning' to render a UI prompt to clear or migrate photo blobs.
+      try {
+        window.dispatchEvent(new CustomEvent('solarops:storage-warning', {
+          detail: { kind: 'trimmed', reason: 'quota-exceeded' },
+        }));
+      } catch {}
     } catch (e2) {
-      console.error('[DataStore] Failed to save — storage quota exceeded:', e2);
+      console.error('[DataStore] FAILED TO SAVE — storage quota exceeded, work is at risk:', e2);
+      try {
+        window.dispatchEvent(new CustomEvent('solarops:storage-warning', {
+          detail: { kind: 'failed', reason: 'quota-exceeded' },
+        }));
+      } catch {}
     }
   }
 
-  // Phase 2: async cloud backup via per-record push + legacy blob
+  // Phase 2: async cloud backup via per-record push + legacy blob.
+  // Even if local save failed, still attempt cloud write so work isn't fully lost.
   dbSet(STORAGE_KEY, state).catch(() => {});
+  void saved;
 };
 
 export const clearData = (): void => {

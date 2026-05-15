@@ -153,7 +153,25 @@ export const loadCRMData = (): CRMData => {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
-      return JSON.parse(stored);
+      const parsed: CRMData = JSON.parse(stored);
+      const seen = new Set<string>();
+      let repaired = false;
+      const leads = (parsed.leads ?? []).map(l => {
+        if (!l.id || seen.has(l.id)) {
+          repaired = true;
+          const fresh = `lead-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+          seen.add(fresh);
+          return { ...l, id: fresh };
+        }
+        seen.add(l.id);
+        return l;
+      });
+      if (repaired) {
+        const next = { ...parsed, leads };
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch {}
+        return next;
+      }
+      return parsed;
     }
   } catch (e) {
     console.error('Failed to load CRM data:', e);
@@ -259,7 +277,7 @@ export const addXP = (stats: UserStats, action: keyof typeof XP_ACTIONS): UserSt
 export const addLead = (data: CRMData, newLead: Omit<Lead, 'id' | 'score' | 'createdAt' | 'updatedAt'>): CRMData => {
   const lead: Lead = {
     ...newLead,
-    id: `lead-${Date.now()}`,
+    id: `lead-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     score: calculateLeadScore({ ...newLead, createdAt: '', updatedAt: '', score: 0 } as Lead),
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),

@@ -11,6 +11,9 @@ node_modules/
 dist/
 build/
 
+# Auto-generated at build time by vite.config.ts — never commit
+solarflow-dashboard/public/version.json
+
 # Netlify
 .netlify/
 
@@ -31,3 +34,4 @@ extracted_package/
 *.log
 *.zip
 .aider*
+.vercel

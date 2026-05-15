@@ -146,7 +146,14 @@ export interface WOPhoto {
   id: string;
   category: 'before' | 'after' | 'serial' | 'process' | 'parts';
   name: string;
+  /**
+   * Inline data URL. Optional after migration: when `photoStoreId` is set, the
+   * binary lives in IndexedDB and dataUrl may be empty. Renderers should call
+   * `hydrateWoPhotos()` from `lib/photoStore` to materialize a displayable URL.
+   */
   dataUrl: string;
+  /** ID of the row in the local photoStore (IndexedDB). Set after migration. */
+  photoStoreId?: string;
   createdAt: string;
 }
 

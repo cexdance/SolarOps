@@ -352,7 +352,21 @@ export function AppRouter({
           />
         );
       }
-      return null;
+      return (
+        <div className="p-6 max-w-md mx-auto text-center">
+          <h2 className="text-lg font-semibold text-slate-900 mb-2">My Jobs unavailable</h2>
+          <p className="text-sm text-slate-600 mb-4">
+            No contractor record is linked to your account email{currentUser?.email ? ` (${currentUser.email})` : ''}.
+            Ask an admin to add this email to a contractor's <em>altEmails</em>.
+          </p>
+          <button
+            onClick={() => onViewChange('dashboard')}
+            className="px-4 py-2 bg-orange-500 text-white rounded-lg text-sm font-medium"
+          >
+            Back to Dashboard
+          </button>
+        </div>
+      );
 
     case 'settings':
       return (

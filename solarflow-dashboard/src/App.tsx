@@ -6,6 +6,8 @@
 import { useState, useEffect, useRef, useMemo, lazy, Suspense } from 'react';
 import { useVersionPoll } from './hooks/useVersionPoll';
 import { useSyncEngine }  from './hooks/useSyncEngine';
+import { BUILD_ID } from './lib/versionConfig';
+import { StorageWarningBanner } from './components/StorageWarningBanner';
 const Layout             = lazy(() => import('./components/Layout').then(m => ({ default: m.Layout })));
 const Dashboard          = lazy(() => import('./components/Dashboard').then(m => ({ default: m.Dashboard })));
 const Jobs               = lazy(() => import('./components/Jobs').then(m => ({ default: m.Jobs })));
@@ -30,6 +32,8 @@ const LeadLobby          = lazy(() => import('./components/LeadLobby').then(m =>
 import { supabase } from './lib/supabase';
 import { syncFromDB } from './lib/db';
 import { loadData, saveData } from './lib/dataStore';
+import { migrateWoPhotos } from './lib/photoStore';
+import { pickupJobsForContractor, toContractorJobView } from './lib/woHelpers';
 import { logChange, flushChangeLog } from './lib/changeLog';
 import { fetchMyNotifications, markNotificationReadRemote, markAllNotificationsReadRemote, startNotificationPolling, stopNotificationPolling } from './lib/notifications';
 import { processBillingTimers } from './lib/billingService';
@@ -38,7 +42,7 @@ import { ContractorInvite as ContractorInviteType } from './types/contractor';
 import { AppState, Job, Customer, User, AppNotification, CRMCustomer, InteractionOutcome, SolarEdgeExtraSite } from './types';
 import { FL_SITES } from './lib/solarEdgeSites';
 import { isFloridaSite, isAllowedCustomer } from './lib/solarEdgeSiteFilter';
-import { getDeletedCustomerIds } from './lib/dataStore';
+import { getDeletedCustomerIds, markJobDeleted } from './lib/dataStore';
 import { Contractor, ContractorStatus, ContractorJob } from './types/contractor';
 import { addInteraction, loadCustomers, loadInteractions, saveInteractions } from './lib/customerStore';
 import {
@@ -87,6 +91,26 @@ const LoginScreen: React.FC<{
   }, []);
 
   const finishStaffLogin = async (supaUser: import('@supabase/supabase-js').User, offerPasskey = false) => {
+    // STEP 5: Force-fresh on sign-in — if a new deploy landed, reload before entering the app
+    if (BUILD_ID !== 'dev') {
+      try {
+        const res = await fetch(`/version.json?t=${Date.now()}`, {
+          cache: 'no-store',
+          headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
+        });
+        if (res.ok) {
+          const remote = await res.json() as { build?: string };
+          if (remote.build && remote.build !== BUILD_ID) {
+            console.info('[Auth] New deployment detected on sign-in. Reloading…');
+            window.location.reload();
+            return;
+          }
+        }
+      } catch (err) {
+        console.warn('[Auth] Version check failed (continuing)', err);
+      }
+    }
+
     const meta = supaUser.user_metadata ?? {};
     const user: User = {
       id: supaUser.id,
@@ -561,6 +585,14 @@ function App() {
   const [isContractorMode, setIsContractorMode] = useState(() => validateContractorSession());
   // Staff user who is also linked to a contractor (dual-role: e.g. cesar.jurado@conexsol.us ↔ iMPower)
   const [linkedContractor, setLinkedContractor] = useState<Contractor | null>(null);
+  const findLinkedContractor = (list: Contractor[], email?: string | null): Contractor | null => {
+    if (!email) return null;
+    const e = email.trim().toLowerCase();
+    return list.find(c =>
+      (c.email ?? '').trim().toLowerCase() === e ||
+      (c.altEmails ?? []).some(alt => (alt ?? '').trim().toLowerCase() === e)
+    ) ?? null;
+  };
   const [loginMode, setLoginMode] = useState<'staff' | 'contractor'>(() => {
     const params = new URLSearchParams(window.location.search);
     return params.get('mode') === 'contractor' || localStorage.getItem('solarops_reset_mode') === 'contractor'
@@ -589,14 +621,28 @@ function App() {
     return loadContractors();
   });
 
-  // One-time migration: reassign any admin-side jobs from legacy contractor-1 → contractor-2
+  // One-time migration: reassign any admin-side jobs from legacy contractor-1 → contractor-2.
+  // Persist synchronously so a concurrent syncFromDB pull cannot overwrite the migrated state.
   useEffect(() => {
     setData(prev => {
       const needsPatch = prev.jobs.some(j => j.contractorId === 'contractor-1');
       if (!needsPatch) return prev;
-      return { ...prev, jobs: prev.jobs.map(j => j.contractorId === 'contractor-1' ? { ...j, contractorId: 'contractor-2' } : j) };
+      const next = { ...prev, jobs: prev.jobs.map(j => j.contractorId === 'contractor-1' ? { ...j, contractorId: 'contractor-2' } : j) };
+      saveData(next);
+      return next;
     });
   }, []);
+
+  // Re-resolve dual-role link whenever contractors list updates (handles async sync hydration on mobile)
+  useEffect(() => {
+    const email = data.currentUser?.email;
+    if (!email) return;
+    setLinkedContractor(prev => {
+      const next = findLinkedContractor(contractors, email);
+      if (next?.id === prev?.id) return prev;
+      return next ?? prev;
+    });
+  }, [contractors, data.currentUser?.email]);
   const [serviceRates, setServiceRates] = useState(() => loadServiceRates());
   const [contractorJobs, setContractorJobs] = useState(() => loadContractorJobs());
 
@@ -763,10 +809,7 @@ function App() {
         });
         startNotificationPolling(mergeRemoteNotifications);
         // Restore dual-role contractor link on session resume
-        const allContractors = loadContractors();
-        const linked = allContractors.find(
-          c => c.email === user.email || c.altEmails?.includes(user.email)
-        );
+        const linked = findLinkedContractor(loadContractors(), user.email);
         if (linked) setLinkedContractor(linked);
       }
     });
@@ -849,11 +892,7 @@ function App() {
       setCurrentView('crm');
     }
     // Detect dual-role: staff user linked to a contractor via email or altEmails
-    const allContractors = loadContractors();
-    const linked = allContractors.find(
-      c => c.email === user.email || c.altEmails?.includes(user.email)
-    );
-    setLinkedContractor(linked ?? null);
+    setLinkedContractor(findLinkedContractor(loadContractors(), user.email));
   };
 
   const handleContractorLogin = (contractor: Contractor) => {
@@ -875,11 +914,9 @@ function App() {
     if (!isContractorMode) {
       await supabase.auth.signOut();
     }
-    setIsAuthenticated(false);
-    setIsContractorMode(false);
-    setCurrentContractor(null);
-    setData(prev => ({ ...prev, users: [], currentUser: undefined as any }));
-    setCurrentView('dashboard');
+    // Reload on sign-out so the next session always starts on the latest bundle.
+    // index.html is no-cache on Vercel, so a reload guarantees fresh assets.
+    window.location.reload();
   };
 
   const handleMarkNotificationRead = (id: string) => {
@@ -939,29 +976,144 @@ function App() {
   };
 
   const handleContractorJobUpdate = (updatedJob: ContractorJob) => {
-    setContractorJobs(contractorJobs.map(j =>
+    // Persist contractorJobs synchronously so a fast reload doesn't drop the update.
+    const nextContractorJobs = contractorJobs.map(j =>
       j.id === updatedJob.id ? updatedJob : j
-    ));
-    // Mirror status to admin-side Job when contractor goes en_route, in_progress, or completed
-    if (updatedJob.sourceJobId && ['en_route', 'in_progress', 'completed'].includes(updatedJob.status)) {
+    );
+    setContractorJobs(nextContractorJobs);
+    saveContractorJobs(nextContractorJobs);
+
+    // ── Phase 1: Full bidirectional mirror to admin-side Job ────────────
+    // Mirror ALL field-side data back to admin Job — not just status.
+    // This closes the dual-store gap where photos, service reports, parts,
+    // and service status written by the contractor never reached the admin record.
+    if (updatedJob.sourceJobId) {
       const woStatusMap: Record<string, string> = {
         en_route: 'in_progress',
         in_progress: 'in_progress',
         completed: 'completed',
       };
-      setData(prev => ({
-        ...prev,
-        jobs: prev.jobs.map(j =>
-          j.id === updatedJob.sourceJobId
-            ? {
-                ...j,
-                woStatus: woStatusMap[updatedJob.status] as any,
-                status: woStatusMap[updatedJob.status] as any,
-                completedAt: updatedJob.status === 'completed' ? (j.completedAt || new Date().toISOString()) : j.completedAt,
-              }
-            : j
-        ),
-      }));
+
+      // Map contractor's 14 photo categories → admin's 5 valid WOPhoto categories.
+      // Bug fix: unsafe casts were letting invalid categories (e.g. 'old_serial',
+      // 'progress', 'cabinet_old') into admin Job.woPhotos, making them invisible
+      // to admin filters that only match 'before|after|serial|process|parts'.
+      const mapContractorCategory = (cat: string): import('./types').WOPhoto['category'] => {
+        if (cat === 'before') return 'before';
+        if (cat === 'after') return 'after';
+        if (cat === 'parts') return 'parts';
+        if (cat === 'serial' || cat === 'old_serial' || cat === 'new_serial') return 'serial';
+        // Everything else (process, progress, ppe, voltage, string_voltage,
+        // cabinet_old, cabinet_new, inv_overview) collapses to 'process'.
+        return 'process';
+      };
+
+      // Convert contractor photos (object-of-arrays of dataURLs) → admin WOPhoto[]
+      const contractorPhotosToWoPhotos = (photos: ContractorJob['photos']): import('./types').WOPhoto[] => {
+        const out: import('./types').WOPhoto[] = [];
+        for (const [cat, urls] of Object.entries(photos)) {
+          for (const url of (urls ?? [])) {
+            if (!url) continue;
+            out.push({
+              id: `cp-${cat}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+              category: mapContractorCategory(cat),
+              name: `${cat} photo`,
+              dataUrl: url,
+              createdAt: new Date().toISOString(),
+            });
+          }
+        }
+        return out;
+      };
+
+      setData(prev => {
+        const adminJob = prev.jobs.find(j => j.id === updatedJob.sourceJobId);
+        if (!adminJob) return prev;
+
+        // Merge contractor photos into admin woPhotos (deduplicate by dataUrl)
+        const existingWoPhotos = adminJob.woPhotos ?? [];
+        const existingUrls = new Set(existingWoPhotos.map(p => p.dataUrl).filter(Boolean));
+        const newPhotos = contractorPhotosToWoPhotos(updatedJob.photos)
+          .filter(p => p.dataUrl && !existingUrls.has(p.dataUrl));
+        const mergedPhotos = [...existingWoPhotos, ...newPhotos];
+
+        // Build the updated admin job with all mirrored fields
+        const statusFields = ['en_route', 'in_progress', 'completed'].includes(updatedJob.status)
+          ? {
+              woStatus: woStatusMap[updatedJob.status] as any,
+              status: woStatusMap[updatedJob.status] as any,
+              completedAt: updatedJob.status === 'completed'
+                ? (adminJob.completedAt || new Date().toISOString())
+                : adminJob.completedAt,
+              startedAt: updatedJob.startedAt ?? adminJob.startedAt,
+            }
+          : {};
+
+        const updatedAdminJob = {
+          ...adminJob,
+          ...statusFields,
+          // Field-side data mirror
+          woPhotos: mergedPhotos.length > 0 ? mergedPhotos : adminJob.woPhotos,
+          serviceReport: updatedJob.operationalNotes ?? updatedJob.completionNotes ?? adminJob.serviceReport,
+          serviceStatus: updatedJob.serviceStatus ?? adminJob.serviceStatus,
+          requiresFollowUp: updatedJob.requiresFollowUp ?? adminJob.requiresFollowUp,
+          nextSteps: updatedJob.nextSteps ?? adminJob.nextSteps,
+          completionNotes: updatedJob.completionNotes ?? adminJob.completionNotes,
+          // Mileage (PowerCare)
+          travelMiles: updatedJob.miles ?? adminJob.travelMiles,
+        };
+
+        const next = {
+          ...prev,
+          jobs: prev.jobs.map(j => j.id === updatedJob.sourceJobId ? updatedAdminJob : j),
+        };
+        saveData(next);
+
+        // Audit log for contractor-originated field update
+        logChange('job.field_update', 'job', updatedJob.sourceJobId!, {
+          source: 'contractor',
+          contractorId: updatedJob.contractorId,
+          fieldsUpdated: Object.keys(statusFields).concat(
+            newPhotos.length > 0 ? ['woPhotos'] : [],
+            updatedJob.serviceStatus ? ['serviceStatus'] : [],
+            updatedJob.operationalNotes || updatedJob.completionNotes ? ['serviceReport'] : [],
+          ),
+        }, data.currentUser?.email ?? updatedJob.contractorId);
+
+        return next;
+      });
+
+      // Fire-and-forget: migrate inline contractor photos into IndexedDB AND
+      // write the resulting photoStoreId references back to admin Job.woPhotos.
+      // Without the write-back, every contractor save would re-migrate the same
+      // blobs (wasted work, no correctness loss but slows things down).
+      const sourceJobId = updatedJob.sourceJobId;
+      void (async () => {
+        try {
+          const adminJob = data.jobs.find(j => j.id === sourceJobId);
+          const woPhotos = adminJob?.woPhotos ?? [];
+          if (woPhotos.length === 0) return;
+          const migrated = await migrateWoPhotos(sourceJobId!, woPhotos as any);
+          // If any new photoStoreId rewrites happened, persist them.
+          const hadRewrites = migrated.some((p: any, i: number) =>
+            p.photoStoreId && !(woPhotos[i] as any).photoStoreId
+          );
+          if (hadRewrites) {
+            setData(prev => {
+              const next = {
+                ...prev,
+                jobs: prev.jobs.map(j =>
+                  j.id === sourceJobId ? { ...j, woPhotos: migrated as any } : j
+                ),
+              };
+              saveData(next);
+              return next;
+            });
+          }
+        } catch (e) {
+          console.error('[App] contractor photo migration failed', sourceJobId, e);
+        }
+      })();
     }
     // Notify admins when a contractor marks the work order as completed
     if (updatedJob.status === 'completed') {
@@ -1025,31 +1177,140 @@ function App() {
       requiresFollowUp: job.requiresFollowUp,
       nextSteps: job.nextSteps,
     };
-    setData(prev => ({ ...prev, jobs: [...prev.jobs, newJob] }));
+    logChange('job.create', 'job', newJob.id, newJob, data.currentUser?.email ?? 'unknown');
+    setData(prev => {
+      const next = { ...prev, jobs: [...prev.jobs, newJob] };
+      saveData(next);
+      return next;
+    });
     // Don't navigate away when creating from a site panel (WO has solarEdgeSiteId set)
     if (!job.solarEdgeSiteId) setCurrentView('jobs');
     return newJob;
   };
 
-  const handleUpdateJob = (updatedJob: Job) => {
+  const handleUpdateJob = (updatedJob: Job, role: 'admin' | 'contractor' | 'technician' = 'admin') => {
     const newActivity = {
       id: `activity-${Date.now()}`,
       type: 'job_updated' as const,
       description: `Work order ${updatedJob.woNumber ?? updatedJob.id} updated — ${updatedJob.serviceType} · ${updatedJob.status}`,
       timestamp: new Date().toISOString(),
     };
-    setData(prev => ({
-      ...prev,
-      jobs: prev.jobs.map((j) => (j.id === updatedJob.id ? updatedJob : j)),
-      customers: prev.customers.map((c) =>
-        c.id === updatedJob.customerId
-          ? { ...c, activityHistory: [newActivity, ...(c.activityHistory || [])] }
-          : c
-      ),
-    }));
+    logChange('job.update', 'job', updatedJob.id, updatedJob, data.currentUser?.email ?? 'unknown');
+    setData(prev => {
+      const next = {
+        ...prev,
+        jobs: prev.jobs.map((j) => (j.id === updatedJob.id ? updatedJob : j)),
+        customers: prev.customers.map((c) =>
+          c.id === updatedJob.customerId
+            ? { ...c, activityHistory: [newActivity, ...(c.activityHistory || [])] }
+            : c
+        ),
+      };
+      saveData(next);
+      return next;
+    });
+
+    // Auto-mirror to contractor side: if a contractor is assigned and no
+    // ContractorJob exists yet for this admin Job, create one. Previously the
+    // ContractorJob was only built when the user advanced status to
+    // 'quote_approved' (WorkOrderPanel.tsx:651), so simply assigning a
+    // contractor + saving left the contractor side empty.
+    if (updatedJob.contractorId) {
+      const alreadyMirrored = contractorJobs.some(cj => cj.sourceJobId === updatedJob.id);
+      if (!alreadyMirrored) {
+        const mirror: ContractorJob = {
+          id: `cj-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          sourceJobId: updatedJob.id,
+          contractorId: updatedJob.contractorId,
+          customerId: updatedJob.customerId,
+          customerName: updatedJob.clientName ?? '',
+          customerPhone: '',
+          customerEmail: undefined,
+          address: updatedJob.siteAddress ?? '',
+          city: '', state: 'FL', zip: '',
+          latitude: 0, longitude: 0,
+          serviceType: updatedJob.serviceType,
+          description: updatedJob.notes || updatedJob.title || `Work Order ${updatedJob.woNumber ?? updatedJob.id}`,
+          priority: (updatedJob.urgency === 'critical' ? 'critical'
+                  : updatedJob.urgency === 'high' ? 'high'
+                  : updatedJob.urgency === 'medium' ? 'normal' : 'low'),
+          status: 'assigned',
+          isRecurringClient: !!updatedJob.isRecurringClient,
+          urgency: (updatedJob.urgency as ContractorJob['urgency']) ?? 'medium',
+          isPowercare: !!updatedJob.isPowercare,
+          scheduledDate: updatedJob.scheduledDate,
+          scheduledTime: updatedJob.scheduledTime,
+          estimatedDuration: 120,
+          assignedAt: new Date().toISOString(),
+          notes: updatedJob.notes,
+          photos: { before: [], serial: [], parts: [], process: [], after: [], progress: [], ppe: [], voltage: [], old_serial: [], string_voltage: [], cabinet_old: [], cabinet_new: [], new_serial: [], inv_overview: [] },
+          parts: [],
+          laborAmount: 0,
+          partsAmount: 0,
+          markupPercent: 0,
+          totalAmount: updatedJob.quoteAmount ?? updatedJob.totalAmount ?? 0,
+          contractorPayRate: updatedJob.contractorPayRate ?? 0,
+          contractorPayUnit: (updatedJob.contractorPayUnit as 'hour' | 'flat') ?? 'flat',
+          contractorTotalPay: (updatedJob.contractorPayRate ?? 0) * ((updatedJob.contractorPayUnit ?? 'flat') === 'flat' ? 1 : (updatedJob.laborHours ?? 1)),
+          paymentStatus: 'pending',
+          payRate: updatedJob.contractorPayRate ?? 0,
+          payUnit: (updatedJob.contractorPayUnit as 'hour' | 'flat') ?? 'flat',
+          totalPay: (updatedJob.contractorPayRate ?? 0) * ((updatedJob.contractorPayUnit ?? 'flat') === 'flat' ? 1 : (updatedJob.laborHours ?? 1)),
+        };
+        const nextCj = [...contractorJobs, mirror];
+        setContractorJobs(nextCj);
+        saveContractorJobs(nextCj);
+        logChange('contractor_job.create', 'contractor_job', mirror.id, mirror, data.currentUser?.email ?? 'unknown');
+      } else {
+        // Already mirrored — keep contractor row in sync with admin edits (assignment / schedule / scope).
+        const nextCj = contractorJobs.map(cj => cj.sourceJobId === updatedJob.id
+          ? { ...cj,
+              contractorId: updatedJob.contractorId!,
+              scheduledDate: updatedJob.scheduledDate,
+              scheduledTime: updatedJob.scheduledTime,
+              serviceType: updatedJob.serviceType,
+              description: updatedJob.notes || updatedJob.title || cj.description,
+              isPowercare: !!updatedJob.isPowercare,
+              totalAmount: updatedJob.quoteAmount ?? updatedJob.totalAmount ?? cj.totalAmount,
+              contractorPayRate: updatedJob.contractorPayRate ?? cj.contractorPayRate,
+              contractorPayUnit: (updatedJob.contractorPayUnit as 'hour' | 'flat') ?? cj.contractorPayUnit,
+            }
+          : cj);
+        setContractorJobs(nextCj);
+        saveContractorJobs(nextCj);
+      }
+    }
+    // Fire-and-forget: offload any inline photo data URLs to IndexedDB so the
+    // localStorage blob doesn't bloat past quota. Runs after the synchronous
+    // save above, so the user's edit is already persisted; this just shrinks
+    // the next saved blob.
+    if (updatedJob.woPhotos && updatedJob.woPhotos.length > 0) {
+      void (async () => {
+        try {
+          const migrated = await migrateWoPhotos(updatedJob.id, updatedJob.woPhotos as any);
+          if (migrated.some((p, i) => p.photoStoreId && !updatedJob.woPhotos![i].photoStoreId)) {
+            setData(prev => {
+              const next = {
+                ...prev,
+                jobs: prev.jobs.map((j) => (j.id === updatedJob.id ? { ...j, woPhotos: migrated as any } : j)),
+              };
+              saveData(next);
+              return next;
+            });
+          }
+        } catch (e) {
+          console.error('[App] photo migration failed for job', updatedJob.id, e);
+        }
+      })();
+    }
   };
 
   const handleDeleteJob = (jobId: string) => {
+    logChange('job.delete', 'job', jobId,
+      { deleted: true, snapshot: data.jobs.find(j => j.id === jobId) ?? null },
+      data.currentUser?.email ?? 'unknown');
+    // Tombstone so realtime/sync cannot resurrect this job from a stale remote row.
+    markJobDeleted(jobId);
     setData(prev => {
       const next = { ...prev, jobs: prev.jobs.filter((j) => j.id !== jobId) };
       saveData(next);
@@ -2069,7 +2330,23 @@ function App() {
             currentUserRole={currentUser?.role ?? 'technician'}
             onCreateJob={handleCreateJob}
             onUpdateJob={handleUpdateJob}
-            onDispatchContractorJob={(cj) => setContractorJobs(prev => [...prev, cj])}
+            onDispatchContractorJob={(cj) => {
+              // Persist immediately so a fast reload doesn't drop the dispatch.
+              const updated = [...contractorJobs, cj];
+              setContractorJobs(updated);
+              saveContractorJobs(updated);
+              // Mirror back onto the admin Job (if it exists) so Manage Work Orders shows it as dispatched.
+              if (cj.sourceJobId) {
+                const parent = data.jobs.find(j => j.id === cj.sourceJobId);
+                if (parent) {
+                  handleUpdateJob({
+                    ...parent,
+                    contractorId: cj.contractorId,
+                    contractorSentAt: parent.contractorSentAt ?? new Date().toISOString(),
+                  });
+                }
+              }
+            }}
             onUpdateSites={data.solarEdgeConfig.apiKey ? handleUpdateFloridaSites : undefined}
             extraSites={data.solarEdgeExtraSites ?? []}
             solarEdgeApiKey={data.solarEdgeConfig.apiKey || undefined}
@@ -2094,7 +2371,21 @@ function App() {
             />
           );
         }
-        return null;
+        return (
+          <div className="p-6 max-w-md mx-auto text-center">
+            <h2 className="text-lg font-semibold text-slate-900 mb-2">My Jobs unavailable</h2>
+            <p className="text-sm text-slate-600 mb-4">
+              No contractor record is linked to your account email{currentUser?.email ? ` (${currentUser.email})` : ''}.
+              Ask an admin to add this email to a contractor's <em>altEmails</em>.
+            </p>
+            <button
+              onClick={() => setCurrentView('dashboard')}
+              className="px-4 py-2 bg-orange-500 text-white rounded-lg text-sm font-medium"
+            >
+              Back to Dashboard
+            </button>
+          </div>
+        );
 
       case 'settings':
         return (
@@ -2146,6 +2437,7 @@ function App() {
 
   return (
     <Suspense fallback={<div className="min-h-screen bg-slate-50 flex items-center justify-center"><div className="w-8 h-8 border-4 border-orange-400 border-t-transparent rounded-full animate-spin" /></div>}>
+      <StorageWarningBanner />
       <Layout
         currentView={currentView}
         onViewChange={handleViewChange}

@@ -574,6 +574,7 @@ export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserId, currentUser
 
   const handleConvertToCustomer = (lead: Lead, siteId: string) => {
     const now = new Date().toISOString();
+    const trimmedId = siteId.trim() || undefined;
     const newCustomer: Partial<Customer> = {
       id:              `cust-${Date.now()}`,
       name:            `${lead.firstName} ${lead.lastName}`.trim(),
@@ -588,7 +589,8 @@ export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserId, currentUser
       type:            'residential',
       notes:           lead.notes || '',
       isPowerCare:     lead.isPowercare ?? false,
-      solarEdgeSiteId: siteId.trim() || undefined,
+      clientId:        trimmedId,
+      solarEdgeSiteId: trimmedId,
       createdAt:       now,
     };
     // Use App-level callback so React state updates immediately (reflects in Customers view)

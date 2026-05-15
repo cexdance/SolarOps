@@ -37,10 +37,12 @@ export const TechnicianView: React.FC<TechnicianViewProps> = ({
   const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [completionNotes, setCompletionNotes] = useState('');
 
-  // Get today's jobs for current technician
+  // Get today's jobs. Admins/COOs see ALL active jobs (this view doubles as Manage Work
+  // Orders for them). Technicians see only the jobs assigned to them.
   const today = new Date().toISOString().split('T')[0];
+  const isAdminLike = currentUser.role === 'admin' || currentUser.role === 'coo';
   const myJobs = jobs
-    .filter((j) => j.technicianId === currentUser.id)
+    .filter((j) => isAdminLike || j.technicianId === currentUser.id)
     .filter((j) => j.scheduledDate === today || j.status === 'in_progress')
     .sort((a, b) => {
       // Active jobs first

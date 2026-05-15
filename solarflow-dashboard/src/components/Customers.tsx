@@ -55,7 +55,7 @@ import { Customer, Job, ClientStatus, Activity, User, CustomerCategory, SolarEdg
 import { ServiceRate } from '../types/contractor';
 import { loadServiceRates } from '../lib/contractorStore';
 import { loadAlerts } from '../lib/operationsStore';
-import { importTrelloCard, TrelloImportResult } from '../lib/trelloImporter';
+import { importTrelloCard, TrelloImportResult, fetchTrelloCard, extractContactInfo } from '../lib/trelloImporter';
 import { FL_SITES, SolarEdgeSite } from '../lib/solarEdgeSites';
 import { AddressAutocomplete } from './AddressAutocomplete';
 import { AddressLink } from './AddressLink';
@@ -4220,6 +4220,48 @@ const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({ onClose, onCr
     referralSource: '',
   });
 
+  // Trello import (pre-fills form fields from a Trello card)
+  const [trelloUrl,     setTrelloUrl]     = useState('');
+  const [trelloLoading, setTrelloLoading] = useState(false);
+  const [trelloError,   setTrelloError]   = useState('');
+  const [trelloOk,      setTrelloOk]      = useState('');
+  const [trelloOpen,    setTrelloOpen]    = useState(false);
+
+  const handleTrelloImport = async () => {
+    const url = trelloUrl.trim();
+    if (!url) return;
+    setTrelloLoading(true);
+    setTrelloError('');
+    setTrelloOk('');
+    try {
+      const card    = await fetchTrelloCard(url);
+      const contact = extractContactInfo(card.desc);
+      // Strip leading "US-XXXXX " from card title to extract human name
+      const namePart = card.name.replace(/^US-\d+\s*/i, '').trim();
+      const parts    = namePart.split(/\s+/);
+      const first    = parts[0] ?? '';
+      const last     = parts.slice(1).join(' ');
+      const us       = card.name.match(/US-\d+/i)?.[0] ?? '';
+
+      setFormData(prev => ({
+        ...prev,
+        clientId:  us || prev.clientId,
+        firstName: first || prev.firstName,
+        lastName:  last  || prev.lastName,
+        name:      namePart || prev.name,
+        phone:     contact.phone || prev.phone,
+        email:     contact.email || prev.email,
+        notes:     card.desc?.slice(0, 1000) || prev.notes,
+        referralSource: prev.referralSource || 'Trello',
+      }));
+      setTrelloOk(`Imported "${card.name}"`);
+    } catch (err) {
+      setTrelloError(err instanceof Error ? err.message : 'Failed to fetch card');
+    } finally {
+      setTrelloLoading(false);
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onCreate({
@@ -4244,6 +4286,45 @@ const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({ onClose, onCr
         </div>
 
         <form onSubmit={handleSubmit} className="p-4 space-y-4">
+          {/* Import from Trello — pre-fills form from a Trello card */}
+          <div className="border border-slate-200 rounded-lg bg-slate-50/60">
+            <button
+              type="button"
+              onClick={() => setTrelloOpen(v => !v)}
+              className="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
+            >
+              <span className="flex items-center gap-2">
+                <Link2 className="w-3.5 h-3.5 text-blue-600" />
+                Import from Trello
+              </span>
+              {trelloOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            </button>
+            {trelloOpen && (
+              <div className="px-3 pb-3 space-y-2">
+                <p className="text-[11px] text-slate-500">Paste a Trello card URL to pre-fill name, phone, email, and notes.</p>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={trelloUrl}
+                    onChange={(e) => { setTrelloUrl(e.target.value); setTrelloError(''); setTrelloOk(''); }}
+                    placeholder="https://trello.com/c/..."
+                    className="flex-1 px-3 py-1.5 text-xs border border-slate-200 rounded-lg"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleTrelloImport}
+                    disabled={!trelloUrl.trim() || trelloLoading}
+                    className="px-3 py-1.5 text-xs font-medium bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white rounded-lg transition-colors"
+                  >
+                    {trelloLoading ? 'Fetching…' : 'Fetch'}
+                  </button>
+                </div>
+                {trelloError && <p className="text-[11px] text-red-600">{trelloError}</p>}
+                {trelloOk    && <p className="text-[11px] text-green-700">{trelloOk}</p>}
+              </div>
+            )}
+          </div>
+
           {/* Client ID and Name Row */}
           <div className="grid grid-cols-2 gap-4">
             <div>

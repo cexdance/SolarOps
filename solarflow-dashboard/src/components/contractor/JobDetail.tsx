@@ -5,7 +5,7 @@ import {
   ArrowLeft, MapPin, Phone, Clock, AlertTriangle, AlertCircle,
   Play, Pause, Camera, CheckCircle, Package, FileText, Send, X, Plus,
   Trash2, Wrench, Zap, Thermometer, User, Mail, DollarSign,
-  Star, MessageSquare, Navigation, ShieldAlert, Image, Check,
+  Star, MessageSquare, Navigation, ShieldAlert, Image as ImageIcon, Check,
   Cloud, CloudRain, Sun, Wind, Sparkles, ChevronDown, ChevronUp,
   HardHat,
 } from 'lucide-react';
@@ -97,7 +97,9 @@ const AfterPhotoSheet: React.FC<{
   onCancel: () => void;
 }> = ({ onCapture, onSkip, onCancel }) => {
   const [preview, setPreview] = useState<string | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [showSourceSheet, setShowSourceSheet] = useState(false);
+  const cameraRef = useRef<HTMLInputElement>(null);
+  const libraryRef = useRef<HTMLInputElement>(null);
 
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -128,15 +130,39 @@ const AfterPhotoSheet: React.FC<{
           <img src={preview} alt="" className="w-full h-40 object-cover rounded-xl border border-slate-200" />
         ) : (
           <button
-            onClick={() => inputRef.current?.click()}
+            onClick={() => setShowSourceSheet(true)}
             className="w-full flex items-center justify-center gap-2 py-3 border-2 border-dashed border-slate-200 rounded-xl text-slate-500 text-sm hover:border-orange-300 hover:text-orange-500 transition-colors cursor-pointer"
           >
             <Camera className="w-5 h-5" />
-            Take After Photo
+            Add After Photo
           </button>
         )}
 
-        <input ref={inputRef} type="file" accept="image/*" capture="environment" onChange={handleFile} className="hidden" />
+        <input ref={cameraRef} type="file" accept="image/*" capture="environment" onChange={handleFile} className="hidden" />
+        <input ref={libraryRef} type="file" accept="image/*" onChange={handleFile} className="hidden" />
+
+        {showSourceSheet && (
+          <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={() => setShowSourceSheet(false)}>
+            <div className="bg-white w-full sm:max-w-sm rounded-t-2xl p-4 space-y-2" onClick={e => e.stopPropagation()}>
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2 text-center">Add after photo</p>
+              <button
+                onClick={() => { setShowSourceSheet(false); cameraRef.current?.click(); }}
+                className="w-full flex items-center gap-3 px-4 py-3 bg-orange-500 text-white rounded-xl font-medium"
+              >
+                <Camera className="w-5 h-5" />
+                Take Photo
+              </button>
+              <button
+                onClick={() => { setShowSourceSheet(false); libraryRef.current?.click(); }}
+                className="w-full flex items-center gap-3 px-4 py-3 bg-slate-100 text-slate-800 rounded-xl font-medium"
+              >
+                <ImageIcon className="w-5 h-5" />
+                Choose from Library
+              </button>
+              <button onClick={() => setShowSourceSheet(false)} className="w-full px-4 py-3 text-slate-500 text-sm">Cancel</button>
+            </div>
+          </div>
+        )}
 
         <div className="flex gap-3">
           <button
@@ -168,8 +194,9 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
   const [showBeforeModal, setShowBeforeModal] = useState(false);
   const [showAfterModal, setShowAfterModal] = useState(false);
 
-  // Photos
-  const [photos, setPhotos] = useState(() => ({
+  // Photos — initial shape always exposes every PhotoCategory key so callers can safely
+  // index into `photos[category]` without an undefined check.
+  const emptyPhotosShape = (): Record<PhotoCategory, string[]> => ({
     before: [],
     serial: [],
     parts: [],
@@ -184,8 +211,20 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
     cabinet_new: [],
     new_serial: [],
     inv_overview: [],
+  });
+  const [photos, setPhotos] = useState(() => ({
+    ...emptyPhotosShape(),
     ...job.photos,
   }));
+  // When the parent swaps in a different job (e.g. server hydration), reset photos
+  // to that job's persisted state. Without this, the local state from the previous
+  // job would auto-save over the new job's photos.
+  const lastJobIdRef = useRef(job.id);
+  useEffect(() => {
+    if (lastJobIdRef.current === job.id) return;
+    lastJobIdRef.current = job.id;
+    setPhotos({ ...emptyPhotosShape(), ...job.photos });
+  }, [job.id, job.photos]);
   const isOptimizerJob = /optimizer|microinverter/i.test(job.serviceType ?? '');
   const isInverterJob  = /inverter/i.test(job.serviceType ?? '') && !isOptimizerJob;
   const [optimizerCount, setOptimizerCount] = useState(job.optimizerCount ?? 1);
@@ -195,7 +234,9 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
 
   const photoTabs = getPhotoTabs(job.isNewInstall, isOptimizerJob, isInverterJob);
   const [activePhotoTab, setActivePhotoTab] = useState<PhotoCategory>('before');
-  const addPhotoRef = useRef<HTMLInputElement>(null);
+  const addPhotoCameraRef = useRef<HTMLInputElement>(null);
+  const addPhotoLibraryRef = useRef<HTMLInputElement>(null);
+  const [showPhotoSourceSheet, setShowPhotoSourceSheet] = useState(false);
 
   // Service report
   const [serviceStatus,   setServiceStatus]   = useState<ServiceStatus>(job.serviceStatus ?? 'fully_operational');
@@ -268,27 +309,27 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
     pauseStartTime,
   );
 
-  // Auto-save photos + notes whenever they change during an active job
+  // Auto-save photos + notes whenever they change — applies in any phase so uploads
+  // before "Start Call" or after "Complete" still persist.
   const isMounted = useRef(false);
   useEffect(() => {
     if (!isMounted.current) { isMounted.current = true; return; }
-    if (phase !== 'active') return;
     onUpdateJob({ ...job, photos, operationalNotes: serviceNotes });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [photos, serviceNotes]);
 
   const addPhoto = (category: PhotoCategory, dataUrl: string) => {
-    setPhotos(prev => ({ ...prev, [category]: [...prev[category], dataUrl] }));
+    setPhotos(prev => ({ ...prev, [category]: [...(prev[category] ?? []), dataUrl] }));
   };
 
   const removePhoto = (category: PhotoCategory, idx: number) => {
-    setPhotos(prev => ({ ...prev, [category]: prev[category].filter((_,i) => i !== idx) }));
+    setPhotos(prev => ({ ...prev, [category]: (prev[category] ?? []).filter((_,i) => i !== idx) }));
   };
 
   const handleAdditionalPhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
-    if (addPhotoRef.current) addPhotoRef.current.value = '';
-    if (!files) return;
+    const inputEl = e.target;
+    if (!files || files.length === 0) { inputEl.value = ''; return; }
     Array.from(files).forEach(async file => {
       try {
         const dataUrl = await compressImageToDataUrl(file);
@@ -297,6 +338,7 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
         console.error('[JobDetail] photo compression failed', err);
       }
     });
+    inputEl.value = '';
   };
 
   // ── Start Call: immediately start clock, photo is optional ────────────────
@@ -654,6 +696,47 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
                 <span className="ml-auto text-xs text-amber-700 font-semibold">⚠ Review safety protocols</span>
               )}
             </div>
+
+            {/* Pre-start photo upload: contractors can attach photos before starting the call. */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-slate-900 flex items-center gap-2">
+                  <Camera className="w-4 h-4 text-orange-500" />
+                  Photos
+                </h3>
+                <select
+                  value={activePhotoTab}
+                  onChange={e => setActivePhotoTab(e.target.value as PhotoCategory)}
+                  className="text-xs px-2 py-1 border border-slate-200 rounded-lg bg-white"
+                >
+                  {photoTabs.map(t => (
+                    <option key={t.id} value={t.id}>{t.label}{(photos[t.id]?.length ?? 0) > 0 ? ` (${photos[t.id].length})` : ''}</option>
+                  ))}
+                </select>
+              </div>
+              {(photos[activePhotoTab]?.length ?? 0) > 0 && (
+                <div className="grid grid-cols-3 gap-2">
+                  {photos[activePhotoTab].map((src, i) => (
+                    <div key={i} className="relative aspect-square rounded-xl overflow-hidden bg-slate-100">
+                      <img src={src} alt="" className="w-full h-full object-cover" />
+                      <button
+                        onClick={() => removePhoto(activePhotoTab, i)}
+                        className="absolute top-1 right-1 p-0.5 bg-red-500 text-white rounded-full cursor-pointer"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <button
+                onClick={() => setShowPhotoSourceSheet(true)}
+                className="w-full flex items-center justify-center gap-2 py-3 border-2 border-dashed border-slate-200 rounded-xl text-slate-500 text-sm hover:border-orange-300 hover:text-orange-500 transition-colors cursor-pointer"
+              >
+                <Camera className="w-4 h-4" />
+                Add Photo
+              </button>
+            </div>
           </>
         )}
 
@@ -756,7 +839,7 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
                   ))}
                   {activePhotoTab !== 'after' && (
                     <button
-                      onClick={() => addPhotoRef.current?.click()}
+                      onClick={() => setShowPhotoSourceSheet(true)}
                       className="aspect-square rounded-xl border-2 border-dashed border-slate-300 flex flex-col items-center justify-center text-slate-400 hover:border-orange-400 hover:text-orange-500 transition-colors cursor-pointer"
                     >
                       <Camera className="w-6 h-6" />
@@ -765,7 +848,7 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
                   )}
                   {activePhotoTab === 'after' && photos.after.length === 0 && (
                     <button
-                      onClick={() => addPhotoRef.current?.click()}
+                      onClick={() => setShowPhotoSourceSheet(true)}
                       className="col-span-3 flex items-center justify-center gap-2 py-3 border-2 border-dashed border-slate-200 rounded-xl text-slate-400 text-xs hover:border-orange-300 hover:text-orange-500 transition-colors cursor-pointer"
                     >
                       <Camera className="w-4 h-4" />
@@ -774,8 +857,6 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
                   )}
                 </div>
 
-                <input ref={addPhotoRef} type="file" accept="image/*" multiple capture="environment"
-                  onChange={handleAdditionalPhoto} className="hidden" />
 
                 {/* Quick notes field — always visible on Photos tab */}
                 <div className="mt-4 pt-4 border-t border-slate-100">
@@ -1324,6 +1405,46 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
                   </div>
                 )}
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Always-mounted photo upload inputs + source chooser ─────────── */}
+        <input ref={addPhotoCameraRef} type="file" accept="image/*" multiple capture="environment"
+          onChange={handleAdditionalPhoto} className="hidden" />
+        <input ref={addPhotoLibraryRef} type="file" accept="image/*" multiple
+          onChange={handleAdditionalPhoto} className="hidden" />
+
+        {showPhotoSourceSheet && (
+          <div
+            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40"
+            onClick={() => setShowPhotoSourceSheet(false)}
+          >
+            <div
+              className="bg-white w-full sm:max-w-sm rounded-t-2xl sm:rounded-2xl p-4 space-y-2"
+              onClick={e => e.stopPropagation()}
+            >
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2 text-center">Add photo</p>
+              <button
+                onClick={() => { setShowPhotoSourceSheet(false); addPhotoCameraRef.current?.click(); }}
+                className="w-full flex items-center gap-3 px-4 py-3 bg-orange-500 text-white rounded-xl font-medium"
+              >
+                <Camera className="w-5 h-5" />
+                Take Photo
+              </button>
+              <button
+                onClick={() => { setShowPhotoSourceSheet(false); addPhotoLibraryRef.current?.click(); }}
+                className="w-full flex items-center gap-3 px-4 py-3 bg-slate-100 text-slate-800 rounded-xl font-medium"
+              >
+                <ImageIcon className="w-5 h-5" />
+                Choose from Library
+              </button>
+              <button
+                onClick={() => setShowPhotoSourceSheet(false)}
+                className="w-full px-4 py-3 text-slate-500 text-sm"
+              >
+                Cancel
+              </button>
             </div>
           </div>
         )}

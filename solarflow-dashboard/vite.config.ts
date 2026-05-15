@@ -14,9 +14,12 @@ function computeBuildInfo() {
   const version = `v${pkg.version}`
   let sha = 'local'
   try { sha = execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim() } catch { /* not a git repo or git unavailable */ }
-  const builtAt = new Date().toISOString()
+  const now = new Date()
+  const builtAt = now.toISOString()
   const buildId = `${version}+${sha}.${Date.now()}`
-  return { version, sha, builtAt, buildId }
+  // DB_VERSION = mm-dd of build date (auto-advances per deploy, no manual maintenance)
+  const dbVersion = `${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  return { version, sha, builtAt, buildId, dbVersion }
 }
 
 export default defineConfig(({ command }) => {
@@ -44,6 +47,7 @@ export default defineConfig(({ command }) => {
     __APP_VERSION__: JSON.stringify(info.version),
     __BUILD_ID__: JSON.stringify(command === 'build' ? info.buildId : 'dev'),
     __BUILT_AT__: JSON.stringify(info.builtAt),
+    __DB_VERSION__: JSON.stringify(info.dbVersion),
   },
   resolve: {
     alias: {
