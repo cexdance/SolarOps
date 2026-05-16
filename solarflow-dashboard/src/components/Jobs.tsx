@@ -3,6 +3,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   Plus, Search, Calendar, MapPin, User, Clock, X, Wrench, Zap,
 } from 'lucide-react';
+import { WorkOrderCalendar } from './WorkOrderCalendar';
 import { Job, Customer, User as UserType, JobStatus, UrgencyLevel, ServiceType } from '../types';
 import { WorkOrderPanel } from './WorkOrderPanel';
 
@@ -222,7 +223,16 @@ export const Jobs: React.FC<JobsProps> = ({
   const [editingCreatedJob, setEditingCreatedJob] = useState<Job | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<JobStatus | 'all'>('all');
-  const [viewMode, setViewMode] = useState<'list' | 'kanban'>(isMobile ? 'list' : 'kanban');
+  const [viewMode, setViewMode] = useState<'list' | 'kanban' | 'calendar'>(() => {
+    const saved = localStorage.getItem('solarops_jobs_view') as 'list' | 'kanban' | 'calendar' | null;
+    if (saved === 'kanban' || saved === 'list' || saved === 'calendar') return saved;
+    return isMobile ? 'list' : 'kanban';
+  });
+
+  const handleViewMode = (mode: 'list' | 'kanban' | 'calendar') => {
+    setViewMode(mode);
+    localStorage.setItem('solarops_jobs_view', mode);
+  };
   const [draggedJobId, setDraggedJobId] = useState<string | null>(null);
 
   const technicians = users.filter((u) => u.role === 'technician' || u.role === 'coo');
@@ -293,16 +303,23 @@ export const Jobs: React.FC<JobsProps> = ({
           </select>
           <div className="flex rounded-lg border border-slate-200 overflow-hidden">
             <button
-              onClick={() => setViewMode('kanban')}
-              className={`px-4 py-2.5 ${viewMode === 'kanban' ? 'bg-slate-800 text-white' : 'bg-white text-slate-600'}`}
+              onClick={() => handleViewMode('kanban')}
+              className={`px-4 py-2.5 ${viewMode === 'kanban' ? 'bg-slate-800 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}
             >
               Kanban
             </button>
             <button
-              onClick={() => setViewMode('list')}
-              className={`px-4 py-2.5 ${viewMode === 'list' ? 'bg-slate-800 text-white' : 'bg-white text-slate-600'}`}
+              onClick={() => handleViewMode('list')}
+              className={`px-4 py-2.5 ${viewMode === 'list' ? 'bg-slate-800 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}
             >
               List
+            </button>
+            <button
+              onClick={() => handleViewMode('calendar')}
+              className={`px-4 py-2.5 flex items-center gap-1.5 ${viewMode === 'calendar' ? 'bg-slate-800 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}
+            >
+              <Calendar className="w-4 h-4" />
+              Calendar
             </button>
           </div>
         </div>
@@ -354,6 +371,18 @@ export const Jobs: React.FC<JobsProps> = ({
             </div>
           )}
         </div>
+      )}
+
+      {/* Calendar View */}
+      {viewMode === 'calendar' && (
+        <WorkOrderCalendar
+          jobs={filteredJobs}
+          customers={customers}
+          users={users}
+          contractors={contractors}
+          isMobile={isMobile}
+          onJobClick={handleCardClick}
+        />
       )}
 
       {/* Step 1: Customer Picker */}
