@@ -2,7 +2,7 @@ import React, { useState, useCallback } from 'react';
 import {
   format, startOfWeek, endOfWeek, addDays, addWeeks, addMonths,
   subWeeks, subMonths, startOfMonth, endOfMonth, eachDayOfInterval,
-  isSameDay, isSameMonth, isToday, parseISO, isValid,
+  isSameDay, isSameMonth, isToday, isValid,
 } from 'date-fns';
 import { ChevronLeft, ChevronRight, CalendarDays } from 'lucide-react';
 import { Job, Customer, User as UserType, JobStatus } from '../types';
@@ -40,7 +40,6 @@ function getWeekStart(date: Date): Date {
 
 function parseDateSafe(dateStr: string | undefined): Date | null {
   if (!dateStr) return null;
-  // scheduledDate is stored as yyyy-mm-dd — parse without timezone conversion
   const parts = dateStr.split('T')[0].split('-');
   if (parts.length !== 3) return null;
   const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
@@ -54,55 +53,179 @@ function getJobsForDay(jobs: Job[], day: Date): Job[] {
   });
 }
 
-// ── Job Pill ──────────────────────────────────────────────────────────────────
+// ── Job Card (planner style) ──────────────────────────────────────────────────
 
-const JobPill: React.FC<{
+const PlannerJobCard: React.FC<{
   job: Job;
   customer?: Customer;
   onClick: (jobId: string) => void;
   dimmed?: boolean;
 }> = ({ job, customer, onClick, dimmed }) => {
   const colorClass = statusColors[job.status] ?? 'bg-slate-100 text-slate-700 border-slate-200';
-  const time = job.scheduledTime ? ` ${job.scheduledTime}` : '';
-  const label = customer?.name ?? job.clientName ?? job.id.slice(0, 6);
+  const name = customer?.name ?? job.clientName ?? `WO ${job.id.slice(0, 6)}`;
+  const time = job.scheduledTime ?? '';
+  const serviceLabel = job.serviceType
+    ? job.serviceType.charAt(0).toUpperCase() + job.serviceType.slice(1)
+    : '';
 
   return (
     <button
       onClick={() => onClick(job.id)}
-      title={`${label}${time} — ${job.status.replace('_', ' ')}`}
-      className={`w-full text-left text-[10px] font-medium px-1.5 py-0.5 rounded border truncate transition-opacity ${colorClass} ${dimmed ? 'opacity-50' : 'hover:opacity-80'}`}
+      className={`w-full text-left rounded border px-2 py-1.5 mb-1 transition-opacity ${colorClass} ${dimmed ? 'opacity-40' : 'hover:opacity-80'}`}
     >
-      {time && <span className="opacity-60 mr-0.5">{time}</span>}{label}
+      {time && (
+        <p className="text-[9px] font-semibold opacity-60 leading-tight mb-0.5">{time}</p>
+      )}
+      <p className="text-[11px] font-semibold leading-tight truncate">{name}</p>
+      {serviceLabel && (
+        <p className="text-[9px] opacity-60 leading-tight truncate">{serviceLabel}</p>
+      )}
     </button>
   );
 };
 
-// ── Day Cell ──────────────────────────────────────────────────────────────────
+// ── Planner Day Column ────────────────────────────────────────────────────────
 
-const DayCell: React.FC<{
+const PlannerDayColumn: React.FC<{
   day: Date;
   jobs: Job[];
   customers: Customer[];
   isCurrentMonth: boolean;
   onJobClick: (jobId: string) => void;
-  maxPills?: number;
-}> = ({ day, jobs, customers, isCurrentMonth, onJobClick, maxPills = 3 }) => {
-  const [showOverflow, setShowOverflow] = useState(false);
-  const todayClass = isToday(day)
-    ? 'bg-orange-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold mx-auto'
-    : 'text-xs font-medium';
-
-  const visible = jobs.slice(0, maxPills);
-  const overflow = jobs.length - maxPills;
+  isLastColumn?: boolean;
+}> = ({ day, jobs, customers, isCurrentMonth, onJobClick, isLastColumn }) => {
+  const today = isToday(day);
 
   return (
-    <div className={`min-h-[90px] p-1 border-b border-r border-slate-100 relative ${!isCurrentMonth ? 'bg-slate-50' : 'bg-white'}`}>
-      <div className={`mb-1 text-center ${isCurrentMonth ? 'text-slate-700' : 'text-slate-300'}`}>
-        <span className={todayClass}>{format(day, 'd')}</span>
+    <div className={`flex flex-col flex-1 min-w-[110px] border-r ${isLastColumn ? 'border-r-0' : ''} border-slate-200`}>
+      {/* Day header */}
+      <div className={`flex flex-col items-center py-2 border-b border-slate-200 ${today ? 'bg-orange-50' : 'bg-slate-50'}`}>
+        <span className={`text-[10px] font-semibold uppercase tracking-wide ${today ? 'text-orange-500' : 'text-slate-500'}`}>
+          {format(day, 'EEE')}
+        </span>
+        <span className={`text-base font-bold leading-tight ${
+          today
+            ? 'text-white bg-orange-500 w-7 h-7 rounded-full flex items-center justify-center text-sm'
+            : isCurrentMonth ? 'text-slate-800' : 'text-slate-300'
+        }`}>
+          {format(day, 'd')}
+        </span>
+      </div>
+
+      {/* Job cards */}
+      <div className={`flex-1 p-1.5 min-h-[120px] ${today ? 'bg-orange-50/30' : 'bg-white'} ${!isCurrentMonth ? 'bg-slate-50/60' : ''}`}>
+        {jobs.length === 0 ? (
+          <div className="h-full flex items-start justify-center pt-4">
+            <span className="text-[10px] text-slate-300">—</span>
+          </div>
+        ) : (
+          jobs.map(job => (
+            <PlannerJobCard
+              key={job.id}
+              job={job}
+              customer={customers.find(c => c.id === job.customerId)}
+              onClick={onJobClick}
+              dimmed={!isCurrentMonth}
+            />
+          ))
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ── Week Planner (7 columns) ──────────────────────────────────────────────────
+
+const WeekPlanner: React.FC<{
+  days: Date[];
+  jobs: Job[];
+  customers: Customer[];
+  focusMonth: Date;
+  onJobClick: (jobId: string) => void;
+}> = ({ days, jobs, customers, focusMonth, onJobClick }) => (
+  <div className="overflow-x-auto rounded-lg border border-slate-200">
+    <div className="flex min-w-[700px]">
+      {days.map((day, i) => (
+        <PlannerDayColumn
+          key={day.toISOString()}
+          day={day}
+          jobs={getJobsForDay(jobs, day)}
+          customers={customers}
+          isCurrentMonth={isSameMonth(day, focusMonth)}
+          onJobClick={onJobClick}
+          isLastColumn={i === days.length - 1}
+        />
+      ))}
+    </div>
+  </div>
+);
+
+// ── 2-Week Planner (2 rows of 7 columns) ─────────────────────────────────────
+
+const TwoWeekPlanner: React.FC<{
+  weekStart: Date;
+  jobs: Job[];
+  customers: Customer[];
+  focusMonth: Date;
+  onJobClick: (jobId: string) => void;
+}> = ({ weekStart, jobs, customers, focusMonth, onJobClick }) => {
+  const week1 = eachDayOfInterval({ start: weekStart, end: addDays(weekStart, 6) });
+  const week2 = eachDayOfInterval({ start: addDays(weekStart, 7), end: addDays(weekStart, 13) });
+
+  const renderRow = (days: Date[]) => (
+    <div className="flex min-w-[700px]">
+      {days.map((day, i) => (
+        <PlannerDayColumn
+          key={day.toISOString()}
+          day={day}
+          jobs={getJobsForDay(jobs, day)}
+          customers={customers}
+          isCurrentMonth={isSameMonth(day, focusMonth)}
+          onJobClick={onJobClick}
+          isLastColumn={i === 6}
+        />
+      ))}
+    </div>
+  );
+
+  return (
+    <div className="overflow-x-auto rounded-lg border border-slate-200 space-y-0">
+      {renderRow(week1)}
+      <div className="border-t-2 border-slate-300" />
+      {renderRow(week2)}
+    </div>
+  );
+};
+
+// ── Month Grid (traditional calendar) ────────────────────────────────────────
+
+const MonthDayCell: React.FC<{
+  day: Date;
+  jobs: Job[];
+  customers: Customer[];
+  isCurrentMonth: boolean;
+  onJobClick: (jobId: string) => void;
+}> = ({ day, jobs, customers, isCurrentMonth, onJobClick }) => {
+  const [showAll, setShowAll] = useState(false);
+  const visible = jobs.slice(0, 3);
+  const overflow = jobs.length - 3;
+
+  return (
+    <div className={`min-h-[100px] p-1 border-b border-r border-slate-100 relative ${!isCurrentMonth ? 'bg-slate-50' : 'bg-white'}`}>
+      <div className="mb-1 text-center">
+        {isToday(day) ? (
+          <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-orange-500 text-white text-xs font-bold">
+            {format(day, 'd')}
+          </span>
+        ) : (
+          <span className={`text-xs font-medium ${isCurrentMonth ? 'text-slate-700' : 'text-slate-300'}`}>
+            {format(day, 'd')}
+          </span>
+        )}
       </div>
       <div className="space-y-0.5">
         {visible.map(job => (
-          <JobPill
+          <PlannerJobCard
             key={job.id}
             job={job}
             customer={customers.find(c => c.id === job.customerId)}
@@ -110,35 +233,64 @@ const DayCell: React.FC<{
             dimmed={!isCurrentMonth}
           />
         ))}
-        {overflow > 0 && (
+        {overflow > 0 && !showAll && (
           <button
-            onClick={() => setShowOverflow(true)}
-            className="w-full text-[10px] text-slate-500 hover:text-slate-700 text-left pl-1"
+            onClick={() => setShowAll(true)}
+            className="w-full text-[10px] text-slate-500 hover:text-slate-700 text-left pl-1 py-0.5"
           >
             +{overflow} more
           </button>
         )}
+        {showAll && jobs.slice(3).map(job => (
+          <PlannerJobCard
+            key={job.id}
+            job={job}
+            customer={customers.find(c => c.id === job.customerId)}
+            onClick={onJobClick}
+            dimmed={!isCurrentMonth}
+          />
+        ))}
       </div>
+    </div>
+  );
+};
 
-      {/* Overflow popover */}
-      {showOverflow && (
-        <div className="absolute top-0 left-0 z-20 bg-white border border-slate-200 rounded-lg shadow-lg p-2 min-w-[180px]">
-          <div className="flex items-center justify-between mb-1.5">
-            <span className="text-xs font-semibold text-slate-700">{format(day, 'MMM d')}</span>
-            <button onClick={() => setShowOverflow(false)} className="text-slate-400 hover:text-slate-600 text-xs">✕</button>
+const MonthGrid: React.FC<{
+  focusDate: Date;
+  jobs: Job[];
+  customers: Customer[];
+  onJobClick: (jobId: string) => void;
+}> = ({ focusDate, jobs, customers, onJobClick }) => {
+  const monthStart = startOfMonth(focusDate);
+  const monthEnd = endOfMonth(focusDate);
+  const gridStart = getWeekStart(monthStart);
+  const gridEnd = endOfWeek(monthEnd, { weekStartsOn: 1 });
+  const days = eachDayOfInterval({ start: gridStart, end: gridEnd });
+  const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+  return (
+    <div className="rounded-lg border border-slate-200 overflow-hidden">
+      {/* Header row */}
+      <div className="grid grid-cols-7 bg-slate-50 border-b border-slate-200">
+        {DAY_LABELS.map(d => (
+          <div key={d} className="text-center text-xs font-semibold text-slate-500 py-2 border-r border-slate-200 last:border-r-0">
+            {d}
           </div>
-          <div className="space-y-0.5">
-            {jobs.map(job => (
-              <JobPill
-                key={job.id}
-                job={job}
-                customer={customers.find(c => c.id === job.customerId)}
-                onClick={(id) => { onJobClick(id); setShowOverflow(false); }}
-              />
-            ))}
-          </div>
-        </div>
-      )}
+        ))}
+      </div>
+      {/* Day cells */}
+      <div className="grid grid-cols-7">
+        {days.map(day => (
+          <MonthDayCell
+            key={day.toISOString()}
+            day={day}
+            jobs={getJobsForDay(jobs, day)}
+            customers={customers}
+            isCurrentMonth={isSameMonth(day, monthStart)}
+            onJobClick={onJobClick}
+          />
+        ))}
+      </div>
     </div>
   );
 };
@@ -177,110 +329,6 @@ const UnscheduledStrip: React.FC<{
   );
 };
 
-// ── Day Column Header Row ─────────────────────────────────────────────────────
-
-const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-
-const DayHeaders: React.FC = () => (
-  <div className="grid grid-cols-7 border-l border-t border-slate-200 rounded-t-lg overflow-hidden">
-    {DAY_LABELS.map(d => (
-      <div key={d} className="text-center text-xs font-semibold text-slate-500 py-2 bg-slate-50 border-b border-r border-slate-200">
-        {d}
-      </div>
-    ))}
-  </div>
-);
-
-// ── Week Grid (7 days) ────────────────────────────────────────────────────────
-
-const WeekGrid: React.FC<{
-  days: Date[];
-  jobs: Job[];
-  customers: Customer[];
-  focusMonth: Date;
-  onJobClick: (jobId: string) => void;
-}> = ({ days, jobs, customers, focusMonth, onJobClick }) => (
-  <div className="border-l border-t border-slate-200 rounded-b-lg overflow-hidden">
-    <div className="grid grid-cols-7">
-      {days.map(day => (
-        <DayCell
-          key={day.toISOString()}
-          day={day}
-          jobs={getJobsForDay(jobs, day)}
-          customers={customers}
-          isCurrentMonth={isSameMonth(day, focusMonth)}
-          onJobClick={onJobClick}
-          maxPills={5}
-        />
-      ))}
-    </div>
-  </div>
-);
-
-// ── Month Grid ────────────────────────────────────────────────────────────────
-
-const MonthGrid: React.FC<{
-  focusDate: Date;
-  jobs: Job[];
-  customers: Customer[];
-  onJobClick: (jobId: string) => void;
-}> = ({ focusDate, jobs, customers, onJobClick }) => {
-  const monthStart = startOfMonth(focusDate);
-  const monthEnd = endOfMonth(focusDate);
-  const gridStart = getWeekStart(monthStart);
-  const gridEnd = endOfWeek(monthEnd, { weekStartsOn: 1 });
-  const days = eachDayOfInterval({ start: gridStart, end: gridEnd });
-
-  return (
-    <div className="border-l border-t border-slate-200 rounded-b-lg overflow-hidden">
-      <div className="grid grid-cols-7">
-        {days.map(day => (
-          <DayCell
-            key={day.toISOString()}
-            day={day}
-            jobs={getJobsForDay(jobs, day)}
-            customers={customers}
-            isCurrentMonth={isSameMonth(day, monthStart)}
-            onJobClick={onJobClick}
-            maxPills={3}
-          />
-        ))}
-      </div>
-    </div>
-  );
-};
-
-// ── Mobile Agenda View ────────────────────────────────────────────────────────
-
-const AgendaView: React.FC<{
-  days: Date[];
-  jobs: Job[];
-  customers: Customer[];
-  onJobClick: (jobId: string) => void;
-}> = ({ days, jobs, customers, onJobClick }) => (
-  <div className="space-y-4">
-    {days.map(day => {
-      const dayJobs = getJobsForDay(jobs, day);
-      return (
-        <div key={day.toISOString()}>
-          <div className={`text-sm font-semibold px-1 mb-1 ${isToday(day) ? 'text-orange-500' : 'text-slate-700'}`}>
-            {format(day, 'EEEE, MMM d')}
-          </div>
-          {dayJobs.length === 0 ? (
-            <p className="text-xs text-slate-400 px-1">No jobs</p>
-          ) : (
-            <div className="space-y-1">
-              {dayJobs.map(job => (
-                <JobPill key={job.id} job={job} customer={customers.find(c => c.id === job.customerId)} onClick={onJobClick} />
-              ))}
-            </div>
-          )}
-        </div>
-      );
-    })}
-  </div>
-);
-
 // ── Main Component ────────────────────────────────────────────────────────────
 
 interface WorkOrderCalendarProps {
@@ -295,7 +343,6 @@ interface WorkOrderCalendarProps {
 export const WorkOrderCalendar: React.FC<WorkOrderCalendarProps> = ({
   jobs,
   customers,
-  isMobile = false,
   onJobClick,
 }) => {
   const [calendarView, setCalendarView] = useState<CalendarViewMode>(() => {
@@ -308,18 +355,12 @@ export const WorkOrderCalendar: React.FC<WorkOrderCalendarProps> = ({
   const handleViewChange = useCallback((mode: CalendarViewMode) => {
     setCalendarView(mode);
     localStorage.setItem(CALENDAR_VIEW_KEY, mode);
-    // Keep focusDate anchored to the current week start when switching
     setFocusDate(prev => getWeekStart(prev));
   }, []);
 
-  // ── Separate scheduled vs unscheduled ──
-  const scheduledJobs = jobs.filter(j => {
-    const d = parseDateSafe(j.scheduledDate);
-    return d !== null;
-  });
+  const scheduledJobs = jobs.filter(j => parseDateSafe(j.scheduledDate) !== null);
   const unscheduledJobs = jobs.filter(j => !parseDateSafe(j.scheduledDate));
 
-  // ── Navigation ──
   const navigateBack = () => {
     if (calendarView === 'month') setFocusDate(d => getWeekStart(startOfMonth(subMonths(d, 1))));
     else if (calendarView === '2week') setFocusDate(d => subWeeks(d, 2));
@@ -334,7 +375,6 @@ export const WorkOrderCalendar: React.FC<WorkOrderCalendarProps> = ({
 
   const goToToday = () => setFocusDate(getWeekStart(new Date()));
 
-  // ── Date range label ──
   const getHeaderLabel = () => {
     if (calendarView === 'month') return format(focusDate, 'MMMM yyyy');
     const weekStart = getWeekStart(focusDate);
@@ -344,30 +384,20 @@ export const WorkOrderCalendar: React.FC<WorkOrderCalendarProps> = ({
         ? `${format(weekStart, 'MMM d')} – ${format(weekEnd, 'd, yyyy')}`
         : `${format(weekStart, 'MMM d')} – ${format(weekEnd, 'MMM d, yyyy')}`;
     }
-    // 2-week
     const twoWeekEnd = addDays(weekStart, 13);
     return isSameMonth(weekStart, twoWeekEnd)
       ? `${format(weekStart, 'MMM d')} – ${format(twoWeekEnd, 'd, yyyy')}`
       : `${format(weekStart, 'MMM d')} – ${format(twoWeekEnd, 'MMM d, yyyy')}`;
   };
 
-  // ── Build visible days array ──
-  const getVisibleDays = (): Date[] => {
-    const weekStart = getWeekStart(focusDate);
-    if (calendarView === 'week') return eachDayOfInterval({ start: weekStart, end: addDays(weekStart, 6) });
-    if (calendarView === '2week') return eachDayOfInterval({ start: weekStart, end: addDays(weekStart, 13) });
-    // month — visible days handled inside MonthGrid
-    return eachDayOfInterval({ start: startOfMonth(focusDate), end: endOfMonth(focusDate) });
-  };
-
-  const visibleDays = getVisibleDays();
+  const weekStart = getWeekStart(focusDate);
+  const weekDays = eachDayOfInterval({ start: weekStart, end: addDays(weekStart, 6) });
 
   return (
     <div className="select-none">
-      {/* Unscheduled strip */}
       <UnscheduledStrip jobs={unscheduledJobs} customers={customers} onJobClick={onJobClick} />
 
-      {/* Calendar header */}
+      {/* Header */}
       <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
         <div className="flex items-center gap-2">
           <button
@@ -393,7 +423,6 @@ export const WorkOrderCalendar: React.FC<WorkOrderCalendarProps> = ({
           </button>
         </div>
 
-        {/* View mode switcher */}
         <div className="flex rounded-lg border border-slate-200 overflow-hidden text-sm">
           {(['week', '2week', 'month'] as CalendarViewMode[]).map(mode => (
             <button
@@ -411,30 +440,27 @@ export const WorkOrderCalendar: React.FC<WorkOrderCalendarProps> = ({
         </div>
       </div>
 
-      {/* Calendar grid */}
-      {isMobile ? (
-        <AgendaView days={visibleDays} jobs={scheduledJobs} customers={customers} onJobClick={onJobClick} />
+      {/* Calendar body */}
+      {calendarView === 'month' ? (
+        <MonthGrid focusDate={focusDate} jobs={scheduledJobs} customers={customers} onJobClick={onJobClick} />
+      ) : calendarView === '2week' ? (
+        <TwoWeekPlanner
+          weekStart={weekStart}
+          jobs={scheduledJobs}
+          customers={customers}
+          focusMonth={focusDate}
+          onJobClick={onJobClick}
+        />
       ) : (
-        <>
-          <DayHeaders />
-          {calendarView === 'month' ? (
-            <MonthGrid focusDate={focusDate} jobs={scheduledJobs} customers={customers} onJobClick={onJobClick} />
-          ) : (
-            <WeekGrid
-              days={calendarView === '2week'
-                ? eachDayOfInterval({ start: getWeekStart(focusDate), end: addDays(getWeekStart(focusDate), 13) })
-                : eachDayOfInterval({ start: getWeekStart(focusDate), end: addDays(getWeekStart(focusDate), 6) })
-              }
-              jobs={scheduledJobs}
-              customers={customers}
-              focusMonth={focusDate}
-              onJobClick={onJobClick}
-            />
-          )}
-        </>
+        <WeekPlanner
+          days={weekDays}
+          jobs={scheduledJobs}
+          customers={customers}
+          focusMonth={focusDate}
+          onJobClick={onJobClick}
+        />
       )}
 
-      {/* Empty state */}
       {scheduledJobs.length === 0 && unscheduledJobs.length === 0 && (
         <div className="text-center py-16">
           <CalendarDays className="w-12 h-12 text-slate-300 mx-auto mb-3" />
