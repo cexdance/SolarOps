@@ -213,6 +213,7 @@ interface CustomersProps {
   solarEdgeSites?: import('../lib/solarEdgeSites').SolarEdgeSite[];
   isMobile: boolean;
   initialCustomerId?: string;
+  selectCustomerSeq?: number;
 }
 
 export const Customers: React.FC<CustomersProps> = ({
@@ -234,6 +235,7 @@ export const Customers: React.FC<CustomersProps> = ({
   solarEdgeSites = [],
   isMobile,
   initialCustomerId,
+  selectCustomerSeq,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [showDedupModal, setShowDedupModal] = useState(false);
@@ -359,12 +361,13 @@ export const Customers: React.FC<CustomersProps> = ({
     initialCustomerId ? (customers.find(c => c.id === initialCustomerId) ?? null) : null
   );
 
-  // React to initialCustomerId changes (e.g. global search while already on this view)
+  // React to global search selections — selectCustomerSeq increments each time,
+  // ensuring the effect re-fires even when the same customer is selected twice
   useEffect(() => {
     if (!initialCustomerId) return;
     const c = customers.find(c => c.id === initialCustomerId);
     if (c) setSelectedCustomer(c);
-  }, [initialCustomerId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [initialCustomerId, selectCustomerSeq]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [showEditModal, setShowEditModal] = useState(false);
   const [showColPicker, setShowColPicker] = useState(false);

@@ -547,6 +547,7 @@ function App() {
   );
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
+  const [selectCustomerSeq, setSelectCustomerSeq] = useState(0);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   // Authentication state - Supabase session + contractor sessionStorage
   const validateContractorSession = (): boolean => {
@@ -2281,6 +2282,7 @@ function App() {
             solarEdgeSites={[...FL_SITES, ...(data.solarEdgeExtraSites ?? [])]}
             isMobile={isMobile}
             initialCustomerId={selectedCustomerId ?? undefined}
+            selectCustomerSeq={selectCustomerSeq}
           />
         );
 
@@ -2461,7 +2463,8 @@ function App() {
         onCheckForUpdate={checkForUpdate}
         onUpdate={() => window.location.reload()}
         customers={data.customers}
-        onSelectCustomer={(id) => { setSelectedCustomerId(id); handleViewChange('customers'); }}
+        jobs={data.jobs}
+        onSelectCustomer={(id) => { setSelectedCustomerId(id); setSelectCustomerSeq(s => s + 1); handleViewChange('customers'); }}
       >
         {renderView()}
       </Layout>

@@ -31,7 +31,7 @@ import {
   RefreshCw,
   CheckCircle2,
 } from 'lucide-react';
-import { User as UserType, AppNotification, Customer } from '../types';
+import { User as UserType, AppNotification, Customer, Job } from '../types';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -50,6 +50,7 @@ interface LayoutProps {
   onCheckForUpdate?: () => Promise<void>;
   onUpdate?: () => void;
   customers?: Customer[];
+  jobs?: Job[];
   onSelectCustomer?: (customerId: string) => void;
 }
 
@@ -89,6 +90,7 @@ export const Layout: React.FC<LayoutProps> = ({
   onCheckForUpdate,
   onUpdate,
   customers = [],
+  jobs = [],
   onSelectCustomer,
 }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -122,12 +124,45 @@ export const Layout: React.FC<LayoutProps> = ({
     if (searchOpen) searchInputRef.current?.focus();
   }, [searchOpen]);
 
-  const searchResults = searchQuery.trim().length >= 1
-    ? customers.filter(c => {
-        const q = searchQuery.toLowerCase();
-        return c.name.toLowerCase().includes(q) || c.phone?.toLowerCase().includes(q);
-      }).slice(0, 8)
-    : [];
+  // Build RMA/case index: customerId → all rma+case numbers from their jobs
+  const rmaIndex = React.useMemo(() => {
+    const idx: Record<string, string[]> = {};
+    for (const job of jobs) {
+      if (!job.customerId) continue;
+      if (!idx[job.customerId]) idx[job.customerId] = [];
+      for (const entry of job.rmaEntries ?? []) {
+        if (entry.rmaNumber) idx[job.customerId].push(entry.rmaNumber.toLowerCase());
+        if (entry.caseNumber) idx[job.customerId].push(entry.caseNumber.toLowerCase());
+      }
+    }
+    return idx;
+  }, [jobs]);
+
+  const searchResults: { customer: Customer; matchLabel: string }[] = React.useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (q.length < 1) return [];
+    const results: { customer: Customer; matchLabel: string }[] = [];
+    for (const c of customers) {
+      let matchLabel = '';
+      if (c.name.toLowerCase().includes(q)) {
+        matchLabel = c.name;
+      } else if (c.phone?.toLowerCase().includes(q)) {
+        matchLabel = c.phone;
+      } else if (c.email?.toLowerCase().includes(q)) {
+        matchLabel = c.email;
+      } else if (c.clientId?.toLowerCase().includes(q)) {
+        matchLabel = `Client #${c.clientId}`;
+      } else if (c.address?.toLowerCase().includes(q) || c.city?.toLowerCase().includes(q)) {
+        matchLabel = [c.address, c.city, c.state].filter(Boolean).join(', ');
+      } else if ((rmaIndex[c.id] ?? []).some(r => r.includes(q))) {
+        const match = (rmaIndex[c.id] ?? []).find(r => r.includes(q)) ?? '';
+        matchLabel = `RMA/Case: ${match.toUpperCase()}`;
+      }
+      if (matchLabel) results.push({ customer: c, matchLabel });
+      if (results.length >= 8) break;
+    }
+    return results;
+  }, [searchQuery, customers, rmaIndex]);
 
   const handleSelectCustomer = (id: string) => {
     onSelectCustomer?.(id);
@@ -202,23 +237,32 @@ export const Layout: React.FC<LayoutProps> = ({
             </div>
 
             {searchOpen && searchQuery.trim().length >= 1 && (
-              <div className="absolute right-0 top-full mt-1 w-72 bg-white rounded-xl shadow-2xl border border-slate-200 z-50 overflow-hidden">
+              <div className="absolute right-0 top-full mt-1 w-80 bg-white rounded-xl shadow-2xl border border-slate-200 z-50 overflow-hidden">
                 {searchResults.length === 0 ? (
                   <div className="px-4 py-5 text-center text-sm text-slate-400">No clients found</div>
                 ) : (
-                  <ul className="divide-y divide-slate-100">
-                    {searchResults.map(c => (
-                      <li key={c.id}>
-                        <button
-                          onClick={() => handleSelectCustomer(c.id)}
-                          className="w-full text-left px-4 py-2.5 hover:bg-orange-50 transition-colors"
-                        >
-                          <p className="text-sm font-medium text-slate-800 truncate">{c.name}</p>
-                          {c.phone && <p className="text-xs text-slate-400 mt-0.5">{c.phone}</p>}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
+                  <>
+                    <div className="px-3 py-1.5 bg-slate-50 border-b border-slate-100">
+                      <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">
+                        {searchResults.length} result{searchResults.length !== 1 ? 's' : ''}
+                      </p>
+                    </div>
+                    <ul className="divide-y divide-slate-100 max-h-72 overflow-y-auto">
+                      {searchResults.map(({ customer: c, matchLabel }) => (
+                        <li key={c.id}>
+                          <button
+                            onClick={() => handleSelectCustomer(c.id)}
+                            className="w-full text-left px-4 py-2.5 hover:bg-orange-50 transition-colors"
+                          >
+                            <p className="text-sm font-medium text-slate-800 truncate">{c.name}</p>
+                            <p className="text-xs text-slate-400 mt-0.5 truncate">
+                              {matchLabel !== c.name ? matchLabel : (c.email || c.phone || c.city || '')}
+                            </p>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </>
                 )}
               </div>
             )}
