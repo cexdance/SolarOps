@@ -1516,11 +1516,17 @@ function App() {
         const response = await fetch(url);
 
         if (!response.ok) {
+          // Try to extract a JSON error body from the proxy
+          let detail = '';
+          try { const b = await response.json(); detail = b?.error || JSON.stringify(b); } catch { /* non-JSON */ }
           if (response.status === 401 || response.status === 403) {
-            alert('Invalid API key. Please check your SolarEdge API key in Settings.');
+            alert(`Invalid API key (HTTP ${response.status}).${detail ? `\n${detail}` : ''}\nPlease check your SolarEdge API key in Settings.`);
             return;
           }
-          throw new Error(`HTTP error: ${response.status}`);
+          if (response.status === 404) {
+            throw new Error('API proxy not found (404). The /api/solaredge route may not be deployed.');
+          }
+          throw new Error(`HTTP ${response.status}${detail ? `: ${detail}` : ''}`);
         }
 
         const result = await response.json();
@@ -1651,7 +1657,8 @@ function App() {
       alert(`Sync complete!\n• ${sites.length} sites in group\n• ${matchedCount} matched to existing customers\n• ${newCustomersFromSync.length} new customers created\n• ${newExtraSites.length} new sites added to monitoring\n\nAPI calls today: ${newDailyCount}/${SE_DAILY_LIMIT} (${remaining} remaining).`);
     } catch (error) {
       console.error('SolarEdge sync error:', error);
-      alert('Failed to sync with SolarEdge. Please check your API key and try again.');
+      const msg = error instanceof Error ? error.message : String(error);
+      alert(`Failed to sync with SolarEdge.\n\n${msg}`);
     }
   };
 
