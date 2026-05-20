@@ -1,7 +1,7 @@
 // SolarFlow MVP - Jobs Component
 import React, { useState, useRef, useEffect } from 'react';
 import {
-  Plus, Search, Calendar, MapPin, User, Clock, X, Wrench, Zap,
+  Plus, Search, Calendar, MapPin, User, Clock, X, Wrench, Zap, LayoutGrid, List as ListIcon,
 } from 'lucide-react';
 import { WorkOrderCalendar } from './WorkOrderCalendar';
 import { Job, Customer, User as UserType, JobStatus, UrgencyLevel, ServiceType } from '../types';
@@ -277,15 +277,28 @@ export const Jobs: React.FC<JobsProps> = ({
 
       {/* Filters */}
       <div className="flex flex-col md:flex-row gap-3 mb-6">
-        <div className="flex-1 relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Search jobs..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-          />
+        <div className="flex rounded-lg border border-slate-200 overflow-hidden">
+          <button
+            onClick={() => handleViewMode('kanban')}
+            title="Kanban"
+            className={`px-3 py-2.5 flex items-center justify-center ${viewMode === 'kanban' ? 'bg-slate-800 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}
+          >
+            <LayoutGrid className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => handleViewMode('list')}
+            title="List"
+            className={`px-3 py-2.5 flex items-center justify-center ${viewMode === 'list' ? 'bg-slate-800 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}
+          >
+            <ListIcon className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => handleViewMode('calendar')}
+            title="Calendar"
+            className={`px-3 py-2.5 flex items-center justify-center ${viewMode === 'calendar' ? 'bg-slate-800 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}
+          >
+            <Calendar className="w-4 h-4" />
+          </button>
         </div>
         <div className="flex gap-2">
           <select
@@ -301,27 +314,16 @@ export const Jobs: React.FC<JobsProps> = ({
             <option value="invoiced">Invoiced</option>
             <option value="paid">Paid</option>
           </select>
-          <div className="flex rounded-lg border border-slate-200 overflow-hidden">
-            <button
-              onClick={() => handleViewMode('kanban')}
-              className={`px-4 py-2.5 ${viewMode === 'kanban' ? 'bg-slate-800 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}
-            >
-              Kanban
-            </button>
-            <button
-              onClick={() => handleViewMode('list')}
-              className={`px-4 py-2.5 ${viewMode === 'list' ? 'bg-slate-800 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}
-            >
-              List
-            </button>
-            <button
-              onClick={() => handleViewMode('calendar')}
-              className={`px-4 py-2.5 flex items-center gap-1.5 ${viewMode === 'calendar' ? 'bg-slate-800 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}
-            >
-              <Calendar className="w-4 h-4" />
-              Calendar
-            </button>
-          </div>
+        </div>
+        <div className="flex-1 relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Search jobs..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+          />
         </div>
       </div>
 

@@ -5,15 +5,18 @@ import {
   AlertTriangle,
   CheckCircle,
   Clock,
-  Filter,
   Search,
   Send,
   ExternalLink,
   FileText,
   ChevronRight,
+  LayoutGrid,
+  List as ListIcon,
+  Calendar,
 } from 'lucide-react';
 import { Job, Customer, User as UserType } from '../types';
 import { createXeroInvoice } from '../lib/xeroService';
+import { WorkOrderCalendar } from './WorkOrderCalendar';
 
 interface BillingProps {
   jobs: Job[];
@@ -37,6 +40,16 @@ export const Billing: React.FC<BillingProps> = ({
   const [filter, setFilter] = useState<'all' | 'unbilled' | 'invoiced' | 'paid'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [processingIds, setProcessingIds] = useState<string[]>([]);
+  const [viewMode, setViewMode] = useState<'kanban' | 'list' | 'calendar'>(() => {
+    const saved = localStorage.getItem('solarops_billing_view');
+    if (saved === 'kanban' || saved === 'list' || saved === 'calendar') return saved as 'kanban' | 'list' | 'calendar';
+    return 'list';
+  });
+
+  const handleViewMode = (mode: 'kanban' | 'list' | 'calendar') => {
+    setViewMode(mode);
+    localStorage.setItem('solarops_billing_view', mode);
+  };
 
   // Filter jobs by status
   const filteredJobs = jobs
@@ -92,6 +105,12 @@ export const Billing: React.FC<BillingProps> = ({
 
   const handleMarkPaid = (job: Job) => {
     onUpdateJob({ ...job, status: 'paid' });
+  };
+
+  const getJobBillingStatus = (job: Job): 'unbilled' | 'invoiced' | 'paid' => {
+    if (job.status === 'paid') return 'paid';
+    if (job.status === 'invoiced') return 'invoiced';
+    return 'unbilled';
   };
 
   const getDaysSinceCompleted = (completedAt?: string) => {
@@ -192,6 +211,42 @@ export const Billing: React.FC<BillingProps> = ({
 
       {/* Filters */}
       <div className="flex flex-col md:flex-row gap-3 mb-6">
+        {/* View toggle */}
+        <div className="flex rounded-lg border border-slate-200 overflow-hidden shrink-0">
+          <button
+            onClick={() => handleViewMode('kanban')}
+            title="Kanban"
+            className={`px-3 py-2.5 flex items-center justify-center ${viewMode === 'kanban' ? 'bg-slate-800 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}
+          >
+            <LayoutGrid className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => handleViewMode('list')}
+            title="List"
+            className={`px-3 py-2.5 flex items-center justify-center ${viewMode === 'list' ? 'bg-slate-800 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}
+          >
+            <ListIcon className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => handleViewMode('calendar')}
+            title="Calendar"
+            className={`px-3 py-2.5 flex items-center justify-center ${viewMode === 'calendar' ? 'bg-slate-800 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}
+          >
+            <Calendar className="w-4 h-4" />
+          </button>
+        </div>
+        {/* Type dropdown */}
+        <select
+          value={filter}
+          onChange={(e) => setFilter(e.target.value as 'all' | 'unbilled' | 'invoiced' | 'paid')}
+          className="px-4 py-2.5 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 shrink-0"
+        >
+          <option value="all">All ({jobs.length})</option>
+          <option value="unbilled">Unbilled ({unbilledJobs.length})</option>
+          <option value="invoiced">Invoiced ({invoicedJobs.length})</option>
+          <option value="paid">Paid ({paidJobs.length})</option>
+        </select>
+        {/* Search */}
         <div className="flex-1 relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
           <input
@@ -202,51 +257,91 @@ export const Billing: React.FC<BillingProps> = ({
             className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
           />
         </div>
-        <div className="flex rounded-lg border border-slate-200 overflow-hidden">
-          <button
-            onClick={() => setFilter('all')}
-            className={`px-4 py-2.5 font-medium transition-colors ${
-              filter === 'all'
-                ? 'bg-slate-800 text-white'
-                : 'bg-white text-slate-600 hover:bg-slate-50'
-            }`}
-          >
-            All ({jobs.length})
-          </button>
-          <button
-            onClick={() => setFilter('unbilled')}
-            className={`px-4 py-2.5 font-medium transition-colors ${
-              filter === 'unbilled'
-                ? 'bg-red-600 text-white'
-                : 'bg-white text-slate-600 hover:bg-slate-50'
-            }`}
-          >
-            Unbilled ({unbilledJobs.length})
-          </button>
-          <button
-            onClick={() => setFilter('invoiced')}
-            className={`px-4 py-2.5 font-medium transition-colors ${
-              filter === 'invoiced'
-                ? 'bg-purple-600 text-white'
-                : 'bg-white text-slate-600 hover:bg-slate-50'
-            }`}
-          >
-            Invoiced ({invoicedJobs.length})
-          </button>
-          <button
-            onClick={() => setFilter('paid')}
-            className={`px-4 py-2.5 font-medium transition-colors ${
-              filter === 'paid'
-                ? 'bg-green-600 text-white'
-                : 'bg-white text-slate-600 hover:bg-slate-50'
-            }`}
-          >
-            Paid ({paidJobs.length})
-          </button>
-        </div>
       </div>
 
-      {/* Job List */}
+      {/* Kanban View */}
+      {viewMode === 'kanban' && (
+        <div className="flex gap-4 overflow-x-auto pb-4">
+          {([
+            { key: 'unbilled' as const, label: 'Unbilled', count: unbilledJobs.length, total: unbilledTotal, headerCls: 'bg-red-50 border-red-200 text-red-700' },
+            { key: 'invoiced' as const, label: 'Invoiced', count: invoicedJobs.length, total: invoicedTotal, headerCls: 'bg-purple-50 border-purple-200 text-purple-700' },
+            { key: 'paid'    as const, label: 'Paid',     count: paidJobs.length,     total: paidTotal,     headerCls: 'bg-green-50 border-green-200 text-green-700' },
+          ]).map(col => {
+            const colJobs = filteredJobs.filter(j => getJobBillingStatus(j) === col.key);
+            return (
+              <div key={col.key} className="flex-1 min-w-[280px]">
+                <div className={`flex items-center justify-between px-3 py-2 rounded-lg border mb-3 ${col.headerCls}`}>
+                  <span className="font-semibold text-sm">{col.label}</span>
+                  <span className="text-xs font-medium">{col.count} · ${col.total.toLocaleString()}</span>
+                </div>
+                <div className="space-y-3">
+                  {colJobs.length === 0 ? (
+                    <div className="text-center py-8 text-slate-400 text-sm border-2 border-dashed border-slate-200 rounded-xl">
+                      No {col.label.toLowerCase()} jobs
+                    </div>
+                  ) : colJobs.map(job => {
+                    const customer = getCustomer(job.customerId);
+                    const billingStatus = getJobBillingStatus(job);
+                    return (
+                      <div key={job.id} className="bg-white rounded-xl border border-slate-200 p-3 hover:shadow-md transition-shadow">
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="min-w-0">
+                            {customer?.clientId && (
+                              <p className="text-[10px] text-slate-400 font-medium leading-tight mb-0.5">{customer.clientId}</p>
+                            )}
+                            <p className="font-semibold text-slate-900 text-sm leading-tight truncate">{customer?.name}</p>
+                          </div>
+                          <p className="font-bold text-slate-900 text-sm ml-2 shrink-0">${job.totalAmount.toFixed(0)}</p>
+                        </div>
+                        <p className="text-xs text-slate-500 mb-3">{job.serviceType}</p>
+                        <div className="flex gap-2">
+                          {billingStatus === 'unbilled' && (
+                            <>
+                              <button
+                                onClick={() => handleGenerateInvoice(job)}
+                                disabled={processingIds.includes(job.id) || !xeroConnected}
+                                className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg text-xs font-medium transition-colors ${xeroConnected ? 'bg-green-600 text-white hover:bg-green-700' : 'bg-slate-200 text-slate-500 cursor-not-allowed'}`}
+                              >
+                                <Send className="w-3 h-3" /> Invoice
+                              </button>
+                              <button onClick={() => handleMarkPaid(job)} className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-50">Paid</button>
+                            </>
+                          )}
+                          {billingStatus === 'invoiced' && (
+                            <>
+                              <button className="flex-1 flex items-center justify-center gap-1 py-1.5 bg-purple-100 text-purple-700 rounded-lg text-xs font-medium hover:bg-purple-200">
+                                <ExternalLink className="w-3 h-3" /> Xero
+                              </button>
+                              <button onClick={() => handleMarkPaid(job)} className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700">Paid</button>
+                            </>
+                          )}
+                          {billingStatus === 'paid' && (
+                            <div className="flex items-center gap-1 text-green-600 text-xs font-medium">
+                              <CheckCircle className="w-4 h-4" /> Payment Received
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Calendar View */}
+      {viewMode === 'calendar' && (
+        <WorkOrderCalendar
+          jobs={filteredJobs}
+          customers={customers}
+          onJobClick={() => {}}
+        />
+      )}
+
+      {/* List View */}
+      {viewMode === 'list' && (
       <div className="space-y-3">
         {filteredJobs.length === 0 ? (
           <div className="text-center py-12">
@@ -257,20 +352,24 @@ export const Billing: React.FC<BillingProps> = ({
           filteredJobs.map((job) => {
             const customer = getCustomer(job.customerId);
             const daysOld = getDaysSinceCompleted(job.completedAt);
+            const billingStatus = getJobBillingStatus(job);
 
             return (
               <div
                 key={job.id}
                 className={`
                   bg-white rounded-xl border p-4
-                  ${filter === 'unbilled' && daysOld > 2 ? 'border-red-300 bg-red-50' : 'border-slate-200'}
+                  ${billingStatus === 'unbilled' && daysOld > 2 ? 'border-red-300 bg-red-50' : 'border-slate-200'}
                 `}
               >
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
+                    {customer?.clientId && (
+                      <p className="text-[10px] text-slate-400 font-medium leading-tight mb-0.5">{customer.clientId}</p>
+                    )}
                     <div className="flex items-center gap-2 mb-1">
                       <h3 className="font-semibold text-slate-900">{customer?.name}</h3>
-                      {filter === 'unbilled' && daysOld > 2 && (
+                      {billingStatus === 'unbilled' && daysOld > 2 && (
                         <span className="text-xs px-2 py-0.5 bg-red-100 text-red-700 rounded-full">
                           {daysOld} days old
                         </span>
@@ -302,7 +401,7 @@ export const Billing: React.FC<BillingProps> = ({
 
                 {/* Actions */}
                 <div className="flex gap-2 mt-4 pt-4 border-t border-slate-100">
-                  {filter === 'unbilled' && (
+                  {billingStatus === 'unbilled' && (
                     <>
                       <button
                         onClick={() => handleGenerateInvoice(job)}
@@ -337,7 +436,7 @@ export const Billing: React.FC<BillingProps> = ({
                     </>
                   )}
 
-                  {filter === 'invoiced' && (
+                  {billingStatus === 'invoiced' && (
                     <>
                       <button className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-purple-100 text-purple-700 rounded-lg font-medium hover:bg-purple-200 transition-colors">
                         <ExternalLink className="w-4 h-4" />
@@ -352,7 +451,7 @@ export const Billing: React.FC<BillingProps> = ({
                     </>
                   )}
 
-                  {filter === 'paid' && (
+                  {billingStatus === 'paid' && (
                     <div className="flex items-center gap-2 text-green-600">
                       <CheckCircle className="w-5 h-5" />
                       <span className="font-medium">Payment Received</span>
@@ -364,6 +463,7 @@ export const Billing: React.FC<BillingProps> = ({
           })
         )}
       </div>
+      )}
     </div>
   );
 };

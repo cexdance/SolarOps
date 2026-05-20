@@ -73,6 +73,9 @@ const PlannerJobCard: React.FC<{
       onClick={() => onClick(job.id)}
       className={`w-full text-left rounded border px-2 py-1.5 mb-1 transition-opacity ${colorClass} ${dimmed ? 'opacity-40' : 'hover:opacity-80'}`}
     >
+      {customer?.clientId && (
+        <p className="text-[9px] font-semibold opacity-60 leading-tight mb-0.5 truncate">{customer.clientId}</p>
+      )}
       {time && (
         <p className="text-[9px] font-semibold opacity-60 leading-tight mb-0.5">{time}</p>
       )}
@@ -362,13 +365,13 @@ export const WorkOrderCalendar: React.FC<WorkOrderCalendarProps> = ({
   const unscheduledJobs = jobs.filter(j => !parseDateSafe(j.scheduledDate));
 
   const navigateBack = () => {
-    if (calendarView === 'month') setFocusDate(d => getWeekStart(startOfMonth(subMonths(d, 1))));
+    if (calendarView === 'month') setFocusDate(d => getWeekStart(startOfMonth(subMonths(addDays(d, 15), 1))));
     else if (calendarView === '2week') setFocusDate(d => subWeeks(d, 2));
     else setFocusDate(d => subWeeks(d, 1));
   };
 
   const navigateForward = () => {
-    if (calendarView === 'month') setFocusDate(d => getWeekStart(startOfMonth(addMonths(d, 1))));
+    if (calendarView === 'month') setFocusDate(d => getWeekStart(startOfMonth(addMonths(addDays(d, 15), 1))));
     else if (calendarView === '2week') setFocusDate(d => addWeeks(d, 2));
     else setFocusDate(d => addWeeks(d, 1));
   };

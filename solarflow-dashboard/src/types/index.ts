@@ -44,6 +44,7 @@ export interface Activity {
   userId?: string;
   userName?: string;
   mentions?: string[]; // user IDs of @mentioned users
+  reactions?: Record<string, string[]>; // emoji → array of userIds
 }
 
 export interface Customer {

@@ -101,15 +101,17 @@ export function extractContactInfo(desc: string): { phone: string; email: string
 }
 
 // ── Build Activity entries ─────────────────────────────────────────────────────
+// IDs are derived from the card's stable short key so re-importing the same
+// card produces identical IDs — enabling dedup by ID in importTrelloCard.
 
 export function buildImportActivities(card: TrelloCardData, userName: string): Activity[] {
   const activities: Activity[] = [];
   const now = new Date().toISOString();
-  const base = Date.now();
+  const cardKey = card.shortUrl.split('/').pop() ?? card.shortUrl;
 
   if (card.desc.trim()) {
     activities.push({
-      id:          `trello-desc-${base}`,
+      id:          `trello-desc-${cardKey}`,
       type:        'note_added',
       description: `📋 Trello import — "${card.name}":\n\n${card.desc.trim()}`,
       timestamp:   now,
@@ -119,9 +121,11 @@ export function buildImportActivities(card: TrelloCardData, userName: string): A
 
   // Attachments are imported as real CustomerFile records — no note needed
 
-  card.comments.forEach((c, i) => {
+  card.comments.forEach((c) => {
+    // Use author + exact timestamp as stable comment key
+    const commentKey = `${cardKey}-${c.date}`;
     activities.push({
-      id:          `trello-comment-${base + 2 + i}`,
+      id:          `trello-comment-${commentKey}`,
       type:        'note_added',
       description: `💬 Trello comment by ${c.author} [${c.date.slice(0, 10)}]:\n${c.text}`,
       timestamp:   c.date,
@@ -141,14 +145,18 @@ export async function importTrelloCard(
 ): Promise<TrelloImportResult> {
   const card        = await fetchTrelloCard(urlOrId);
   const contactInfo = extractContactInfo(card.desc);
-  const activities  = buildImportActivities(card, userName);
+  const allActivities = buildImportActivities(card, userName);
+
+  // Dedup against timeline already in the customer record
+  const existingActivityIds = new Set((customer.activityHistory ?? []).map(a => a.id));
+  const activities = allActivities.filter(a => !existingActivityIds.has(a.id));
 
   // Build CustomerFile records — download each attachment and re-host in Supabase
   // so the URL is permanent and never blocked by browser CSP or Trello token expiry.
-  const base = Date.now();
+  const cardKey = card.shortUrl.split('/').pop() ?? card.shortUrl;
   const files: CustomerFile[] = await Promise.all(
     card.attachments.map(async (a, i) => {
-      const fileId    = `trello-file-${base + i}`;
+      const fileId    = `trello-file-${cardKey}-${i}`;
       const sourceUrl = a.url; // raw Trello attachment URL (no token)
 
       // Try to upload to Supabase Storage → get a permanent public URL
@@ -183,13 +191,17 @@ export async function importTrelloCard(
 
   const existingFiles = customer.files ?? [];
   // Avoid duplicating files already imported from the same card
-  const existingUrls = new Set(existingFiles.map(f => f.name + f.size));
-  const newFiles = files.filter(f => !existingUrls.has(f.name + f.size));
+  const existingFileKeys = new Set(existingFiles.map(f => f.name + (f.size ?? '')));
+  const newFiles = files.filter(f => !existingFileKeys.has(f.name + (f.size ?? '')));
 
+  const existingHistory = customer.activityHistory ?? [];
   const updates: Partial<Customer> = {
     trelloBackupUrl: card.shortUrl,
-    activityHistory: [...activities, ...(customer.activityHistory ?? [])],
-    files:           [...newFiles, ...existingFiles],
+    // Only prepend net-new activities — skip anything already in the timeline
+    activityHistory: activities.length > 0
+      ? [...activities, ...existingHistory]
+      : existingHistory,
+    files: newFiles.length > 0 ? [...newFiles, ...existingFiles] : existingFiles,
   };
 
   if (!customer.phone && contactInfo.phone) updates.phone = contactInfo.phone;

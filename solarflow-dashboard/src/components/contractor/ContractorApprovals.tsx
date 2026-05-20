@@ -4,6 +4,7 @@ import {
   User, Building, Shield, CheckCircle, XCircle, Clock, FileText,
   Mail, Phone, MapPin, AlertCircle, ChevronRight, DollarSign, X,
   Plus, Trash2, Pencil, Save, Wrench, ReceiptText,
+  LayoutGrid, List as ListIcon, Calendar,
 } from 'lucide-react';
 import { Contractor, ContractorStatus, ContractorJob, ContractorExpense } from '../../types/contractor';
 import { ContractorInvite } from './ContractorInvite';
@@ -52,6 +53,7 @@ export const ContractorApprovals: React.FC<ContractorApprovalsProps> = ({
   const [earningsPeriod, setEarningsPeriod] = useState<'week' | 'curr_month' | 'prev_month' | 'ytd'>('curr_month');
   const [selectedWO, setSelectedWO]         = useState<ContractorJob | null>(null);
   const [showExpenseModal, setShowExpenseModal] = useState(false);
+  const [woViewMode, setWoViewMode] = useState<'list' | 'kanban' | 'calendar'>('list');
 
   const contractorWOs = contractorJobs.filter(j => j.contractorId === selected?.id);
 
@@ -465,11 +467,28 @@ export const ContractorApprovals: React.FC<ContractorApprovalsProps> = ({
 
             {/* ── Work Orders tab ───────────────────────────────────────── */}
             {!showEditMode && activeTab === 'jobs' && (
-              <div className="p-6 max-w-2xl">
+              <div className="p-6">
+                {/* View toggle */}
+                <div className="flex rounded-lg border border-slate-200 overflow-hidden w-fit mb-4">
+                  {(['list', 'kanban', 'calendar'] as const).map((mode) => (
+                    <button
+                      key={mode}
+                      title={mode.charAt(0).toUpperCase() + mode.slice(1)}
+                      onClick={() => setWoViewMode(mode)}
+                      className={`px-3 py-2 flex items-center justify-center ${woViewMode === mode ? 'bg-slate-800 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}
+                    >
+                      {mode === 'kanban'   && <LayoutGrid className="w-4 h-4" />}
+                      {mode === 'list'     && <ListIcon   className="w-4 h-4" />}
+                      {mode === 'calendar' && <Calendar   className="w-4 h-4" />}
+                    </button>
+                  ))}
+                </div>
+
                 {contractorWOs.length === 0 ? (
                   <div className="text-center py-12 text-sm text-slate-400">No work orders assigned yet.</div>
-                ) : (
-                  <div className="space-y-3">
+                ) : woViewMode === 'list' ? (
+                  /* ── List view ── */
+                  <div className="space-y-3 max-w-2xl">
                     {contractorWOs.map(job => (
                       <button
                         key={job.id}
@@ -483,29 +502,104 @@ export const ContractorApprovals: React.FC<ContractorApprovalsProps> = ({
                               job.status === 'completed' ? 'bg-emerald-100 text-emerald-700' :
                               job.status === 'on_hold'   ? 'bg-red-100 text-red-700' :
                               'bg-blue-100 text-blue-700'
-                            }`}>
-                              {job.status.replace('_', ' ').toUpperCase()}
-                            </span>
+                            }`}>{job.status.replace('_', ' ').toUpperCase()}</span>
                             <ChevronRight className="w-4 h-4 text-slate-400" />
                           </div>
                         </div>
                         <div className="grid grid-cols-3 gap-3 text-xs text-slate-500">
-                          <div>
-                            <p className="font-medium text-slate-400 uppercase tracking-wide mb-0.5">Scheduled</p>
-                            <p>{new Date(job.scheduledDate).toLocaleDateString()}</p>
-                          </div>
-                          <div>
-                            <p className="font-medium text-slate-400 uppercase tracking-wide mb-0.5">Customer</p>
-                            <p className="truncate">{job.customerName}</p>
-                          </div>
-                          <div>
-                            <p className="font-medium text-slate-400 uppercase tracking-wide mb-0.5">Pay</p>
-                            <p className="text-emerald-600 font-semibold">${(job.contractorTotalPay || 0).toLocaleString()}</p>
-                          </div>
+                          <div><p className="font-medium text-slate-400 uppercase tracking-wide mb-0.5">Scheduled</p><p>{new Date(job.scheduledDate).toLocaleDateString()}</p></div>
+                          <div><p className="font-medium text-slate-400 uppercase tracking-wide mb-0.5">Customer</p><p className="truncate">{job.customerName}</p></div>
+                          <div><p className="font-medium text-slate-400 uppercase tracking-wide mb-0.5">Pay</p><p className="text-emerald-600 font-semibold">${(job.contractorTotalPay || 0).toLocaleString()}</p></div>
                         </div>
                       </button>
                     ))}
                   </div>
+                ) : woViewMode === 'kanban' ? (
+                  /* ── Kanban view ── */
+                  <div className="flex gap-4 overflow-x-auto pb-2">
+                    {(['assigned', 'in_progress', 'completed', 'on_hold'] as const).map(colStatus => {
+                      const colJobs = contractorWOs.filter(j => j.status === colStatus);
+                      const colLabel = colStatus.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
+                      const colColor = colStatus === 'completed' ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                        : colStatus === 'on_hold'  ? 'bg-red-50 border-red-200 text-red-700'
+                        : colStatus === 'in_progress' ? 'bg-amber-50 border-amber-200 text-amber-700'
+                        : 'bg-blue-50 border-blue-200 text-blue-700';
+                      return (
+                        <div key={colStatus} className="flex-1 min-w-[220px]">
+                          <div className={`flex items-center justify-between px-3 py-2 rounded-lg border mb-3 ${colColor}`}>
+                            <span className="font-semibold text-sm">{colLabel}</span>
+                            <span className="text-xs font-medium">{colJobs.length}</span>
+                          </div>
+                          <div className="space-y-2">
+                            {colJobs.length === 0 ? (
+                              <div className="text-center py-6 text-slate-300 text-xs border-2 border-dashed border-slate-200 rounded-xl">Empty</div>
+                            ) : colJobs.map(job => (
+                              <button
+                                key={job.id}
+                                onClick={() => setSelectedWO(job)}
+                                className="w-full text-left bg-white rounded-xl border border-slate-200 p-3 hover:shadow-md hover:border-orange-200 transition-all"
+                              >
+                                <p className="font-semibold text-slate-900 text-sm leading-tight truncate mb-1">{job.customerName}</p>
+                                <p className="text-xs text-slate-500 mb-2 capitalize">{job.serviceType}</p>
+                                <div className="flex items-center justify-between text-xs">
+                                  <span className="text-slate-400">{new Date(job.scheduledDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                                  <span className="text-emerald-600 font-semibold">${(job.contractorTotalPay || 0).toLocaleString()}</span>
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  /* ── Calendar view ── */
+                  (() => {
+                    const today = new Date();
+                    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+                    const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+                    const startDow = (monthStart.getDay() + 6) % 7; // Mon=0
+                    const days = Array.from({ length: daysInMonth }, (_, i) => new Date(today.getFullYear(), today.getMonth(), i + 1));
+                    const jobsByDay = new Map<string, typeof contractorWOs>();
+                    contractorWOs.forEach(j => {
+                      const key = j.scheduledDate?.split('T')[0];
+                      if (key) { if (!jobsByDay.has(key)) jobsByDay.set(key, []); jobsByDay.get(key)!.push(j); }
+                    });
+                    const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+                    return (
+                      <div>
+                        <p className="text-sm font-semibold text-slate-700 mb-3">{today.toLocaleString('default', { month: 'long', year: 'numeric' })}</p>
+                        <div className="grid grid-cols-7 gap-px bg-slate-200 rounded-xl overflow-hidden border border-slate-200">
+                          {DAYS.map(d => (
+                            <div key={d} className="bg-slate-50 text-center text-[10px] font-semibold text-slate-500 py-1.5 uppercase tracking-wide">{d}</div>
+                          ))}
+                          {Array.from({ length: startDow }).map((_, i) => <div key={`empty-${i}`} className="bg-white min-h-[72px]" />)}
+                          {days.map(day => {
+                            const key = `${day.getFullYear()}-${String(day.getMonth()+1).padStart(2,'0')}-${String(day.getDate()).padStart(2,'0')}`;
+                            const dayJobs = jobsByDay.get(key) || [];
+                            const isToday = day.toDateString() === today.toDateString();
+                            return (
+                              <div key={key} className={`bg-white min-h-[72px] p-1 ${isToday ? 'ring-2 ring-orange-400 ring-inset' : ''}`}>
+                                <p className={`text-[10px] font-semibold mb-1 w-5 h-5 flex items-center justify-center rounded-full ${isToday ? 'bg-orange-500 text-white' : 'text-slate-500'}`}>{day.getDate()}</p>
+                                {dayJobs.map(j => (
+                                  <button
+                                    key={j.id}
+                                    onClick={() => setSelectedWO(j)}
+                                    className={`w-full text-left rounded px-1 py-0.5 mb-0.5 text-[10px] font-medium leading-tight truncate ${
+                                      j.status === 'completed'   ? 'bg-emerald-100 text-emerald-800' :
+                                      j.status === 'in_progress' ? 'bg-amber-100 text-amber-800' :
+                                      j.status === 'on_hold'     ? 'bg-red-100 text-red-800' :
+                                      'bg-blue-100 text-blue-800'
+                                    }`}
+                                  >{j.customerName}</button>
+                                ))}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })()
                 )}
               </div>
             )}

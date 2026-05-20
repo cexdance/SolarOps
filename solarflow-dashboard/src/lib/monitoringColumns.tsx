@@ -123,10 +123,47 @@ export const COLUMN_REGISTRY: MonitoringColumnDef[] = [
     sortKey: 'clientId',
     defaultVisible: true,
     defaultOrder: 1,
-    render: ({ site }) =>
-      site.clientId
-        ? <span className="font-mono text-xs font-semibold text-orange-600 bg-orange-50 px-2 py-0.5 rounded">{site.clientId}</span>
-        : <span className="text-slate-300 text-xs">—</span>,
+    render: ({ site, customerBySiteId }) => {
+      // 1. Stored value
+      let resolved = site.clientId || '';
+
+      // 2. Parse US-XXXXX embedded in the site name (e.g. "US-15253 Jorge Bravo")
+      if (!resolved) {
+        const m = site.siteName.match(/\bUS-\d+\b/i);
+        if (m) resolved = m[0].toUpperCase();
+      }
+
+      // 3. Look up via siteId → customer.clientId
+      if (!resolved) {
+        const c = customerBySiteId.bySiteId.get(site.siteId);
+        if (c?.clientId) resolved = c.clientId;
+      }
+
+      // 4. Fuzzy name match: strip any leading US-XXXXX from siteName, compare to customer names
+      if (!resolved) {
+        const namePart = site.siteName.replace(/^US-\d+\s*/i, '').toLowerCase().trim();
+        if (namePart) {
+          for (const [, c] of customerBySiteId.bySiteId) {
+            if (c.clientId && c.name.toLowerCase().includes(namePart)) {
+              resolved = c.clientId;
+              break;
+            }
+          }
+        }
+        if (!resolved && namePart) {
+          for (const [, c] of customerBySiteId.byClientId) {
+            if (c.clientId && c.name.toLowerCase().includes(namePart)) {
+              resolved = c.clientId;
+              break;
+            }
+          }
+        }
+      }
+
+      return resolved
+        ? <span className="font-mono text-xs font-semibold text-orange-600 bg-orange-50 px-2 py-0.5 rounded">{resolved}</span>
+        : <span className="text-slate-300 text-xs">—</span>;
+    },
   },
   {
     id: 'siteName',

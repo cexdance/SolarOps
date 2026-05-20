@@ -90,7 +90,10 @@ const getRange = (period: Period): { start: Date; end: Date } => {
 };
 const inRange = (d: string | undefined, start: Date, end: Date) => {
   if (!d) return false;
-  const t = new Date(d).getTime();
+  const parts = d.split('T')[0].split('-');
+  const t = parts.length === 3
+    ? new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2])).getTime()
+    : new Date(d).getTime();
   return t >= start.getTime() && t <= end.getTime();
 };
 const fmtMoney = (n: number) => {
