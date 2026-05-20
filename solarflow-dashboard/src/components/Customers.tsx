@@ -1188,9 +1188,9 @@ const COST_PER_KWH = 0.16;
 
 interface EnergyDataPoint {
   date: string;
-  rawDate: string; // YYYY-MM-DD — used to merge UV data
+  rawDate: string; // YYYY-MM-DD
   kWh: number;
-  uv?: number;     // UV index max for that day
+  psh?: number;    // Peak Sun Hours (kWh/m²/day) from Open-Meteo shortwave radiation
 }
 
 const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
@@ -1205,7 +1205,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
   const [siteOverview, setSiteOverview] = useState<{
     lifetimeKwh: number; yearKwh: number; monthKwh: number; todayKwh: number;
   } | null>(null);
-  const [siteDetails, setSiteDetails] = useState<{ peakPower: number } | null>(null);
+  const [siteDetails, setSiteDetails] = useState<{ peakPower: number; lat?: number; lng?: number } | null>(null);
   const [reportNotes, setReportNotes] = useState('');
   const [sendingReport, setSendingReport] = useState(false);
   const [reportSent, setReportSent] = useState(false);
@@ -1217,6 +1217,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
   const [previewUptime, setPreviewUptime] = useState(100);
   const [previewGreeting, setPreviewGreeting] = useState('');
   const [previewAccountUpdates, setPreviewAccountUpdates] = useState('');
+  const [previewEmail, setPreviewEmail] = useState('');
   const [xeroInvoices, setXeroInvoices] = useState<any[]>([]);
   const [xeroLoading, setXeroLoading] = useState(false);
   const [xeroError, setXeroError] = useState('');
@@ -1299,52 +1300,56 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
       .then(r => r.ok ? r.json() : null)
       .then(json => {
         if (!json || json.error) return;
-        setSiteDetails({ peakPower: json.details?.peakPower || 0 });
+        setSiteDetails({
+          peakPower: json.details?.peakPower || 0,
+          lat: json.details?.location?.lat,
+          lng: json.details?.location?.lng,
+        });
       })
       .catch(() => {});
   }, [siteId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Fetch UV index from Open-Meteo (free, no API key) ────────────────────
-  // Merges UV data into cached energy points for the current period
+  // ── Fetch Peak Sun Hours from Open-Meteo (free, no API key) ────────────────
+  // Uses site lat/lng from SolarEdge details; shortwave_radiation_sum MJ/m² ÷ 3.6 = PSH
   useEffect(() => {
     if (!siteId) return;
-    const fetchUv = async () => {
+    const fetchPsh = async () => {
       try {
+        // Use site coords from SolarEdge details, fall back to South FL default
+        const lat = siteDetails?.lat ?? 26.0;
+        const lng = siteDetails?.lng ?? -80.2;
         const now = new Date();
-        let startDate: string;
         let baseUrl: string;
 
         if (graphPeriod === 'year') {
-          // Archive API for historical yearly data
           const d = new Date(now); d.setFullYear(d.getFullYear() - 1);
-          startDate = d.toISOString().slice(0, 10);
+          const startDate = d.toISOString().slice(0, 10);
           const endDate = now.toISOString().slice(0, 10);
-          baseUrl = `https://archive-api.open-meteo.com/v1/archive?latitude=26.0&longitude=-80.2&start_date=${startDate}&end_date=${endDate}&daily=uv_index_max&timezone=America%2FNew_York`;
+          baseUrl = `https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lng}&start_date=${startDate}&end_date=${endDate}&daily=shortwave_radiation_sum&timezone=America%2FNew_York`;
         } else {
           const pastDays = graphPeriod === 'quarter' ? 90 : graphPeriod === 'month' ? 30 : 7;
-          baseUrl = `https://api.open-meteo.com/v1/forecast?latitude=26.0&longitude=-80.2&daily=uv_index_max&timezone=America%2FNew_York&past_days=${pastDays}&forecast_days=0`;
+          baseUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&daily=shortwave_radiation_sum&timezone=America%2FNew_York&past_days=${pastDays}&forecast_days=0`;
         }
 
         const resp = await fetch(baseUrl);
         if (!resp.ok) return;
         const json = await resp.json();
-        const times: string[] = json.daily?.time || [];
-        const uvs: number[]   = json.daily?.uv_index_max || [];
-        // Build date → uv map
-        const uvMap: Record<string, number> = {};
-        times.forEach((t, i) => { uvMap[t] = uvs[i]; });
+        const times: string[]   = json.daily?.time || [];
+        const rads: number[]    = json.daily?.shortwave_radiation_sum || [];
+        // MJ/m²/day ÷ 3.6 = kWh/m²/day = Peak Sun Hours
+        const pshMap: Record<string, number> = {};
+        times.forEach((t, i) => { pshMap[t] = Math.round((rads[i] / 3.6) * 10) / 10; });
 
-        // Merge into existing cached energy points
         setEnergyCache(prev => {
           const points = prev[graphPeriod];
           if (!points || points.length === 0) return prev;
-          const merged = points.map(p => ({ ...p, uv: uvMap[p.rawDate] ?? p.uv }));
+          const merged = points.map(p => ({ ...p, psh: pshMap[p.rawDate] ?? p.psh }));
           return { ...prev, [graphPeriod]: merged };
         });
-      } catch { /* UV is supplemental — silently skip on error */ }
+      } catch { /* PSH is supplemental — silently skip on error */ }
     };
-    fetchUv();
-  }, [siteId, graphPeriod]); // eslint-disable-line react-hooks/exhaustive-deps
+    fetchPsh();
+  }, [siteId, graphPeriod, siteDetails?.lat, siteDetails?.lng]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Fetch energy time-series — skip if already cached ────────────────────
   useEffect(() => {
@@ -1489,6 +1494,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
     setPreviewAccountUpdates(reportNotes);
     setPreviewDowntimeDays(0);
     setPreviewServiceCalls(0);
+    setPreviewEmail(customer.email || '');
     setShowReportPreview(true);
   };
 
@@ -1826,7 +1832,8 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
   // Approve & Send — sends via SMTP API (IONOS) or falls back to mailto
   const [sendError, setSendError] = useState<string | null>(null);
   const handleSendReport = async () => {
-    if (!customer.email || !previewHtmlComputed) return;
+    const recipientEmail = previewEmail.trim();
+    if (!recipientEmail || !previewHtmlComputed) return;
     setSendingReport(true);
     setSendError(null);
 
@@ -1838,7 +1845,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
     const subject = `Solar Production Report — ${customer.name}`;
 
     localStorage.setItem(`solarops_report_${previewTrackingId}`, JSON.stringify({
-      to: customer.email,
+      to: recipientEmail,
       bcc: 'cesar.jurado@conexsol.us',
       subject,
       trackingId: previewTrackingId,
@@ -1851,7 +1858,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            to: customer.email,
+            to: recipientEmail,
             subject,
             html: previewHtmlComputed,
             smtpHost,
@@ -1879,7 +1886,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
       const subjectEnc = encodeURIComponent(subject);
       const bcc = encodeURIComponent('cesar.jurado@conexsol.us');
       window.open(
-        `mailto:${customer.email}?subject=${subjectEnc}&bcc=${bcc}&body=${encodeURIComponent('Please view the attached HTML report for your solar production summary.\n\n— Conexsol Service Team')}`,
+        `mailto:${recipientEmail}?subject=${subjectEnc}&bcc=${bcc}&body=${encodeURIComponent('Please view the attached HTML report for your solar production summary.\n\n— Conexsol Service Team')}`,
         '_blank'
       );
       setShowReportPreview(false);
@@ -1956,7 +1963,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
           <h3 className="font-semibold text-slate-900 flex items-center gap-2">
             <BarChart3 className="w-4 h-4 text-orange-500" />
             Production History
-            <InfoTooltip text="Energy production (bars) and daily UV index (line) over time. UV index gives an estimate of solar irradiance — higher UV generally means more production." />
+            <InfoTooltip text="Energy production (bars) and Peak Sun Hours (line) by site location. PSH = daily solar radiation ÷ 3.6 — higher PSH means more available solar energy." />
           </h3>
           <div className="flex gap-1">
             {(['week', 'month', 'quarter', 'year'] as const).map(p => (
@@ -1986,53 +1993,63 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
             </div>
           ) : energyData.length > 0 ? (
             <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={energyData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="#94a3b8" />
-                {/* Left axis: UV index (normalized to fill chart height) */}
-                <YAxis
-                  yAxisId="uv"
-                  orientation="left"
-                  domain={[0, (max: number) => Math.ceil(Math.max(max, 1) * 1.15)]}
-                  tick={{ fontSize: 10, fill: '#d97706' }}
-                  stroke="#d97706"
-                  width={32}
-                  label={{ value: 'UV', angle: -90, position: 'insideLeft', style: { fontSize: 10, fill: '#d97706' }, offset: 4 }}
-                />
-                {/* Right axis: kWh production */}
-                <YAxis
-                  yAxisId="kwh"
-                  orientation="right"
-                  tick={{ fontSize: 10 }}
-                  stroke="#f97316"
-                  unit=" kWh"
-                  width={52}
-                />
-                <RechartsTooltip
-                  contentStyle={{ borderRadius: 8, fontSize: 12 }}
-                  formatter={(value: number, name: string) =>
-                    name === 'uv'
-                      ? [`${value?.toFixed(1)}`, 'UV Index']
-                      : [`${value?.toFixed(1)} kWh`, 'Production']
-                  }
-                />
-                <Legend
-                  wrapperStyle={{ fontSize: 11, paddingTop: 4 }}
-                  formatter={(val: string) => val === 'uv' ? 'UV Index' : 'Production (kWh)'}
-                />
-                <Bar yAxisId="kwh" dataKey="kWh" fill="#f97316" opacity={0.85} radius={[3, 3, 0, 0]} name="kWh" />
-                <Line
-                  yAxisId="uv"
-                  type="monotone"
-                  dataKey="uv"
-                  stroke="#fbbf24"
-                  strokeWidth={2.5}
-                  dot={{ r: 3, fill: '#f59e0b', stroke: '#d97706', strokeWidth: 1 }}
-                  activeDot={{ r: 5, fill: '#f59e0b' }}
-                  connectNulls
-                  name="uv"
-                />
-              </ComposedChart>
+              {(() => {
+                const hasPsh = energyData.some(d => d.psh != null);
+                return (
+                <ComposedChart data={energyData} margin={{ top: 4, right: hasPsh ? 8 : 8, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                  <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="#94a3b8" />
+                  {hasPsh && (
+                    <YAxis
+                      yAxisId="psh"
+                      orientation="left"
+                      domain={[0, (max: number) => Math.ceil(Math.max(max, 1) * 1.2)]}
+                      tick={{ fontSize: 10, fill: '#d97706' }}
+                      stroke="#d97706"
+                      width={32}
+                      label={{ value: 'PSH', angle: -90, position: 'insideLeft', style: { fontSize: 9, fill: '#d97706' }, offset: 6 }}
+                    />
+                  )}
+                  <YAxis
+                    yAxisId="kwh"
+                    orientation="right"
+                    tick={{ fontSize: 10 }}
+                    stroke="#f97316"
+                    unit=" kWh"
+                    width={52}
+                  />
+                  <RechartsTooltip
+                    contentStyle={{ borderRadius: 8, fontSize: 12 }}
+                    formatter={(value: number, name: string) =>
+                      name === 'psh'
+                        ? [`${value?.toFixed(1)} kWh/m²`, 'Peak Sun Hours']
+                        : [`${value?.toFixed(1)} kWh`, 'Production']
+                    }
+                  />
+                  {hasPsh && (
+                    <Legend
+                      wrapperStyle={{ fontSize: 11, paddingTop: 4 }}
+                      formatter={(val: string) => val === 'psh' ? 'Peak Sun Hours' : 'Production (kWh)'}
+                    />
+                  )}
+                  <Bar yAxisId="kwh" dataKey="kWh" fill="#f97316" opacity={0.85} radius={[3, 3, 0, 0]} name="kWh" />
+                  {hasPsh && (
+                    <Line
+                      yAxisId="psh"
+                      type="monotone"
+                      dataKey="psh"
+                      stroke="#fbbf24"
+                      strokeWidth={2.5}
+                      dot={{ r: 3, fill: '#f59e0b', stroke: '#d97706', strokeWidth: 1 }}
+                      activeDot={{ r: 5, fill: '#f59e0b' }}
+                      connectNulls
+                      name="psh"
+                    />
+                  )}
+                </ComposedChart>
+                );
+              })()}
+
             </ResponsiveContainer>
           ) : (
             <div className="h-full flex flex-col items-center justify-center gap-1 text-center px-4">
@@ -2312,20 +2329,31 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
                   </p>
                   <div style={{ height: 160 }}>
                     <ResponsiveContainer width="100%" height="100%">
-                      <ComposedChart data={energyData} margin={{ top: 2, right: 4, left: 0, bottom: 0 }}>
+                      <ComposedChart data={energyData} margin={{ top: 2, right: 40, left: 0, bottom: 0 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                         <XAxis dataKey="date" tick={{ fontSize: 9 }} stroke="#cbd5e1" interval="preserveStartEnd" />
                         <YAxis yAxisId="kwh" tick={{ fontSize: 9 }} stroke="#f97316" unit=" kWh" width={48} />
+                        {energyData.some(d => d.psh) && (
+                          <YAxis
+                            yAxisId="psh"
+                            orientation="right"
+                            domain={[0, (max: number) => Math.ceil(Math.max(max, 1) * 1.2)]}
+                            tick={{ fontSize: 9, fill: '#d97706' }}
+                            stroke="#d97706"
+                            width={36}
+                            label={{ value: 'PSH', angle: 90, position: 'insideRight', style: { fontSize: 9, fill: '#d97706' }, offset: -2 }}
+                          />
+                        )}
                         <RechartsTooltip
                           contentStyle={{ borderRadius: 8, fontSize: 11, padding: '6px 10px' }}
                           formatter={(value: number, name: string) =>
-                            name === 'uv' ? [`${value?.toFixed(1)}`, 'UV Index'] : [`${value?.toFixed(1)} kWh`, 'Production']
+                            name === 'psh' ? [`${value?.toFixed(1)} kWh/m²`, 'Peak Sun Hours'] : [`${value?.toFixed(1)} kWh`, 'Production']
                           }
                         />
                         <Bar yAxisId="kwh" dataKey="kWh" fill="#f97316" opacity={0.85} radius={[3, 3, 0, 0]} name="kWh" />
-                        {energyData.some(d => d.uv) && (
-                          <Line yAxisId="kwh" type="monotone" dataKey="uv" stroke="#fbbf24" strokeWidth={2}
-                            dot={false} connectNulls name="uv" />
+                        {energyData.some(d => d.psh) && (
+                          <Line yAxisId="psh" type="monotone" dataKey="psh" stroke="#fbbf24" strokeWidth={2}
+                            dot={false} connectNulls name="psh" />
                         )}
                       </ComposedChart>
                     </ResponsiveContainer>
@@ -2393,18 +2421,23 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
                   {sendError}
                 </div>
               )}
-              <div className="flex items-center justify-between">
-                <div className="truncate max-w-[50%]">
-                  <p className="text-xs text-slate-500">
-                    To: <strong className="text-slate-700">{customer.email || 'No email on file'}</strong>
-                  </p>
-                  <p className="text-[10px] text-slate-400">
+              <div className="flex items-center gap-2">
+                <div className="flex-1 min-w-0">
+                  <p className="text-[10px] text-slate-400 mb-0.5">To:</p>
+                  <input
+                    type="email"
+                    value={previewEmail}
+                    onChange={e => setPreviewEmail(e.target.value)}
+                    placeholder="recipient@example.com"
+                    className="w-full px-2 py-1 text-sm border border-slate-200 rounded-lg text-slate-800 bg-white focus:outline-none focus:ring-1 focus:ring-orange-400"
+                  />
+                  <p className="text-[10px] text-slate-400 mt-0.5">
                     {localStorage.getItem('solarops_smtp_user')
                       ? `via ${localStorage.getItem('solarops_smtp_user')}`
-                      : 'via mailto (configure SMTP in Settings)'}
+                      : 'via mailto — configure SMTP in Settings'}
                   </p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-shrink-0">
                   <button
                     onClick={() => { setShowReportPreview(false); setSendError(null); }}
                     className="px-4 py-2 text-sm text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg font-medium transition-colors cursor-pointer"
@@ -2413,7 +2446,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
                   </button>
                   <button
                     onClick={handleSendReport}
-                    disabled={sendingReport || !customer.email}
+                    disabled={sendingReport || !previewEmail.trim()}
                     className="flex items-center gap-2 px-4 py-2 text-sm text-white bg-orange-500 hover:bg-orange-600 rounded-lg font-semibold transition-colors disabled:opacity-50 cursor-pointer"
                   >
                     {sendingReport ? 'Sending…' : <><Send className="w-3.5 h-3.5" /> Send Report</>}
