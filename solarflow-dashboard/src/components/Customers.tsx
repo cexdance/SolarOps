@@ -48,6 +48,8 @@ import {
   Link2,
   CheckCircle2,
   Copy,
+  Smile,
+  Undo2,
 } from 'lucide-react';
 import * as _recharts from 'recharts';
 const { ComposedChart, Bar, Line, XAxis, YAxis, Tooltip: RechartsTooltip, ResponsiveContainer, CartesianGrid, Legend } = _recharts as any;
@@ -356,6 +358,14 @@ export const Customers: React.FC<CustomersProps> = ({
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(() =>
     initialCustomerId ? (customers.find(c => c.id === initialCustomerId) ?? null) : null
   );
+
+  // React to initialCustomerId changes (e.g. global search while already on this view)
+  useEffect(() => {
+    if (!initialCustomerId) return;
+    const c = customers.find(c => c.id === initialCustomerId);
+    if (c) setSelectedCustomer(c);
+  }, [initialCustomerId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const [showEditModal, setShowEditModal] = useState(false);
   const [showColPicker, setShowColPicker] = useState(false);
   const dragSrc = useRef<ColId | null>(null);
@@ -1458,7 +1468,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
     const kwFmt = kWh >= 1000 ? `${(kWh / 1000).toFixed(1)} MWh` : `${Math.round(kWh).toLocaleString('en-US')} kWh`;
     const savFmt = `$${Math.round(savings).toLocaleString('en-US')}`;
     const systemState = uptime >= 95 ? 'operating at peak efficiency' : uptime >= 85 ? 'performing well' : 'requiring attention';
-    return `Dear ${firstName},\n\nWe're pleased to present your solar system performance report for the ${pLabel}. Your system is currently ${systemState}, with ${uptime.toFixed(0)}% uptime and generated ${kwFmt} of clean energy during this period, delivering an estimated ${savFmt} in utility savings.\n\nThis report provides a complete overview of your system's production, efficiency metrics, and performance summary. We remain committed to keeping your system operating optimally and supporting your energy independence goals.`;
+    return `Dear ${firstName},\n\nWe're delighted to share your solar system performance report for the last 3 months. Your system is running at peak efficiency with ${uptime.toFixed(0)}% uptime, and over this period it generated ${kwFmt} of clean energy, delivering an estimated ${savFmt} in utility savings directly back to you.\n\nAnd whenever a question comes up, whether it is about a number on this report or anything else about your system, our team is genuinely glad to hear from you. Reach out any time.`;
   };
 
   const handleOpenPreview = () => {
@@ -1813,30 +1823,68 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showReportPreview, previewTrackingId, previewGreeting, previewAccountUpdates, previewDowntimeDays, previewServiceCalls, previewUptime, xeroInvoices, displayKwh, dollarsSaved, specificYield, co2Tons, lifetimeKwh, graphPeriod, peakPowerKw, siteId, siteData, customer]);
 
-  // Approve & Send — called from inside the preview modal
+  // Approve & Send — sends via SMTP API (IONOS) or falls back to mailto
+  const [sendError, setSendError] = useState<string | null>(null);
   const handleSendReport = async () => {
     if (!customer.email || !previewHtmlComputed) return;
     setSendingReport(true);
-    try {
-      const subject = encodeURIComponent(`Solar Production Report — ${customer.name}`);
+    setSendError(null);
+
+    const smtpUser = localStorage.getItem('solarops_smtp_user');
+    const smtpPass = localStorage.getItem('solarops_smtp_pass');
+    const smtpHost = localStorage.getItem('solarops_smtp_host') || 'smtp.ionos.com';
+    const smtpPort = parseInt(localStorage.getItem('solarops_smtp_port') || '465');
+    const fromName = localStorage.getItem('solarops_smtp_from_name') || 'Conexsol Energy';
+    const subject = `Solar Production Report — ${customer.name}`;
+
+    localStorage.setItem(`solarops_report_${previewTrackingId}`, JSON.stringify({
+      to: customer.email,
+      bcc: 'cesar.jurado@conexsol.us',
+      subject,
+      trackingId: previewTrackingId,
+      sentAt: new Date().toISOString(),
+    }));
+
+    if (smtpUser && smtpPass) {
+      try {
+        const res = await fetch('/api/send-report', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            to: customer.email,
+            subject,
+            html: previewHtmlComputed,
+            smtpHost,
+            smtpPort,
+            smtpUser,
+            smtpPass,
+            fromName,
+            bcc: 'cesar.jurado@conexsol.us',
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          setSendError(data.error || 'Failed to send');
+          setSendingReport(false);
+          return;
+        }
+        setShowReportPreview(false);
+        setReportSent(true);
+        setTimeout(() => setReportSent(false), 4000);
+      } catch (err) {
+        console.error('SMTP send failed:', err);
+        setSendError('Network error — check your connection');
+      }
+    } else {
+      const subjectEnc = encodeURIComponent(subject);
       const bcc = encodeURIComponent('cesar.jurado@conexsol.us');
-      localStorage.setItem(`solarops_report_${previewTrackingId}`, JSON.stringify({
-        to: customer.email,
-        bcc: 'cesar.jurado@conexsol.us',
-        subject: `Solar Production Report — ${customer.name}`,
-        html: previewHtmlComputed,
-        trackingId: previewTrackingId,
-        sentAt: new Date().toISOString(),
-      }));
       window.open(
-        `mailto:${customer.email}?subject=${subject}&bcc=${bcc}&body=${encodeURIComponent('Please view the attached HTML report for your solar production summary.\n\n— Conexsol Service Team')}`,
+        `mailto:${customer.email}?subject=${subjectEnc}&bcc=${bcc}&body=${encodeURIComponent('Please view the attached HTML report for your solar production summary.\n\n— Conexsol Service Team')}`,
         '_blank'
       );
       setShowReportPreview(false);
       setReportSent(true);
       setTimeout(() => setReportSent(false), 4000);
-    } catch (err) {
-      console.error('Failed to send report:', err);
     }
     setSendingReport(false);
   };
@@ -1941,23 +1989,24 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
               <ComposedChart data={energyData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                 <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="#94a3b8" />
-                {/* Left axis: kWh production */}
+                {/* Left axis: UV index (normalized to fill chart height) */}
+                <YAxis
+                  yAxisId="uv"
+                  orientation="left"
+                  domain={[0, (max: number) => Math.ceil(Math.max(max, 1) * 1.15)]}
+                  tick={{ fontSize: 10, fill: '#d97706' }}
+                  stroke="#d97706"
+                  width={32}
+                  label={{ value: 'UV', angle: -90, position: 'insideLeft', style: { fontSize: 10, fill: '#d97706' }, offset: 4 }}
+                />
+                {/* Right axis: kWh production */}
                 <YAxis
                   yAxisId="kwh"
+                  orientation="right"
                   tick={{ fontSize: 10 }}
                   stroke="#f97316"
                   unit=" kWh"
                   width={52}
-                />
-                {/* Right axis: UV index */}
-                <YAxis
-                  yAxisId="uv"
-                  orientation="right"
-                  domain={[0, 14]}
-                  tick={{ fontSize: 10, fill: '#d97706' }}
-                  stroke="#fbbf24"
-                  unit=""
-                  width={28}
                 />
                 <RechartsTooltip
                   contentStyle={{ borderRadius: 8, fontSize: 12 }}
@@ -2338,24 +2387,38 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
             </div>
 
             {/* ── Footer ── */}
-            <div className="flex items-center justify-between px-4 py-3 border-t border-slate-200 bg-white rounded-b-2xl flex-shrink-0">
-              <p className="text-xs text-slate-500 truncate max-w-[50%]">
-                To: <strong className="text-slate-700">{customer.email || 'No email on file'}</strong>
-              </p>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setShowReportPreview(false)}
-                  className="px-4 py-2 text-sm text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg font-medium transition-colors cursor-pointer"
-                >
-                  Close
-                </button>
-                <button
-                  onClick={handleSendReport}
-                  disabled={sendingReport || !customer.email}
-                  className="flex items-center gap-2 px-4 py-2 text-sm text-white bg-orange-500 hover:bg-orange-600 rounded-lg font-semibold transition-colors disabled:opacity-50 cursor-pointer"
-                >
-                  {sendingReport ? 'Sending…' : <><Send className="w-3.5 h-3.5" /> Send Report</>}
-                </button>
+            <div className="px-4 py-3 border-t border-slate-200 bg-white rounded-b-2xl flex-shrink-0 space-y-2">
+              {sendError && (
+                <div className="p-2 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                  {sendError}
+                </div>
+              )}
+              <div className="flex items-center justify-between">
+                <div className="truncate max-w-[50%]">
+                  <p className="text-xs text-slate-500">
+                    To: <strong className="text-slate-700">{customer.email || 'No email on file'}</strong>
+                  </p>
+                  <p className="text-[10px] text-slate-400">
+                    {localStorage.getItem('solarops_smtp_user')
+                      ? `via ${localStorage.getItem('solarops_smtp_user')}`
+                      : 'via mailto (configure SMTP in Settings)'}
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => { setShowReportPreview(false); setSendError(null); }}
+                    className="px-4 py-2 text-sm text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg font-medium transition-colors cursor-pointer"
+                  >
+                    Close
+                  </button>
+                  <button
+                    onClick={handleSendReport}
+                    disabled={sendingReport || !customer.email}
+                    className="flex items-center gap-2 px-4 py-2 text-sm text-white bg-orange-500 hover:bg-orange-600 rounded-lg font-semibold transition-colors disabled:opacity-50 cursor-pointer"
+                  >
+                    {sendingReport ? 'Sending…' : <><Send className="w-3.5 h-3.5" /> Send Report</>}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -2427,6 +2490,92 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
   const [activeTab, setActiveTab] = useState<'story' | 'jobs' | 'files' | 'activity' | 'production'>('story');
   const [editingJob, setEditingJob] = useState<Job | null>(null);
 
+  // Activity edit/delete
+  const [editingActivityId, setEditingActivityId] = useState<string | null>(null);
+  const [editingActivityText, setEditingActivityText] = useState('');
+  const [undoStack, setUndoStack] = useState<Array<{ action: 'delete' | 'edit'; entry: Activity; previousText?: string }>>([]);
+  const [showEmojiPicker, setShowEmojiPicker] = useState<string | null>(null);
+
+  const handleDeleteActivity = (id: string) => {
+    const entry = (customer.activityHistory ?? []).find(a => a.id === id);
+    if (entry) setUndoStack(prev => [...prev.slice(-4), { action: 'delete', entry }]);
+    onUpdateCustomer({
+      ...customer,
+      activityHistory: (customer.activityHistory ?? []).filter(a => a.id !== id),
+    });
+  };
+
+  const handleSaveActivity = (id: string) => {
+    const entry = (customer.activityHistory ?? []).find(a => a.id === id);
+    if (entry) setUndoStack(prev => [...prev.slice(-4), { action: 'edit', entry, previousText: entry.description }]);
+    onUpdateCustomer({
+      ...customer,
+      activityHistory: (customer.activityHistory ?? []).map(a =>
+        a.id === id ? { ...a, description: editingActivityText } : a
+      ),
+    });
+    setEditingActivityId(null);
+  };
+
+  const handleUndoActivity = () => {
+    const last = undoStack[undoStack.length - 1];
+    if (!last) return;
+    const history = customer.activityHistory ?? [];
+    if (last.action === 'delete') {
+      onUpdateCustomer({ ...customer, activityHistory: [last.entry, ...history] });
+    } else {
+      onUpdateCustomer({
+        ...customer,
+        activityHistory: history.map(a =>
+          a.id === last.entry.id ? { ...a, description: last.previousText ?? a.description } : a
+        ),
+      });
+    }
+    setUndoStack(prev => prev.slice(0, -1));
+  };
+
+  const handleAddReaction = (activityId: string, emoji: string) => {
+    const userId = currentUser?.id ?? 'anonymous';
+    onUpdateCustomer({
+      ...customer,
+      activityHistory: (customer.activityHistory ?? []).map(a => {
+        if (a.id !== activityId) return a;
+        const reactions = { ...(a.reactions ?? {}) };
+        const users = reactions[emoji] ?? [];
+        if (users.includes(userId)) {
+          const next = users.filter(u => u !== userId);
+          if (next.length === 0) delete reactions[emoji];
+          else reactions[emoji] = next;
+        } else {
+          reactions[emoji] = [...users, userId];
+        }
+        return { ...a, reactions };
+      }),
+    });
+    setShowEmojiPicker(null);
+  };
+
+  // Customer story inline editing
+  const [editingStory, setEditingStory] = useState(false);
+  const [storyEditText, setStoryEditText] = useState('');
+
+  const handleSaveStory = () => {
+    const newText = storyEditText.trim();
+    const logEntry: Activity = {
+      id: `story-edit-${Date.now()}`,
+      type: 'info_updated',
+      description: `📝 Customer story updated by ${currentUser?.name ?? 'User'}`,
+      timestamp: new Date().toISOString(),
+      userName: currentUser?.name ?? 'User',
+    };
+    onUpdateCustomer({
+      ...customer,
+      notes: newText,
+      activityHistory: [logEntry, ...(customer.activityHistory ?? [])],
+    });
+    setEditingStory(false);
+  };
+
   // Trello import modal
   const [showTrelloModal, setShowTrelloModal]     = useState(false);
   const [trelloUrl, setTrelloUrl]                 = useState('');
@@ -2473,6 +2622,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
   }, [mergeTarget?.id, primaryId]);
   const [notes, setNotes] = useState('');
   const [noteSaved, setNoteSaved] = useState(false);
+  const [pastedFiles, setPastedFiles] = useState<Array<{id: string; name: string; dataUrl: string; mimeType: string; size: number}>>([]);
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
   const [mentionQuery, setMentionQuery] = useState('');
   const [showMentionDropdown, setShowMentionDropdown] = useState(false);
@@ -2622,25 +2772,72 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
       })
     : users;
 
+  const handleNotePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const fileItems = Array.from(e.clipboardData.items).filter(i => i.kind === 'file');
+    if (fileItems.length === 0) return;
+    e.preventDefault();
+    fileItems.forEach(item => {
+      const file = item.getAsFile();
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const raw = ev.target?.result as string;
+        if (!raw) return;
+        const id = `paste-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+        const name = file.name || (file.type.startsWith('image/') ? `image-${Date.now()}.jpg` : `file-${Date.now()}`);
+        if (file.type.startsWith('image/')) {
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            const max = 1400;
+            const scale = Math.min(1, max / Math.max(img.width, img.height));
+            canvas.width = Math.round(img.width * scale);
+            canvas.height = Math.round(img.height * scale);
+            canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height);
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+            setPastedFiles(prev => [...prev, { id, name, dataUrl, mimeType: 'image/jpeg', size: Math.round(dataUrl.length * 0.75) }]);
+          };
+          img.src = raw;
+        } else {
+          setPastedFiles(prev => [...prev, { id, name, dataUrl: raw, mimeType: file.type || 'application/octet-stream', size: file.size }]);
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
   const handleSaveNote = () => {
-    if (!notes.trim()) return;
+    if (!notes.trim() && pastedFiles.length === 0) return;
     const mentionedIds = parseMentions(notes);
     const noteText = notes.trim();
+    const fileRefs = pastedFiles.map(f => `📎 ${f.name}`).join('\n');
+    const fullText = [noteText, fileRefs].filter(Boolean).join('\n');
     const newActivity: Activity = {
       id: `activity-${Date.now()}`,
       type: 'note_added',
-      description: noteText,
+      description: fullText,
       timestamp: new Date().toISOString(),
       userId: currentUser?.id,
       userName: currentUser?.name,
       mentions: mentionedIds.length > 0 ? mentionedIds : undefined,
     };
+    const newFiles: CustomerFile[] = pastedFiles.map(f => ({
+      id: f.id,
+      name: f.name,
+      url: f.dataUrl,
+      mimeType: f.mimeType,
+      size: f.size,
+      source: 'upload' as const,
+      createdAt: new Date().toISOString(),
+    }));
     const activityHistory = customer.activityHistory || [];
     onUpdateCustomer({
       ...customer,
       activityHistory: [newActivity, ...activityHistory],
+      files: [...newFiles, ...(customer.files ?? [])],
     });
     setNotes('');
+    setPastedFiles([]);
     setNoteSaved(true);
     setTimeout(() => setNoteSaved(false), 2000);
 
@@ -2876,26 +3073,43 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
         <div className="md:flex-1 md:overflow-y-auto p-4">
           {activeTab === 'story' && (
             <div className="space-y-4">
-              {/* How they found us */}
+              {/* Customer Story — with inline edit */}
               <div className="bg-slate-50 rounded-lg p-4">
-                <h3 className="font-semibold text-slate-900 mb-2 flex items-center gap-2">
-                  <Users className="w-4 h-4 text-orange-500" />
-                  How They Found Us
-                </h3>
-                <p className="text-sm text-slate-600">
-                  {customer.referralSource || 'Referral from existing customer'}
-                </p>
-              </div>
-
-              {/* Story */}
-              <div className="bg-slate-50 rounded-lg p-4">
-                <h3 className="font-semibold text-slate-900 mb-2 flex items-center gap-2">
-                  <FileText className="w-4 h-4 text-orange-500" />
-                  Customer Story
-                </h3>
-                <p className="text-sm text-slate-600 whitespace-pre-line">
-                  {customerStory}
-                </p>
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="font-semibold text-slate-900 flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-orange-500" />
+                    Customer Story
+                  </h3>
+                  {!editingStory && (
+                    <button
+                      onClick={() => { setStoryEditText(customer.notes ?? ''); setEditingStory(true); }}
+                      className="flex items-center gap-1 text-xs text-slate-500 hover:text-orange-500 transition-colors"
+                      title="Edit customer story"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                      Edit
+                    </button>
+                  )}
+                </div>
+                {editingStory ? (
+                  <div className="space-y-2">
+                    <textarea
+                      value={storyEditText}
+                      onChange={e => setStoryEditText(e.target.value)}
+                      rows={5}
+                      placeholder="Write the customer story…"
+                      className="w-full text-sm border border-slate-300 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-orange-400"
+                    />
+                    <div className="flex gap-2">
+                      <button onClick={handleSaveStory} className="px-3 py-1 bg-orange-500 text-white text-xs font-medium rounded-lg hover:bg-orange-600">Save</button>
+                      <button onClick={() => setEditingStory(false)} className="px-3 py-1 bg-slate-200 text-slate-600 text-xs font-medium rounded-lg hover:bg-slate-300">Cancel</button>
+                    </div>
+                  </div>
+                ) : customerStory ? (
+                  <p className="text-sm text-slate-600 whitespace-pre-line">{customerStory}</p>
+                ) : (
+                  <p className="text-sm italic text-slate-400">No story added yet. Click Edit to add one.</p>
+                )}
               </div>
 
               {/* Notes */}
@@ -2919,14 +3133,38 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                     ref={textareaRef}
                     value={notes}
                     onChange={handleNotesChange}
+                    onPaste={handleNotePaste}
                     onKeyDown={(e) => {
                       if (showMentionDropdown && e.key === 'Escape') {
                         setShowMentionDropdown(false);
                       }
                     }}
-                    placeholder="Add notes… type @ to mention a teammate"
+                    placeholder="Add notes… type @ to mention a teammate · Ctrl+V to paste images/files"
                     className="w-full p-3 border border-slate-200 rounded-lg text-sm min-h-[100px] focus:outline-none focus:ring-2 focus:ring-orange-400"
                   />
+                  {/* Pasted file previews */}
+                  {pastedFiles.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {pastedFiles.map(f => (
+                        <div key={f.id} className="relative group/paste border border-slate-200 rounded-lg overflow-hidden bg-white shadow-sm">
+                          {f.mimeType.startsWith('image/') ? (
+                            <img src={f.dataUrl} alt={f.name} className="w-20 h-20 object-cover" />
+                          ) : (
+                            <div className="w-20 h-20 flex flex-col items-center justify-center gap-1 bg-slate-50 px-1">
+                              <Paperclip className="w-5 h-5 text-slate-400" />
+                              <span className="text-[9px] text-slate-500 text-center truncate w-full px-1">{f.name}</span>
+                            </div>
+                          )}
+                          <button
+                            onClick={() => setPastedFiles(prev => prev.filter(p => p.id !== f.id))}
+                            className="absolute top-0.5 right-0.5 w-4 h-4 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover/paste:opacity-100 transition-opacity"
+                          >
+                            <X className="w-2.5 h-2.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   {/* @ Mention dropdown */}
                   {showMentionDropdown && filteredMentionUsers.length > 0 && (
                     <div className="absolute left-0 bottom-full mb-1 w-64 bg-white border border-slate-200 rounded-xl shadow-lg z-50 overflow-hidden">
@@ -2957,7 +3195,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                   <p className="text-xs text-slate-400">Type @ to mention a teammate</p>
                   <button
                     onClick={handleSaveNote}
-                    disabled={!notes.trim()}
+                    disabled={!notes.trim() && pastedFiles.length === 0}
                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
                       noteSaved
                         ? 'bg-green-500 text-white'
@@ -2970,41 +3208,125 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                 </div>
               </div>
 
-              {/* Activity Timeline */}
+              {/* Comments and Activity */}
               <div className="bg-slate-50 rounded-lg p-4">
-                <h3 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
-                  <Clock className="w-4 h-4 text-orange-500" />
-                  Activity Timeline
-                </h3>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-semibold text-slate-900 flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-orange-500" />
+                    Comments and Activity
+                  </h3>
+                  {undoStack.length > 0 && (
+                    <button
+                      onClick={handleUndoActivity}
+                      className="flex items-center gap-1 text-xs text-slate-500 hover:text-orange-500 transition-colors"
+                      title="Undo last change"
+                    >
+                      <Undo2 className="w-3.5 h-3.5" />
+                      Undo
+                    </button>
+                  )}
+                </div>
                 <div className="space-y-3">
                   {/* activityHistory entries */}
                   {(customer.activityHistory || []).map((activity) => (
-                    <div key={activity.id} className="flex gap-3">
+                    <div key={activity.id} className="flex gap-3 group relative">
                       <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${
                         activity.type === 'note_added' ? 'bg-blue-500'
                         : activity.type === 'job_updated' ? 'bg-amber-500'
                         : activity.type === 'job_created' ? 'bg-green-500'
                         : 'bg-orange-500'
                       }`} />
-                      <div>
-                        <p className="text-sm font-medium text-slate-900">
-                          {formatActivityType(activity.type)}
-                        </p>
-                        <p className="text-xs text-slate-600 line-clamp-2">
-                          {activity.description.split(/(@\S+)/g).map((part, i) =>
-                            part.startsWith('@')
-                              ? <span key={i} className="text-orange-600 font-medium">{part}</span>
-                              : part
-                          )}
-                        </p>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          {activity.userName && (
-                            <span className="text-xs text-slate-400">by {activity.userName}</span>
-                          )}
-                          <span className="text-xs text-slate-400">
-                            {new Date(activity.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                          </span>
+                      <div className="flex-1 min-w-0">
+                        {/* Header: name · datetime + action icons */}
+                        <div className="flex items-center justify-between gap-1 mb-0.5">
+                          <p className="text-xs font-semibold text-slate-700 truncate">
+                            {activity.userName || formatActivityType(activity.type)}
+                            <span className="font-normal text-slate-400 ml-1">·</span>
+                            <span className="font-normal text-slate-400 ml-1">
+                              {new Date(activity.timestamp).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                            </span>
+                          </p>
+                          <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 relative">
+                            {/* Emoji reaction */}
+                            <button
+                              onClick={() => setShowEmojiPicker(showEmojiPicker === activity.id ? null : activity.id)}
+                              className="p-0.5 rounded hover:bg-slate-200 text-slate-400 hover:text-yellow-500"
+                              title="Add reaction"
+                            >
+                              <Smile className="w-3 h-3" />
+                            </button>
+                            {activity.type === 'note_added' && (
+                              <>
+                                <button
+                                  onClick={() => { setEditingActivityId(activity.id); setEditingActivityText(activity.description); }}
+                                  className="p-0.5 rounded hover:bg-slate-200 text-slate-400 hover:text-slate-600"
+                                  title="Edit note"
+                                >
+                                  <Pencil className="w-3 h-3" />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteActivity(activity.id)}
+                                  className="p-0.5 rounded hover:bg-red-100 text-slate-400 hover:text-red-500"
+                                  title="Delete entry"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              </>
+                            )}
+                            {/* Emoji picker popover */}
+                            {showEmojiPicker === activity.id && (
+                              <div className="absolute right-0 top-5 z-50 bg-white border border-slate-200 rounded-xl shadow-lg p-2 flex gap-1">
+                                {['👍','❤️','😂','🔥','✅','👀'].map(emoji => (
+                                  <button
+                                    key={emoji}
+                                    onClick={() => handleAddReaction(activity.id, emoji)}
+                                    className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-slate-100 text-base transition-colors"
+                                  >
+                                    {emoji}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
                         </div>
+                        {editingActivityId === activity.id ? (
+                          <div className="mt-1 space-y-1">
+                            <textarea
+                              value={editingActivityText}
+                              onChange={e => setEditingActivityText(e.target.value)}
+                              rows={3}
+                              className="w-full text-xs border border-slate-300 rounded-md px-2 py-1.5 resize-none focus:outline-none focus:ring-1 focus:ring-orange-400"
+                            />
+                            <div className="flex gap-1.5">
+                              <button onClick={() => handleSaveActivity(activity.id)} className="px-2 py-0.5 bg-orange-500 text-white text-xs rounded-md hover:bg-orange-600">Save</button>
+                              <button onClick={() => setEditingActivityId(null)} className="px-2 py-0.5 bg-slate-200 text-slate-600 text-xs rounded-md hover:bg-slate-300">Cancel</button>
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="text-xs text-slate-600 line-clamp-2">
+                            {activity.description.split(/(@\S+)/g).map((part, i) =>
+                              part.startsWith('@')
+                                ? <span key={i} className="text-orange-600 font-medium">{part}</span>
+                                : part
+                            )}
+                          </p>
+                        )}
+                        {/* Reactions display */}
+                        {activity.reactions && Object.keys(activity.reactions).length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {Object.entries(activity.reactions).map(([emoji, users]) => (
+                              <button
+                                key={emoji}
+                                onClick={() => handleAddReaction(activity.id, emoji)}
+                                className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs border transition-colors ${
+                                  users.includes(currentUser?.id ?? '') ? 'bg-orange-50 border-orange-300 text-orange-700' : 'bg-slate-100 border-slate-200 text-slate-600 hover:bg-slate-200'
+                                }`}
+                              >
+                                {emoji} <span className="font-medium">{users.length}</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -3029,6 +3351,17 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                     </div>
                   </div>
                 </div>
+              </div>
+
+              {/* How They Found Us — pinned to bottom of story stack */}
+              <div className="bg-slate-50 rounded-lg p-4">
+                <h3 className="font-semibold text-slate-900 mb-2 flex items-center gap-2">
+                  <Users className="w-4 h-4 text-orange-500" />
+                  How They Found Us
+                </h3>
+                <p className="text-sm text-slate-600">
+                  {customer.referralSource || 'Referral from existing customer'}
+                </p>
               </div>
             </div>
           )}
@@ -3245,23 +3578,116 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
           {activeTab === 'activity' && (
             <div className="space-y-4">
               <div className="bg-slate-50 rounded-lg p-4">
-                <h3 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
-                  <Clock className="w-4 h-4 text-orange-500" />
-                  Activity Timeline
-                </h3>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-semibold text-slate-900 flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-orange-500" />
+                    Comments and Activity
+                  </h3>
+                  {undoStack.length > 0 && (
+                    <button
+                      onClick={handleUndoActivity}
+                      className="flex items-center gap-1 text-xs text-slate-500 hover:text-orange-500 transition-colors"
+                      title="Undo last change"
+                    >
+                      <Undo2 className="w-3.5 h-3.5" />
+                      Undo
+                    </button>
+                  )}
+                </div>
                 {(customer.activityHistory && customer.activityHistory.length > 0) ? (
-                  <div className="space-y-3">
+                  <div className="space-y-1">
                     {customer.activityHistory.map((activity) => (
-                      <div key={activity.id} className="border-l-2 border-orange-200 pl-3 py-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-xs font-medium text-orange-600">
-                            {formatActivityType(activity.type)}
+                      <div key={activity.id} className="border-l-2 border-orange-200 pl-3 py-2 group relative">
+                        {/* Header row: name · datetime + action icons */}
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                          <span className="text-xs font-semibold text-slate-700">
+                            {activity.userName || formatActivityType(activity.type)}
+                            <span className="font-normal text-slate-400 ml-1">·</span>
+                            <span className="font-normal text-slate-400 ml-1">
+                              {new Date(activity.timestamp).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                            </span>
                           </span>
-                          <span className="text-xs text-slate-400">
-                            {new Date(activity.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                          </span>
+                          {/* Action icons — revealed on hover */}
+                          <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 relative">
+                            <button
+                              onClick={() => setShowEmojiPicker(showEmojiPicker === activity.id ? null : activity.id)}
+                              className="p-1 rounded hover:bg-slate-200 text-slate-400 hover:text-yellow-500"
+                              title="Add reaction"
+                            >
+                              <Smile className="w-3.5 h-3.5" />
+                            </button>
+                            {activity.type === 'note_added' && (
+                              <>
+                                <button
+                                  onClick={() => { setEditingActivityId(activity.id); setEditingActivityText(activity.description); }}
+                                  className="p-1 rounded hover:bg-slate-200 text-slate-400 hover:text-slate-600"
+                                  title="Edit note"
+                                >
+                                  <Pencil className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteActivity(activity.id)}
+                                  className="p-1 rounded hover:bg-red-100 text-slate-400 hover:text-red-500"
+                                  title="Delete entry"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </>
+                            )}
+                            {/* Emoji picker popover */}
+                            {showEmojiPicker === activity.id && (
+                              <div className="absolute right-0 top-6 z-50 bg-white border border-slate-200 rounded-xl shadow-lg p-2 flex gap-1">
+                                {['👍','❤️','😂','🔥','✅','👀'].map(emoji => (
+                                  <button
+                                    key={emoji}
+                                    onClick={() => handleAddReaction(activity.id, emoji)}
+                                    className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 text-base transition-colors"
+                                  >
+                                    {emoji}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
                         </div>
-                        <p className="text-sm text-slate-600">{activity.description}</p>
+                        {editingActivityId === activity.id ? (
+                          <div className="space-y-2">
+                            <textarea
+                              value={editingActivityText}
+                              onChange={e => setEditingActivityText(e.target.value)}
+                              rows={4}
+                              className="w-full text-sm border border-slate-300 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-orange-400"
+                            />
+                            <div className="flex gap-2">
+                              <button onClick={() => handleSaveActivity(activity.id)} className="px-3 py-1 bg-orange-500 text-white text-xs font-medium rounded-lg hover:bg-orange-600">Save</button>
+                              <button onClick={() => setEditingActivityId(null)} className="px-3 py-1 bg-slate-200 text-slate-600 text-xs font-medium rounded-lg hover:bg-slate-300">Cancel</button>
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="text-sm text-slate-600 whitespace-pre-wrap">
+                            {activity.description.split(/(@\S+)/g).map((part, i) =>
+                              part.startsWith('@')
+                                ? <span key={i} className="text-orange-600 font-medium">{part}</span>
+                                : part
+                            )}
+                          </p>
+                        )}
+                        {/* Reactions */}
+                        {activity.reactions && Object.keys(activity.reactions).length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1.5">
+                            {Object.entries(activity.reactions).map(([emoji, users]) => (
+                              <button
+                                key={emoji}
+                                onClick={() => handleAddReaction(activity.id, emoji)}
+                                className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs border transition-colors ${
+                                  users.includes(currentUser?.id ?? '') ? 'bg-orange-50 border-orange-300 text-orange-700' : 'bg-slate-100 border-slate-200 text-slate-600 hover:bg-slate-200'
+                                }`}
+                              >
+                                {emoji} <span className="font-medium">{users.length}</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>

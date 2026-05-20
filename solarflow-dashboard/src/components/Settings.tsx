@@ -15,6 +15,10 @@ import {
   RefreshCw,
   MapPin,
   Phone,
+  Mail,
+  Eye,
+  EyeOff,
+  Send,
 } from 'lucide-react';
 import { GMAPS_KEY_STORAGE } from './AddressAutocomplete';
 import { User as UserType, XeroConfig, SolarEdgeConfig } from '../types';
@@ -74,6 +78,80 @@ export const Settings: React.FC<SettingsProps> = ({
   const envGmapsKey = (import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string) || '';
   const [gmapsKeyInput, setGmapsKeyInput] = useState(sessionStorage.getItem(GMAPS_KEY_STORAGE) || '');
   const [showGmapsKeyInput, setShowGmapsKeyInput] = useState(!sessionStorage.getItem(GMAPS_KEY_STORAGE) && !envGmapsKey);
+
+  // ── SMTP / Email config ──────────────────────────────────────────────────
+  const SMTP_HOST_KEY = 'solarops_smtp_host';
+  const SMTP_PORT_KEY = 'solarops_smtp_port';
+  const SMTP_USER_KEY = 'solarops_smtp_user';
+  const SMTP_PASS_KEY = 'solarops_smtp_pass';
+  const SMTP_FROM_KEY = 'solarops_smtp_from_name';
+
+  const [smtpHost, setSmtpHost] = useState(localStorage.getItem(SMTP_HOST_KEY) || 'smtp.ionos.com');
+  const [smtpPort, setSmtpPort] = useState(localStorage.getItem(SMTP_PORT_KEY) || '465');
+  const [smtpUser, setSmtpUser] = useState(localStorage.getItem(SMTP_USER_KEY) || '');
+  const [smtpPass, setSmtpPass] = useState(localStorage.getItem(SMTP_PASS_KEY) || '');
+  const [smtpFromName, setSmtpFromName] = useState(localStorage.getItem(SMTP_FROM_KEY) || 'Conexsol Energy');
+  const [showSmtpPass, setShowSmtpPass] = useState(false);
+  const [smtpSaved, setSmtpSaved] = useState(!!localStorage.getItem(SMTP_USER_KEY));
+  const [showSmtpSetup, setShowSmtpSetup] = useState(!localStorage.getItem(SMTP_USER_KEY));
+  const [smtpTesting, setSmtpTesting] = useState(false);
+  const [smtpTestResult, setSmtpTestResult] = useState<{ ok: boolean; msg: string } | null>(null);
+
+  const handleSaveSmtp = () => {
+    localStorage.setItem(SMTP_HOST_KEY, smtpHost.trim());
+    localStorage.setItem(SMTP_PORT_KEY, smtpPort);
+    localStorage.setItem(SMTP_USER_KEY, smtpUser.trim());
+    localStorage.setItem(SMTP_PASS_KEY, smtpPass);
+    localStorage.setItem(SMTP_FROM_KEY, smtpFromName.trim());
+    setSmtpSaved(true);
+    setShowSmtpSetup(false);
+  };
+
+  const handleTestSmtp = async () => {
+    setSmtpTesting(true);
+    setSmtpTestResult(null);
+    try {
+      const res = await fetch('/api/send-report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: smtpUser.trim(),
+          subject: 'SolarOps SMTP Test',
+          html: '<div style="font-family:sans-serif;padding:20px"><h2 style="color:#f97316">✓ SMTP is working!</h2><p>Your SolarOps email integration is configured correctly.</p></div>',
+          smtpHost: smtpHost.trim(),
+          smtpPort: parseInt(smtpPort),
+          smtpUser: smtpUser.trim(),
+          smtpPass,
+          fromName: smtpFromName.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setSmtpTestResult({ ok: true, msg: `Test email sent to ${smtpUser.trim()}` });
+      } else {
+        setSmtpTestResult({ ok: false, msg: data.error || 'Send failed' });
+      }
+    } catch (err) {
+      setSmtpTestResult({ ok: false, msg: String(err) });
+    }
+    setSmtpTesting(false);
+  };
+
+  const handleClearSmtp = () => {
+    localStorage.removeItem(SMTP_HOST_KEY);
+    localStorage.removeItem(SMTP_PORT_KEY);
+    localStorage.removeItem(SMTP_USER_KEY);
+    localStorage.removeItem(SMTP_PASS_KEY);
+    localStorage.removeItem(SMTP_FROM_KEY);
+    setSmtpUser('');
+    setSmtpPass('');
+    setSmtpFromName('Conexsol Energy');
+    setSmtpHost('smtp.ionos.com');
+    setSmtpPort('465');
+    setSmtpSaved(false);
+    setShowSmtpSetup(true);
+    setSmtpTestResult(null);
+  };
 
   const handleSaveGmapsKey = () => {
     const trimmed = gmapsKeyInput.trim();
@@ -433,6 +511,142 @@ export const Settings: React.FC<SettingsProps> = ({
                 >
                   Remove
                 </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* IONOS Email / SMTP Integration */}
+        <div className="p-4 border-b border-slate-100">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <div className="p-2 rounded-lg bg-slate-100">
+                <Mail className="w-5 h-5 text-orange-500" />
+              </div>
+              <div>
+                <p className="font-medium text-slate-900">Email (SMTP)</p>
+                {smtpSaved && !showSmtpSetup
+                  ? <p className="text-sm text-green-600">Configured — {smtpUser}</p>
+                  : <p className="text-sm text-slate-500">Send client reports directly from SolarOps</p>
+                }
+              </div>
+            </div>
+            {smtpSaved && !showSmtpSetup && (
+              <span className="flex items-center gap-1 text-sm text-green-600 font-medium">
+                <Check className="w-4 h-4" /> Active
+              </span>
+            )}
+          </div>
+
+          {smtpSaved && !showSmtpSetup ? (
+            <div className="space-y-2">
+              <div className="text-sm space-y-0.5">
+                <p className="text-slate-500">Server: {smtpHost}:{smtpPort}</p>
+                <p className="text-slate-500">From: {smtpFromName} &lt;{smtpUser}&gt;</p>
+              </div>
+              <div className="flex items-center gap-2 mt-2">
+                <button
+                  onClick={handleTestSmtp}
+                  disabled={smtpTesting}
+                  className="flex items-center gap-1 px-3 py-1.5 text-sm border border-orange-200 text-orange-600 rounded-lg hover:bg-orange-50 transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  <Send className="w-3 h-3" />
+                  {smtpTesting ? 'Sending…' : 'Send Test'}
+                </button>
+                <button
+                  onClick={() => setShowSmtpSetup(true)}
+                  className="px-3 py-1.5 text-sm border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer"
+                >
+                  Edit
+                </button>
+                <button
+                  onClick={handleClearSmtp}
+                  className="px-3 py-1.5 text-sm border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition-colors cursor-pointer"
+                >
+                  Remove
+                </button>
+              </div>
+              {smtpTestResult && (
+                <div className={`mt-2 p-2 rounded-lg text-sm ${smtpTestResult.ok ? 'bg-green-50 border border-green-200 text-green-700' : 'bg-red-50 border border-red-200 text-red-700'}`}>
+                  {smtpTestResult.ok ? '✓ ' : '✕ '}{smtpTestResult.msg}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-800">
+                <p className="font-medium mb-1">IONOS SMTP Setup</p>
+                <p className="text-xs">Enter your IONOS email credentials to send reports directly from the app. Your password is stored locally on this device only.</p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  type="text"
+                  value={smtpHost}
+                  onChange={e => setSmtpHost(e.target.value)}
+                  placeholder="SMTP Server"
+                  className="px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-900 bg-white placeholder:text-slate-400"
+                />
+                <select
+                  value={smtpPort}
+                  onChange={e => setSmtpPort(e.target.value)}
+                  className="px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-900 bg-white"
+                >
+                  <option value="465">465 (SSL/TLS)</option>
+                  <option value="587">587 (STARTTLS)</option>
+                </select>
+              </div>
+
+              <input
+                type="text"
+                value={smtpFromName}
+                onChange={e => setSmtpFromName(e.target.value)}
+                placeholder="From Name (e.g. Conexsol Energy)"
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-900 bg-white placeholder:text-slate-400"
+              />
+
+              <input
+                type="email"
+                value={smtpUser}
+                onChange={e => setSmtpUser(e.target.value)}
+                placeholder="Email address (e.g. reports@conexsol.us)"
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-900 bg-white placeholder:text-slate-400"
+              />
+
+              <div className="relative">
+                <input
+                  type={showSmtpPass ? 'text' : 'password'}
+                  value={smtpPass}
+                  onChange={e => setSmtpPass(e.target.value)}
+                  placeholder="Email password"
+                  className="w-full px-3 py-2 pr-10 border border-slate-200 rounded-lg text-sm text-slate-900 bg-white placeholder:text-slate-400"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowSmtpPass(!showSmtpPass)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                >
+                  {showSmtpPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  onClick={handleSaveSmtp}
+                  disabled={!smtpUser.trim() || !smtpPass}
+                  className="flex-1 flex items-center justify-center gap-2 py-2 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors cursor-pointer"
+                >
+                  <Save className="w-4 h-4" />
+                  Save & Activate
+                </button>
+                {smtpSaved && (
+                  <button
+                    onClick={() => setShowSmtpSetup(false)}
+                    className="px-4 py-2 text-sm border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                )}
               </div>
             </div>
           )}
