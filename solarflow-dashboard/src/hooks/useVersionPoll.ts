@@ -1,41 +1,58 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { BUILD_ID } from '../lib/versionConfig';
 
-/**
- * Polls /version.json and flips `updateAvailable` when the deployed build id
- * differs from the bundle's compiled-in BUILD_ID. Refresh handler in App.tsx
- * calls window.location.reload() when the user clicks the banner.
- *
- * Disabled during `vite dev` (BUILD_ID === 'dev') so the dev server doesn't
- * thrash on every save.
- */
-export function useVersionPoll(): boolean {
-  const [updateAvailable, setUpdateAvailable] = useState(false);
+type CheckState = 'idle' | 'checking' | 'up-to-date' | 'update-available';
+
+interface VersionPollResult {
+  state: CheckState;
+  remoteVersion: string | null;
+  checkNow: () => Promise<void>;
+}
+
+export function useVersionPoll(): VersionPollResult {
+  const [state, setState] = useState<CheckState>('idle');
+  const [remoteVersion, setRemoteVersion] = useState<string | null>(null);
   const initialCheckDone = useRef(false);
+  const mountedRef = useRef(true);
+
+  const check = useCallback(async (isInitial = false) => {
+    if (!isInitial) setState('checking');
+    try {
+      const res = await fetch(`/version.json?t=${Date.now()}`, { cache: 'no-store' });
+      if (!res.ok) {
+        console.warn('[version-poll] /version.json returned', res.status);
+        if (mountedRef.current) setState('idle');
+        return;
+      }
+      const data = await res.json() as { version?: string; build?: string };
+      const remote = data?.build ?? data?.version;
+      if (!mountedRef.current || !remote) return;
+
+      if (remote === BUILD_ID) {
+        setState('up-to-date');
+        setTimeout(() => { if (mountedRef.current) setState('idle'); }, 2000);
+        return;
+      }
+
+      setRemoteVersion(data?.version ?? remote);
+      if (isInitial) {
+        window.location.reload();
+        return;
+      }
+      setState('update-available');
+    } catch (err) {
+      console.warn('[version-poll] fetch failed', err);
+      if (mountedRef.current) setState('idle');
+    }
+  }, []);
+
+  const checkNow = useCallback(async () => {
+    await check(false);
+  }, [check]);
 
   useEffect(() => {
-    if (BUILD_ID === 'dev') return; // skip in dev — no real deploys to detect
-    let mounted = true;
-
-    const check = async (isInitial = false) => {
-      try {
-        const res = await fetch(`/version.json?t=${Date.now()}`, { cache: 'no-store' });
-        if (!res.ok) {
-          console.warn('[version-poll] /version.json returned', res.status);
-          return;
-        }
-        const data = await res.json() as { version?: string; build?: string };
-        const remote = data?.build ?? data?.version;
-        if (!mounted || !remote || remote === BUILD_ID) return;
-        if (isInitial) {
-          window.location.reload();
-          return;
-        }
-        setUpdateAvailable(true);
-      } catch (err) {
-        console.warn('[version-poll] fetch failed', err);
-      }
-    };
+    mountedRef.current = true;
+    if (BUILD_ID === 'dev') return;
 
     if (!initialCheckDone.current) {
       initialCheckDone.current = true;
@@ -51,12 +68,12 @@ export function useVersionPoll(): boolean {
     window.addEventListener('focus', onVisible);
 
     return () => {
-      mounted = false;
+      mountedRef.current = false;
       clearInterval(interval);
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('focus', onVisible);
     };
-  }, []);
+  }, [check]);
 
-  return updateAvailable;
+  return { state, remoteVersion, checkNow };
 }

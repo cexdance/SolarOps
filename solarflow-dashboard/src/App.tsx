@@ -687,7 +687,7 @@ function App() {
   useSyncEngine({ setData, setContractors, setServiceRates, setContractorJobs, skipContractorPersist });
 
   // ── Version poll (extracted to hook) ─────────────────────────────────────
-  const updateAvailable = useVersionPoll();
+  const { state: versionState, remoteVersion, checkNow: checkForUpdate } = useVersionPoll();
 
   // Handle Xero OAuth callback (?code=...) and restore existing Xero connection
   useEffect(() => {
@@ -2034,7 +2034,7 @@ function App() {
         contractorName={currentContractor.contactName}
         contractorId={currentContractor.id}
         contractor={currentContractor}
-        jobs={contractorJobs.filter(j => j.contractorId === currentContractor.id)}
+        jobs={pickupJobsForContractor(currentContractor.id, data.jobs).map(j => toContractorJobView(j))}
         onLogout={handleLogout}
         onUpdateJob={handleContractorJobUpdate}
         onUpdateContractor={(updated) => {
@@ -2361,7 +2361,7 @@ function App() {
               contractorName={linkedContractor.contactName}
               contractorId={linkedContractor.id}
               contractor={linkedContractor}
-              jobs={contractorJobs.filter(j => j.contractorId === linkedContractor.id)}
+              jobs={pickupJobsForContractor(linkedContractor.id, data.jobs).map(j => toContractorJobView(j))}
               onLogout={() => setCurrentView('dashboard')}
               onUpdateJob={handleContractorJobUpdate}
               onUpdateContractor={(updated) => {
@@ -2449,8 +2449,12 @@ function App() {
         onMarkNotificationRead={handleMarkNotificationRead}
         onMarkAllNotificationsRead={handleMarkAllNotificationsRead}
         linkedContractorName={linkedContractor?.businessName ?? null}
-        updateAvailable={updateAvailable}
+        versionState={versionState}
+        remoteVersion={remoteVersion}
+        onCheckForUpdate={checkForUpdate}
         onUpdate={() => window.location.reload()}
+        customers={data.customers}
+        onSelectCustomer={(id) => { setSelectedCustomerId(id); handleViewChange('customers'); }}
       >
         {renderView()}
       </Layout>

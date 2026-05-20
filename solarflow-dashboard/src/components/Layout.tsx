@@ -26,8 +26,12 @@ import {
   Bell,
   CheckCheck,
   Briefcase,
+  Search,
+  Download,
+  RefreshCw,
+  CheckCircle2,
 } from 'lucide-react';
-import { User as UserType, AppNotification } from '../types';
+import { User as UserType, AppNotification, Customer } from '../types';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -41,8 +45,12 @@ interface LayoutProps {
   onMarkNotificationRead: (id: string) => void;
   onMarkAllNotificationsRead: () => void;
   linkedContractorName?: string | null;
-  updateAvailable?: boolean;
+  versionState?: 'idle' | 'checking' | 'up-to-date' | 'update-available';
+  remoteVersion?: string | null;
+  onCheckForUpdate?: () => Promise<void>;
   onUpdate?: () => void;
+  customers?: Customer[];
+  onSelectCustomer?: (customerId: string) => void;
 }
 
 const allNavItems = [
@@ -55,7 +63,6 @@ const allNavItems = [
   { id: 'billing',            label: 'Billing',            icon: Receipt,         badge: 'unbilled', roles: ['admin', 'coo'] },
   { id: 'contractor-billing', label: 'Contractor Pay',     icon: DollarSign,      indent: true, parent: 'billing', roles: ['admin', 'coo'] },
   { id: 'rates',              label: 'Service Rates',      icon: DollarSign,      indent: true, parent: 'billing', roles: ['admin', 'coo'] },
-  { id: 'technician',         label: 'Manage Work Orders', icon: Phone,                            roles: ['admin', 'coo', 'technician'] },
   { id: 'contractors',        label: 'Contractors',        icon: UserCog,                          roles: ['admin', 'coo'] },
   { id: 'projects',           label: 'New Install',        icon: HardHat,                          roles: ['admin', 'coo', 'support'] },
   { id: 'inventory',          label: 'Inventory',          icon: Package,                          roles: ['admin', 'coo', 'support'] },
@@ -77,26 +84,56 @@ export const Layout: React.FC<LayoutProps> = ({
   onMarkNotificationRead,
   onMarkAllNotificationsRead,
   linkedContractorName,
-  updateAvailable = false,
+  versionState = 'idle',
+  remoteVersion,
+  onCheckForUpdate,
   onUpdate,
+  customers = [],
+  onSelectCustomer,
 }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const notifRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   // RC widget is loaded on-demand from Settings, not auto-loaded here
 
-  // Close notification dropdown when clicking outside
+  // Close dropdowns when clicking outside
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
         setNotifOpen(false);
       }
+      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
+        setSearchOpen(false);
+        setSearchQuery('');
+      }
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, []);
+
+  // Focus input when search opens
+  useEffect(() => {
+    if (searchOpen) searchInputRef.current?.focus();
+  }, [searchOpen]);
+
+  const searchResults = searchQuery.trim().length >= 1
+    ? customers.filter(c => {
+        const q = searchQuery.toLowerCase();
+        return c.name.toLowerCase().includes(q) || c.phone?.toLowerCase().includes(q);
+      }).slice(0, 8)
+    : [];
+
+  const handleSelectCustomer = (id: string) => {
+    onSelectCustomer?.(id);
+    setSearchOpen(false);
+    setSearchQuery('');
+  };
 
   const myNotifications = notifications.filter(n => n.userId === currentUser?.id);
   const unreadCount = myNotifications.filter(n => !n.read).length;
@@ -137,10 +174,56 @@ export const Layout: React.FC<LayoutProps> = ({
             />
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           {currentUser && (
             <span className="text-sm text-slate-300 hidden sm:block">{currentUser.name}</span>
           )}
+
+          {/* Global Search */}
+          <div ref={searchRef} className="relative">
+            <div className={`flex items-center transition-all duration-200 ${searchOpen ? 'bg-slate-800 rounded-lg' : ''}`}>
+              {searchOpen && (
+                <input
+                  ref={searchInputRef}
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Escape') { setSearchOpen(false); setSearchQuery(''); } }}
+                  placeholder="Search client name or phone…"
+                  className="w-48 sm:w-64 bg-transparent text-sm text-white placeholder-slate-400 pl-3 pr-1 py-2 outline-none"
+                />
+              )}
+              <button
+                onClick={() => setSearchOpen(v => !v)}
+                className="p-2 hover:bg-slate-800 rounded-lg transition-colors"
+                aria-label="Search clients"
+              >
+                <Search className="w-5 h-5 text-slate-300" />
+              </button>
+            </div>
+
+            {searchOpen && searchQuery.trim().length >= 1 && (
+              <div className="absolute right-0 top-full mt-1 w-72 bg-white rounded-xl shadow-2xl border border-slate-200 z-50 overflow-hidden">
+                {searchResults.length === 0 ? (
+                  <div className="px-4 py-5 text-center text-sm text-slate-400">No clients found</div>
+                ) : (
+                  <ul className="divide-y divide-slate-100">
+                    {searchResults.map(c => (
+                      <li key={c.id}>
+                        <button
+                          onClick={() => handleSelectCustomer(c.id)}
+                          className="w-full text-left px-4 py-2.5 hover:bg-orange-50 transition-colors"
+                        >
+                          <p className="text-sm font-medium text-slate-800 truncate">{c.name}</p>
+                          {c.phone && <p className="text-xs text-slate-400 mt-0.5">{c.phone}</p>}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+          </div>
+
           {/* Notification Bell */}
           <div ref={notifRef} className="relative">
             <button
@@ -429,19 +512,37 @@ export const Layout: React.FC<LayoutProps> = ({
             </div>
           )}
 
-          {/* Version badge — clickable when an update is available */}
+          {/* Version badge — always clickable: check for updates or apply */}
           <div className="px-4 py-1.5 text-center select-none border-t border-slate-800/60">
-            {updateAvailable && onUpdate ? (
+            {versionState === 'update-available' ? (
               <button
                 onClick={onUpdate}
-                title="New version available — click to update"
-                className="inline-flex items-center justify-center gap-1.5 text-[9px] font-semibold text-orange-300 hover:text-white hover:bg-orange-500/20 rounded px-2 py-0.5 transition-colors cursor-pointer animate-pulse"
+                title={`Update to ${remoteVersion ?? 'latest'} — click to restart`}
+                className="group w-full flex items-center justify-center gap-2 text-[10px] font-semibold text-orange-300 hover:text-white bg-orange-500/10 hover:bg-orange-500/25 rounded-md px-2.5 py-1.5 transition-all cursor-pointer"
               >
-                <span>{getVersionString()}</span>
-                <span className="px-1 py-px rounded text-[8px] bg-orange-500 text-white leading-tight">update</span>
+                <Download className="w-3 h-3 animate-bounce" />
+                <span>Update available{remoteVersion ? ` — ${remoteVersion}` : ''}</span>
               </button>
             ) : (
-              <span className="text-[9px] text-slate-600 pointer-events-none">{getVersionString()}</span>
+              <button
+                onClick={onCheckForUpdate}
+                disabled={versionState === 'checking'}
+                title="Click to check for updates"
+                className="group inline-flex items-center justify-center gap-1.5 text-[9px] text-slate-500 hover:text-slate-300 hover:bg-slate-800/60 rounded-md px-2 py-1 transition-all cursor-pointer disabled:cursor-wait"
+              >
+                {versionState === 'checking' ? (
+                  <RefreshCw className="w-2.5 h-2.5 animate-spin text-orange-400" />
+                ) : versionState === 'up-to-date' ? (
+                  <CheckCircle2 className="w-2.5 h-2.5 text-emerald-400" />
+                ) : (
+                  <RefreshCw className="w-2.5 h-2.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                )}
+                <span>
+                  {versionState === 'checking' ? 'Checking…' :
+                   versionState === 'up-to-date' ? `${getVersionString()} — up to date` :
+                   getVersionString()}
+                </span>
+              </button>
             )}
           </div>
         </div>
