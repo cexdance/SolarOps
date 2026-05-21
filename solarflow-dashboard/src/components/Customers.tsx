@@ -53,7 +53,7 @@ import {
 } from 'lucide-react';
 import * as _recharts from 'recharts';
 const { ComposedChart, Bar, Line, XAxis, YAxis, Tooltip: RechartsTooltip, ResponsiveContainer, CartesianGrid, Legend } = _recharts as any;
-import { Customer, Job, ClientStatus, Activity, User, CustomerCategory, SolarEdgeAlert } from '../types';
+import { Customer, CustomerFile, Job, ClientStatus, Activity, User, CustomerCategory, SolarEdgeAlert } from '../types';
 import { ServiceRate } from '../types/contractor';
 import { loadServiceRates } from '../lib/contractorStore';
 import { loadAlerts } from '../lib/operationsStore';

@@ -336,6 +336,7 @@ export const Billing: React.FC<BillingProps> = ({
         <WorkOrderCalendar
           jobs={filteredJobs}
           customers={customers}
+          users={[]}
           onJobClick={() => {}}
         />
       )}
