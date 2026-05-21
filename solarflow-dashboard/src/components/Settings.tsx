@@ -698,7 +698,7 @@ export const Settings: React.FC<SettingsProps> = ({
         <SettingItem
           icon={<SettingsIcon className="w-5 h-5" />}
           label="App Version"
-          value="1.0.0 (MVP)"
+          value="1.7.2.1"
         />
       </div>
 

@@ -15,7 +15,7 @@ export interface User {
 
 export type CustomerType = 'residential' | 'commercial';
 
-export type CustomerCategory = 'O&M' | 'New Install' | 'Prospect';
+export type CustomerCategory = 'O&M' | 'New Install' | 'Prospect' | 'PowerCare';
 
 export type SystemType = 'SolarEdge' | 'Enphase' | 'SMA' | 'Other';
 

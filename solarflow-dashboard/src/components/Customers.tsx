@@ -95,6 +95,7 @@ const getCategoryColor = (category: CustomerCategory): string => {
     'O&M':         'bg-teal-100 text-teal-700',
     'New Install': 'bg-blue-100 text-blue-700',
     'Prospect':    'bg-purple-100 text-purple-700',
+    'PowerCare':   'bg-orange-100 text-orange-700',
   };
   return colors[category];
 };
@@ -2737,7 +2738,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
         priority: 'medium',
         dateDue: '',
         serviceRateId: '',
-        isPowerCare: customer.isPowerCare || false,
+        isPowerCare: customer.isPowerCare || customer.category === 'PowerCare' || false,
         baseRate: 0,
         additionalAmount: 0,
         total: 0,
@@ -4083,6 +4084,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                   <option value="O&M">O&amp;M</option>
                   <option value="New Install">New Install</option>
                   <option value="Prospect">Prospect</option>
+                  <option value="PowerCare">PowerCare</option>
                 </select>
               </div>
               <div>
@@ -4860,6 +4862,7 @@ const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({ onClose, onCr
                 <option value="O&M">O&amp;M</option>
                 <option value="New Install">New Install</option>
                 <option value="Prospect">Prospect</option>
+                <option value="PowerCare">PowerCare</option>
               </select>
             </div>
           </div>
