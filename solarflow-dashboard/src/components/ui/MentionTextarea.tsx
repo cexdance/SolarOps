@@ -14,6 +14,7 @@ interface Props {
   rows?: number;
   className?: string;
   disabled?: boolean;
+  onPaste?: (e: React.ClipboardEvent<HTMLTextAreaElement>) => void;
 }
 
 /** Textarea with live @mention dropdown. Selecting a user inserts @handle. */
@@ -25,6 +26,7 @@ export const MentionTextarea: React.FC<Props> = ({
   rows = 4,
   className = '',
   disabled,
+  onPaste,
 }) => {
   const [query, setQuery]       = useState('');
   const [start, setStart]       = useState(-1);
@@ -70,6 +72,7 @@ export const MentionTextarea: React.FC<Props> = ({
         ref={ref}
         value={value}
         onChange={handleChange}
+        onPaste={onPaste}
         rows={rows}
         placeholder={placeholder}
         disabled={disabled}

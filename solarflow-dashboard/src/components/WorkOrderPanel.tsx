@@ -689,6 +689,35 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
 
   const removePhoto = (id: string) => setWoPhotos(prev => prev.filter(p => p.id !== id));
 
+  // Paste images from clipboard into notes — they become attached photos under "process"
+  const [pasteToast, setPasteToast] = useState<string | null>(null);
+  const handleNotesPaste = useCallback((e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const fileItems = Array.from(e.clipboardData.items).filter(i => i.kind === 'file');
+    if (fileItems.length === 0) return;
+    e.preventDefault();
+    let added = 0;
+    fileItems.forEach(async (item) => {
+      const file = item.getAsFile();
+      if (!file || !file.type.startsWith('image/')) return;
+      try {
+        const dataUrl = await compressImageToDataUrl(file);
+        const photo: WOPhoto = {
+          id: `ph-paste-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          category: 'process',
+          name: file.name || `pasted-${Date.now()}.jpg`,
+          dataUrl,
+          createdAt: new Date().toISOString(),
+        };
+        setWoPhotos(prev => [...prev, photo]);
+        added++;
+        setPasteToast(`${added} image${added > 1 ? 's' : ''} attached — see Photos tab`);
+        setTimeout(() => setPasteToast(null), 2500);
+      } catch (err) {
+        console.error('[WorkOrderPanel] paste image compression failed', err);
+      }
+    });
+  }, []);
+
   // RMA
   const handleAddRma = () => {
     if (!rmaForm.manufacturer || !rmaForm.partDescription) return;
@@ -1360,16 +1389,20 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
               <div>
                 <label className="block text-xs font-medium text-slate-500 mb-1">
                   Scope of Work / Notes
-                  {users.length > 0 && <span className="ml-1 text-slate-400 font-normal">— type @ to mention a teammate</span>}
+                  {users.length > 0 && <span className="ml-1 text-slate-400 font-normal">— type @ to mention · Ctrl/Cmd+V to paste images</span>}
                 </label>
                 <MentionTextarea
                   value={notes}
                   onChange={setNotes}
                   users={users}
                   rows={5}
-                  placeholder="Describe the work to be done…"
+                  onPaste={handleNotesPaste}
+                  placeholder="Describe the work to be done… (paste screenshots with Ctrl/Cmd+V)"
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 resize-none"
                 />
+                {pasteToast && (
+                  <p className="mt-1 text-xs text-emerald-600 font-medium">📎 {pasteToast}</p>
+                )}
               </div>
 
               {/* SE Compensation banner — shown when warranty SolarEdge parts added + site < 5 yrs */}
@@ -1917,7 +1950,8 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                   onChange={setServiceReport}
                   users={users}
                   rows={6}
-                  placeholder="Describe what was done, findings, and any observations…"
+                  onPaste={handleNotesPaste}
+                  placeholder="Describe what was done, findings, and any observations… (paste screenshots with Ctrl/Cmd+V)"
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 resize-none"
                 />
               </div>
