@@ -1,8 +1,11 @@
 // SolarFlow MVP - Jobs Component
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
-  Plus, Search, Calendar, MapPin, User, Clock, X, Wrench, Zap, LayoutGrid, List as ListIcon,
+  Plus, Search, Calendar, MapPin, User, Clock, X, Wrench, Zap, LayoutGrid, List as ListIcon, Filter,
 } from 'lucide-react';
+import {
+  startOfWeek, endOfWeek, startOfMonth, endOfMonth, subMonths,
+} from 'date-fns';
 import { WorkOrderCalendar } from './WorkOrderCalendar';
 import { Job, Customer, User as UserType, JobStatus, UrgencyLevel, ServiceType } from '../types';
 import { WorkOrderPanel } from './WorkOrderPanel';
@@ -223,6 +226,10 @@ export const Jobs: React.FC<JobsProps> = ({
   const [editingCreatedJob, setEditingCreatedJob] = useState<Job | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<JobStatus | 'all'>('all');
+  type PeriodFilter = 'all' | 'this_week' | 'this_month' | 'last_month' | 'custom';
+  const [filterPeriod, setFilterPeriod] = useState<PeriodFilter>('all');
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
   const [viewMode, setViewMode] = useState<'list' | 'kanban' | 'calendar'>(() => {
     const saved = localStorage.getItem('solarops_jobs_view') as 'list' | 'kanban' | 'calendar' | null;
     if (saved === 'kanban' || saved === 'list' || saved === 'calendar') return saved;
@@ -237,7 +244,29 @@ export const Jobs: React.FC<JobsProps> = ({
 
   const technicians = users.filter((u) => u.role === 'technician' || u.role === 'coo');
 
-  const filteredJobs = jobs.filter((job) => {
+  // Period date range
+  const periodRange = useMemo<{ start: Date; end: Date } | null>(() => {
+    const now = new Date();
+    switch (filterPeriod) {
+      case 'this_week':
+        return { start: startOfWeek(now, { weekStartsOn: 1 }), end: endOfWeek(now, { weekStartsOn: 1 }) };
+      case 'this_month':
+        return { start: startOfMonth(now), end: endOfMonth(now) };
+      case 'last_month': {
+        const prev = subMonths(now, 1);
+        return { start: startOfMonth(prev), end: endOfMonth(prev) };
+      }
+      case 'custom':
+        if (customFrom && customTo) return { start: new Date(customFrom), end: new Date(customTo + 'T23:59:59') };
+        if (customFrom) return { start: new Date(customFrom), end: new Date('2099-12-31') };
+        if (customTo) return { start: new Date('2000-01-01'), end: new Date(customTo + 'T23:59:59') };
+        return null;
+      default:
+        return null;
+    }
+  }, [filterPeriod, customFrom, customTo]);
+
+  const filteredJobs = useMemo(() => jobs.filter((job) => {
     const customer = customers.find((c) => c.id === job.customerId);
     const matchesSearch =
       !searchQuery ||
@@ -245,8 +274,19 @@ export const Jobs: React.FC<JobsProps> = ({
       customer?.address.toLowerCase().includes(searchQuery.toLowerCase()) ||
       job.notes.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStatus = filterStatus === 'all' || job.status === filterStatus;
-    return matchesSearch && matchesStatus;
-  });
+    // Period filter — uses scheduledDate or createdAt
+    let matchesPeriod = true;
+    if (periodRange) {
+      const dateStr = job.scheduledDate || (job as any).createdAt;
+      if (dateStr) {
+        const d = new Date(dateStr.split('T')[0]);
+        matchesPeriod = d >= periodRange.start && d <= periodRange.end;
+      } else {
+        matchesPeriod = false; // no date → excluded when period filter active
+      }
+    }
+    return matchesSearch && matchesStatus && matchesPeriod;
+  }), [jobs, customers, searchQuery, filterStatus, periodRange]);
 
   const handleDragStart = (e: React.DragEvent, jobId: string) => {
     e.dataTransfer.setData('jobId', jobId);
@@ -300,11 +340,11 @@ export const Jobs: React.FC<JobsProps> = ({
             <Calendar className="w-4 h-4" />
           </button>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value as JobStatus | 'all')}
-            className="px-4 py-2.5 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+            className="px-4 py-2.5 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 text-sm"
           >
             <option value="all">All Status</option>
             <option value="new">New</option>
@@ -314,6 +354,34 @@ export const Jobs: React.FC<JobsProps> = ({
             <option value="invoiced">Invoiced</option>
             <option value="paid">Paid</option>
           </select>
+          <select
+            value={filterPeriod}
+            onChange={(e) => setFilterPeriod(e.target.value as PeriodFilter)}
+            className="px-4 py-2.5 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 text-sm"
+          >
+            <option value="all">All Time</option>
+            <option value="this_week">This Week</option>
+            <option value="this_month">This Month</option>
+            <option value="last_month">Last Month</option>
+            <option value="custom">Custom Dates</option>
+          </select>
+          {filterPeriod === 'custom' && (
+            <div className="flex items-center gap-1.5">
+              <input
+                type="date"
+                value={customFrom}
+                onChange={(e) => setCustomFrom(e.target.value)}
+                className="px-2.5 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+              />
+              <span className="text-slate-400 text-xs">to</span>
+              <input
+                type="date"
+                value={customTo}
+                onChange={(e) => setCustomTo(e.target.value)}
+                className="px-2.5 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+              />
+            </div>
+          )}
         </div>
         <div className="flex-1 relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
