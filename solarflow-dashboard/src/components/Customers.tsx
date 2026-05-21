@@ -3340,10 +3340,10 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                             </div>
                           </div>
                         ) : (
-                          <p className="text-xs text-slate-600 line-clamp-2">
+                          <p className="text-sm text-slate-700 whitespace-pre-line leading-relaxed">
                             {activity.description.split(/(@\S+)/g).map((part, i) =>
                               part.startsWith('@')
-                                ? <span key={i} className="text-orange-600 font-medium">{part}</span>
+                                ? <span key={i} className="text-orange-600 font-semibold bg-orange-50 px-0.5 rounded">{part}</span>
                                 : part
                             )}
                           </p>
@@ -3701,10 +3701,10 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                             </div>
                           </div>
                         ) : (
-                          <p className="text-sm text-slate-600 whitespace-pre-wrap">
+                          <p className="text-sm text-slate-700 whitespace-pre-line leading-relaxed">
                             {activity.description.split(/(@\S+)/g).map((part, i) =>
                               part.startsWith('@')
-                                ? <span key={i} className="text-orange-600 font-medium">{part}</span>
+                                ? <span key={i} className="text-orange-600 font-semibold bg-orange-50 px-0.5 rounded">{part}</span>
                                 : part
                             )}
                           </p>
