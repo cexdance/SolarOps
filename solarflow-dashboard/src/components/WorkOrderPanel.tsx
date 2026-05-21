@@ -522,18 +522,6 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
   // Active tab
   const [activeTab, setActiveTab] = useState<'overview' | 'parts' | 'photos' | 'report'>('overview');
 
-  // Auto-calc travel miles when siteAddress is available and status is idle
-  useEffect(() => {
-    if (!siteAddress || travelCalcStatus !== 'idle') return;
-    setTravelCalcStatus('loading');
-    calcDrivingMiles(travelFromAddress, siteAddress)
-      .then(miles => { setTravelMiles(miles); setTravelCalcStatus('done'); })
-      .catch(err => {
-        console.warn('[WorkOrderPanel] Travel miles calculation failed:', err?.message || err);
-        setTravelCalcStatus('error');
-      });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [siteAddress, travelCalcStatus]);
 
   // Build ContractorJob from current WO state
   const buildContractorJob = (woNumber: string): ContractorJob => {
@@ -1006,6 +994,29 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
           {/* Overview */}
           {activeTab === 'overview' && (
             <div className="p-6 space-y-5">
+              {/* Priority — top of form for quick triage */}
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1">Priority</label>
+                <div className="flex gap-2">
+                  {(['low', 'medium', 'high', 'critical'] as const).map(u => (
+                    <button
+                      key={u}
+                      onClick={() => setUrgency(u)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold capitalize transition-colors cursor-pointer ${
+                        urgency === u
+                          ? u === 'critical' ? 'bg-red-600 text-white'
+                          : u === 'high'     ? 'bg-orange-500 text-white'
+                          : u === 'medium'   ? 'bg-amber-500 text-white'
+                                             : 'bg-slate-500 text-white'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      {u}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-slate-500 mb-1">Job Title</label>
@@ -1060,6 +1071,8 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                             ? rate.powercareClientRate
                             : (rate.clientRateStandard ?? 0);
                           if (clientAdd > 0) setQuoteAmount(prev => +(prev + clientAdd).toFixed(2));
+                          // Switch to Parts & Labor tab so the user sees the new items
+                          setActiveTab('parts');
                         }
                       }}
                       className={`flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-md transition-colors ${
@@ -1200,28 +1213,6 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                     />
                     <span className="font-medium text-xs">PowerCare Client</span>
                   </label>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-slate-500 mb-1">Priority</label>
-                <div className="flex gap-2">
-                  {(['low', 'medium', 'high', 'critical'] as const).map(u => (
-                    <button
-                      key={u}
-                      onClick={() => setUrgency(u)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold capitalize transition-colors cursor-pointer ${
-                        urgency === u
-                          ? u === 'critical' ? 'bg-red-600 text-white'
-                          : u === 'high'     ? 'bg-orange-500 text-white'
-                          : u === 'medium'   ? 'bg-amber-500 text-white'
-                                             : 'bg-slate-500 text-white'
-                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                      }`}
-                    >
-                      {u}
-                    </button>
-                  ))}
                 </div>
               </div>
 
@@ -1695,73 +1686,6 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                     ))}
                   </div>
                 )}
-              </div>
-
-              {/* Travel Miles */}
-              <div className="bg-white rounded-xl border border-slate-200 p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
-                    <Navigation className="w-3.5 h-3.5 text-orange-500" />
-                    Travel Miles
-                  </p>
-                  {travelCalcStatus === 'loading' && (
-                    <span className="flex items-center gap-1 text-xs text-slate-400">
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />Calculating…
-                    </span>
-                  )}
-                  {travelCalcStatus === 'done' && (
-                    <span className="text-xs text-green-600 font-medium">Auto-calculated</span>
-                  )}
-                  {travelCalcStatus === 'error' && (
-                    <span className="text-xs text-slate-400">Enter manually or
-                      <button onClick={() => setTravelCalcStatus('idle')} className="text-orange-500 hover:underline cursor-pointer ml-1">retry</button>
-                    </span>
-                  )}
-                </div>
-
-                {/* Primary: large manual input — always accessible */}
-                <div className="flex items-center gap-3 mb-3">
-                  <input
-                    type="number"
-                    min={0}
-                    step={1}
-                    value={travelMiles || ''}
-                    placeholder="0"
-                    onChange={e => { setTravelMiles(Math.max(0, Number(e.target.value))); setTravelCalcStatus('done'); }}
-                    className="w-28 px-3 py-2 text-sm font-semibold border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-300 text-center bg-slate-50"
-                  />
-                  <span className="text-sm text-slate-500 font-medium">miles</span>
-                  {siteAddress && travelCalcStatus !== 'loading' && (
-                    <button
-                      onClick={() => { setTravelCalcStatus('idle'); setTravelMiles(0); }}
-                      title="Auto-calculate from address"
-                      className="ml-auto flex items-center gap-1.5 text-xs text-orange-500 hover:text-orange-700 cursor-pointer font-medium"
-                    >
-                      <RefreshCw className="w-3 h-3" />
-                      Auto-calc
-                    </button>
-                  )}
-                </div>
-
-                {/* Secondary: From / To for auto-calc */}
-                <div className="space-y-1.5 pt-2 border-t border-slate-100">
-                  <div className="flex items-center gap-2 text-xs text-slate-500">
-                    <span className="font-medium text-slate-600 shrink-0 w-7">From</span>
-                    <AddressAutocomplete
-                      value={travelFromAddress}
-                      onChange={setTravelFromAddress}
-                      onAddressSelect={r => setTravelFromAddress([r.address, r.city, r.state, r.zip].filter(Boolean).join(', '))}
-                      placeholder="HQ — 814 Ponce de Leon Blvd"
-                      className="flex-1 px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-orange-400 bg-white"
-                    />
-                  </div>
-                  {siteAddress && (
-                    <div className="flex items-center gap-2 text-xs">
-                      <span className="font-medium text-slate-600 shrink-0 w-7">To</span>
-                      <AddressLink compact fullAddress={siteAddress} className="flex-1 min-w-0" />
-                    </div>
-                  )}
-                </div>
               </div>
 
               {/* Profit Breakdown Summary */}

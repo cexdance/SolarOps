@@ -3491,11 +3491,6 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                               <Calendar className="w-3 h-3" />{job.scheduledDate.split('T')[0]}
                             </span>
                           )}
-                          {job.travelMiles && job.travelMiles > 0 ? (
-                            <span className="flex items-center gap-1">
-                              <ArrowRight className="w-3 h-3" />{job.travelMiles} mi
-                            </span>
-                          ) : null}
                         </div>
 
                         {/* ── Stage pipeline ──────────────────────────── */}
