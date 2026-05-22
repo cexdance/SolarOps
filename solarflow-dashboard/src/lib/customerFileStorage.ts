@@ -28,7 +28,7 @@ export interface StoredCustomerFile {
 
 /**
  * Upload a pasted file to Supabase Storage and return a public URL.
- * Falls back to dataURL if upload fails.
+ * Throws error if upload fails (caller will show error toast).
  */
 export async function uploadCustomerFile(
   file: CustomerFileUpload,
@@ -55,17 +55,7 @@ export async function uploadCustomerFile(
       });
 
     if (error) {
-      console.warn('[CustomerFileStorage] Upload failed, using dataURL fallback:', error.message);
-      // Fallback: store as dataURL
-      return {
-        id: file.id,
-        name: file.name,
-        url: file.dataUrl,
-        mimeType: file.mimeType,
-        size: file.size,
-        source: 'upload',
-        createdAt: new Date().toISOString(),
-      };
+      throw new Error(`Upload failed: ${error.message}`);
     }
 
     // Get public URL
@@ -81,17 +71,8 @@ export async function uploadCustomerFile(
       createdAt: new Date().toISOString(),
     };
   } catch (err) {
-    console.warn('[CustomerFileStorage] Upload error, using dataURL fallback:', err);
-    // Fallback: store as dataURL
-    return {
-      id: file.id,
-      name: file.name,
-      url: file.dataUrl,
-      mimeType: file.mimeType,
-      size: file.size,
-      source: 'upload',
-      createdAt: new Date().toISOString(),
-    };
+    // Throw error for caller to handle (no fallback to base64)
+    throw err instanceof Error ? err : new Error('File upload failed');
   }
 }
 
