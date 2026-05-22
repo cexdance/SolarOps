@@ -93,7 +93,7 @@ export interface CustomerFile {
 
 export type ServiceType = string;
 
-export type JobStatus = 'new' | 'assigned' | 'in_progress' | 'completed' | 'invoiced' | 'paid';
+export type JobStatus = 'new' | 'assigned' | 'in_progress' | 'completed' | 'invoiced' | 'paid' | 'archived';
 export type UrgencyLevel = 'low' | 'medium' | 'high' | 'critical';
 
 // Extended Work Order status (superset of JobStatus — drives the WO Panel workflow)
@@ -248,6 +248,7 @@ export interface Job {
   contractorPayDelayBonusAt?: string;  // 14 days after completedAt
   contractorPayDelayBonusAmount?: number;
   contractorAutoPayAt?: string;        // 28 days after completedAt
+  archivedAt?: string;                 // ISO timestamp when archived
 }
 
 export interface RMAEntry {

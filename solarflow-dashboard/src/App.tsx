@@ -35,6 +35,7 @@ import { loadData, saveData } from './lib/dataStore';
 import { migrateWoPhotos } from './lib/photoStore';
 import { pickupJobsForContractor, toContractorJobView } from './lib/woHelpers';
 import { logChange, flushChangeLog } from './lib/changeLog';
+import { autoArchiveCompletedJobs } from './lib/jobService';
 import { fetchMyNotifications, markNotificationReadRemote, markAllNotificationsReadRemote, startNotificationPolling, stopNotificationPolling } from './lib/notifications';
 import { processBillingTimers } from './lib/billingService';
 import { loadContractors, saveContractors, loadServiceRates, saveServiceRates, loadContractorJobs, saveContractorJobs, initializeContractorData, findInviteByToken } from './lib/contractorStore';
@@ -654,13 +655,18 @@ function App() {
       .then(() => {
         // Re-read localStorage after remote merge (may have new records from other devices)
         const merged = loadData();
+        // Auto-archive completed jobs >30 days old
+        const withArchived = {
+          ...merged,
+          jobs: autoArchiveCompletedJobs(merged.jobs),
+        };
         setData(prev => {
-          // Only update if remote actually added records (avoids unnecessary re-renders)
+          // Only update if remote actually added records or archiving changed state
           if (
-            merged.customers.length !== prev.customers.length ||
-            merged.jobs.length     !== prev.jobs.length
+            withArchived.customers.length !== prev.customers.length ||
+            withArchived.jobs.length     !== prev.jobs.length
           ) {
-            return merged;
+            return withArchived;
           }
           return prev;
         });

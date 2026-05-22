@@ -27,6 +27,7 @@ const statusColors: Record<JobStatus, string> = {
   completed: 'bg-green-100 text-green-700 border-green-200',
   invoiced: 'bg-purple-100 text-purple-700 border-purple-200',
   paid: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+  archived: 'bg-gray-100 text-gray-700 border-gray-200',
 };
 
 const urgencyColors: Record<UrgencyLevel, string> = {
@@ -134,6 +135,7 @@ const colColors: Record<JobStatus, string> = {
   completed: 'bg-green-50 border-green-200',
   invoiced: 'bg-purple-50 border-purple-200',
   paid: 'bg-emerald-50 border-emerald-200',
+  archived: 'bg-gray-50 border-gray-200',
 };
 
 const KanbanColumn: React.FC<KanbanColumnProps> = ({
@@ -226,6 +228,7 @@ export const Jobs: React.FC<JobsProps> = ({
   const [editingCreatedJob, setEditingCreatedJob] = useState<Job | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<JobStatus | 'all'>('all');
+  const [showArchived, setShowArchived] = useState(false);
   type PeriodFilter = 'all' | 'this_week' | 'this_month' | 'last_month' | 'custom';
   const [filterPeriod, setFilterPeriod] = useState<PeriodFilter>('all');
   const [customFrom, setCustomFrom] = useState('');
@@ -266,6 +269,8 @@ export const Jobs: React.FC<JobsProps> = ({
     }
   }, [filterPeriod, customFrom, customTo]);
 
+  const archivedCount = useMemo(() => jobs.filter(j => j.status === 'archived' && !showArchived).length, [jobs, showArchived]);
+
   const filteredJobs = useMemo(() => jobs.filter((job) => {
     const customer = customers.find((c) => c.id === job.customerId);
     const matchesSearch =
@@ -285,8 +290,12 @@ export const Jobs: React.FC<JobsProps> = ({
         matchesPeriod = false; // no date → excluded when period filter active
       }
     }
-    return matchesSearch && matchesStatus && matchesPeriod;
-  }), [jobs, customers, searchQuery, filterStatus, periodRange]);
+    // Filter out archived jobs unless toggle is enabled
+    const isArchived = job.status === 'archived';
+    const notArchived = !isArchived || showArchived;
+
+    return matchesSearch && matchesStatus && matchesPeriod && notArchived;
+  }), [jobs, customers, searchQuery, filterStatus, periodRange, showArchived]);
 
   const handleDragStart = (e: React.DragEvent, jobId: string) => {
     e.dataTransfer.setData('jobId', jobId);
@@ -382,6 +391,17 @@ export const Jobs: React.FC<JobsProps> = ({
               />
             </div>
           )}
+          <label className="flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 hover:bg-slate-50 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={showArchived}
+              onChange={(e) => setShowArchived(e.target.checked)}
+              className="w-4 h-4 accent-orange-600"
+            />
+            <span className="text-sm font-medium text-slate-700">
+              Show Archived {archivedCount > 0 && `(${archivedCount})`}
+            </span>
+          </label>
         </div>
         <div className="flex-1 relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />

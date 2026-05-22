@@ -21,6 +21,7 @@ const statusColors: Record<JobStatus, string> = {
   completed: 'bg-green-100 text-green-700 border-green-200',
   invoiced: 'bg-purple-100 text-purple-700 border-purple-200',
   paid: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+  archived: 'bg-gray-100 text-gray-700 border-gray-200',
 };
 
 const statusDotColors: Record<JobStatus, string> = {
@@ -30,6 +31,7 @@ const statusDotColors: Record<JobStatus, string> = {
   completed: 'bg-green-500',
   invoiced: 'bg-purple-500',
   paid: 'bg-emerald-500',
+  archived: 'bg-gray-400',
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
