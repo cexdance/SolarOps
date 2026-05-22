@@ -1338,16 +1338,17 @@ const TodoListWidget: React.FC<{
             {/* Content */}
             <div className="flex-1 min-w-0">
               {editingTodoId === todo.id ? (
-                <input
+                <textarea
                   autoFocus
                   value={editingTodoText}
                   onChange={e => setEditingTodoText(e.target.value)}
                   onKeyDown={e => {
-                    if (e.key === 'Enter') handleSaveEdit(todo.id);
-                    if (e.key === 'Escape') setEditingTodoId(null);
+                    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); handleSaveEdit(todo.id); }
+                    if (e.key === 'Escape') { e.preventDefault(); setEditingTodoId(null); }
                   }}
                   onBlur={() => handleSaveEdit(todo.id)}
-                  className="w-full text-xs border border-indigo-300 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                  rows={2}
+                  className="w-full text-xs border border-indigo-300 rounded-md px-2 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-400 resize-y leading-snug"
                 />
               ) : (
                 <p

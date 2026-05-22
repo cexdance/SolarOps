@@ -560,14 +560,17 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     />
                     <div className="flex-1 min-w-0">
                       {editingTodoId === todo.id ? (
-                        <input
-                          type="text"
+                        <textarea
                           value={editingTodoText}
                           onChange={e => setEditingTodoText(e.target.value)}
-                          onKeyDown={e => { if (e.key === 'Enter') saveEditTodo(todo.id); if (e.key === 'Escape') setEditingTodoId(null); }}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); saveEditTodo(todo.id); }
+                            if (e.key === 'Escape') { e.preventDefault(); setEditingTodoId(null); }
+                          }}
                           onBlur={() => saveEditTodo(todo.id)}
                           autoFocus
-                          className="w-full text-sm border-b border-orange-400 focus:outline-none bg-transparent text-slate-900"
+                          rows={2}
+                          className="w-full text-sm border border-orange-300 rounded-md px-2 py-1 focus:outline-none focus:ring-1 focus:ring-orange-400 resize-y bg-white text-slate-900 leading-snug"
                         />
                       ) : (
                         <p
