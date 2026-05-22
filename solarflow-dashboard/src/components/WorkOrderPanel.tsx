@@ -377,6 +377,80 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
   const [laborHours, setLaborHours] = useState<number>(job?.laborHours ?? 1);
   const [partsCostDirect, setPartsCostDirect] = useState<number>(job?.partsCost ?? 0);
 
+  // ── Optimizer Pricing Calculator (PowerCare) ──────────────────────────────
+  const [optCalc, setOptCalc] = useState({
+    optimizerCount: 1,
+    steepRoof: false,
+    buildingHeight3Plus: false,
+    specialtyRoof: 0,    // % surcharge 0 / 10 / 15 / 20 / 25
+    critterGuard: false,
+    critterPanels: 20,
+    emergencyDispatch: false,
+    detachedArray: false,
+  });
+
+  const optimizerTotal = useMemo(() => {
+    const { optimizerCount, steepRoof, buildingHeight3Plus, specialtyRoof,
+            critterGuard, critterPanels, emergencyDispatch } = optCalc;
+    // Base labour
+    const base = optimizerCount <= 4
+      ? 450
+      : 450 + (optimizerCount - 4) * 100;
+    // Surcharge multiplier
+    let surcharge = 1;
+    if (steepRoof) surcharge += 0.20;
+    if (buildingHeight3Plus) surcharge += 0.15;
+    if (specialtyRoof > 0) surcharge += specialtyRoof / 100;
+    if (emergencyDispatch) surcharge += 0.25;
+    const labour = Math.round(base * surcharge);
+    // Critter guard
+    const critter = critterGuard
+      ? 750 + (critterPanels > 20 ? Math.ceil((critterPanels - 20) / 4) * 80 : 0)
+      : 0;
+    return { labour, critter, total: labour + critter, surcharge, base };
+  }, [optCalc]);
+
+  const applyOptimizerCalc = useCallback(() => {
+    const { labour, critter, surcharge, base } = optimizerTotal;
+    const { optimizerCount, steepRoof, buildingHeight3Plus, specialtyRoof,
+            emergencyDispatch, critterGuard, critterPanels, detachedArray } = optCalc;
+    const surchargePct = Math.round((surcharge - 1) * 100);
+    const addItems: WOLineItem[] = [];
+
+    // Base labour line
+    const baseDesc = optimizerCount <= 4
+      ? `Optimizer Replacement — Base Charge (${optimizerCount} optimizer${optimizerCount > 1 ? 's' : ''}, incl. mobilization, diagnostics, commissioning)`
+      : `Optimizer Replacement — Base (4 units) + ${optimizerCount - 4} additional @ $100ea`;
+    addItems.push({ id: `opt-base-${Date.now()}`, type: 'labor', description: baseDesc, quantity: 1, unitCost: base, totalCost: base });
+
+    // Surcharge line (if any)
+    if (surchargePct > 0) {
+      const flags = [
+        steepRoof && 'Steep Roof +20%',
+        buildingHeight3Plus && 'Height >3 Stories +15%',
+        specialtyRoof > 0 && `Specialty Roof +${specialtyRoof}%`,
+        emergencyDispatch && 'Emergency Dispatch +25%',
+      ].filter(Boolean).join(' · ');
+      const surchargeAmt = Math.round(base * (surcharge - 1));
+      addItems.push({ id: `opt-sur-${Date.now()}`, type: 'labor', description: `Labor Surcharge +${surchargePct}% (${flags})`, quantity: 1, unitCost: surchargeAmt, totalCost: surchargeAmt });
+    }
+
+    // Critter guard
+    if (critterGuard) {
+      const cgDesc = critterPanels > 20
+        ? `Critter Guard Installation — up to 20 panels $750 + ${Math.ceil((critterPanels - 20) / 4)} extra sections`
+        : `Critter Guard Installation — up to 20 panels`;
+      addItems.push({ id: `opt-cg-${Date.now()}`, type: 'labor', description: cgDesc, quantity: 1, unitCost: critter, totalCost: critter });
+    }
+
+    // Detached / difficult access
+    if (detachedArray) {
+      addItems.push({ id: `opt-da-${Date.now()}`, type: 'other', description: 'Detached Array / Difficult Access — Custom (price TBD)', quantity: 1, unitCost: 0, totalCost: 0 });
+    }
+
+    setLineItems(prev => [...prev, ...addItems]);
+  }, [optCalc, optimizerTotal]);
+
   // Line items
   const [lineItems, setLineItems]   = useState<WOLineItem[]>(job?.lineItems ?? []);
 
@@ -1448,6 +1522,115 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
           {/* Parts & Labor */}
           {activeTab === 'parts' && (
             <div className="p-6 space-y-4">
+
+              {/* ── Optimizer Pricing Calculator (PowerCare only) ─────────────── */}
+              {isPowercare && (
+                <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 space-y-4">
+                  <div className="flex items-center gap-2">
+                    <Zap className="w-4 h-4 text-indigo-600 shrink-0" />
+                    <p className="text-sm font-semibold text-indigo-800">Optimizer Replacement Pricing Calculator</p>
+                  </div>
+
+                  {/* Row 1: optimizer count */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="sm:col-span-1">
+                      <label className="block text-xs font-medium text-slate-600 mb-1"># Optimizers</label>
+                      <input
+                        type="number" min={1} step={1}
+                        value={optCalc.optimizerCount}
+                        onChange={e => setOptCalc(p => ({ ...p, optimizerCount: Math.max(1, parseInt(e.target.value) || 1) }))}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                      />
+                      <p className="text-[10px] text-slate-400 mt-0.5">
+                        {optCalc.optimizerCount <= 4
+                          ? `$450 flat (covers 1–4)`
+                          : `$450 + ${optCalc.optimizerCount - 4}×$100 extra`}
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">Specialty Roof</label>
+                      <select
+                        value={optCalc.specialtyRoof}
+                        onChange={e => setOptCalc(p => ({ ...p, specialtyRoof: parseInt(e.target.value) }))}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                      >
+                        <option value={0}>None</option>
+                        <option value={10}>Tile / Standing Seam +10%</option>
+                        <option value={15}>Fragile Roofing +15%</option>
+                        <option value={20}>Specialty Attach. +20%</option>
+                        <option value={25}>Extra Protection +25%</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Row 2: toggles */}
+                  <div className="flex flex-wrap gap-3">
+                    {([
+                      { key: 'steepRoof', label: 'Steep Roof +20%' },
+                      { key: 'buildingHeight3Plus', label: '>3 Stories +15%' },
+                      { key: 'emergencyDispatch', label: 'Emergency Dispatch +25%' },
+                      { key: 'critterGuard', label: 'Critter Guard' },
+                      { key: 'detachedArray', label: 'Detached Array (Custom)' },
+                    ] as { key: keyof typeof optCalc; label: string }[]).map(({ key, label }) => (
+                      <label key={key} className="flex items-center gap-1.5 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={!!optCalc[key]}
+                          onChange={e => setOptCalc(p => ({ ...p, [key]: e.target.checked }))}
+                          className="w-4 h-4 rounded border-slate-300 accent-indigo-600"
+                        />
+                        <span className="text-xs text-slate-700">{label}</span>
+                      </label>
+                    ))}
+                  </div>
+
+                  {/* Critter guard panel count */}
+                  {optCalc.critterGuard && (
+                    <div className="flex items-center gap-3">
+                      <label className="text-xs font-medium text-slate-600 shrink-0"># Panels (critter guard)</label>
+                      <input
+                        type="number" min={1} step={1}
+                        value={optCalc.critterPanels}
+                        onChange={e => setOptCalc(p => ({ ...p, critterPanels: Math.max(1, parseInt(e.target.value) || 20) }))}
+                        className="w-24 px-3 py-1.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                      />
+                      <span className="text-xs text-slate-500">
+                        {optCalc.critterPanels <= 20
+                          ? '$750 flat (≤20 panels)'
+                          : `$750 + ${Math.ceil((optCalc.critterPanels - 20) / 4)}×$80 extra sections`}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Live total */}
+                  <div className="flex items-center justify-between bg-white border border-indigo-200 rounded-lg px-4 py-3">
+                    <div className="text-xs text-slate-500 space-y-0.5">
+                      <p>Base labor: <span className="font-semibold text-slate-800">${optimizerTotal.base.toLocaleString()}</span></p>
+                      {optimizerTotal.surcharge > 1 && (
+                        <p>Surcharges: <span className="font-semibold text-slate-800">+{Math.round((optimizerTotal.surcharge - 1) * 100)}%</span></p>
+                      )}
+                      {optCalc.critterGuard && (
+                        <p>Critter guard: <span className="font-semibold text-slate-800">${optimizerTotal.critter.toLocaleString()}</span></p>
+                      )}
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs text-slate-500">Client Total</p>
+                      <p className="text-2xl font-bold text-indigo-700">${optimizerTotal.total.toLocaleString()}</p>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={applyOptimizerCalc}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add to Line Items
+                  </button>
+                  <p className="text-[10px] text-slate-400 text-center -mt-2">Contractor cost can be entered manually in the line items below.</p>
+                </div>
+              )}
+
               {/* Table */}
               {lineItems.length > 0 && (
                 <div className="rounded-xl border border-slate-200 overflow-x-auto">
