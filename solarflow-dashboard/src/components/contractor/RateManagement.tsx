@@ -273,13 +273,25 @@ export const RateManagement: React.FC<RateManagementProps> = ({ rates, onSaveRat
                             className="w-16 px-2 py-1 text-xs border border-slate-200 rounded text-right"
                           />
                         </td>
-                        <td className="px-2 py-2 text-center">
-                          <input
-                            type="checkbox"
-                            checked={editForm.isPowercareEligible || false}
-                            onChange={(e) => setEditForm({ ...editForm, isPowercareEligible: e.target.checked })}
-                            className="w-4 h-4 rounded border-slate-300"
-                          />
+                        <td className="px-2 py-2">
+                          <div className="flex items-center gap-0.5">
+                            <span className="text-xs text-slate-400">$</span>
+                            <input
+                              type="number"
+                              min={0}
+                              step="0.01"
+                              value={editForm.powercareClientRate || 0}
+                              onChange={(e) => {
+                                const v = parseFloat(e.target.value) || 0;
+                                setEditForm({
+                                  ...editForm,
+                                  powercareClientRate: v,
+                                  isPowercareEligible: v > 0,
+                                });
+                              }}
+                              className="w-16 px-2 py-1 text-xs border border-slate-200 rounded text-right"
+                            />
+                          </div>
                         </td>
                         <td className="px-2 py-2"></td>
                         <td className="px-2 py-2">
