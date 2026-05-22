@@ -64,6 +64,7 @@ import { AddressLink } from './AddressLink';
 import { WorkOrderPanel } from './WorkOrderPanel';
 import { PhoneLink } from './PhoneLink';
 import { ActivityFeed } from './ui/ActivityFeed';
+import { uploadCustomerFiles } from '../lib/customerFileStorage';
 
 // Client Status Badge Component
 const getStatusColor = (status: ClientStatus): string => {
@@ -2860,21 +2861,44 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
       userName: currentUser?.name,
       mentions: mentionedIds.length > 0 ? mentionedIds : undefined,
     };
-    const newFiles: CustomerFile[] = pastedFiles.map(f => ({
-      id: f.id,
-      name: f.name,
-      url: f.dataUrl,
-      mimeType: f.mimeType,
-      size: f.size,
-      source: 'upload' as const,
-      createdAt: new Date().toISOString(),
-    }));
-    const activityHistory = customer.activityHistory || [];
-    onUpdateCustomer({
-      ...customer,
-      activityHistory: [newActivity, ...activityHistory],
-      files: [...newFiles, ...(customer.files ?? [])],
+
+    // Upload files to Supabase Storage (async, non-blocking)
+    // If upload fails, files are stored as dataURLs directly in customer object
+    uploadCustomerFiles(pastedFiles, customer.id).then((uploadedFiles) => {
+      const newFiles: CustomerFile[] = uploadedFiles.map(f => ({
+        id: f.id,
+        name: f.name,
+        url: f.url,
+        mimeType: f.mimeType,
+        size: f.size,
+        source: 'upload' as const,
+        createdAt: f.createdAt,
+      }));
+      const activityHistory = customer.activityHistory || [];
+      onUpdateCustomer({
+        ...customer,
+        activityHistory: [newActivity, ...activityHistory],
+        files: [...newFiles, ...(customer.files ?? [])],
+      });
+    }).catch(() => {
+      // Fallback: store files as dataURLs directly
+      const newFiles: CustomerFile[] = pastedFiles.map(f => ({
+        id: f.id,
+        name: f.name,
+        url: f.dataUrl,
+        mimeType: f.mimeType,
+        size: f.size,
+        source: 'upload' as const,
+        createdAt: new Date().toISOString(),
+      }));
+      const activityHistory = customer.activityHistory || [];
+      onUpdateCustomer({
+        ...customer,
+        activityHistory: [newActivity, ...activityHistory],
+        files: [...newFiles, ...(customer.files ?? [])],
+      });
     });
+
     setNotes('');
     setPastedFiles([]);
     setNoteSaved(true);
