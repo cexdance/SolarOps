@@ -18,6 +18,7 @@ import { searchParts, CatalogPart } from '../lib/partsCatalog';
 import { AddressAutocomplete, GMAPS_KEY_STORAGE, loadGoogleMaps } from './AddressAutocomplete';
 import { AddressLink } from './AddressLink';
 import { MentionTextarea, MentionUser, renderWithMentions, parseMentions, fireMentionNotifications } from './ui/MentionTextarea';
+import { ActivityFeed } from './ui/ActivityFeed';
 import { compressImageToDataUrl } from '../lib/photoCompress';
 
 // ─── constants ────────────────────────────────────────────────────────────────
@@ -594,7 +595,11 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
   const applyRecurringDiscount = discountType !== ''; // kept for legacy compat
 
   // Active tab
-  const [activeTab, setActiveTab] = useState<'overview' | 'parts' | 'photos' | 'report'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'parts' | 'photos' | 'report' | 'comments'>('overview');
+
+  // Team comments & activity (mirrors Customer.activityHistory)
+  const [woActivities, setWoActivities] = useState<import('../types').Activity[]>(job?.activityHistory ?? []);
+  const [newComment, setNewComment] = useState('');
 
 
   // Build ContractorJob from current WO state
@@ -763,6 +768,56 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
 
   const removePhoto = (id: string) => setWoPhotos(prev => prev.filter(p => p.id !== id));
 
+  // ── Comments / Activity handlers ─────────────────────────────────────────
+  const addComment = useCallback(() => {
+    const text = newComment.trim();
+    if (!text) return;
+    const entry: import('../types').Activity = {
+      id: `wo-cmt-${Date.now()}`,
+      type: 'note_added',
+      description: text,
+      timestamp: new Date().toISOString(),
+      userId: (currentUserName && users.find(u => u.name === currentUserName)?.id) || undefined,
+      userName: currentUserName ?? 'Unknown',
+      mentions: parseMentions(text, users as any),
+    };
+    setWoActivities(prev => [entry, ...prev]);
+    setNewComment('');
+    // Fire mention notifications (non-blocking)
+    if (entry.mentions && entry.mentions.length > 0 && job?.woNumber) {
+      fireMentionNotifications({
+        mentionedUserIds: entry.mentions,
+        notifierName:     currentUserName ?? 'Someone',
+        context:          job.woNumber,
+        contextId:        job.id,
+        contextType:      'workOrder',
+        message:          text,
+      });
+    }
+  }, [newComment, currentUserName, users, job]);
+
+  const editComment = useCallback((id: string, text: string) => {
+    setWoActivities(prev => prev.map(a => a.id === id ? { ...a, description: text } : a));
+  }, []);
+
+  const deleteComment = useCallback((id: string) => {
+    setWoActivities(prev => prev.filter(a => a.id !== id));
+  }, []);
+
+  const reactComment = useCallback((id: string, emoji: string) => {
+    const uid = (currentUserName && users.find(u => u.name === currentUserName)?.id) || 'unknown';
+    setWoActivities(prev => prev.map(a => {
+      if (a.id !== id) return a;
+      const reactions = { ...(a.reactions ?? {}) };
+      const list = reactions[emoji] ?? [];
+      reactions[emoji] = list.includes(uid)
+        ? list.filter(x => x !== uid)
+        : [...list, uid];
+      if (reactions[emoji].length === 0) delete reactions[emoji];
+      return { ...a, reactions };
+    }));
+  }, [currentUserName, users]);
+
   // Paste images from clipboard into notes — they become attached photos under "process"
   const [pasteToast, setPasteToast] = useState<string | null>(null);
   const handleNotesPaste = useCallback((e: React.ClipboardEvent<HTMLTextAreaElement>) => {
@@ -852,6 +907,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
       contractorSentAt: effectiveWoStatus === 'scheduled' ? (job?.contractorSentAt ?? new Date().toISOString()) : job?.contractorSentAt,
       lineItems,
       woPhotos,
+      activityHistory: woActivities,
       serviceReport,
       serviceStatus,
       requiresFollowUp,
@@ -923,6 +979,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
     { key: 'parts',    label: 'Parts & Labor',   icon: <Wrench className="w-4 h-4" /> },
     { key: 'photos',   label: `Photos${woPhotos.length ? ` (${woPhotos.length})` : ''}`, icon: <Camera className="w-4 h-4" /> },
     { key: 'report',   label: 'Service Report',  icon: <FileText className="w-4 h-4" /> },
+    { key: 'comments', label: `Comments${woActivities.length ? ` (${woActivities.length})` : ''}`, icon: <Users className="w-4 h-4" /> },
   ] as const;
 
   return (
@@ -1077,7 +1134,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
             {tabs.map(tab => (
               <button
                 key={tab.key}
-                onClick={() => setActiveTab(tab.key)}
+                onClick={() => setActiveTab(tab.key as typeof activeTab)}
                 className={`flex items-center gap-1.5 px-3 py-3 text-sm font-medium border-b-2 transition-colors cursor-pointer whitespace-nowrap ${
                   activeTab === tab.key
                     ? 'border-orange-500 text-orange-600'
@@ -2220,6 +2277,50 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                     ))}
                   </div>
                 )}
+              </div>
+            </div>
+          )}
+
+          {/* ── Comments & Activity ──────────────────────────────────── */}
+          {activeTab === 'comments' && (
+            <div className="p-6 space-y-5">
+              <div>
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Add a comment</p>
+                <MentionTextarea
+                  value={newComment}
+                  onChange={setNewComment}
+                  users={users ?? []}
+                  rows={3}
+                  onPaste={handleNotesPaste}
+                  placeholder="Type your update… use @ to mention a teammate · Ctrl/Cmd+V to paste a screenshot"
+                  className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 resize-none"
+                />
+                <div className="flex items-center justify-between mt-2">
+                  <p className="text-[11px] text-slate-400">Comments are shared with the entire team and stored with this work order.</p>
+                  <button
+                    onClick={addComment}
+                    disabled={!newComment.trim()}
+                    className="px-4 py-1.5 bg-orange-500 text-white text-sm font-medium rounded-lg hover:bg-orange-600 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed transition-colors"
+                  >
+                    Post
+                  </button>
+                </div>
+              </div>
+
+              <div className="border-t border-slate-100 pt-5">
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                  <Users className="w-3.5 h-3.5" />
+                  Team Conversation
+                </p>
+                <ActivityFeed
+                  activities={woActivities}
+                  users={(users ?? []) as any}
+                  currentUser={(users ?? []).find(u => u.name === currentUserName) as any ?? null}
+                  onEdit={editComment}
+                  onDelete={deleteComment}
+                  onReact={reactComment}
+                  emptyMessage="No comments yet — start the conversation by posting an update above."
+                />
               </div>
             </div>
           )}

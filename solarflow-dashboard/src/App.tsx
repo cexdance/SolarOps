@@ -2125,6 +2125,7 @@ function App() {
             customers={data.customers}
             jobs={data.jobs}
             contractors={contractors}
+            users={data.users}
             isMobile={isMobile}
             currentUserId={data.currentUser?.id || 'user-1'}
             onViewCustomer={(customerId) => {
@@ -2407,6 +2408,17 @@ function App() {
             onSaveSolarEdgeApiKey={handleSaveSolarEdgeApiKey}
             onSyncSolarEdge={handleSyncSolarEdge}
             onLogout={handleLogout}
+            onUpdateAvatar={(dataUrl) => {
+              if (!currentUser) return;
+              setData(prev => {
+                const next = {
+                  ...prev,
+                  users: prev.users.map(u => u.id === currentUser.id ? { ...u, avatar: dataUrl ?? undefined } : u),
+                };
+                saveData(next);
+                return next;
+              });
+            }}
             isMobile={isMobile}
           />
         );

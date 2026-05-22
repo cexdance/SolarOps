@@ -1,0 +1,132 @@
+Asunto: SolarOps — La Plataforma que Construí para Nosotros, y una Conversación que Necesitamos Tener
+
+Hola [Nombres de los Socios],
+
+Quiero compartir algo en lo que he estado trabajando en silencio durante los últimos meses — y más importante aún, quiero tener una conversación honesta al respecto.
+
+Construí SolarOps. Desde cero. Una plataforma CRM y de operaciones completa, diseñada específicamente para la manera en que trabajamos como empresa de operaciones y mantenimiento solar. Está activa, desplegada, y lista para usarse hoy mismo.
+
+Les envío este correo porque creo que merece una mirada real por parte de los socios, y porque quiero ser transparente sobre lo que me costó construirlo y lo que propongo de aquí en adelante.
+
+
+── POR QUÉ LO CONSTRUÍ ─────────────────────────────────────────
+
+Durante más de dos años planteé internamente la necesidad de un CRM y un sistema de operaciones. Era algo que el equipo necesitaba, algo que la gerencia reconoció, pero nada avanzó. Así que lo construí yo mismo.
+
+Quiero ser honesto con ustedes: este trabajo estuvo completamente fuera del alcance de mis responsabilidades como socio. Fueron noches y fines de semana. Fue una inversión personal significativa de tiempo y dinero. Lo hice porque creía en ello y porque podía ver el impacto directo que tendría en cómo operamos.
+
+El resultado es una plataforma lista para producción, desplegada y accesible ahora mismo.
+
+
+── QUÉ HACE SOLAROPS ───────────────────────────────────────────
+
+Permítanme mostrarles lo que hay dentro, porque creo que el alcance puede sorprenderlos.
+
+VENTAS Y GESTIÓN DE PROSPECTOS
+La plataforma tiene un pipeline de ventas completo con un Lead Lobby para prospectos entrantes, seguimiento de interacciones para cada llamada, correo, mensaje, nota y reunión, y un sistema de clasificación gamificado que mantiene al equipo de ventas motivado y responsable. Los representantes ganan XP y suben de nivel conforme cierran prospectos. Esto reemplaza herramientas que normalmente cuestan entre $50 y $150 por usuario al mes.
+
+GESTIÓN DE CLIENTES — VISTA 360°
+Cada cliente tiene un perfil completo. Se puede ver toda su historia: cada orden de trabajo, cada interacción, cada factura, su ID de sitio en SolarEdge, números de caso PowerCare, seguimiento de piezas, y un historial de actividad completo. Todo lo que haya ocurrido con ese cliente está en un solo lugar. Esto tiene un enorme potencial para la comunicación automatizada con clientes y para órdenes de trabajo recurrentes de O&M que podemos atender de forma proactiva.
+
+GESTIÓN DE ÓRDENES DE TRABAJO
+Las órdenes de trabajo avanzan por un ciclo de vida completo — desde borrador, cotización enviada, cotización aprobada, programada, en progreso, completada, facturada y pagada. Cada orden de trabajo rastrea costos de mano de obra, piezas, honorarios de contratistas, ingresos del cliente y margen de ganancia. Las cotizaciones se generan directamente dentro de la plataforma y se envían al cliente para su aprobación. Si decidimos avanzar con la suite completa, se integrará para crear la factura y el enlace de pago a través de una conexión con la API de Xero.
+
+PORTAL DE CONTRATISTAS
+Los contratistas tienen su propio acceso seguro. Al incorporarse, deberán presentar la documentación W-9, los requisitos de seguro y aceptar los estándares de seguridad y términos y condiciones. En el día a día, ven sus trabajos asignados, envían reportes de finalización, suben fotos organizadas del sitio (antes, después, números de serie, pruebas de voltaje, fotos del inversor) y presentan sus facturas. Los administradores revisan y aprueban desde el panel principal. No más idas y venidas por WhatsApp o correo. Esto nos permite expandir nuestro negocio de O&M y hacer crecer nuestra fuerza de trabajo.
+
+MONITOREO DE SOLAREDGE
+La plataforma se conecta a la API de SolarEdge y recibe alertas del sitio automáticamente. Cada alerta tiene un nivel de severidad y puede ser reconocida, resuelta o vinculada directamente a una orden de trabajo. Esto elimina por completo la revisión manual del portal de SolarEdge. También representa un gran potencial para ser proactivos en las llamadas de O&M y en la planificación estratégica.
+
+FACTURACIÓN E INGRESOS
+Las facturas se crean dentro de la plataforma y se sincronizan con Xero. El seguimiento de pagos, alertas de mora, rentabilidad por cliente e informes de ingresos están todos integrados.
+
+INVENTARIO Y OPERACIONES
+Gestión de equipos, herramientas y proveedores en un solo lugar. El panel de operaciones muestra en tiempo real el cronograma del día, trabajos sin facturar, estado de órdenes de trabajo, actividad del equipo y notificaciones — todo visible desde el momento en que se inicia sesión.
+
+ROLES MULTI-USUARIO Y MÓVIL
+La plataforma admite roles de Administrador, COO, Técnico, Ventas y Soporte con los controles de acceso correspondientes. Funciona en escritorio, tablet y celular.
+
+Pueden verla en vivo ahora mismo en: https://solarflow-dashboard-sooty.vercel.app
+
+
+── EL VALOR QUE ESTO LE DA AL NEGOCIO ──────────────────────────
+
+Quiero plantear un punto que va más allá de la conveniencia del día a día.
+
+Un negocio que opera con un CRM estructurado, flujos de trabajo documentados, ingresos rastreados por cliente e historial auditado de órdenes de trabajo vale más que uno que no lo tiene. Si alguna vez buscamos inversión externa, incorporamos un nuevo socio, o posicionamos la empresa para una venta o valuación — una plataforma operativa como esta es un activo tangible en esa lista.
+
+Las empresas con operaciones documentadas y sistematizadas obtienen múltiplos más altos en cualquier conversación de valuación. SolarOps nos da eso. Demuestra que no estamos operando con hojas de cálculo y chats de grupo. Demuestra estructura, responsabilidad y escalabilidad. Eso es una elevación directa y medible del valor de este negocio.
+
+
+── ¿QUÉ HAY DEL SUITE DE PANAMÁ? ───────────────────────────────
+
+Sé que nuestra contraparte en Conexsol Panamá tiene un suite disponible en suite.conexsol.com que potencialmente podría adquirirse a bajo costo o de forma gratuita. Quiero ser justo con esta comparación porque creo que importa.
+
+El suite de Panamá es una plataforma funcional basada en Firebase. Cubre parte de lo que necesitamos. Respeto que existe y que el equipo allá lo construyó. Pero esto es lo que les pido que consideren honestamente:
+
+No fue construida para nuestro flujo de trabajo. Nuestras operaciones son específicas — integración con SolarEdge, cambios de optimizadores, portales de contratistas, seguimiento de RMA, casos PowerCare, facturación con Xero. Esas no son características estándar en un suite genérico. Lograr que la plataforma de Panamá haga lo que SolarOps ya hace requeriría un trabajo significativo de personalización, y ese trabajo dependería de la disponibilidad y prioridades del equipo allá.
+
+También fue construida en Firebase con una tecnología que puede o no ser mantenible a largo plazo por alguien de nuestro equipo. SolarOps está construido en React y TypeScript — moderno, bien documentado, y algo que yo puedo actualizar el mismo día que se necesite un cambio.
+
+Y luego está la migración. Mover nuestros datos de clientes, historial de órdenes de trabajo y contactos a un nuevo sistema no es una tarea de fin de semana. Requiere planificación, mapeo de datos, pruebas y tiempo del personal. Aunque el software sea gratuito, la implementación no lo es. Un estimado realista para esa migración — solo en tiempo de personal — es de $3,000 a $6,000.
+
+SolarOps ya está construido. Ya funciona. Ya tiene nuestra estructura de datos. La única pregunta es si formalizamos el acuerdo a su alrededor.
+
+
+── LO QUE PROPONGO ─────────────────────────────────────────────
+
+No busco beneficiarme económicamente a costa de la sociedad. Soy socio y quiero que esta empresa tenga éxito. Pero también dediqué horas reales y sustanciales construyendo algo de valor real — y creo que eso merece reconocimiento y un acuerdo justo y sostenible.
+
+Ofrezco dos caminos:
+
+
+OPCIÓN A — Pago Único + Mantenimiento Mensual
+
+  Honorario único de desarrollo:    $3,500
+  Mantenimiento mensual:            $370/mes
+
+  El honorario único puede pagarse en tres meses si es necesario (~$1,167/mes).
+  El mantenimiento mensual cubre hosting, actualizaciones, corrección de errores,
+  nuevas funcionalidades y soporte técnico.
+
+  Costo total Año 1:    aproximadamente $7,940
+  Costo total Año 2+:   $4,440/año
+
+  Para referencia — una plataforma comparable en el mercado (ServiceTitan, HubSpot,
+  Salesforce) costaría entre $800 y $3,200 al mes para un equipo de nuestro tamaño.
+  Lo que pido es una fracción de eso.
+
+
+OPCIÓN C — Reconocimiento de Sociedad + Derechos de Licencia
+
+  Sin pago en efectivo por parte de la empresa.
+
+  A cambio, acordamos y documentamos formalmente que SolarOps fue diseñado
+  y construido por mí, Cesar Jurado, completamente fuera de mis responsabilidades
+  como socio, y que conservo el derecho de licenciar la plataforma de forma
+  independiente a otras empresas en el futuro.
+
+  Los costos mensuales de hosting (aproximadamente $140/mes) serían cubiertos
+  por la empresa como gasto operativo directo.
+
+  Esta opción no le cuesta casi nada a la empresa y nos protege a ambos de manera justa.
+
+
+Quiero ser claro sobre lo que NO estoy pidiendo. No pido un aumento de sueldo. No pido un pago retroactivo por mi tiempo. No intento hacerme indispensable ni crear una dependencia. Construí documentación sólida, el código es limpio, y otro desarrollador podría retomarlo. Simplemente pido equidad.
+
+
+── HABLEMOS ────────────────────────────────────────────────────
+
+Me encantaría tener 30 minutos para hacer una demostración en vivo con ustedes. Ver la plataforma en acción vale más que cualquier descripción que pueda escribir en un correo.
+
+Después de eso, estoy abierto a escuchar sus opiniones. Si ninguna opción les parece adecuada, estoy dispuesto a escuchar. Mi objetivo es llegar a un acuerdo que se sienta justo para todos nosotros y que mantenga SolarOps funcionando y mejorando para el negocio.
+
+Gracias por leer esto. Lo construí para nosotros, y estoy orgulloso de lo que se ha convertido.
+
+Un abrazo,
+
+Cesar Jurado
+Socio — ConexSol
+cesar.jurado@conexsol.us
+
+P.D. — La plataforma está activa ahora mismo. Ambos tienen acceso y podemos coordinar una demostración de 30 minutos cuando gusten. Solo digan la palabra.

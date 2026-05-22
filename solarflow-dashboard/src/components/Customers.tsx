@@ -63,6 +63,7 @@ import { AddressAutocomplete } from './AddressAutocomplete';
 import { AddressLink } from './AddressLink';
 import { WorkOrderPanel } from './WorkOrderPanel';
 import { PhoneLink } from './PhoneLink';
+import { ActivityFeed } from './ui/ActivityFeed';
 
 // Client Status Badge Component
 const getStatusColor = (status: ClientStatus): string => {
@@ -2542,13 +2543,14 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
     });
   };
 
-  const handleSaveActivity = (id: string) => {
+  const handleSaveActivity = (id: string, textOverride?: string) => {
+    const newText = textOverride ?? editingActivityText;
     const entry = (customer.activityHistory ?? []).find(a => a.id === id);
     if (entry) setUndoStack(prev => [...prev.slice(-4), { action: 'edit', entry, previousText: entry.description }]);
     onUpdateCustomer({
       ...customer,
       activityHistory: (customer.activityHistory ?? []).map(a =>
-        a.id === id ? { ...a, description: editingActivityText } : a
+        a.id === id ? { ...a, description: newText } : a
       ),
     });
     setEditingActivityId(null);
@@ -3263,110 +3265,17 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                     </button>
                   )}
                 </div>
-                <div className="space-y-3">
-                  {/* activityHistory entries */}
-                  {(customer.activityHistory || []).map((activity) => (
-                    <div key={activity.id} className="flex gap-3 group relative">
-                      <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${
-                        activity.type === 'note_added' ? 'bg-blue-500'
-                        : activity.type === 'job_updated' ? 'bg-amber-500'
-                        : activity.type === 'job_created' ? 'bg-green-500'
-                        : 'bg-orange-500'
-                      }`} />
-                      <div className="flex-1 min-w-0">
-                        {/* Header: name · datetime + action icons */}
-                        <div className="flex items-center justify-between gap-1 mb-0.5">
-                          <p className="text-xs font-semibold text-slate-700 truncate">
-                            {activity.userName || formatActivityType(activity.type)}
-                            <span className="font-normal text-slate-400 ml-1">·</span>
-                            <span className="font-normal text-slate-400 ml-1">
-                              {new Date(activity.timestamp).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
-                            </span>
-                          </p>
-                          <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 relative">
-                            {/* Emoji reaction */}
-                            <button
-                              onClick={() => setShowEmojiPicker(showEmojiPicker === activity.id ? null : activity.id)}
-                              className="p-0.5 rounded hover:bg-slate-200 text-slate-400 hover:text-yellow-500"
-                              title="Add reaction"
-                            >
-                              <Smile className="w-3 h-3" />
-                            </button>
-                            {activity.type === 'note_added' && (
-                              <>
-                                <button
-                                  onClick={() => { setEditingActivityId(activity.id); setEditingActivityText(activity.description); }}
-                                  className="p-0.5 rounded hover:bg-slate-200 text-slate-400 hover:text-slate-600"
-                                  title="Edit note"
-                                >
-                                  <Pencil className="w-3 h-3" />
-                                </button>
-                                <button
-                                  onClick={() => handleDeleteActivity(activity.id)}
-                                  className="p-0.5 rounded hover:bg-red-100 text-slate-400 hover:text-red-500"
-                                  title="Delete entry"
-                                >
-                                  <Trash2 className="w-3 h-3" />
-                                </button>
-                              </>
-                            )}
-                            {/* Emoji picker popover */}
-                            {showEmojiPicker === activity.id && (
-                              <div className="absolute right-0 top-5 z-50 bg-white border border-slate-200 rounded-xl shadow-lg p-2 flex gap-1">
-                                {['👍','❤️','😂','🔥','✅','👀'].map(emoji => (
-                                  <button
-                                    key={emoji}
-                                    onClick={() => handleAddReaction(activity.id, emoji)}
-                                    className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-slate-100 text-base transition-colors"
-                                  >
-                                    {emoji}
-                                  </button>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                        {editingActivityId === activity.id ? (
-                          <div className="mt-1 space-y-1">
-                            <textarea
-                              value={editingActivityText}
-                              onChange={e => setEditingActivityText(e.target.value)}
-                              rows={3}
-                              className="w-full text-xs border border-slate-300 rounded-md px-2 py-1.5 resize-none focus:outline-none focus:ring-1 focus:ring-orange-400"
-                            />
-                            <div className="flex gap-1.5">
-                              <button onClick={() => handleSaveActivity(activity.id)} className="px-2 py-0.5 bg-orange-500 text-white text-xs rounded-md hover:bg-orange-600">Save</button>
-                              <button onClick={() => setEditingActivityId(null)} className="px-2 py-0.5 bg-slate-200 text-slate-600 text-xs rounded-md hover:bg-slate-300">Cancel</button>
-                            </div>
-                          </div>
-                        ) : (
-                          <p className="text-sm text-slate-700 whitespace-pre-line leading-relaxed">
-                            {activity.description.split(/(@\S+)/g).map((part, i) =>
-                              part.startsWith('@')
-                                ? <span key={i} className="text-orange-600 font-semibold bg-orange-50 px-0.5 rounded">{part}</span>
-                                : part
-                            )}
-                          </p>
-                        )}
-                        {/* Reactions display */}
-                        {activity.reactions && Object.keys(activity.reactions).length > 0 && (
-                          <div className="flex flex-wrap gap-1 mt-1">
-                            {Object.entries(activity.reactions).map(([emoji, users]) => (
-                              <button
-                                key={emoji}
-                                onClick={() => handleAddReaction(activity.id, emoji)}
-                                className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs border transition-colors ${
-                                  users.includes(currentUser?.id ?? '') ? 'bg-orange-50 border-orange-300 text-orange-700' : 'bg-slate-100 border-slate-200 text-slate-600 hover:bg-slate-200'
-                                }`}
-                              >
-                                {emoji} <span className="font-medium">{users.length}</span>
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
+                <div>
+                  <ActivityFeed
+                    activities={customer.activityHistory || []}
+                    users={users}
+                    currentUser={currentUser}
+                    onEdit={(id, newText) => handleSaveActivity(id, newText)}
+                    onDelete={handleDeleteActivity}
+                    onReact={handleAddReaction}
+                  />
+                </div>
+                <div className="space-y-3 mt-4">
                   {/* Work orders */}
                   {jobs.slice(0, 3).map((job) => (
                     <div key={job.id} className="flex gap-3">

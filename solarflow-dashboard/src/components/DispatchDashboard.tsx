@@ -5,7 +5,7 @@ import {
   Crosshair, AlertTriangle, Zap, Wrench, Plus, X, Sun,
   Clock, MapPin, LayoutGrid, Search, ChevronRight, ChevronUp, ChevronDown,
   TrendingUp, UserCog, ClipboardList, User, Check, Inbox, Pencil,
-  Phone, Mail, CheckSquare, Trash2, Calendar, GripVertical,
+  Phone, Mail, CheckSquare, Trash2, Calendar, GripVertical, AtSign,
 } from 'lucide-react';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 import * as _recharts from 'recharts';
@@ -14,6 +14,7 @@ import { FL_SITES, SolarEdgeSite } from '../lib/solarEdgeSites';
 import { Job, Customer, LeadSource } from '../types';
 import { loadCRMData, saveCRMData, addLead, CRMData } from '../lib/crmStore';
 import { loadTodos, saveTodos, TodoItem } from '../lib/todoStore';
+import { MentionsWidget } from './MentionsWidget';
 import { Lead } from '../types';
 import { Contractor } from '../types/contractor';
 
@@ -29,7 +30,8 @@ type WidgetType =
   | 'daily-production-graph'
   | 'lead-pipeline'
   | 'single-lead'
-  | 'todo-list';
+  | 'todo-list'
+  | 'mentions';
 
 interface WidgetConfig {
   type: WidgetType;
@@ -43,6 +45,7 @@ interface DispatchDashboardProps {
   customers: Customer[];
   jobs: Job[];
   contractors: Contractor[];
+  users: import('../types').User[];
   isMobile: boolean;
   currentUserId: string;
   onViewCustomer: (customerId: string) => void;
@@ -146,6 +149,14 @@ const WIDGET_CATALOG: WidgetCatalogEntry[] = [
     icon: CheckSquare,
     colorClass: 'text-indigo-600',
     bgClass: 'bg-indigo-50',
+  },
+  {
+    type: 'mentions',
+    label: 'My Mentions',
+    description: 'Every comment that @mentions you — the team accountability inbox',
+    icon: AtSign,
+    colorClass: 'text-orange-600',
+    bgClass: 'bg-orange-50',
   },
 ];
 
@@ -1438,6 +1449,7 @@ const WidgetSlot: React.FC<{
   customers: Customer[];
   jobs: Job[];
   contractors: Contractor[];
+  users: import('../types').User[];
   onOpenAdd: (index: number) => void;
   onRemove: (index: number) => void;
   editMode: boolean;
@@ -1449,7 +1461,7 @@ const WidgetSlot: React.FC<{
   onDrop: (index: number) => void;
   onViewCustomer: (id: string) => void;
   onViewChange: (view: string, id?: string) => void;
-}> = ({ config, index, customers, jobs, contractors, onOpenAdd, onRemove, editMode, currentUserId, isDragOver, onDragStart, onDragOver, onDragLeave, onDrop, onViewCustomer, onViewChange }) => {
+}> = ({ config, index, customers, jobs, contractors, users, onOpenAdd, onRemove, editMode, currentUserId, isDragOver, onDragStart, onDragOver, onDragLeave, onDrop, onViewCustomer, onViewChange }) => {
   if (!config) {
     return (
       <div
@@ -1519,6 +1531,7 @@ const WidgetSlot: React.FC<{
         {config.type === 'lead-pipeline'          && <LeadPipelineWidget />}
         {config.type === 'single-lead'            && config.leadId       && <SingleLeadWidget leadId={config.leadId} />}
         {config.type === 'todo-list'              && <TodoListWidget userId={currentUserId} customers={customers} onViewCustomer={onViewCustomer} />}
+        {config.type === 'mentions'               && <MentionsWidget userId={currentUserId} users={users} onOpenCustomer={onViewCustomer} onOpenWorkOrder={(jobId) => onViewChange?.('jobDetail', jobId)} />}
       </WidgetErrorBoundary>
     </div>
   );
@@ -1526,7 +1539,7 @@ const WidgetSlot: React.FC<{
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 
-export const DispatchDashboard: React.FC<DispatchDashboardProps> = ({ customers, jobs, contractors, isMobile, currentUserId, onViewCustomer, onViewChange }) => {
+export const DispatchDashboard: React.FC<DispatchDashboardProps> = ({ customers, jobs, contractors, users, isMobile, currentUserId, onViewCustomer, onViewChange }) => {
   const [layout,       setLayout]      = useState<(WidgetConfig | null)[]>(loadLayout);
   const [editMode,     setEditMode]    = useState(false);
   const [addSlot,      setAddSlot]     = useState<number | null>(null);
@@ -1696,6 +1709,7 @@ export const DispatchDashboard: React.FC<DispatchDashboardProps> = ({ customers,
               customers={customers}
               jobs={jobs}
               contractors={contractors}
+              users={users}
               onOpenAdd={handleAdd}
               onRemove={handleRemove}
               editMode={editMode}

@@ -159,6 +159,7 @@ export function AppRouter({
           customers={data.customers}
           jobs={data.jobs}
           contractors={contractors}
+          users={data.users}
           isMobile={isMobile}
           currentUserId={currentUser?.id ?? 'user-1'}
           onViewCustomer={(id) => { onSelectCustomer(id); onViewChange('customers'); }}

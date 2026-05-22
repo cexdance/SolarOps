@@ -234,6 +234,8 @@ export interface Job {
   travelMiles?: number;
   // Audit trail
   auditLog?: AuditEntry[];
+  // Team comments & activity (mirrors Customer.activityHistory)
+  activityHistory?: Activity[];
   // Billing timeline
   invoicedAt?: string;
   clientPaymentDueAt?: string;         // invoicedAt + 14 days

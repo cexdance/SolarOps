@@ -129,7 +129,7 @@ export function parseMentions(text: string, users: MentionUser[]): string[] {
   return ids;
 }
 
-/** Fire mention notifications via /api/notify (non-blocking). */
+/** Fire mention notifications via /api/notify (non-blocking) + add to local inbox. */
 export async function fireMentionNotifications(opts: {
   mentionedUserIds: string[];
   notifierName: string;
@@ -139,6 +139,20 @@ export async function fireMentionNotifications(opts: {
   message: string;
 }): Promise<void> {
   if (opts.mentionedUserIds.length === 0) return;
+  // Add to local mentions inbox immediately (visible in Ops Center widget)
+  try {
+    const { addMentions } = await import('../../lib/mentionsStore');
+    const snippet = opts.message.length > 240 ? opts.message.slice(0, 237) + '…' : opts.message;
+    addMentions(opts.mentionedUserIds.map(uid => ({
+      userId:        uid,
+      notifierName:  opts.notifierName,
+      sourceType:    opts.contextType,
+      sourceId:      opts.contextId,
+      sourceLabel:   opts.context,
+      snippet,
+      createdAt:     new Date().toISOString(),
+    })));
+  } catch {/* ignore */}
   try {
     const { supabase } = await import('../../lib/supabase');
     const { data: { session } } = await supabase.auth.getSession();

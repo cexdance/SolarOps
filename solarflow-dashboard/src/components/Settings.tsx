@@ -1,5 +1,5 @@
 // SolarFlow MVP - Settings Component
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   Settings as SettingsIcon,
   User,
@@ -19,11 +19,14 @@ import {
   Eye,
   EyeOff,
   Send,
+  Camera,
 } from 'lucide-react';
 import { GMAPS_KEY_STORAGE } from './AddressAutocomplete';
 import { User as UserType, XeroConfig, SolarEdgeConfig } from '../types';
 import { XERO_CLIENT_ID_KEY, XERO_CLIENT_SECRET_KEY, getXeroClientSecret, setXeroClientSecret } from '../lib/xeroService';
 import { PhotoCleanupCard } from './admin/PhotoCleanupCard';
+import { Avatar } from './ui/Avatar';
+import { compressImageToDataUrl } from '../lib/photoCompress';
 
 interface SettingsProps {
   currentUser: UserType | null;
@@ -34,6 +37,7 @@ interface SettingsProps {
   onSaveSolarEdgeApiKey: (apiKey: string) => void;
   onSyncSolarEdge: () => void;
   onLogout: () => void;
+  onUpdateAvatar?: (dataUrl: string | null) => void;
   isMobile: boolean;
 }
 
@@ -46,8 +50,19 @@ export const Settings: React.FC<SettingsProps> = ({
   onSaveSolarEdgeApiKey,
   onSyncSolarEdge,
   onLogout,
+  onUpdateAvatar,
   isMobile,
 }) => {
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+  const handleAvatarFile = async (file: File) => {
+    if (!file.type.startsWith('image/')) return;
+    try {
+      const dataUrl = await compressImageToDataUrl(file, 400, 0.85);
+      onUpdateAvatar?.(dataUrl);
+    } catch (e) {
+      console.error('[Settings] avatar compress failed', e);
+    }
+  };
   const [apiKeyInput, setApiKeyInput] = useState(solarEdgeConfig.apiKey || '');
   const [showApiKeyInput, setShowApiKeyInput] = useState(!solarEdgeConfig.apiKey);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -246,13 +261,39 @@ export const Settings: React.FC<SettingsProps> = ({
       {currentUser && (
         <div className="bg-white rounded-xl border border-slate-200 p-4 mb-6">
           <div className="flex items-center gap-4">
-            <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center">
-              <User className="w-8 h-8 text-orange-600" />
+            <div className="relative group">
+              <Avatar user={currentUser} size="lg" className="w-16 h-16 text-xl" />
+              <button
+                onClick={() => avatarInputRef.current?.click()}
+                title="Change profile photo"
+                className="absolute -bottom-1 -right-1 w-7 h-7 bg-orange-500 hover:bg-orange-600 text-white rounded-full flex items-center justify-center shadow-md border-2 border-white transition-colors"
+              >
+                <Camera className="w-3.5 h-3.5" />
+              </button>
+              <input
+                ref={avatarInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={e => {
+                  const file = e.target.files?.[0];
+                  if (file) handleAvatarFile(file);
+                  e.target.value = '';
+                }}
+              />
             </div>
-            <div>
-              <h2 className="font-semibold text-slate-900">{currentUser.name}</h2>
+            <div className="flex-1 min-w-0">
+              <h2 className="font-semibold text-slate-900 truncate">{currentUser.name}</h2>
               <p className="text-sm text-slate-500 capitalize">{currentUser.role}</p>
-              <p className="text-sm text-slate-500">{currentUser.email}</p>
+              <p className="text-sm text-slate-500 truncate">{currentUser.email}</p>
+              {currentUser.avatar && (
+                <button
+                  onClick={() => onUpdateAvatar?.(null)}
+                  className="text-xs text-slate-400 hover:text-red-500 mt-1"
+                >
+                  Remove photo
+                </button>
+              )}
             </div>
           </div>
         </div>

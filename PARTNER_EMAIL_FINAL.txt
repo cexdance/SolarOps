@@ -1,0 +1,131 @@
+Subject: SolarOps — The Platform I Built for Us, and a Conversation I'd Like to Have
+
+Hi [Partner Names],
+
+I want to share something I've been building quietly for the past couple of years — and more importantly, I want to have an honest conversation about it.
+
+I built SolarOps. From scratch. A full CRM and operations platform designed specifically around the way we work as a solar operations and maintenance business. It is live, deployed, and ready to use today.
+
+I'm sending this email because I believe it deserves a real look from the partnership, and because I want to be transparent about what it cost me to build it and what I'm proposing going forward.
+
+
+── WHY I BUILT IT ──────────────────────────────────────────────
+
+For over two years I raised the need for a CRM and operations system internally. It was something the team needed, something management acknowledged, but nothing moved. So I built it myself.
+
+I want to be honest with you: this work was entirely outside the scope of my responsibilities as a partner. It was nights and weekends. It was a significant personal investment of time. I did it because I believed in it and because I could see the direct impact it would have on how we operate.
+
+The result is a production-ready platform that is deployed and accessible right now.
+
+
+── WHAT SOLAROPS DOES ──────────────────────────────────────────
+
+Let me walk you through what's actually inside it, because I think the scope might surprise you.
+
+SALES & LEAD MANAGEMENT
+The platform has a full sales pipeline with a Lead Lobby for incoming prospects, interaction tracking for every call, email, text, note, and meeting, and a gamified leaderboard system that keeps the sales team motivated and accountable. Reps earn XP and advance levels as they close leads. This replaces tools that typically cost $50 to $150 per user per month.
+
+CUSTOMER MANAGEMENT — 360° VIEW
+Every customer has a complete profile. You can see their entire history: every work order, every interaction, every invoice, their SolarEdge site ID, PowerCare case numbers, parts tracking, and a full activity log. Everything that has ever happened with that client is in one place.
+
+WORK ORDER MANAGEMENT
+Work orders move through a complete lifecycle — from draft, to quote sent, quote approved, scheduled, in progress, completed, invoiced, and paid. Each work order tracks labor costs, parts costs, contractor fees, customer revenue, and profit margin. Quotes are generated directly inside the platform.
+
+CONTRACTOR PORTAL
+Contractors have their own secure login. They see their assigned jobs, submit completion reports, upload organized site photos (before, after, serial numbers, voltage tests, inverter photos), and submit invoices. Admins review and approve from the main dashboard. No more back-and-forth over WhatsApp or email.
+
+SOLAREDGE MONITORING
+The platform connects to the SolarEdge API and pulls in site alerts automatically. Each alert has a severity level and can be acknowledged, resolved, or linked directly to a work order. This eliminates manual checking of the SolarEdge portal entirely.
+
+BILLING & INVOICING
+Invoices are created inside the platform and sync with Xero. Payment tracking, overdue flags, profitability per client, and revenue reports are all built in.
+
+INVENTORY & OPERATIONS
+Equipment, tools, and provider management in one place. The Ops Center dashboard gives a real-time view of today's schedule, unbilled jobs, work order status, team activity, and notifications — all visible the moment you log in.
+
+MULTI-USER ROLES & MOBILE
+The platform supports Admin, COO, Technician, Sales, and Support roles with appropriate access controls. It works on desktop, tablet, and mobile.
+
+You can see it live right now at: https://solarflow-dashboard-sooty.vercel.app
+
+
+── THE BUSINESS VALUE OF HAVING THIS ───────────────────────────
+
+I want to make a point that goes beyond day-to-day convenience.
+
+A business that operates with a structured CRM, documented workflows, tracked revenue per client, and auditable work order history is worth more than one that doesn't. If we ever pursue outside investment, bring in a new partner, or position the company for sale or valuation — a fully operational platform like this is a tangible asset on that list.
+
+Companies with documented, systematized operations command higher multiples in any valuation conversation. SolarOps gives us that. It shows we are not running on spreadsheets and group chats. It shows structure, accountability, and scalability. That is a direct and measurable elevation of what this business is worth.
+
+
+── WHAT ABOUT THE PANAMA SUITE? ────────────────────────────────
+
+I know our Panama chapter has a CRM suite available at suite.conexsol.com that could potentially be acquired at low or no cost. I want to be fair about this comparison because I think it matters.
+
+The Panama suite is a working Firebase-based platform. It handles some of what we need. I respect that it exists and that the team there built it. But here is what I'd ask you to honestly consider:
+
+It was not built for our workflow. Our operations are specific — SolarEdge integration, optimizer changes, contractor portals, RMA tracking, PowerCare cases, Xero billing. Those are not standard features in a generic suite. Getting the Panama platform to do what SolarOps already does would require significant customization work, and that work would depend on their team's availability and priorities.
+
+It was also built in Firebase with a stack that may or may not be maintainable long-term by someone on our team. SolarOps is built on React and TypeScript — modern, well-documented, and something I can update the same day a change is needed.
+
+And then there is the migration. Moving our customer data, work order history, and contacts into a new system is not a weekend task. It requires planning, mapping, testing, and staff time. Even if the software is free, the implementation is not. A realistic estimate for that migration — in staff time alone — is $3,000 to $6,000.
+
+SolarOps is already built. It already works. It is already holding our data structure. The only question is whether we formalize the arrangement around it.
+
+
+── WHAT I'M PROPOSING ──────────────────────────────────────────
+
+I am not looking to profit from the partnership. I am a partner and I want this company to succeed. But I also put in real, substantial hours building something of real value — and I think that deserves acknowledgment and a fair, sustainable arrangement.
+
+I'm offering two paths:
+
+
+OPTION A — Lump Sum + Monthly Maintenance
+
+  One-time development fee:    $4,500
+  Monthly maintenance fee:     $400/month
+
+  The one-time fee can be paid over three months if needed (~$1,500/month).
+  Monthly maintenance covers hosting, updates, bug fixes, new features, and support.
+
+  Total cost in Year 1:   approximately $9,300
+  Total cost in Year 2+:  $4,800/year
+
+  For context — a comparable off-the-shelf platform (ServiceTitan, HubSpot, Salesforce)
+  would cost between $800 and $3,200 per month for a team our size.
+  What I'm asking is a fraction of that.
+
+
+OPTION C — Partnership Recognition + Licensing Rights
+
+  No cash payment from the company.
+
+  In exchange, we formally agree and document that SolarOps was designed and
+  built by me, Cesar Jurado, entirely outside my responsibilities as a partner,
+  and that I retain the right to independently license the platform to other
+  companies in the future.
+
+  Monthly hosting costs (approximately $50–100/month) would be covered by
+  the business as a direct operating expense.
+
+  This option costs the company almost nothing while protecting both of us fairly.
+
+
+I want to be clear about what I am NOT asking for. I am not asking for a salary increase. I am not asking for retroactive payment for my time. I am not trying to make myself indispensable or create a dependency. I built solid documentation, the code is clean, and another developer could pick it up. I'm simply asking for fairness.
+
+
+── LET'S TALK ──────────────────────────────────────────────────
+
+I'd love 30 minutes to do a live walkthrough with you. Seeing the platform in action is worth more than anything I can describe in an email.
+
+After that, I'm open to hearing your thoughts. If neither option feels right, I'm willing to listen. My goal is to reach an agreement that feels fair to all of us and keeps SolarOps running and improving for the business.
+
+Thank you for reading this. I built this for us, and I'm proud of what it has become.
+
+Warm regards,
+
+Cesar Jurado
+Partner — ConexSol
+cesar.jurado@conexsol.us
+
+P.S. — The platform is live right now. I can set up a walkthrough login for any of you at any time. Just say the word.
