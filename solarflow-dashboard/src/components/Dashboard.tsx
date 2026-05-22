@@ -234,6 +234,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
     setTodos(next);
     saveTodos(uid, next);
     setEditingTodoId(null);
+    setEditingTodoText('');
   };
 
   // Static data
@@ -565,7 +566,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                           onChange={e => setEditingTodoText(e.target.value)}
                           onKeyDown={e => {
                             if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); saveEditTodo(todo.id); }
-                            if (e.key === 'Escape') { e.preventDefault(); setEditingTodoId(null); }
+                            if (e.key === 'Escape') { e.preventDefault(); setEditingTodoId(null); setEditingTodoText(''); }
                           }}
                           onBlur={() => saveEditTodo(todo.id)}
                           autoFocus

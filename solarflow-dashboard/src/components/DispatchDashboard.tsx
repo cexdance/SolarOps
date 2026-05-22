@@ -1197,6 +1197,7 @@ const TodoListWidget: React.FC<{
     if (!text) return;
     persist(todos.map(t => t.id === id ? { ...t, task: text } : t));
     setEditingTodoId(null);
+    setEditingTodoText('');
   };
 
   const handleMove = (id: string, dir: -1 | 1) => {
@@ -1344,7 +1345,7 @@ const TodoListWidget: React.FC<{
                   onChange={e => setEditingTodoText(e.target.value)}
                   onKeyDown={e => {
                     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); handleSaveEdit(todo.id); }
-                    if (e.key === 'Escape') { e.preventDefault(); setEditingTodoId(null); }
+                    if (e.key === 'Escape') { e.preventDefault(); setEditingTodoId(null); setEditingTodoText(''); }
                   }}
                   onBlur={() => handleSaveEdit(todo.id)}
                   rows={2}
