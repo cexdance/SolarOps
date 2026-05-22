@@ -318,29 +318,50 @@ export const loadData = (): AppState => {
 
 // ── saveData ──────────────────────────────────────────────────────────────────
 //
-// Writes to localStorage synchronously (instant, never fails silently due to
-// storage quota because we handle the error below), then kicks off an async
-// Supabase cloud backup.
+// Writes to localStorage synchronously. Strips woPhotos and customer files before
+// saving to localStorage (they live in Supabase Storage, not localStorage).
+// Then kicks off an async Supabase cloud backup with the full state (including photos).
 
 export const saveData = (state: AppState): void => {
+  // Always strip base64 photos from localStorage — they're stored in Supabase
+  const slimState: AppState = {
+    ...state,
+    customers: state.customers.map(c => ({
+      ...c,
+      // Strip files but keep metadata (id, name, url, mimeType, size, source, createdAt)
+      // Customer file objects should NOT contain base64 data, only Supabase URLs
+      files: c.files?.map(f => ({
+        id: f.id,
+        name: f.name,
+        url: f.url,
+        mimeType: f.mimeType,
+        size: f.size,
+        source: f.source,
+        createdAt: f.createdAt,
+      })) as any,
+    })),
+    jobs: state.jobs.map(j => ({
+      ...j,
+      // Strip woPhotos — they live in Supabase Storage, not in localStorage
+      woPhotos: undefined as any,
+    })),
+  };
+
   let saved = false;
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(slimState));
     saved = true;
   } catch (e) {
-    // QuotaExceededError: localStorage is full.
-    // Try saving a trimmed version without activityHistory + woPhotos to free space.
+    // QuotaExceededError: localStorage is still full even after stripping photos
+    // This should be rare now, but handle it gracefully
     try {
-      const slim: AppState = {
-        ...state,
-        customers: state.customers.map(c => ({ ...c, activityHistory: undefined as any })),
-        jobs: state.jobs.map(j => ({ ...j, woPhotos: undefined as any })),
+      const moreTrimmed: AppState = {
+        ...slimState,
+        customers: slimState.customers.map(c => ({ ...c, activityHistory: undefined as any })),
       };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(slim));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(moreTrimmed));
       saved = true;
-      console.warn('[DataStore] Saved trimmed state (activity history + woPhotos omitted) due to storage quota');
-      // Surface to the app so a toast/banner can warn the user. Listeners can subscribe to
-      // 'solarops:storage-warning' to render a UI prompt to clear or migrate photo blobs.
+      console.warn('[DataStore] Saved heavily trimmed state (photos + activity history + customer files omitted) due to storage quota');
       try {
         window.dispatchEvent(new CustomEvent('solarops:storage-warning', {
           detail: { kind: 'trimmed', reason: 'quota-exceeded' },
@@ -356,8 +377,8 @@ export const saveData = (state: AppState): void => {
     }
   }
 
-  // Phase 2: async cloud backup via per-record push + legacy blob.
-  // Even if local save failed, still attempt cloud write so work isn't fully lost.
+  // Cloud backup: async Supabase write with FULL state (including photos)
+  // Supabase has its own storage limits but handles large data better than localStorage
   dbSet(STORAGE_KEY, state).catch(() => {});
   void saved;
 };
