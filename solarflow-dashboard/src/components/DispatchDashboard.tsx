@@ -4,7 +4,7 @@ import React, { useState, useMemo, useCallback, useRef } from 'react';
 import {
   Crosshair, AlertTriangle, Zap, Wrench, Plus, X, Sun,
   Clock, MapPin, LayoutGrid, Search, ChevronRight, ChevronUp, ChevronDown,
-  TrendingUp, UserCog, ClipboardList, User, Check, Inbox,
+  TrendingUp, UserCog, ClipboardList, User, Check, Inbox, Pencil,
   Phone, Mail, CheckSquare, Trash2, Calendar, GripVertical,
 } from 'lucide-react';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1150,6 +1150,8 @@ const TodoListWidget: React.FC<{
   const [taskInput, setTaskInput] = useState('');
   const [dueDateInput, setDueDateInput] = useState('');
   const [showForm, setShowForm] = useState(false);
+  const [editingTodoId, setEditingTodoId] = useState<string | null>(null);
+  const [editingTodoText, setEditingTodoText] = useState('');
 
   const persist = (updated: TodoItem[]) => {
     setTodos(updated);
@@ -1177,6 +1179,13 @@ const TodoListWidget: React.FC<{
 
   const handleDelete = (id: string) => {
     persist(todos.filter(t => t.id !== id));
+  };
+
+  const handleSaveEdit = (id: string) => {
+    const text = editingTodoText.trim();
+    if (!text) return;
+    persist(todos.map(t => t.id === id ? { ...t, task: text } : t));
+    setEditingTodoId(null);
   };
 
   const handleMove = (id: string, dir: -1 | 1) => {
@@ -1317,9 +1326,26 @@ const TodoListWidget: React.FC<{
 
             {/* Content */}
             <div className="flex-1 min-w-0">
-              <p className={`text-xs leading-snug ${todo.done ? 'line-through text-slate-400' : 'text-slate-800 font-medium'}`}>
-                {renderTaskText(todo.task)}
-              </p>
+              {editingTodoId === todo.id ? (
+                <input
+                  autoFocus
+                  value={editingTodoText}
+                  onChange={e => setEditingTodoText(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') handleSaveEdit(todo.id);
+                    if (e.key === 'Escape') setEditingTodoId(null);
+                  }}
+                  onBlur={() => handleSaveEdit(todo.id)}
+                  className="w-full text-xs border border-indigo-300 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                />
+              ) : (
+                <p
+                  className={`text-xs leading-snug ${todo.done ? 'line-through text-slate-400' : 'text-slate-800 font-medium'}`}
+                  onDoubleClick={() => { if (!todo.done) { setEditingTodoId(todo.id); setEditingTodoText(todo.task); } }}
+                >
+                  {renderTaskText(todo.task)}
+                </p>
+              )}
               {todo.dueDate && (
                 <div className="flex items-center gap-1 mt-0.5">
                   <Clock className="w-2.5 h-2.5 flex-shrink-0" style={{ color: overdue(todo) ? '#ef4444' : dueToday(todo) ? '#f59e0b' : '#94a3b8' }} />
@@ -1351,7 +1377,15 @@ const TodoListWidget: React.FC<{
               </div>
             )}
 
-            {/* Delete */}
+            {/* Edit + Delete (hover) */}
+            {!todo.done && (
+              <button
+                onClick={() => { setEditingTodoId(todo.id); setEditingTodoText(todo.task); }}
+                className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 text-slate-300 hover:text-indigo-500"
+              >
+                <Pencil className="w-3 h-3" />
+              </button>
+            )}
             <button
               onClick={() => handleDelete(todo.id)}
               className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 text-slate-300 hover:text-red-400"
