@@ -194,6 +194,18 @@ export const Dashboard: React.FC<DashboardProps> = ({
     return () => document.removeEventListener('mousedown', handler);
   }, [editingCard]);
 
+  // Sync editing text when editing ID changes
+  useEffect(() => {
+    if (editingTodoId === null) {
+      setEditingTodoText('');
+    } else {
+      const todo = todos.find(t => t.id === editingTodoId);
+      if (todo) {
+        setEditingTodoText(todo.text);
+      }
+    }
+  }, [editingTodoId, todos]);
+
   // Todo helpers
   const addTodo = () => {
     const text = todoInput.trim();

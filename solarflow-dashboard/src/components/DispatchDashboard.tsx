@@ -1,6 +1,6 @@
 // SolarOps — OPS CENTER Dashboard
 // 2 columns × 2 rows = 4 configurable widget slots
-import React, { useState, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import {
   Crosshair, AlertTriangle, Zap, Wrench, Plus, X, Sun,
   Clock, MapPin, LayoutGrid, Search, ChevronRight, ChevronUp, ChevronDown,
@@ -1163,6 +1163,18 @@ const TodoListWidget: React.FC<{
   const [showForm, setShowForm] = useState(false);
   const [editingTodoId, setEditingTodoId] = useState<string | null>(null);
   const [editingTodoText, setEditingTodoText] = useState('');
+
+  // Sync editing text when editing ID changes
+  useEffect(() => {
+    if (editingTodoId === null) {
+      setEditingTodoText('');
+    } else {
+      const todo = todos.find(t => t.id === editingTodoId);
+      if (todo) {
+        setEditingTodoText(todo.task);
+      }
+    }
+  }, [editingTodoId, todos]);
 
   const persist = (updated: TodoItem[]) => {
     setTodos(updated);
