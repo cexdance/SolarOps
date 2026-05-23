@@ -64,7 +64,7 @@ import { AddressLink } from './AddressLink';
 import { WorkOrderPanel } from './WorkOrderPanel';
 import { PhoneLink } from './PhoneLink';
 import { ActivityFeed } from './ui/ActivityFeed';
-import { uploadCustomerFiles } from '../lib/customerFileStorage';
+import { uploadCustomerFiles, StoredCustomerFile } from '../lib/customerFileStorage';
 import { toast } from 'sonner';
 
 // Client Status Badge Component
@@ -2847,7 +2847,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
     });
   };
 
-  const handleSaveNote = () => {
+  const handleSaveNote = async () => {
     if (!notes.trim() && pastedFiles.length === 0) return;
     const mentionedIds = parseMentions(notes);
     const noteText = notes.trim();
@@ -2863,35 +2863,44 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
       mentions: mentionedIds.length > 0 ? mentionedIds : undefined,
     };
 
-    // Upload files to Supabase Storage (async, non-blocking)
-    // If upload fails, files are stored as dataURLs directly in customer object
-    uploadCustomerFiles(pastedFiles, customer.id).then((uploadedFiles) => {
-      toast.success(`📎 ${uploadedFiles.length} file${uploadedFiles.length !== 1 ? 's' : ''} uploaded`);
-      const newFiles: CustomerFile[] = uploadedFiles.map(f => ({
-        id: f.id,
-        name: f.name,
-        url: f.url,
-        mimeType: f.mimeType,
-        size: f.size,
-        source: 'upload' as const,
-        createdAt: f.createdAt,
-      }));
-      const activityHistory = customer.activityHistory || [];
-      onUpdateCustomer({
-        ...customer,
-        activityHistory: [newActivity, ...activityHistory],
-        files: [...newFiles, ...(customer.files ?? [])],
-      });
-    }).catch((err) => {
-      // Show error to user instead of silently falling back to base64
-      toast.error(`Failed to upload files: ${err?.message || 'Check your connection'}`);
-      // Do NOT fall back to base64 (causes localStorage quota issues)
-    });
+    // Save pastedFiles to local variable BEFORE clearing state
+    // This ensures we can restore them if upload fails
+    const filesToUpload = pastedFiles;
 
+    // Upload files to Supabase Storage FIRST
+    let uploadedFiles: StoredCustomerFile[] = [];
+    try {
+      uploadedFiles = await uploadCustomerFiles(filesToUpload, customer.id);
+      toast.success(`📎 ${uploadedFiles.length} file${uploadedFiles.length !== 1 ? 's' : ''} uploaded`);
+    } catch (err) {
+      // Upload failed - show error but DON'T lose user's data
+      toast.error(`Failed to upload files: ${err?.message || 'Check your connection'}`);
+      // Do NOT clear notes or pastedFiles - user can retry
+      return;
+    }
+
+    // Upload succeeded - NOW clear UI state and save
     setNotes('');
     setPastedFiles([]);
     setNoteSaved(true);
     setTimeout(() => setNoteSaved(false), 2000);
+
+    // Save the note with uploaded file URLs
+    const newFiles: CustomerFile[] = uploadedFiles.map(f => ({
+      id: f.id,
+      name: f.name,
+      url: f.url,
+      mimeType: f.mimeType,
+      size: f.size,
+      source: 'upload' as const,
+      createdAt: f.createdAt,
+    }));
+    const activityHistory = customer.activityHistory || [];
+    onUpdateCustomer({
+      ...customer,
+      activityHistory: [newActivity, ...activityHistory],
+      files: [...newFiles, ...(customer.files ?? [])],
+    });
 
     // Fire @mention notifications (async, non-blocking)
     if (mentionedIds.length > 0) {
