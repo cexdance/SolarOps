@@ -650,8 +650,14 @@ function App() {
 
   // Sync from Supabase on startup → merge into local state
   // syncFromDB() merges remote customers/jobs into localStorage, then we reload
+  // Wrapped in Promise.race() so Supabase timeouts never block the loading spinner
   useEffect(() => {
-    syncFromDB()
+    const SYNC_TIMEOUT_MS = 8000; // 8s max — fall back to local data if Supabase is slow
+    const timeout = new Promise<void>((_, reject) =>
+      setTimeout(() => reject(new Error('sync-timeout')), SYNC_TIMEOUT_MS)
+    );
+
+    Promise.race([syncFromDB(), timeout])
       .then(() => {
         // Re-read localStorage after remote merge (may have new records from other devices)
         const merged = loadData();
@@ -671,8 +677,11 @@ function App() {
           return prev;
         });
       })
-      .catch(() => {
-        // Sync failed (offline / not logged in) — local data is already loaded
+      .catch((err) => {
+        // Sync failed (offline, not logged in, or timed out) — local data is already loaded
+        if (err?.message === 'sync-timeout') {
+          console.warn('[App] Supabase sync timed out after 8s — using local data');
+        }
       })
       .finally(() => setDbReady(true));
   }, []);
