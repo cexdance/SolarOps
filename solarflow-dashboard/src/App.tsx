@@ -129,26 +129,39 @@ const LoginScreen: React.FC<{
     onLogin(user, !!meta.mustChangePassword);
   };
 
+  const AUTH_TIMEOUT_MS = 12_000; // 12s — Supabase auth must respond within this window
+  const authTimeout = <T,>(p: Promise<T>): Promise<T> =>
+    Promise.race([p, new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error('auth-timeout')), AUTH_TIMEOUT_MS))]);
+
   const handlePasskeyLogin = async () => {
     setError('');
     setLoading(true);
-    const rawId = await authenticateWithPasskey();
-    if (!rawId) {
+    try {
+      const rawId = await authenticateWithPasskey();
+      if (!rawId) {
+        setError('Face ID / Touch ID failed. Please sign in with your password.');
+        return;
+      }
+      // Try current session first; if JWT expired, refresh using the stored refresh token
+      let { data: { session } } = await authTimeout(supabase.auth.getSession());
+      if (!session) {
+        const { data: refreshed } = await authTimeout(supabase.auth.refreshSession());
+        session = refreshed.session;
+      }
+      if (session?.user) {
+        await finishStaffLogin(session.user);
+      } else {
+        setError('Session expired. Please sign in with your password once to re-enable Face ID.');
+      }
+    } catch (err: any) {
+      if (err?.message === 'auth-timeout') {
+        setError('Connection timed out. Check your internet and try again.');
+      } else {
+        setError('Sign in failed. Please try again.');
+      }
+    } finally {
       setLoading(false);
-      setError('Face ID / Touch ID failed. Please sign in with your password.');
-      return;
-    }
-    // Try current session first; if JWT expired, refresh using the stored refresh token
-    let { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      const { data: refreshed } = await supabase.auth.refreshSession();
-      session = refreshed.session;
-    }
-    setLoading(false);
-    if (session?.user) {
-      await finishStaffLogin(session.user);
-    } else {
-      setError('Session expired. Please sign in with your password once to re-enable Face ID.');
     }
   };
 
@@ -156,20 +169,31 @@ const LoginScreen: React.FC<{
     e.preventDefault();
     setError('');
     setLoading(true);
-    const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password });
-    setLoading(false);
-    if (authError || !data.user) {
-      setError('Invalid email or password.');
-      return;
+    try {
+      const { data, error: authError } = await authTimeout(
+        supabase.auth.signInWithPassword({ email, password })
+      );
+      if (authError || !data.user) {
+        setError('Invalid email or password.');
+        return;
+      }
+      const meta = data.user.user_metadata ?? {};
+      // Block pure contractors (no staff access); dual-role users (isStaff=true) are allowed
+      if (meta.role === 'contractor' && !meta.isStaff) {
+        await supabase.auth.signOut();
+        setError('This is the staff portal. Please use the Contractor Portal below.');
+        return;
+      }
+      await finishStaffLogin(data.user, true);
+    } catch (err: any) {
+      if (err?.message === 'auth-timeout') {
+        setError('Connection timed out. Check your internet and try again.');
+      } else {
+        setError('Sign in failed. Please try again.');
+      }
+    } finally {
+      setLoading(false);
     }
-    const meta = data.user.user_metadata ?? {};
-    // Block pure contractors (no staff access); dual-role users (isStaff=true) are allowed
-    if (meta.role === 'contractor' && !meta.isStaff) {
-      await supabase.auth.signOut();
-      setError('This is the staff portal. Please use the Contractor Portal below.');
-      return;
-    }
-    await finishStaffLogin(data.user, true);
   };
 
   const handleForgotSubmit = async (e: React.FormEvent) => {
