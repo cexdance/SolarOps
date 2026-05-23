@@ -1,5 +1,5 @@
 import { useEffect, useRef, type MutableRefObject } from 'react';
-import { drainOutbox } from '../lib/outbox';
+import { drainOutbox, resetOutboxAttempts } from '../lib/outbox';
 import { pullAndMerge, subscribeToChanges } from '../lib/syncEngine';
 import { loadContractors, loadServiceRates, loadContractorJobs } from '../lib/contractorStore';
 import type { AppState, Customer, Job } from '../types';
@@ -48,7 +48,11 @@ export function useSyncEngine({
 
     const interval = setInterval(syncCycle, 30_000);
     const onFocus  = () => syncCycle();
-    const onOnline = () => syncCycle();
+    const onOnline = () => {
+      // Reset the attempt counter so a deadlocked outbox retries on reconnect
+      resetOutboxAttempts();
+      syncCycle();
+    };
     window.addEventListener('focus',  onFocus);
     window.addEventListener('online', onOnline);
     return () => {

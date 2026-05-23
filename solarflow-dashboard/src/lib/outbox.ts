@@ -89,6 +89,22 @@ export function clearPendingPush(): void {
 }
 
 /**
+ * Reset the attempt counter while keeping the pending flag.
+ * Call when the device comes back online so the outbox will retry
+ * even if it hit the consecutive-failure limit.
+ */
+export function resetOutboxAttempts(): void {
+  try {
+    const existing = get();
+    if (!existing) return; // nothing pending — no-op
+    save({ ...existing, attempts: 0 });
+    console.info('[Outbox] Attempt counter reset — will retry on next drain');
+  } catch (err) {
+    console.warn('[Outbox] Error resetting attempts:', err);
+  }
+}
+
+/**
  * Drain the outbox — push current localStorage state to Supabase.
  *
  * Always reads the CURRENT state so it includes every offline mutation,
