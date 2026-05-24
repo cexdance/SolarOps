@@ -42,7 +42,23 @@ export function useSyncEngine({
             j.id !== prev.jobs[i]?.id || JSON.stringify(j) !== JSON.stringify(prev.jobs[i])
           );
         if (!customersChanged && !jobsChanged) return prev;
-        return { ...prev, ...merged };
+        // Merge jobs defensively: if remote has a job without woPhotos but local has them,
+        // keep the local photos. This prevents a stale Supabase pull (race with an in-flight
+        // pushToSupabase) from wiping photos that are already in React state.
+        const safeMergedJobs = merged.jobs
+          ? merged.jobs.map((remoteJ: Job) => {
+              const localJ = prev.jobs.find(j => j.id === remoteJ.id);
+              if (!localJ) return remoteJ;
+              // Prefer whichever has more photos (local upload may be ahead of remote)
+              const remotePhotos = remoteJ.woPhotos ?? [];
+              const localPhotos  = localJ.woPhotos  ?? [];
+              return {
+                ...remoteJ,
+                woPhotos: remotePhotos.length >= localPhotos.length ? remotePhotos : localPhotos,
+              };
+            })
+          : prev.jobs;
+        return { ...prev, ...merged, jobs: safeMergedJobs };
       });
     };
 

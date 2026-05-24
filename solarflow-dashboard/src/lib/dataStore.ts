@@ -342,8 +342,16 @@ export const saveData = (state: AppState): void => {
     })),
     jobs: state.jobs.map(j => ({
       ...j,
-      // Strip woPhotos — they live in Supabase Storage, not in localStorage
-      woPhotos: undefined as any,
+      // Keep photos that have a Supabase storageUrl (just a URL string — negligible space).
+      // Strip only the inline base64 dataUrl so the localStorage blob stays small.
+      // Stripping ALL woPhotos was the root cause: pullAndMerge reads localStorage, so if
+      // the Supabase write hadn't landed yet the merge returned a job without photos and
+      // the 500ms debounced save then pushed that stale job back, permanently deleting photos.
+      woPhotos: j.woPhotos?.length
+        ? j.woPhotos
+            .filter(p => p.storageUrl)       // keep only successfully-uploaded photos
+            .map(p => ({ ...p, dataUrl: '' })) // strip the inline base64 preview
+        : undefined as any,
     })),
   };
 

@@ -414,7 +414,18 @@ export function mergeRemote(local: AppState, remote: Partial<AppState>): AppStat
     const remoteMap = new Map(remote.jobs.map(j => [j.id, j]));
 
     const merged = new Map(localMap);
-    for (const [id, j] of remoteMap) merged.set(id, j);
+    for (const [id, remoteJ] of remoteMap) {
+      const localJ = localMap.get(id);
+      if (!localJ) { merged.set(id, remoteJ); continue; }
+      // Preserve whichever copy has more photos — prevents a stale remote pull
+      // (race with an in-flight pushToSupabase) from wiping locally-uploaded photos.
+      const remotePhotos = remoteJ.woPhotos ?? [];
+      const localPhotos  = localJ.woPhotos  ?? [];
+      merged.set(id, {
+        ...remoteJ,
+        woPhotos: remotePhotos.length >= localPhotos.length ? remotePhotos : localPhotos,
+      });
+    }
 
     // Same ghost-purge removal as customers above. Jobs are deleted only via
     // explicit user action (handleDeleteJob), which records a job-id tombstone.

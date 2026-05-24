@@ -692,7 +692,17 @@ function App() {
             withArchived.customers.length !== prev.customers.length ||
             withArchived.jobs.length     !== prev.jobs.length
           ) {
-            return withArchived;
+            // Defensive photo merge: keep whichever copy has more photos so a startup
+            // sync (reading localStorage which may have stale photo count) doesn't
+            // overwrite photos that are already in React state from a recent upload.
+            const safeMergedJobs = withArchived.jobs.map((j: import('./types').Job) => {
+              const prevJ = prev.jobs.find(p => p.id === j.id);
+              if (!prevJ) return j;
+              const incoming = j.woPhotos ?? [];
+              const existing  = prevJ.woPhotos ?? [];
+              return incoming.length >= existing.length ? j : { ...j, woPhotos: existing };
+            });
+            return { ...withArchived, jobs: safeMergedJobs };
           }
           return prev;
         });
