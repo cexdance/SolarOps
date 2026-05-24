@@ -60,7 +60,12 @@ export const Settings: React.FC<SettingsProps> = ({
       if (!currentUser?.id) { setAvatarError('Not logged in'); return; }
       const result = await uploadAvatarToStorage(blob, currentUser.id);
       if (result.url) {
-        onUpdateAvatar?.(result.url);
+        // Always append a cache-busting timestamp so the browser re-fetches
+        // the new image even if the Supabase Storage path is unchanged.
+        const bustUrl = result.url.includes('?')
+          ? `${result.url}&t=${Date.now()}`
+          : `${result.url}?t=${Date.now()}`;
+        onUpdateAvatar?.(bustUrl);
       } else if (result.error === 'session_expired') {
         setAvatarError('Session expired — please re-login.');
       } else {
