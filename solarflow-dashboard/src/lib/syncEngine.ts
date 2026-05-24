@@ -22,7 +22,7 @@
  */
 
 import { supabase } from './supabase';
-import { markPushPending, clearPendingPush, hasPendingPush, drainOutbox } from './outbox';
+import { markPushPending, clearPendingPush, hasPendingPush, drainOutbox, isRowPoisoned, incRowFailure, clearRowPoison } from './outbox';
 import { isAllowedCustomer } from './solarEdgeSiteFilter';
 import type { AppState, Customer, Job } from '../types';
 import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
@@ -205,20 +205,26 @@ export async function pushToSupabase(state: AppState): Promise<void> {
     // Jobs can carry photo dataURLs; one oversized job would fail the whole
     // batch and mark the entire push pending. Push individually so a single
     // bloated row only fails itself — the rest still land.
+    // Rows that fail POISON_THRESHOLD times are marked "poisoned" and skipped
+    // in future pushes so one bad record never blocks all others.
     const failedJobs: Array<{ key: string; error: string }> = [];
     for (const row of jobRows) {
+      if (isRowPoisoned(row.key)) {
+        console.warn('[SyncEngine] Skipping poisoned row:', row.key);
+        continue; // blocked permanently until poison is cleared
+      }
       try {
         await pushRows([row]);
+        clearRowPoison(row.key); // success — reset any prior failure count
       } catch (err) {
-        failedJobs.push({ key: row.key, error: err instanceof Error ? err.message : String(err) });
+        const msg = err instanceof Error ? err.message : String(err);
+        incRowFailure(row.key, msg); // track towards poison threshold
+        failedJobs.push({ key: row.key, error: msg });
       }
     }
     if (failedJobs.length > 0) {
       console.warn('[SyncEngine] some job rows failed to push:', failedJobs);
-      // Re-throw the first error to mark the entire push as failed
-      if (failedJobs.length > 0) {
-        throw new Error(`Failed to push ${failedJobs.length} job rows: ${failedJobs[0].error}`);
-      }
+      throw new Error(`Failed to push ${failedJobs.length} job rows: ${failedJobs[0].error}`);
     }
 
     // ── Legacy blobs (backward compat) ───────────────────────────────────────

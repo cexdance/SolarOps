@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { Job, WOStatus, WOLineItem, WOPhoto, WOServiceStatus, WO_TO_JOB_STATUS, RMAEntry, AuditEntry } from '../types';
 import { updateClientStatus } from '../lib/siteProfileStore';
-import { createXeroQuote, isXeroConnected } from '../lib/xeroService';
+import { QuotePreviewModal } from './QuotePreviewModal';
 import { Contractor, ContractorJob, JobPriority, ServiceRate } from '../types/contractor';
 import { loadServiceRates } from '../lib/contractorStore';
 import { searchParts, CatalogPart } from '../lib/partsCatalog';
@@ -19,7 +19,8 @@ import { AddressAutocomplete, GMAPS_KEY_STORAGE, loadGoogleMaps } from './Addres
 import { AddressLink } from './AddressLink';
 import { MentionTextarea, MentionUser, renderWithMentions, parseMentions, fireMentionNotifications } from './ui/MentionTextarea';
 import { ActivityFeed } from './ui/ActivityFeed';
-import { compressImageToDataUrl } from '../lib/photoCompress';
+import { compressImageToDataUrl, compressImageToBlob } from '../lib/photoCompress';
+import { uploadPhotoToStorage, deletePhotoFromStorage } from '../lib/photoStorage';
 
 // ─── constants ────────────────────────────────────────────────────────────────
 
@@ -64,6 +65,31 @@ const SERVICE_ACCOUNT_ACTIONS: Record<WOStatus, { label: string; color: string; 
 };
 
 const SE_COMP_SERVICE_TYPES = new Set(['repair', 'maintenance']); // expand as needed
+
+// Site-transfer WOs skip quote + contractor dispatch; draft → completed → invoiced
+const SITE_TRANSFER_ACTIONS: Record<WOStatus, { label: string; color: string } | null> = {
+  draft:          { label: 'Mark Transfer Done',  color: 'bg-teal-600 hover:bg-teal-700' },
+  quote_sent:     { label: 'Mark Transfer Done',  color: 'bg-teal-600 hover:bg-teal-700' },
+  contact_client: { label: 'Mark Transfer Done',  color: 'bg-teal-600 hover:bg-teal-700' },
+  quote_approved: { label: 'Mark Transfer Done',  color: 'bg-teal-600 hover:bg-teal-700' },
+  scheduled:      { label: 'Mark Transfer Done',  color: 'bg-teal-600 hover:bg-teal-700' },
+  in_progress:    { label: 'Mark Transfer Done',  color: 'bg-teal-600 hover:bg-teal-700' },
+  completed:      { label: 'Notify to Invoice',   color: 'bg-blue-600 hover:bg-blue-700' },
+  invoiced:       { label: 'Mark Paid',           color: 'bg-emerald-700 hover:bg-emerald-800' },
+  paid:           null,
+};
+
+const SITE_TRANSFER_NEXT: Record<WOStatus, WOStatus | null> = {
+  draft:          'completed',
+  quote_sent:     'completed',
+  contact_client: 'completed',
+  quote_approved: 'completed',
+  scheduled:      'completed',
+  in_progress:    'completed',
+  completed:      'invoiced',
+  invoiced:       'paid',
+  paid:           null,
+};
 
 const NEXT_STATUS: Record<WOStatus, WOStatus | null> = {
   draft:          'quote_sent',
@@ -281,7 +307,6 @@ export interface WorkOrderPanelProps {
   technicians?: { id: string; name: string }[];
   currentUserName?: string;
   currentUserRole?: string; // 'admin' | 'coo' | 'technician'
-  xeroConnected?: boolean;
   customer?: import('../types').Customer;
   onQuoteSent?: (quoteId: string, quoteNumber: string, onlineUrl: string) => void;
   /** Admin-only: navigate to the linked client card. When provided, the
@@ -311,14 +336,12 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
   technicians = [],
   currentUserName = 'Staff',
   currentUserRole = 'technician',
-  xeroConnected,
   customer,
   onQuoteSent,
   onViewCustomer,
   users = [],
 }) => {
   const isNew = !job;
-  const xeroReady = xeroConnected ?? isXeroConnected();
   const serviceRates: ServiceRate[] = loadServiceRates();
 
   // Core form state
@@ -340,7 +363,6 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
   const [urgency, setUrgency]       = useState(job?.urgency ?? 'medium');
   const [notes, setNotes]           = useState(job?.notes ?? '');
   const [quoteAmount, setQuoteAmount] = useState<number>(job?.quoteAmount ?? 0);
-  const [showQuotePreview, setShowQuotePreview] = useState(false);
   // RMA — pre-populate with PowerCare case number for new WOs
   const defaultRmaEntries: RMAEntry[] = (() => {
     if (job?.rmaEntries) return job.rmaEntries;
@@ -370,7 +392,8 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
   const [auditLog, setAuditLog] = useState<AuditEntry[]>(job?.auditLog ?? []);
   // Delete confirmation (0=idle, 1=first confirm, 2=confirmed)
   const [deleteStep, setDeleteStep] = useState(0);
-  // Xero quote state
+  // Quote modal state
+  const [showQuotePreview, setShowQuotePreview] = useState(false);
   const [quoteSending, setQuoteSending] = useState(false);
   const [quoteResult, setQuoteResult] = useState<{ ok: boolean; msg: string } | null>(null);
   const [technicianId, setTechnicianId] = useState(job?.technicianId ?? '');
@@ -455,6 +478,22 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
   // Line items
   const [lineItems, setLineItems]   = useState<WOLineItem[]>(job?.lineItems ?? []);
 
+  // Stable upload folder — generated once per panel open. New WOs get a UUID
+  // so photos don't all land in wo-photos/unsaved/. Existing WOs use job.id.
+  const stableWoIdRef = useRef<string>(job?.id ?? `wo-${crypto.randomUUID()}`);
+
+  // Track in-flight uploads. Using a ref (not state) to avoid re-renders; we
+  // derive the boolean `uploading` state separately so the button can react.
+  const pendingUploads = useRef(new Set<string>());
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
+  // Always-fresh ref to handleSave — lets async useCallback closures call the
+  // CURRENT version of handleSave (with up-to-date woPhotos/lineItems state)
+  // instead of the stale version captured when the callback was last created.
+  // Assigned below (after handleSave is defined); declared here so it's in scope.
+  const handleSaveRef = useRef<(statusOverride?: WOStatus, keepOpen?: boolean) => void>(() => {});
+
   // Photos. Some entries may be migrated to the local photoStore (no inline
   // dataUrl, only a photoStoreId). Hydrate those in the background so <img>
   // can render. Already-inlined photos pass through untouched.
@@ -504,6 +543,13 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
   const isInverterJob  = serviceType.toLowerCase().includes('inverter');
   const isOptimizerJob = serviceType.toLowerCase().includes('optimizer');
   const isSerialJob    = isInverterJob || isOptimizerJob;
+  const isSiteTransfer = serviceCode === 'SITE-TRX' || serviceType === 'Site Transfer';
+
+  // Site transfer state
+  const [stInverterSerial, setStInverterSerial] = useState(job?.siteTransferInverterSerial ?? '');
+  const [stSiteId, setStSiteId] = useState(job?.siteTransferSiteId ?? '');
+  const stMissingBoth = isSiteTransfer && !stInverterSerial && !stSiteId;
+  const stMissingOne  = isSiteTransfer && ((!stInverterSerial && !!stSiteId) || (!!stInverterSerial && !stSiteId));
 
   // Preset parts by job type (injected when SOW modal opens)
   const INVERTER_PARTS = [
@@ -667,6 +713,18 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
 
   // Workflow action: advance status
   const handleWorkflowAction = async () => {
+    // Block advance while any photo is still uploading to Storage
+    if (pendingUploads.current.size > 0) return;
+
+    // Site Transfer: uses its own pipeline, no quotes or contractor dispatch
+    if (isSiteTransfer) {
+      const next = SITE_TRANSFER_NEXT[woStatus];
+      if (!next) return;
+      setWoStatus(next);
+      handleSave(next, true);
+      return;
+    }
+
     const next = NEXT_STATUS[woStatus];
     if (!next) return;
 
@@ -674,37 +732,9 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
       if (woStatus === 'quote_sent' && !isAdmin) return;
     } else {
       if (woStatus === 'draft') {
-        // Send quote via Xero if connected
-        if (xeroReady && customer) {
-          setQuoteSending(true);
-          setQuoteResult(null);
-          try {
-            const _labor = lineItems.filter(i => i.type === 'labor').reduce((s, i) => s + i.totalCost, 0);
-            const _parts = lineItems.filter(i => i.type !== 'labor').reduce((s, i) => s + i.totalCost, 0);
-            const jobSnapshot: any = {
-              id: job?.id ?? `wo-${Date.now()}`,
-              title: title || `WO – ${siteName}`,
-              serviceType,
-              laborHours,
-              laborRate: _labor / (laborHours || 1),
-              partsCost: _parts,
-            };
-            const result = await createXeroQuote({ customer, job: jobSnapshot });
-            setQuoteResult(
-              result.success
-                ? { ok: true, msg: `Quote ${result.quoteNumber ?? ''} sent via Xero` }
-                : { ok: false, msg: result.error ?? 'Xero error' }
-            );
-            if (!result.success) return;
-            if (result.quoteId && onQuoteSent) {
-              onQuoteSent(result.quoteId, result.quoteNumber ?? '', result.onlineUrl ?? '');
-            }
-          } catch (e) {
-            setQuoteResult({ ok: false, msg: String(e) });
-            return;
-          } finally {
-            setQuoteSending(false);
-          }
+        if (customer?.email) {
+          setShowQuotePreview(true);
+          return;
         }
         updateClientStatus(siteId, 'quote_approval');
         onUpdateSiteStatus?.(siteId, 'quote_approval');
@@ -745,28 +775,84 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
 
   const removeLineItem = (id: string) => setLineItems(prev => prev.filter(i => i.id !== id));
 
-  // Photo upload — compress before storing so the Job row can sync to Supabase.
+  // Photo upload — compress then push to Supabase Storage; store URL not base64.
+  // Uses a stable folder ID (stableWoIdRef) so new WOs don't collide in /unsaved/.
+  // Tracks in-flight uploads and auto-saves the WO after each successful upload.
   const handlePhotoFiles = useCallback((files: FileList | null) => {
     if (!files) return;
+    setUploadError(null);
     Array.from(files).forEach(async file => {
       if (!file.type.startsWith('image/')) return;
+      const photoId = `ph-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
       try {
+        // Step 1: compress to dataUrl for optimistic preview (instant display)
         const dataUrl = await compressImageToDataUrl(file);
         const photo: WOPhoto = {
-          id: `ph-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          id: photoId,
           category: uploadCategory,
           name: file.name,
           dataUrl,
           createdAt: new Date().toISOString(),
         };
         setWoPhotos(prev => [...prev, photo]);
+
+        // Step 2: compress to Blob for upload (avoids base64 round-trip overhead)
+        pendingUploads.current.add(photoId);
+        setUploading(true);
+        const blob = await compressImageToBlob(file);
+        const result = await uploadPhotoToStorage(blob, stableWoIdRef.current, photoId);
+        pendingUploads.current.delete(photoId);
+        setUploading(pendingUploads.current.size > 0);
+
+        if (result.url) {
+          // Swap dataUrl → storageUrl; dataUrl cleared so it's not synced to app_data
+          setWoPhotos(prev => prev.map(p =>
+            p.id === photoId ? { ...p, storageUrl: result.url!, dataUrl: '' } : p
+          ));
+        } else {
+          if (result.error === 'session_expired') {
+            setUploadError('Session expired — please re-login to save photos.');
+          } else {
+            setUploadError(`Photo upload failed: ${result.error ?? 'unknown error'}`);
+          }
+          console.error('[WorkOrderPanel] photo upload failed', result.error);
+        }
+        // Auto-save once ALL in-flight uploads settle (prevents simultaneous-upload stomp).
+        // With 3 concurrent photos, each decrements pendingUploads independently; only the
+        // last to finish (size===0) fires the single consolidated save so all storageUrls
+        // are in state before writing to Supabase. setTimeout(0) defers until after React
+        // commits the setWoPhotos update above.
+        if (pendingUploads.current.size === 0) {
+          setTimeout(() => handleSaveRef.current(undefined, true), 0);
+        }
       } catch (err) {
-        console.error('[WorkOrderPanel] photo compression failed', err);
+        pendingUploads.current.delete(photoId);
+        setUploading(pendingUploads.current.size > 0);
+        console.error('[WorkOrderPanel] photo upload error', err);
+        setUploadError('Photo upload failed. Check your connection.');
+        // Still save — other concurrent uploads may have succeeded.
+        if (pendingUploads.current.size === 0) {
+          setTimeout(() => handleSaveRef.current(undefined, true), 0);
+        }
       }
     });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uploadCategory]);
 
-  const removePhoto = (id: string) => setWoPhotos(prev => prev.filter(p => p.id !== id));
+  const removePhoto = async (id: string) => {
+    // Guard: don't remove a photo that's still uploading (would orphan the Storage object)
+    if (pendingUploads.current.has(id)) return;
+    const photo = woPhotos.find(p => p.id === id);
+    // Remove from UI first (optimistic), then delete from Storage
+    setWoPhotos(prev => prev.filter(p => p.id !== id));
+    if (photo?.storageUrl) {
+      try {
+        await deletePhotoFromStorage(photo.storageUrl);
+      } catch (err) {
+        console.error('[WorkOrderPanel] Storage delete failed — object may be orphaned', err);
+      }
+    }
+  };
 
   // ── Comments / Activity handlers ─────────────────────────────────────────
   const addComment = useCallback(() => {
@@ -828,10 +914,11 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
     fileItems.forEach(async (item) => {
       const file = item.getAsFile();
       if (!file || !file.type.startsWith('image/')) return;
+      const photoId = `ph-paste-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
       try {
         const dataUrl = await compressImageToDataUrl(file);
         const photo: WOPhoto = {
-          id: `ph-paste-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          id: photoId,
           category: 'process',
           name: file.name || `pasted-${Date.now()}.jpg`,
           dataUrl,
@@ -841,8 +928,30 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
         added++;
         setPasteToast(`${added} image${added > 1 ? 's' : ''} attached — see Photos tab`);
         setTimeout(() => setPasteToast(null), 2500);
+        // Upload pasted image to Storage in background
+        pendingUploads.current.add(photoId);
+        setUploading(true);
+        const blob = await compressImageToBlob(file);
+        const result = await uploadPhotoToStorage(blob, stableWoIdRef.current, photoId);
+        pendingUploads.current.delete(photoId);
+        setUploading(pendingUploads.current.size > 0);
+        if (result.url) {
+          setWoPhotos(prev => prev.map(p =>
+            p.id === photoId ? { ...p, storageUrl: result.url!, dataUrl: '' } : p
+          ));
+        } else {
+          console.error('[WorkOrderPanel] paste upload failed', result.error);
+        }
+        if (pendingUploads.current.size === 0) {
+          setTimeout(() => handleSaveRef.current(undefined, true), 0);
+        }
       } catch (err) {
+        pendingUploads.current.delete(photoId);
+        setUploading(pendingUploads.current.size > 0);
         console.error('[WorkOrderPanel] paste image compression failed', err);
+        if (pendingUploads.current.size === 0) {
+          setTimeout(() => handleSaveRef.current(undefined, true), 0);
+        }
       }
     });
   }, []);
@@ -926,6 +1035,9 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
       // Serial numbers (inverter / optimizer swaps)
       oldSerialNumber: sowOldSN || undefined,
       newSerialNumber: sowNewSN || undefined,
+      // Site Transfer
+      siteTransferInverterSerial: isSiteTransfer ? (stInverterSerial || undefined) : undefined,
+      siteTransferSiteId: isSiteTransfer ? (stSiteId || undefined) : undefined,
       // Schedule SolarEdge SN sync within 2hrs when WO closes
       snSyncScheduledAt: (isSerialJob && sowNewSN && effectiveWoStatus === 'completed')
         ? (job?.snSyncCompletedAt ? job.snSyncScheduledAt : new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString())
@@ -939,7 +1051,24 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
           action: isNew ? 'created' : 'updated',
           details: isNew
             ? `Work order created by ${currentUserName}`
-            : `Stage → ${effectiveWoStatus}`,
+            : (() => {
+                const parts: string[] = [];
+                if (job?.woStatus !== effectiveWoStatus)
+                  parts.push(`Stage ${job?.woStatus ?? 'draft'} → ${effectiveWoStatus}`);
+                const prevPhotos = job?.woPhotos?.length ?? 0;
+                if (woPhotos.length !== prevPhotos)
+                  parts.push(`Photos ${prevPhotos} → ${woPhotos.length}`);
+                const prevTotal = job?.totalAmount ?? 0;
+                if (Math.abs(effectiveQuote - prevTotal) > 0.01)
+                  parts.push(`Total $${prevTotal.toFixed(2)} → $${effectiveQuote.toFixed(2)}`);
+                const prevLiCount = job?.lineItems?.length ?? 0;
+                if (lineItems.length !== prevLiCount)
+                  parts.push(`Line items ${prevLiCount} → ${lineItems.length}`);
+                if (job?.serviceType !== serviceType)
+                  parts.push(`Type → ${serviceType}`);
+                if (job?.notes !== notes) parts.push('Notes updated');
+                return parts.length > 0 ? parts.join(' · ') : 'Fields updated';
+              })(),
         },
       ],
     };
@@ -964,9 +1093,14 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
     // Panel always stays open after save — user closes manually
   };
 
+  // Sync the ref on every render so async callbacks always call the fresh handleSave.
+  // This is the fix for the stale-closure bug: useCallback closures (handlePhotoFiles,
+  // handleNotesPaste) captured handleSave from an old render and read stale woPhotos.
+  handleSaveRef.current = handleSave;
+
   // Computed
   const stageIdx = STAGE_INDEX[woStatus];
-  const action = isServiceAccountExpense ? SERVICE_ACCOUNT_ACTIONS[woStatus] : ACTION_CONFIG[woStatus];
+  const action = isSiteTransfer ? SITE_TRANSFER_ACTIONS[woStatus] : isServiceAccountExpense ? SERVICE_ACCOUNT_ACTIONS[woStatus] : ACTION_CONFIG[woStatus];
   const actionAdminOnly = isServiceAccountExpense && SERVICE_ACCOUNT_ACTIONS[woStatus]?.adminOnly;
   const { labor, parts, total } = sumLineItems(lineItems);
   const photosByCategory = PHOTO_CATEGORIES.reduce((acc, cat) => {
@@ -1089,8 +1223,10 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
           }`}>
             <div className="flex items-center gap-2 text-sm text-slate-500">
               <Clock className="w-4 h-4" />
-              {woStatus === 'quote_approved' && !assignedContractorId && !isServiceAccountExpense ? (
+              {!isSiteTransfer && woStatus === 'quote_approved' && !assignedContractorId && !isServiceAccountExpense ? (
                 <span className="text-amber-600 font-medium">Assign a contractor first (Overview tab)</span>
+              ) : isSiteTransfer && stMissingBoth ? (
+                <span className="text-red-600 font-medium">Enter Inverter Serial or Site ID first</span>
               ) : actionAdminOnly && !isAdmin ? (
                 <span className="text-violet-600 font-medium">Awaiting admin approval</span>
               ) : woStatus === 'draft' && !serviceCode ? (
@@ -1100,29 +1236,39 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
               )}
             </div>
             <div className="flex flex-col items-end gap-1">
-              {/* Xero quote feedback */}
               {quoteResult && (
                 <span className={`text-xs font-medium ${quoteResult.ok ? 'text-emerald-600' : 'text-red-600'}`}>
                   {quoteResult.msg}
                 </span>
               )}
-              {woStatus === 'draft' && xeroReady && !quoteResult && (
-                <span className="text-xs text-slate-400">Will send via Xero</span>
+              {!isSiteTransfer && woStatus === 'draft' && customer?.email && !quoteResult && (
+                <span className="text-xs text-slate-400">Will email quote to {customer.email}</span>
               )}
-              {woStatus === 'draft' && !xeroReady && (
-                <span className="text-xs text-amber-500">Xero not connected — quote won't be sent</span>
+              {!isSiteTransfer && woStatus === 'draft' && !customer?.email && (
+                <span className="text-xs text-amber-500">No customer email — add one to send quote</span>
+              )}
+              {isSiteTransfer && woStatus === 'draft' && (
+                <span className="text-xs text-teal-600">Admin agentic workflow · No quote sent · $120 flat fee</span>
               )}
               <button
                 onClick={handleWorkflowAction}
                 disabled={
                   quoteSending ||
+                  uploading ||
                   (woStatus === 'draft' && !serviceCode) ||
-                  (woStatus === 'quote_approved' && !assignedContractorId && !isServiceAccountExpense) ||
+                  (!isSiteTransfer && woStatus === 'quote_approved' && !assignedContractorId && !isServiceAccountExpense) ||
+                  (isSiteTransfer && stMissingBoth) ||
                   (actionAdminOnly === true && !isAdmin)
                 }
+                title={uploading ? 'Waiting for photos to finish uploading…' : undefined}
                 className={`px-4 py-1.5 rounded-lg text-sm font-semibold text-white transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${action.color}`}
               >
-                {quoteSending ? 'Sending…' : <>{action.label} <ChevronRight className="inline w-3.5 h-3.5 ml-0.5 -mt-0.5" /></>}
+                {uploading
+                  ? <><Loader2 className="inline w-3.5 h-3.5 mr-1 -mt-0.5 animate-spin" />Uploading…</>
+                  : quoteSending
+                    ? 'Sending…'
+                    : <>{action.label} <ChevronRight className="inline w-3.5 h-3.5 ml-0.5 -mt-0.5" /></>
+                }
               </button>
             </div>
           </div>
@@ -1263,6 +1409,21 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                           ? rate.powercareClientRate
                           : rate.clientRateStandard;
                         if (clientRate) setQuoteAmount(clientRate);
+                        // Site Transfer: auto-add $120 flat-fee line item
+                        if (code === 'SITE-TRX') {
+                          setLineItems(prev => {
+                            const alreadyHas = prev.some(li => li.description.toLowerCase().includes('site transfer'));
+                            if (alreadyHas) return prev;
+                            return [...prev, {
+                              ...newLineItem(),
+                              type: 'other' as WOLineItem['type'],
+                              description: 'Site Transfer — SolarEdge ownership transfer (admin agentic workflow)',
+                              quantity: 1,
+                              unitCost: 120,
+                              totalCost: 120,
+                            }];
+                          });
+                        }
                       }
                     }}
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 cursor-pointer"
@@ -1306,8 +1467,14 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                 </div>
               </div>
 
-              {/* Contractor */}
-              <div>
+              {/* Contractor — hidden for Site Transfer (admin-team-only WO) */}
+              {isSiteTransfer && (
+                <div className="flex items-center gap-2 rounded-lg bg-teal-50 border border-teal-200 px-3 py-2">
+                  <svg className="w-4 h-4 text-teal-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
+                  <p className="text-xs text-teal-700 font-medium">Handled by admin team — no contractor assigned</p>
+                </div>
+              )}
+              <div className={isSiteTransfer ? 'hidden' : ''}>
                 <label className="block text-xs font-medium text-slate-500 mb-1">Contractor</label>
                 {approvedContractors.length === 0 ? (
                   <p className="text-xs text-slate-400 italic">No approved contractors</p>
@@ -2041,6 +2208,20 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
           {activeTab === 'photos' && (
             <div className="p-4 space-y-4">
 
+              {/* ── Upload status / error banner ───────────────────────────── */}
+              {uploading && (
+                <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
+                  <Loader2 className="w-4 h-4 shrink-0 animate-spin" />
+                  Uploading photo{pendingUploads.current.size > 1 ? `s (${pendingUploads.current.size})` : ''}…
+                </div>
+              )}
+              {uploadError && !uploading && (
+                <div className="flex items-center justify-between gap-2 px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                  <span>{uploadError}</span>
+                  <button onClick={() => setUploadError(null)} className="shrink-0 text-red-400 hover:text-red-600 cursor-pointer">✕</button>
+                </div>
+              )}
+
               {/* ── Category chips ─────────────────────────────────────────── */}
               <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
                 {PHOTO_CATEGORIES.map(cat => (
@@ -2065,55 +2246,81 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                 ))}
               </div>
 
-              {/* ── Camera-first action buttons ──────────────────────────── */}
-              <div className="grid grid-cols-2 gap-3">
-                {/* Take Photo — opens device camera directly on mobile */}
-                <button
-                  onClick={() => {
-                    const el = document.createElement('input');
-                    el.type = 'file';
-                    el.accept = 'image/*';
-                    el.capture = 'environment';
-                    el.onchange = () => handlePhotoFiles(el.files);
-                    el.click();
-                  }}
-                  className="flex flex-col items-center justify-center gap-2 p-5 bg-orange-500 text-white rounded-2xl hover:bg-orange-600 active:scale-95 transition-all cursor-pointer shadow-sm"
-                >
-                  <Camera className="w-7 h-7" />
-                  <span className="text-sm font-semibold">Take Photo</span>
-                  <span className="text-[10px] opacity-75 capitalize">{PHOTO_CATEGORY_LABELS[uploadCategory]}</span>
-                </button>
-
-                {/* Choose from library */}
-                <button
-                  onClick={() => photoInputRef.current?.click()}
-                  className="flex flex-col items-center justify-center gap-2 p-5 bg-slate-800 text-white rounded-2xl hover:bg-slate-900 active:scale-95 transition-all cursor-pointer shadow-sm"
-                >
-                  <Upload className="w-7 h-7" />
-                  <span className="text-sm font-semibold">Choose Files</span>
-                  <span className="text-[10px] opacity-75">Multiple OK</span>
-                </button>
-
+              {/* ── Unified upload zone: tap/click, drag-drop, paste ──── */}
+              <div
+                onDragOver={e => { e.preventDefault(); e.currentTarget.classList.add('ring-2', 'ring-orange-400'); }}
+                onDragLeave={e => { e.currentTarget.classList.remove('ring-2', 'ring-orange-400'); }}
+                onDrop={e => { e.preventDefault(); e.currentTarget.classList.remove('ring-2', 'ring-orange-400'); handlePhotoFiles(e.dataTransfer.files); }}
+                onPaste={e => {
+                  const fileItems = Array.from(e.clipboardData.items).filter(i => i.kind === 'file');
+                  if (fileItems.length === 0) return;
+                  e.preventDefault();
+                  fileItems.forEach(async (item) => {
+                    const file = item.getAsFile();
+                    if (!file || !file.type.startsWith('image/')) return;
+                    const photoId = `ph-paste-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+                    try {
+                      const dataUrl = await compressImageToDataUrl(file);
+                      const photo: WOPhoto = {
+                        id: photoId,
+                        category: uploadCategory,
+                        name: file.name || `pasted-${Date.now()}.jpg`,
+                        dataUrl,
+                        createdAt: new Date().toISOString(),
+                      };
+                      setWoPhotos(prev => [...prev, photo]);
+                      pendingUploads.current.add(photoId);
+                      setUploading(true);
+                      const blob = await compressImageToBlob(file);
+                      const result = await uploadPhotoToStorage(blob, stableWoIdRef.current, photoId);
+                      pendingUploads.current.delete(photoId);
+                      setUploading(pendingUploads.current.size > 0);
+                      if (result.url) {
+                        setWoPhotos(prev => prev.map(p =>
+                          p.id === photoId ? { ...p, storageUrl: result.url!, dataUrl: '' } : p
+                        ));
+                      } else {
+                        console.error('[WorkOrderPanel] drop-zone paste upload failed', result.error);
+                      }
+                      if (pendingUploads.current.size === 0) {
+                        setTimeout(() => handleSaveRef.current(undefined, true), 0);
+                      }
+                    } catch (err) {
+                      pendingUploads.current.delete(photoId);
+                      setUploading(pendingUploads.current.size > 0);
+                      console.error('[WorkOrderPanel] paste photo upload failed', err);
+                      if (pendingUploads.current.size === 0) {
+                        setTimeout(() => handleSaveRef.current(undefined, true), 0);
+                      }
+                    }
+                  });
+                }}
+                tabIndex={0}
+                className="relative flex flex-col items-center gap-3 p-6 bg-slate-800 rounded-2xl border-2 border-dashed border-slate-600 hover:border-orange-400 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-orange-400"
+                onClick={() => photoInputRef.current?.click()}
+              >
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-orange-500 flex items-center justify-center">
+                    <Camera className="w-6 h-6 text-white" />
+                  </div>
+                  <div className="w-12 h-12 rounded-xl bg-slate-700 flex items-center justify-center">
+                    <Upload className="w-6 h-6 text-slate-300" />
+                  </div>
+                </div>
+                <span className="text-sm font-semibold text-white">Tap to take photo or choose files</span>
+                <span className="text-xs text-slate-400">Drag & drop or paste (Ctrl+V) images here</span>
+                <span className="text-[10px] text-orange-400 capitalize">{PHOTO_CATEGORY_LABELS[uploadCategory]}</span>
                 <input
                   ref={photoInputRef}
                   type="file"
                   accept="image/*"
                   multiple
+                  capture="environment"
                   className="hidden"
-                  onChange={e => handlePhotoFiles(e.target.files)}
+                  onChange={e => { handlePhotoFiles(e.target.files); e.target.value = ''; }}
+                  onClick={e => e.stopPropagation()}
                 />
               </div>
-
-              {/* ── Drop zone (visible when no photos) ─────────────────── */}
-              {woPhotos.length === 0 && (
-                <div
-                  onDragOver={e => e.preventDefault()}
-                  onDrop={e => { e.preventDefault(); handlePhotoFiles(e.dataTransfer.files); }}
-                  className="border-2 border-dashed border-slate-200 rounded-xl p-8 text-center"
-                >
-                  <p className="text-sm text-slate-400">or drag & drop photos here</p>
-                </div>
-              )}
 
               {/* ── Photo grid — grouped by category ───────────────────── */}
               {PHOTO_CATEGORIES.map(cat => {
@@ -2128,7 +2335,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                       {photos.map(photo => (
                         <div key={photo.id} className="relative group aspect-square rounded-xl overflow-hidden border border-slate-200 shadow-sm">
-                          <img src={photo.dataUrl} alt={photo.name} className="w-full h-full object-cover" />
+                          <img src={photo.storageUrl ?? photo.dataUrl} alt={photo.name} className="w-full h-full object-cover" />
                           <button
                             onClick={() => removePhoto(photo.id)}
                             className="absolute top-2 right-2 w-7 h-7 bg-black/70 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
@@ -2468,6 +2675,81 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                   )}
                 </div>
 
+                {/* ── Site Transfer Details ─────────────────────────────── */}
+                {isSiteTransfer && (
+                  <div className="rounded-xl border-2 border-teal-200 bg-teal-50 p-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="w-6 h-6 rounded-full bg-teal-500 flex items-center justify-center shrink-0">
+                        <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
+                      </div>
+                      <p className="text-xs font-bold text-teal-800 uppercase tracking-widest">Site Transfer — Admin Agentic Workflow</p>
+                    </div>
+
+                    {/* Missing-data warning */}
+                    {stMissingBoth && (
+                      <div className="mb-3 flex items-start gap-2 rounded-lg bg-red-50 border border-red-200 p-3">
+                        <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+                        <p className="text-xs text-red-700 font-medium">Provide at least one identifier (Inverter Serial or Site ID) before completing this transfer.</p>
+                      </div>
+                    )}
+                    {stMissingOne && (
+                      <div className="mb-3 flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 p-3">
+                        <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-xs text-amber-800 font-semibold">Only one identifier provided</p>
+                          <p className="text-xs text-amber-700 mt-0.5">Contact or chat SolarEdge support to obtain the missing {!stInverterSerial ? 'Inverter Serial Number' : 'Site ID'} before running the transfer.</p>
+                          <a
+                            href="https://www.solaredge.com/en/service-and-support"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 mt-1.5 text-xs text-amber-700 font-semibold underline hover:text-amber-900"
+                          >
+                            SolarEdge Support →
+                          </a>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {/* Inverter Serial */}
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-600 mb-1.5">
+                          Inverter Serial Number
+                          {!stInverterSerial && <span className="ml-1 text-amber-500 font-normal">(required if no Site ID)</span>}
+                        </label>
+                        <input
+                          type="text"
+                          value={stInverterSerial}
+                          onChange={e => setStInverterSerial(e.target.value.trim())}
+                          placeholder="e.g. 7F123456-78"
+                          className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:outline-none font-mono ${
+                            !stInverterSerial && stSiteId ? 'border-amber-300 bg-amber-50 focus:ring-amber-200' : 'border-slate-300 bg-white focus:ring-teal-200'
+                          }`}
+                        />
+                      </div>
+                      {/* Site ID */}
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-600 mb-1.5">
+                          SolarEdge Site ID
+                          {!stSiteId && <span className="ml-1 text-amber-500 font-normal">(required if no Serial)</span>}
+                        </label>
+                        <input
+                          type="text"
+                          value={stSiteId}
+                          onChange={e => setStSiteId(e.target.value.trim())}
+                          placeholder="e.g. 1234567"
+                          className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:outline-none font-mono ${
+                            !stSiteId && stInverterSerial ? 'border-amber-300 bg-amber-50 focus:ring-amber-200' : 'border-slate-300 bg-white focus:ring-teal-200'
+                          }`}
+                        />
+                      </div>
+                    </div>
+                    <p className="mt-3 text-[10px] text-teal-700">
+                      ℹ️ Admin team runs the SolarEdge ownership transfer via agentic workflow. No contractor assigned. Client charge: <strong>$120</strong>.
+                    </p>
+                  </div>
+                )}
+
                 {/* ── Serial Numbers (inverter / optimizer only) ────────── */}
                 {isSerialJob && (
                   <div className="bg-blue-50 rounded-xl p-4 border border-blue-100">
@@ -2622,7 +2904,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                             {catPhotos.map(photo => (
                               <div key={photo.id} className="bg-slate-100 rounded-lg overflow-hidden aspect-square">
-                                <img src={photo.dataUrl} alt={photo.name} className="w-full h-full object-cover" />
+                                <img src={photo.storageUrl ?? photo.dataUrl} alt={photo.name} className="w-full h-full object-cover" />
                               </div>
                             ))}
                           </div>
@@ -2637,6 +2919,38 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
           </div>
         );
       })()}
+      {/* ── Quote Preview Modal ─────────────────────────────────── */}
+      {showQuotePreview && customer && (
+        <QuotePreviewModal
+          customerName={customer.name}
+          customerEmail={customer.email}
+          address={siteAddress}
+          woNumber={job?.woNumber ?? generateWONumber()}
+          jobId={job?.id ?? `wo-${Date.now()}`}
+          lineItems={lineItems.map(li => ({
+            description: li.description,
+            qty: li.quantity,
+            unitPrice: li.unitCost,
+            total: li.totalCost,
+          }))}
+          laborTotal={lineItems.filter(i => i.type === 'labor').reduce((s, i) => s + i.totalCost, 0)}
+          partsTotal={lineItems.filter(i => i.type !== 'labor').reduce((s, i) => s + i.totalCost, 0)}
+          grandTotal={lineItems.reduce((s, i) => s + i.totalCost, 0)}
+          notes={notes}
+          onClose={() => setShowQuotePreview(false)}
+          onSent={() => {
+            setShowQuotePreview(false);
+            setQuoteResult({ ok: true, msg: 'Quote emailed to customer' });
+            updateClientStatus(siteId, 'quote_approval');
+            onUpdateSiteStatus?.(siteId, 'quote_approval');
+            const next = NEXT_STATUS[woStatus];
+            if (next) {
+              setWoStatus(next);
+              handleSave(next, true);
+            }
+          }}
+        />
+      )}
     </div>
   );
 };

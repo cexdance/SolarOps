@@ -19,12 +19,22 @@
  *   - 30-second interval     (background convergence)
  */
 
-const OUTBOX_KEY = 'solarops_outbox_v1';
+const OUTBOX_KEY  = 'solarops_outbox_v1';
+const POISON_KEY  = 'solarops_poisoned_rows_v1';
+
+/** Consecutive failures before a row is considered "poisoned" and skipped. */
+const POISON_THRESHOLD = 3;
 
 interface PendingPush {
   queuedAt: string;   // ISO — when the first failure was recorded
   attempts: number;   // consecutive failure count
   lastError?: string; // last error message for debugging
+}
+
+interface PoisonEntry {
+  failCount: number;
+  lastError: string;
+  since: string; // ISO — first failure timestamp
 }
 
 // ── Storage helpers ────────────────────────────────────────────────────────────
@@ -46,6 +56,83 @@ function save(entry: PendingPush | null): void {
   } catch (err) {
     console.warn('[Outbox] Error saving to localStorage:', err);
   }
+}
+
+// ── Per-row poison tracking ────────────────────────────────────────────────────
+// A "poisoned" row is one that has failed POISON_THRESHOLD times in a row.
+// Poisoned rows are skipped in future pushes so one bad record can never
+// block every other record from reaching Supabase.
+
+function getPoison(): Record<string, PoisonEntry> {
+  try {
+    const raw = localStorage.getItem(POISON_KEY);
+    return raw ? (JSON.parse(raw) as Record<string, PoisonEntry>) : {};
+  } catch { return {}; }
+}
+
+function savePoison(poison: Record<string, PoisonEntry>): void {
+  try {
+    if (Object.keys(poison).length === 0) {
+      localStorage.removeItem(POISON_KEY);
+    } else {
+      localStorage.setItem(POISON_KEY, JSON.stringify(poison));
+    }
+  } catch (err) {
+    console.warn('[Outbox] Error saving poison list:', err);
+  }
+}
+
+/** True if the row has hit the failure threshold and should be skipped. */
+export function isRowPoisoned(key: string): boolean {
+  return (getPoison()[key]?.failCount ?? 0) >= POISON_THRESHOLD;
+}
+
+/**
+ * Record a per-row push failure.
+ * After POISON_THRESHOLD calls the row is considered poisoned.
+ */
+export function incRowFailure(key: string, error: string): void {
+  try {
+    const poison = getPoison();
+    const existing = poison[key];
+    poison[key] = {
+      failCount: (existing?.failCount ?? 0) + 1,
+      lastError: error,
+      since:     existing?.since ?? new Date().toISOString(),
+    };
+    savePoison(poison);
+    if (poison[key].failCount >= POISON_THRESHOLD) {
+      console.warn(`[Outbox] Row poisoned after ${POISON_THRESHOLD} failures:`, key, error);
+    }
+  } catch (err) {
+    console.warn('[Outbox] Error incrementing row failure:', err);
+  }
+}
+
+/** Clear the poison record for a specific row (called on success). */
+export function clearRowPoison(key: string): void {
+  try {
+    const poison = getPoison();
+    if (!poison[key]) return;
+    delete poison[key];
+    savePoison(poison);
+  } catch (err) {
+    console.warn('[Outbox] Error clearing row poison:', err);
+  }
+}
+
+/** Returns all currently poisoned row keys (for UI display). */
+export function getPoisonedKeys(): string[] {
+  try {
+    return Object.entries(getPoison())
+      .filter(([, v]) => v.failCount >= POISON_THRESHOLD)
+      .map(([k]) => k);
+  } catch { return []; }
+}
+
+/** Reset all poisoned rows (called on explicit user-triggered sync). */
+export function resetAllPoison(): void {
+  try { localStorage.removeItem(POISON_KEY); } catch {}
 }
 
 // ── Public API ─────────────────────────────────────────────────────────────────

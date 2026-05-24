@@ -46,10 +46,6 @@ import { isFloridaSite, isAllowedCustomer } from './lib/solarEdgeSiteFilter';
 import { getDeletedCustomerIds, markJobDeleted } from './lib/dataStore';
 import { Contractor, ContractorStatus, ContractorJob } from './types/contractor';
 import { addInteraction, loadCustomers, loadInteractions, saveInteractions } from './lib/customerStore';
-import {
-  getXeroClientId, setXeroClientId, startXeroOAuth,
-  handleXeroCallback, clearXeroTokens, isXeroConnected, getXeroTokens,
-} from './lib/xeroService';
 
 // ── Passkey / WebAuthn helpers (imported from shared lib) ─────────────────────
 import {
@@ -729,39 +725,6 @@ function App() {
   // ── Version poll (extracted to hook) ─────────────────────────────────────
   const { state: versionState, remoteVersion, checkNow: checkForUpdate } = useVersionPoll();
 
-  // Handle Xero OAuth callback (?code=...) and restore existing Xero connection
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const code = params.get('code');
-
-    if (code && window.location.pathname === '/xero-callback') {
-      // Exchange code for tokens
-      handleXeroCallback(code)
-        .then(({ orgName, tenantId }) => {
-          setData(prev => ({
-            ...prev,
-            xeroConfig: { connected: true, organizationName: orgName, tenantId },
-          }));
-          // Clean up URL
-          window.history.replaceState({}, '', '/');
-          setCurrentView('settings');
-        })
-        .catch(err => {
-          console.error('Xero OAuth error:', err);
-          window.history.replaceState({}, '', '/');
-        });
-    } else if (isXeroConnected()) {
-      // Restore connection state on app load from stored tokens
-      const { orgName, tenantId } = getXeroTokens();
-      if (orgName) {
-        setData(prev => ({
-          ...prev,
-          xeroConfig: { connected: true, organizationName: orgName, tenantId },
-        }));
-      }
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   useEffect(() => {
     if (skipContractorPersist.current) return;
@@ -1436,6 +1399,18 @@ function App() {
   };
 
   const handleMergeCustomers = (primaryId: string, secondaryId: string, resolvedFields?: Partial<Customer>) => {
+    // Log before setData so we have access to both customer records
+    const primary   = data.customers.find(c => c.id === primaryId);
+    const secondary = data.customers.find(c => c.id === secondaryId);
+    if (primary && secondary) {
+      logChange('customer.merge', 'customer', primaryId, {
+        primaryId,
+        secondaryId,
+        primaryName:   `${primary.firstName ?? ''} ${primary.lastName ?? ''}`.trim(),
+        secondaryName: `${secondary.firstName ?? ''} ${secondary.lastName ?? ''}`.trim(),
+        resolvedFields,
+      }, data.currentUser?.email ?? 'unknown');
+    }
     setData(prev => {
       const primary = prev.customers.find(c => c.id === primaryId);
       const secondary = prev.customers.find(c => c.id === secondaryId);
@@ -1470,29 +1445,6 @@ function App() {
     } else {
       setSelectedJobId(null);
     }
-  };
-
-  const handleCreateInvoice = (job: Job, xeroInvoiceId: string) => {
-    console.log('Invoice created:', job.id, xeroInvoiceId);
-  };
-
-  /** Save client ID then redirect to Xero OAuth.
-   *  Called with a clientId from Settings, or without args from Billing (reads stored key). */
-  const handleConnectXero = async (clientId?: string): Promise<void> => {
-    const id = clientId || getXeroClientId();
-    if (!id) {
-      // No client ID configured yet — send user to Settings
-      setCurrentView('settings');
-      return;
-    }
-    setXeroClientId(id);
-    await startXeroOAuth(id);
-  };
-
-  const handleXeroDisconnect = () => {
-    clearXeroTokens();
-    localStorage.removeItem('solarops_xero_client_id');
-    setData(prev => ({ ...prev, xeroConfig: { connected: false } }));
   };
 
   // SolarEdge API handlers
@@ -2231,7 +2183,6 @@ function App() {
               users={data.users.map(u => ({ id: u.id, name: u.name, username: u.username }))}
               currentUserName={currentUser?.name}
               currentUserRole={currentUser?.role}
-              xeroConnected={data.xeroConfig.connected}
               customer={selectedCustomer}
               onClose={() => { setSelectedJobId(null); setCurrentView('jobs'); }}
               onSave={(partial) => {
@@ -2248,8 +2199,7 @@ function App() {
                 setContractorJobs(updated);
                 saveContractorJobs(updated);
               }}
-              onQuoteSent={(quoteId, quoteNumber, onlineUrl) => {
-                // Find matching CRM customer by email to record in activity timeline
+              onQuoteSent={(quoteId, quoteNumber) => {
                 const crmCustomers = loadCustomers();
                 const crmMatch = crmCustomers.find(
                   c => c.email?.toLowerCase() === selectedCustomer?.email?.toLowerCase()
@@ -2257,17 +2207,14 @@ function App() {
                 if (crmMatch) {
                   const interactions = loadInteractions();
                   const label = quoteNumber ? `Quote #${quoteNumber}` : 'Quote';
-                  const content = onlineUrl
-                    ? `${label} sent via Xero — ${onlineUrl}`
-                    : `${label} sent via Xero (Quote ID: ${quoteId})`;
                   const updated = addInteraction(
                     interactions,
                     crmMatch.id,
                     'quote',
-                    content,
+                    `${label} emailed to ${selectedCustomer?.email ?? 'customer'}`,
                     currentUser?.id ?? '',
                     currentUser?.name ?? 'Staff',
-                    { subject: `${label} sent via Xero`, direction: 'outbound' }
+                    { subject: `${label} sent via email`, direction: 'outbound' }
                   );
                   saveInteractions(updated);
                 }
@@ -2333,9 +2280,8 @@ function App() {
             customers={data.customers}
             users={data.users}
             onUpdateJob={handleUpdateJob}
-            xeroConnected={data.xeroConfig.connected}
-            onConnectXero={handleConnectXero}
             isMobile={isMobile}
+            currentUserName={currentUser?.name}
           />
         );
 
@@ -2440,15 +2386,16 @@ function App() {
         return (
           <Settings
             currentUser={currentUser}
-            xeroConfig={data.xeroConfig}
             solarEdgeConfig={data.solarEdgeConfig}
-            onConnectXero={handleConnectXero}
-            onXeroDisconnect={handleXeroDisconnect}
             onSaveSolarEdgeApiKey={handleSaveSolarEdgeApiKey}
             onSyncSolarEdge={handleSyncSolarEdge}
             onLogout={handleLogout}
             onUpdateAvatar={(dataUrl) => {
               if (!currentUser) return;
+              logChange('user.avatar_update', 'user', currentUser.id,
+                { avatarUrl: dataUrl },
+                currentUser.email ?? 'unknown',
+              );
               setData(prev => {
                 const next = {
                   ...prev,
