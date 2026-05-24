@@ -234,6 +234,8 @@ export async function pushToSupabase(state: AppState): Promise<void> {
       { key: 'jobs',                value: state.jobs,                   updated_at: now },
       { key: 'solarEdgeExtraSites', value: state.solarEdgeExtraSites ?? [], updated_at: now },
       { key: 'deleted_customer_ids', value: deletedIds,                  updated_at: now },
+      // API key must sync across devices — push it alongside the other blobs
+      { key: 'solarEdgeConfig',     value: state.solarEdgeConfig,        updated_at: now },
     ];
 
     const { error } = await supabase
@@ -313,11 +315,11 @@ export async function pullFromSupabase(): Promise<Partial<AppState> | null> {
       pullPrefix<Job>(PREFIX.job, since),
     ]);
 
-    // ── Tombstones + standalone KV keys ──────────────────────────────────────
+    // ── Tombstones + standalone KV keys + solarEdgeConfig ───────────────────
     const { data: kvData, error: kvError } = await supabase
       .from('app_data')
       .select('key, value')
-      .in('key', ['deleted_customer_ids', ...KV_SYNC_KEYS]);
+      .in('key', ['deleted_customer_ids', 'solarEdgeConfig', ...KV_SYNC_KEYS]);
 
     if (kvError) {
       console.warn('[SyncEngine] pullFromSupabase KV data fetch error:', kvError.message);
@@ -358,9 +360,13 @@ export async function pullFromSupabase(): Promise<Partial<AppState> | null> {
 
     setLastSync(now);
 
+    // Extract solarEdgeConfig from kvData if present
+    const remoteSEConfig = kvData?.find(r => r.key === 'solarEdgeConfig')?.value as AppState['solarEdgeConfig'] | undefined;
+
     const result: Partial<AppState> = {};
-    if (customers.length > 0) result.customers = customers;
-    if (jobs.length > 0)      result.jobs       = jobs;
+    if (customers.length > 0)  result.customers       = customers;
+    if (jobs.length > 0)       result.jobs            = jobs;
+    if (remoteSEConfig?.apiKey) result.solarEdgeConfig = remoteSEConfig;
     return result;
   } catch (err) {
     console.warn('[SyncEngine] pullFromSupabase error:', err);
@@ -437,7 +443,14 @@ export function mergeRemote(local: AppState, remote: Partial<AppState>): AppStat
   // ── SolarEdge extra sites (still blob — low volume, no Realtime needed) ───
   let solarEdgeExtraSites = local.solarEdgeExtraSites ?? [];
 
-  return { ...local, customers, jobs, solarEdgeExtraSites };
+  // ── SolarEdge config — sync API key across devices ────────────────────────
+  // Remote wins if it has a key and local is empty; otherwise keep local.
+  // This lets desktop-saved API keys propagate to mobile automatically.
+  const solarEdgeConfig = (remote.solarEdgeConfig?.apiKey && !local.solarEdgeConfig?.apiKey)
+    ? { ...local.solarEdgeConfig, ...remote.solarEdgeConfig }
+    : local.solarEdgeConfig;
+
+  return { ...local, customers, jobs, solarEdgeExtraSites, solarEdgeConfig };
 }
 
 // ── Full sync on login ────────────────────────────────────────────────────────
