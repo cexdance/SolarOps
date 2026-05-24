@@ -27,6 +27,8 @@ import { PhotoCleanupCard } from './admin/PhotoCleanupCard';
 import { Avatar } from './ui/Avatar';
 import { compressImageToBlob } from '../lib/photoCompress';
 import { uploadAvatarToStorage } from '../lib/photoStorage';
+import { logUpload } from '../lib/changeLog';
+import { LogViewer } from './admin/LogViewer';
 
 interface SettingsProps {
   currentUser: UserType | null;
@@ -55,24 +57,33 @@ export const Settings: React.FC<SettingsProps> = ({
     if (!file.type.startsWith('image/')) return;
     setAvatarError(null);
     setAvatarUploading(true);
+    const uploadStart = Date.now();
+    const userEmail = currentUser?.email ?? 'unknown';
+    logUpload('avatar.upload_start', currentUser?.id ?? 'unknown', {
+      name: file.name, size: file.size, type: file.type,
+    }, userEmail);
     try {
       const blob = await compressImageToBlob(file, 400, 0.85);
       if (!currentUser?.id) { setAvatarError('Not logged in'); return; }
       const result = await uploadAvatarToStorage(blob, currentUser.id);
       if (result.url) {
-        // Always append a cache-busting timestamp so the browser re-fetches
-        // the new image even if the Supabase Storage path is unchanged.
+        const durationMs = Date.now() - uploadStart;
+        // Cache-bust so the browser always re-fetches the freshly uploaded avatar.
         const bustUrl = result.url.includes('?')
           ? `${result.url}&t=${Date.now()}`
           : `${result.url}?t=${Date.now()}`;
+        logUpload('avatar.upload_success', currentUser.id, { storageUrl: bustUrl }, userEmail, durationMs);
         onUpdateAvatar?.(bustUrl);
       } else if (result.error === 'session_expired') {
+        logUpload('avatar.upload_fail', currentUser?.id ?? 'unknown', { error: 'session_expired' }, userEmail, Date.now() - uploadStart);
         setAvatarError('Session expired — please re-login.');
       } else {
+        logUpload('avatar.upload_fail', currentUser?.id ?? 'unknown', { error: result.error }, userEmail, Date.now() - uploadStart);
         setAvatarError('Avatar upload failed. Try again.');
         console.error('[Settings] avatar upload failed', result.error);
       }
     } catch (e) {
+      logUpload('avatar.upload_fail', currentUser?.id ?? 'unknown', { error: String(e) }, userEmail, Date.now() - uploadStart);
       console.error('[Settings] avatar compress/upload failed', e);
       setAvatarError('Avatar upload failed.');
     } finally {
@@ -612,6 +623,21 @@ export const Settings: React.FC<SettingsProps> = ({
       {currentUser?.role === 'admin' && (
         <div className="mb-6">
           <PhotoCleanupCard />
+        </div>
+      )}
+
+      {/* Activity Log — admin only */}
+      {currentUser?.role === 'admin' && (
+        <div className="bg-white rounded-xl border border-slate-200 mb-6">
+          <div className="p-4 border-b border-slate-100">
+            <h3 className="font-semibold text-slate-900">Activity Log</h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Last 100 events from this device — photo uploads, record changes, errors
+            </p>
+          </div>
+          <div className="p-4">
+            <LogViewer />
+          </div>
         </div>
       )}
 

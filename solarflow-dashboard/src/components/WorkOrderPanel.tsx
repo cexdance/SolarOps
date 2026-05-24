@@ -21,6 +21,7 @@ import { MentionTextarea, MentionUser, renderWithMentions, parseMentions, fireMe
 import { ActivityFeed } from './ui/ActivityFeed';
 import { compressImageToDataUrl, compressImageToBlob } from '../lib/photoCompress';
 import { uploadPhotoToStorage, deletePhotoFromStorage } from '../lib/photoStorage';
+import { logUpload } from '../lib/changeLog';
 
 // ─── constants ────────────────────────────────────────────────────────────────
 
@@ -784,7 +785,13 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
     Array.from(files).forEach(async file => {
       if (!file.type.startsWith('image/')) return;
       const photoId = `ph-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      const uploadStart = Date.now();
       try {
+        logUpload('photo.upload_start', photoId, {
+          name: file.name, size: file.size, type: file.type,
+          jobId: stableWoIdRef.current, category: uploadCategory,
+        });
+
         // Step 1: compress to dataUrl for optimistic preview (instant display)
         const dataUrl = await compressImageToDataUrl(file);
         const photo: WOPhoto = {
@@ -805,11 +812,21 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
         setUploading(pendingUploads.current.size > 0);
 
         if (result.url) {
+          const durationMs = Date.now() - uploadStart;
+          // Cache-bust so browser always fetches the freshly uploaded file
+          const bustUrl = result.url.includes('?') ? `${result.url}&t=${Date.now()}` : `${result.url}?t=${Date.now()}`;
+          logUpload('photo.upload_success', photoId, {
+            storageUrl: bustUrl, name: file.name, jobId: stableWoIdRef.current,
+          }, undefined, durationMs);
           // Swap dataUrl → storageUrl; dataUrl cleared so it's not synced to app_data
           setWoPhotos(prev => prev.map(p =>
-            p.id === photoId ? { ...p, storageUrl: result.url!, dataUrl: '' } : p
+            p.id === photoId ? { ...p, storageUrl: bustUrl, dataUrl: '' } : p
           ));
         } else {
+          const durationMs = Date.now() - uploadStart;
+          logUpload('photo.upload_fail', photoId, {
+            error: result.error, name: file.name, jobId: stableWoIdRef.current,
+          }, undefined, durationMs);
           if (result.error === 'session_expired') {
             setUploadError('Session expired — please re-login to save photos.');
           } else {
@@ -828,6 +845,9 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
       } catch (err) {
         pendingUploads.current.delete(photoId);
         setUploading(pendingUploads.current.size > 0);
+        logUpload('photo.upload_fail', photoId, {
+          error: String(err), name: file.name, jobId: stableWoIdRef.current,
+        }, undefined, Date.now() - uploadStart);
         console.error('[WorkOrderPanel] photo upload error', err);
         setUploadError('Photo upload failed. Check your connection.');
         // Still save — other concurrent uploads may have succeeded.
