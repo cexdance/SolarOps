@@ -16,22 +16,33 @@ export async function compressImageToDataUrl(
     return await fileToDataUrl(file);
   }
 
-  const bitmap = await loadBitmap(file);
-  const { width, height } = scaleToFit(bitmap.width, bitmap.height, maxEdge);
-
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) {
+  // HEIC/HEIF: Canvas cannot decode these on non-WebKit engines (iOS Chrome).
+  // Fall back to FileReader so callers still get a usable dataURL.
+  if (file.type === 'image/heic' || file.type === 'image/heif') {
     return await fileToDataUrl(file);
   }
-  ctx.drawImage(bitmap as CanvasImageSource, 0, 0, width, height);
-  if ('close' in bitmap && typeof (bitmap as ImageBitmap).close === 'function') {
-    (bitmap as ImageBitmap).close();
-  }
 
-  return canvas.toDataURL('image/jpeg', quality);
+  try {
+    const bitmap = await loadBitmap(file);
+    const { width, height } = scaleToFit(bitmap.width, bitmap.height, maxEdge);
+
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      return await fileToDataUrl(file);
+    }
+    ctx.drawImage(bitmap as CanvasImageSource, 0, 0, width, height);
+    if ('close' in bitmap && typeof (bitmap as ImageBitmap).close === 'function') {
+      (bitmap as ImageBitmap).close();
+    }
+
+    return canvas.toDataURL('image/jpeg', quality);
+  } catch {
+    // Any canvas/decode failure — fall back to raw dataURL
+    return await fileToDataUrl(file);
+  }
 }
 
 async function loadBitmap(file: File): Promise<ImageBitmap | HTMLImageElement> {
@@ -84,26 +95,36 @@ export async function compressImageToBlob(
 ): Promise<Blob> {
   if (!file.type.startsWith('image/')) return file;
 
-  const bitmap = await loadBitmap(file);
-  const { width, height } = scaleToFit(bitmap.width, bitmap.height, maxEdge);
+  // HEIC/HEIF: iOS camera default. iOS Safari auto-converts when reading from the
+  // Photos library, but iOS Chrome may give raw HEIC. Canvas cannot decode HEIC —
+  // skip compression and upload the original file directly.
+  if (file.type === 'image/heic' || file.type === 'image/heif') return file;
 
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return file;
-  ctx.drawImage(bitmap as CanvasImageSource, 0, 0, width, height);
-  if ('close' in bitmap && typeof (bitmap as ImageBitmap).close === 'function') {
-    (bitmap as ImageBitmap).close();
+  try {
+    const bitmap = await loadBitmap(file);
+    const { width, height } = scaleToFit(bitmap.width, bitmap.height, maxEdge);
+
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return file;
+    ctx.drawImage(bitmap as CanvasImageSource, 0, 0, width, height);
+    if ('close' in bitmap && typeof (bitmap as ImageBitmap).close === 'function') {
+      (bitmap as ImageBitmap).close();
+    }
+
+    const blob = await new Promise<Blob | null>(res => {
+      canvas.toBlob(res, 'image/jpeg', quality);
+    });
+    // canvas.toBlob returns null on iOS when memory is low or the image type is
+    // unsupported by the GPU compositor. Fall back to the original file.
+    return blob ?? file;
+  } catch {
+    // Any compression error (HEIC decode failure, canvas SecurityError, etc.)
+    // — upload the original file rather than failing the whole operation.
+    return file;
   }
-
-  return new Promise<Blob>((resolve, reject) => {
-    canvas.toBlob(
-      blob => (blob ? resolve(blob) : reject(new Error('canvas.toBlob returned null'))),
-      'image/jpeg',
-      quality,
-    );
-  });
 }
 
 /** Approximate decoded byte length of a data:*;base64 URL. */
