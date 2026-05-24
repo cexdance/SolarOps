@@ -11,10 +11,12 @@ import {
   LayoutGrid,
   List as ListIcon,
   Calendar,
+  Printer,
 } from 'lucide-react';
 import { Job, Customer, User as UserType } from '../types';
 import { notifyAdminForInvoice } from '../lib/quoteService';
 import { WorkOrderCalendar } from './WorkOrderCalendar';
+import { BillingReportModal } from './BillingReportModal';
 
 interface BillingProps {
   jobs: Job[];
@@ -36,6 +38,7 @@ export const Billing: React.FC<BillingProps> = ({
   const [filter, setFilter] = useState<'all' | 'unbilled' | 'invoiced' | 'paid'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [processingIds, setProcessingIds] = useState<string[]>([]);
+  const [showReport, setShowReport] = useState(false);
   const [viewMode, setViewMode] = useState<'kanban' | 'list' | 'calendar'>(() => {
     const saved = localStorage.getItem('solarops_billing_view');
     if (saved === 'kanban' || saved === 'list' || saved === 'calendar') return saved as 'kanban' | 'list' | 'calendar';
@@ -124,9 +127,18 @@ export const Billing: React.FC<BillingProps> = ({
   return (
     <div className="p-4 md:p-6 pb-24 md:pb-6">
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-900">Billing</h1>
-        <p className="text-slate-500 mt-1">Manage invoices and track payments</p>
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Billing</h1>
+          <p className="text-slate-500 mt-1">Manage invoices and track payments</p>
+        </div>
+        <button
+          onClick={() => setShowReport(true)}
+          className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white text-sm font-semibold rounded-xl hover:bg-slate-700 transition-colors shrink-0 cursor-pointer"
+        >
+          <Printer className="w-4 h-4" />
+          Print Report
+        </button>
       </div>
 
       {/* Stats Cards */}
@@ -316,6 +328,21 @@ export const Billing: React.FC<BillingProps> = ({
           customers={customers}
           users={[]}
           onJobClick={() => {}}
+        />
+      )}
+
+      {/* Billing Report Modal */}
+      {showReport && (
+        <BillingReportModal
+          jobs={filteredJobs}
+          customers={customers}
+          reportTitle={
+            filter === 'all'      ? 'Full Billing Report' :
+            filter === 'unbilled' ? 'Unbilled Jobs Report' :
+            filter === 'invoiced' ? 'Invoiced Jobs Report' :
+                                    'Paid Jobs Report'
+          }
+          onClose={() => setShowReport(false)}
         />
       )}
 

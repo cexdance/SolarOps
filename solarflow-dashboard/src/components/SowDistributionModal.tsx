@@ -317,17 +317,14 @@ export const SowDistributionModal: React.FC<Props> = ({
               {/* ── Letterhead ──────────────────────────────────────── */}
               <div className="flex items-start justify-between gap-4 pb-5 border-b-2 border-slate-900">
                 {/* Left: brand */}
-                <div className="flex items-center gap-3">
-                  <div
-                    className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
-                    style={{ background: 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)' }}
-                  >
-                    <span className="text-white font-black text-sm">C</span>
-                  </div>
-                  <div>
-                    <p className="text-base font-black text-slate-900 tracking-tight leading-none">CONEXSOL ENERGY</p>
-                    <p className="text-[10px] text-orange-500 font-semibold uppercase tracking-widest mt-0.5">Scope of Work — Completion Report</p>
-                  </div>
+                <div className="flex flex-col gap-1">
+                  <img
+                    src="/conexsol-logo-color.svg"
+                    alt="Conexsol Energy"
+                    className="h-10 w-auto object-contain"
+                    style={{ maxWidth: '200px' }}
+                  />
+                  <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-widest">Scope of Work — Completion Report</p>
                 </div>
 
                 {/* Right: WO# + date */}
