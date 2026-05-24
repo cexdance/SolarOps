@@ -117,6 +117,7 @@ const LoginScreen: React.FC<{
       role: meta.role ?? 'admin',
       active: true,
       username: meta.username ?? '',
+      avatar: (meta.avatar_url as string | undefined) ?? undefined,
     };
     if (offerPasskey && passkeyAvailable && !localStorage.getItem(PASSKEY_STORE_KEY)) {
       await registerPasskey(supaUser.id, supaUser.email ?? '');
@@ -808,6 +809,8 @@ function App() {
           role: meta.role ?? 'admin',
           active: true,
           username: meta.username ?? '',
+          // Restore avatar from user_metadata so it shows on page load/refresh
+          avatar: (meta.avatar_url as string | undefined) ?? undefined,
         };
         setData(prev => ({ ...prev, currentUser: user }));
         setIsAuthenticated(true);
@@ -2434,7 +2437,14 @@ function App() {
               setData(prev => {
                 const next = {
                   ...prev,
-                  users: prev.users.map(u => u.id === currentUser.id ? { ...u, avatar: dataUrl ?? undefined } : u),
+                  // Update the logged-in user object so the header + Settings
+                  // Avatar renders immediately (currentUser = data.currentUser).
+                  currentUser: prev.currentUser
+                    ? { ...prev.currentUser, avatar: dataUrl ?? undefined }
+                    : prev.currentUser,
+                  users: prev.users.map(u =>
+                    u.id === currentUser.id ? { ...u, avatar: dataUrl ?? undefined } : u
+                  ),
                 };
                 saveData(next);
                 return next;
