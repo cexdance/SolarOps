@@ -32,6 +32,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       role: u.user_metadata?.role ?? 'admin',
       active: true,
       username: u.user_metadata?.username ?? '',
+      // Avatar URL stored in user_metadata by the client after Storage upload
+      avatar: (u.user_metadata?.avatar_url as string | undefined) ?? undefined,
     }));
 
   res.setHeader('Cache-Control', 'private, max-age=300');

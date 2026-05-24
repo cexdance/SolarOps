@@ -802,7 +802,16 @@ function App() {
         setData(prev => ({ ...prev, currentUser: user }));
         setIsAuthenticated(true);
         fetchStaffUsers().then(users => {
-          if (users.length > 0) setData(prev => ({ ...prev, users }));
+          if (users.length > 0) setData(prev => ({
+            ...prev,
+            // Merge: keep locally-set avatars that the API doesn't return yet
+            // (avatar lives in user_metadata.avatar_url; API populates it too,
+            // but guard against a race where metadata hasn't propagated yet).
+            users: users.map(u => {
+              const existing = prev.users.find(e => e.id === u.id);
+              return (u.avatar || !existing?.avatar) ? u : { ...u, avatar: existing.avatar };
+            }),
+          }));
         });
         // Flush any change log entries that were queued while offline
         flushChangeLog().catch(() => {});
@@ -889,7 +898,13 @@ function App() {
     setIsContractorMode(false);
     if (forcePasswordChange) { setMustChangePassword(true); return; }
     fetchStaffUsers().then(users => {
-      if (users.length > 0) setData(prev => ({ ...prev, users }));
+      if (users.length > 0) setData(prev => ({
+        ...prev,
+        users: users.map(u => {
+          const existing = prev.users.find(e => e.id === u.id);
+          return (u.avatar || !existing?.avatar) ? u : { ...u, avatar: existing.avatar };
+        }),
+      }));
     });
     if (user.role === 'sales') {
       setCurrentView('crm');
@@ -2008,7 +2023,13 @@ function App() {
           setMustChangePassword(false);
           if (!isContractorMode) {
             fetchStaffUsers().then(users => {
-              if (users.length > 0) setData(prev => ({ ...prev, users }));
+              if (users.length > 0) setData(prev => ({
+                ...prev,
+                users: users.map(u => {
+                  const existing = prev.users.find(e => e.id === u.id);
+                  return (u.avatar || !existing?.avatar) ? u : { ...u, avatar: existing.avatar };
+                }),
+              }));
             });
             if (data.currentUser?.role === 'sales') setCurrentView('crm');
           }
@@ -2396,6 +2417,10 @@ function App() {
                 { avatarUrl: dataUrl },
                 currentUser.email ?? 'unknown',
               );
+              // Persist avatar URL into Supabase Auth user_metadata so it
+              // survives fetchStaffUsers() overwrites and syncs cross-device.
+              supabase.auth.updateUser({ data: { avatar_url: dataUrl ?? null } })
+                .catch(err => console.warn('[Avatar] Failed to persist to user_metadata:', err));
               setData(prev => {
                 const next = {
                   ...prev,
