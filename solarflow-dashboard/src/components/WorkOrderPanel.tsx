@@ -2317,28 +2317,34 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                 }}
                 tabIndex={0}
                 className="relative flex flex-col items-center gap-3 p-6 bg-slate-800 rounded-2xl border-2 border-dashed border-slate-600 hover:border-orange-400 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-orange-400"
-                onClick={() => photoInputRef.current?.click()}
               >
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-xl bg-orange-500 flex items-center justify-center">
-                    <Camera className="w-6 h-6 text-white" />
+                {/*
+                  iOS Safari/Chrome blocks programmatic input.click() from div onClick handlers.
+                  Using <label htmlFor> is the only reliable cross-platform pattern.
+                  capture="environment" is intentionally omitted so users can choose between
+                  camera, photo library, and files — not just the rear camera.
+                */}
+                <label htmlFor="wo-photo-upload" className="flex flex-col items-center gap-3 cursor-pointer w-full">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-xl bg-orange-500 flex items-center justify-center">
+                      <Camera className="w-6 h-6 text-white" />
+                    </div>
+                    <div className="w-12 h-12 rounded-xl bg-slate-700 flex items-center justify-center">
+                      <Upload className="w-6 h-6 text-slate-300" />
+                    </div>
                   </div>
-                  <div className="w-12 h-12 rounded-xl bg-slate-700 flex items-center justify-center">
-                    <Upload className="w-6 h-6 text-slate-300" />
-                  </div>
-                </div>
-                <span className="text-sm font-semibold text-white">Tap to take photo or choose files</span>
-                <span className="text-xs text-slate-400">Drag & drop or paste (Ctrl+V) images here</span>
-                <span className="text-[10px] text-orange-400 capitalize">{PHOTO_CATEGORY_LABELS[uploadCategory]}</span>
+                  <span className="text-sm font-semibold text-white">Tap to take photo or choose files</span>
+                  <span className="text-xs text-slate-400">Drag & drop or paste (Ctrl+V) images here</span>
+                  <span className="text-[10px] text-orange-400 capitalize">{PHOTO_CATEGORY_LABELS[uploadCategory]}</span>
+                </label>
                 <input
+                  id="wo-photo-upload"
                   ref={photoInputRef}
                   type="file"
                   accept="image/*"
                   multiple
-                  capture="environment"
                   className="hidden"
                   onChange={e => { handlePhotoFiles(e.target.files); e.target.value = ''; }}
-                  onClick={e => e.stopPropagation()}
                 />
               </div>
 
