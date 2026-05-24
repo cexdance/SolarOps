@@ -18,6 +18,7 @@ import { searchParts, CatalogPart } from '../lib/partsCatalog';
 import { AddressAutocomplete, GMAPS_KEY_STORAGE, loadGoogleMaps } from './AddressAutocomplete';
 import { AddressLink } from './AddressLink';
 import { MentionTextarea, MentionUser, renderWithMentions, parseMentions, fireMentionNotifications } from './ui/MentionTextarea';
+import { SowDistributionModal, SOW_DISTRIBUTION_NAMES } from './SowDistributionModal';
 import { ActivityFeed } from './ui/ActivityFeed';
 import { compressImageToDataUrl, compressImageToBlob } from '../lib/photoCompress';
 import { uploadPhotoToStorage, deletePhotoFromStorage } from '../lib/photoStorage';
@@ -410,6 +411,8 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
   const [auditLog, setAuditLog] = useState<AuditEntry[]>(job?.auditLog ?? []);
   // Delete confirmation (0=idle, 1=first confirm, 2=confirmed)
   const [deleteStep, setDeleteStep] = useState(0);
+  // SOW Distribution Report state
+  const [showSowDistribution, setShowSowDistribution] = useState(false);
   // Quote modal state
   const [showQuotePreview, setShowQuotePreview] = useState(false);
   const [quoteSending, setQuoteSending] = useState(false);
@@ -1157,6 +1160,32 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
         });
       }
     }
+
+    // ── SOW Distribution — fires when WO is marked completed ─────────────
+    // Notify Anthony Lopez, Daniel Matos, Cesar Jurado and auto-open the report.
+    const isNowCompleted =
+      effectiveWoStatus === 'completed' && job?.woStatus !== 'completed';
+    if (isNowCompleted && users.length > 0) {
+      const distIds = users
+        .filter(u => SOW_DISTRIBUTION_NAMES.some(name =>
+          u.name.toLowerCase().includes(name.split(' ')[0].toLowerCase())
+        ))
+        .map(u => u.id);
+      const woLabel = partialJob.woNumber ?? job?.woNumber ?? 'Work Order';
+      if (distIds.length > 0) {
+        fireMentionNotifications({
+          mentionedUserIds: distIds,
+          notifierName: currentUserName || 'Staff',
+          context: `${siteName} — ${woLabel}`,
+          contextId: siteId,
+          contextType: 'workOrder',
+          message: `✅ Work Order ${woLabel} has been marked COMPLETED for ${siteName}. SOW Distribution Report is ready for review.`,
+        });
+      }
+      // Auto-open the SOW distribution report
+      setShowSowDistribution(true);
+    }
+
     // Panel always stays open after save — user closes manually
   };
 
@@ -2752,6 +2781,20 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                 Preview Report
               </button>
             )}
+            {/* SOW Distribution Report — always accessible once a WO exists */}
+            {!isNew && (
+              <button
+                onClick={() => setShowSowDistribution(true)}
+                className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg transition-colors cursor-pointer ${
+                  job?.woStatus === 'completed'
+                    ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                    : 'text-slate-700 border border-slate-200 hover:bg-slate-50'
+                }`}
+              >
+                <FileText className="w-4 h-4" />
+                SOW Report
+              </button>
+            )}
             {!isNew && onDeleteJob && (
               deleteStep === 0 ? (
                 <button
@@ -3150,6 +3193,20 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
               handleSave(next, true);
             }
           }}
+        />
+      )}
+
+      {/* ── SOW Distribution Report Modal ─────────────────────────── */}
+      {showSowDistribution && job && (
+        <SowDistributionModal
+          job={{ ...job, serviceReport, nextSteps, completionNotes: job.completionNotes, woPhotos }}
+          siteName={siteName}
+          siteAddress={siteAddress}
+          customer={customer}
+          contractors={contractors}
+          technicians={technicians}
+          users={users}
+          onClose={() => setShowSowDistribution(false)}
         />
       )}
     </div>
