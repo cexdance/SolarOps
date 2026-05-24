@@ -3,11 +3,11 @@
 
 import React, { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import {
-  X, ChevronRight, Plus, Trash2, Upload, FileText,
+  X, ChevronRight, Plus, Trash2, Upload, FileText, Check,
   CheckCircle, Clock, AlertTriangle, DollarSign, Wrench,
   Camera, ClipboardList, Package, ZapOff, Zap, UserCheck,
   ShieldCheck, ReceiptText, Banknote, TrendingUp, TrendingDown, Users,
-  RotateCcw, History, Navigation, Loader2, RefreshCw,
+  RotateCcw, History, Navigation, Loader2, RefreshCw, FolderOpen,
 } from 'lucide-react';
 import { Job, WOStatus, WOLineItem, WOPhoto, WOServiceStatus, WO_TO_JOB_STATUS, RMAEntry, AuditEntry } from '../types';
 import { updateClientStatus } from '../lib/siteProfileStore';
@@ -113,6 +113,23 @@ const PHOTO_CATEGORY_LABELS: Record<WOPhoto['category'], string> = {
   serial:  'Serial #',
   process: 'In Progress',
   parts:   'Parts / Equipment',
+};
+
+// Short label for the thumbnail chip
+const PHOTO_CATEGORY_SHORT: Record<WOPhoto['category'], string> = {
+  before:  'Before',
+  after:   'After',
+  serial:  'Serial',
+  process: 'Progress',
+  parts:   'Parts',
+};
+
+const CATEGORY_CHIP_COLOR: Record<WOPhoto['category'], string> = {
+  before:  'bg-blue-500',
+  after:   'bg-emerald-500',
+  serial:  'bg-violet-500',
+  process: 'bg-amber-500',
+  parts:   'bg-slate-500',
 };
 
 const SERVICE_STATUS_OPTIONS: { key: WOServiceStatus; label: string; icon: React.ReactNode }[] = [
@@ -522,6 +539,35 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
   const photoInputRef = useRef<HTMLInputElement>(null);
   const [uploadCategory, setUploadCategory] = useState<WOPhoto['category']>('before');
 
+  // ── Photo multi-select / category-reassign state ───────────────────────
+  const [selectMode, setSelectMode]               = useState(false);
+  const [selectedPhotoIds, setSelectedPhotoIds]   = useState<Set<string>>(new Set());
+  const [editingCategoryFor, setEditingCategoryFor] = useState<string | null>(null);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const startLongPress = useCallback((photoId: string) => {
+    longPressTimer.current = setTimeout(() => {
+      setSelectMode(true);
+      setSelectedPhotoIds(new Set([photoId]));
+      longPressTimer.current = null;
+    }, 450);
+  }, []);
+
+  const cancelLongPress = useCallback(() => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  }, []);
+
+  const reassignPhotos = useCallback((ids: Set<string>, newCat: WOPhoto['category']) => {
+    setWoPhotos(prev => prev.map(p => ids.has(p.id) ? { ...p, category: newCat } : p));
+    setSelectMode(false);
+    setSelectedPhotoIds(new Set());
+    setEditingCategoryFor(null);
+    setTimeout(() => handleSaveRef.current(undefined, true), 0);
+  }, []);
+
   // Service report
   const [serviceReport, setServiceReport]   = useState(job?.serviceReport ?? '');
   const [serviceStatus, setServiceStatus]   = useState<WOServiceStatus | undefined>(job?.serviceStatus);
@@ -779,9 +825,10 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
   // Photo upload — compress then push to Supabase Storage; store URL not base64.
   // Uses a stable folder ID (stableWoIdRef) so new WOs don't collide in /unsaved/.
   // Tracks in-flight uploads and auto-saves the WO after each successful upload.
-  const handlePhotoFiles = useCallback((files: FileList | null) => {
+  const handlePhotoFiles = useCallback((files: FileList | null, forceCat?: WOPhoto['category']) => {
     if (!files) return;
     setUploadError(null);
+    const effectiveCat = forceCat ?? uploadCategory;
     Array.from(files).forEach(async file => {
       if (!file.type.startsWith('image/')) return;
       const photoId = `ph-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
@@ -789,14 +836,14 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
       try {
         logUpload('photo.upload_start', photoId, {
           name: file.name, size: file.size, type: file.type,
-          jobId: stableWoIdRef.current, category: uploadCategory,
+          jobId: stableWoIdRef.current, category: effectiveCat,
         });
 
         // Step 1: compress to dataUrl for optimistic preview (instant display)
         const dataUrl = await compressImageToDataUrl(file);
         const photo: WOPhoto = {
           id: photoId,
-          category: uploadCategory,
+          category: effectiveCat,
           name: file.name,
           dataUrl,
           createdAt: new Date().toISOString(),
@@ -2348,6 +2395,41 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                 />
               </div>
 
+              {/* ── Multi-select action bar ─────────────────────────────── */}
+              {selectMode && (
+                <div className="sticky top-0 z-10 bg-white border border-orange-200 rounded-xl p-3 shadow-lg flex items-center gap-2 flex-wrap">
+                  <span className="text-sm font-semibold text-slate-700 shrink-0">
+                    {selectedPhotoIds.size} selected
+                  </span>
+                  <div className="flex gap-1.5 flex-wrap flex-1">
+                    {PHOTO_CATEGORIES.map(c => (
+                      <button
+                        key={c}
+                        disabled={selectedPhotoIds.size === 0}
+                        onClick={() => reassignPhotos(selectedPhotoIds, c)}
+                        className={`px-2.5 py-1 rounded-full text-[11px] font-semibold text-white cursor-pointer active:scale-95 transition-transform disabled:opacity-40 ${CATEGORY_CHIP_COLOR[c]}`}
+                      >
+                        {PHOTO_CATEGORY_SHORT[c]}
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => { setSelectMode(false); setSelectedPhotoIds(new Set()); }}
+                    className="shrink-0 text-xs text-slate-400 hover:text-slate-700 px-2 py-1 rounded-lg border border-slate-200 cursor-pointer"
+                  >
+                    Done
+                  </button>
+                </div>
+              )}
+
+              {/* Hint — shown when photos exist and not in select mode */}
+              {woPhotos.length > 0 && !selectMode && (
+                <p className="text-[10px] text-slate-400 text-center flex items-center justify-center gap-1">
+                  <FolderOpen className="w-3 h-3" />
+                  Hold any photo to select &amp; move to a different category
+                </p>
+              )}
+
               {/* ── Photo grid — grouped by category ───────────────────── */}
               {PHOTO_CATEGORIES.map(cat => {
                 const photos = photosByCategory[cat];
@@ -2355,32 +2437,125 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                 return (
                   <div key={cat}>
                     <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-2">
+                      <span className={`w-2 h-2 rounded-full ${CATEGORY_CHIP_COLOR[cat]}`} />
                       {PHOTO_CATEGORY_LABELS[cat]}
                       <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-full font-bold">{photos.length}</span>
                     </h4>
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                      {photos.map(photo => (
-                        <div key={photo.id} className="relative group aspect-square rounded-xl overflow-hidden border border-slate-200 shadow-sm">
-                          <img src={photo.storageUrl ?? photo.dataUrl} alt={photo.name} className="w-full h-full object-cover" />
-                          <button
-                            onClick={() => removePhoto(photo.id)}
-                            className="absolute top-2 right-2 w-7 h-7 bg-black/70 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                      {photos.map(photo => {
+                        const isSelected = selectedPhotoIds.has(photo.id);
+                        const isEditingCat = editingCategoryFor === photo.id;
+                        return (
+                          <div
+                            key={photo.id}
+                            className={`relative group aspect-square rounded-xl overflow-hidden shadow-sm transition-all border-2 ${
+                              isSelected ? 'border-orange-400 shadow-orange-100' : 'border-slate-200'
+                            }`}
+                            onTouchStart={() => startLongPress(photo.id)}
+                            onTouchEnd={cancelLongPress}
+                            onTouchMove={cancelLongPress}
+                            onMouseDown={() => startLongPress(photo.id)}
+                            onMouseUp={cancelLongPress}
+                            onMouseLeave={cancelLongPress}
+                            onClick={() => {
+                              if (selectMode) {
+                                setSelectedPhotoIds(prev => {
+                                  const next = new Set(prev);
+                                  if (next.has(photo.id)) next.delete(photo.id);
+                                  else next.add(photo.id);
+                                  return next;
+                                });
+                              } else if (isEditingCat) {
+                                setEditingCategoryFor(null);
+                              }
+                            }}
                           >
-                            <X className="w-3.5 h-3.5 text-white" />
-                          </button>
-                          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent px-2 py-2">
-                            <p className="text-white text-[10px] truncate">{photo.name}</p>
+                            <img
+                              src={photo.storageUrl ?? photo.dataUrl}
+                              alt={photo.name}
+                              className="w-full h-full object-cover"
+                            />
+
+                            {/* Checkbox — select mode only */}
+                            {selectMode && (
+                              <div className={`absolute top-2 left-2 w-6 h-6 rounded-full border-2 flex items-center justify-center pointer-events-none transition-colors ${
+                                isSelected ? 'bg-orange-500 border-orange-500' : 'bg-white/80 border-white'
+                              }`}>
+                                {isSelected && <Check className="w-3.5 h-3.5 text-white" />}
+                              </div>
+                            )}
+
+                            {/* Delete — not in select mode, always visible on mobile */}
+                            {!selectMode && !isEditingCat && (
+                              <button
+                                onClick={e => { e.stopPropagation(); cancelLongPress(); removePhoto(photo.id); }}
+                                className="absolute top-2 right-2 w-7 h-7 bg-black/70 rounded-full flex items-center justify-center opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity cursor-pointer"
+                              >
+                                <X className="w-3.5 h-3.5 text-white" />
+                              </button>
+                            )}
+
+                            {/* Bottom bar — category chip (tap) or inline category picker */}
+                            <div className="absolute bottom-0 left-0 right-0">
+                              {isEditingCat ? (
+                                /* Inline picker — tap to reassign this single photo */
+                                <div
+                                  className="bg-black/90 px-2 py-2.5 flex gap-1.5 flex-wrap justify-center"
+                                  onClick={e => e.stopPropagation()}
+                                >
+                                  {PHOTO_CATEGORIES.map(c => (
+                                    <button
+                                      key={c}
+                                      onClick={e => {
+                                        e.stopPropagation();
+                                        reassignPhotos(new Set([photo.id]), c);
+                                        setEditingCategoryFor(null);
+                                      }}
+                                      className={`px-2 py-1 rounded-full text-[10px] font-bold text-white cursor-pointer active:scale-95 transition-transform ${
+                                        c === photo.category ? 'ring-2 ring-white ring-offset-1 ring-offset-black/50' : 'opacity-80 hover:opacity-100'
+                                      } ${CATEGORY_CHIP_COLOR[c]}`}
+                                    >
+                                      {PHOTO_CATEGORY_SHORT[c]}
+                                    </button>
+                                  ))}
+                                </div>
+                              ) : (
+                                /* Normal: filename + tappable category chip */
+                                <button
+                                  className="w-full bg-gradient-to-t from-black/70 to-transparent px-2 py-2 flex items-end justify-between cursor-pointer text-left"
+                                  onClick={e => {
+                                    e.stopPropagation();
+                                    cancelLongPress();
+                                    if (!selectMode) setEditingCategoryFor(photo.id);
+                                  }}
+                                >
+                                  <p className="text-white text-[10px] truncate flex-1 mr-1">{photo.name}</p>
+                                  <span className={`shrink-0 px-1.5 py-0.5 rounded-full text-[9px] font-bold text-white ${CATEGORY_CHIP_COLOR[photo.category]}`}>
+                                    {PHOTO_CATEGORY_SHORT[photo.category]}
+                                  </span>
+                                </button>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      ))}
-                      {/* Inline add button per category */}
-                      <button
-                        onClick={() => { setUploadCategory(cat); photoInputRef.current?.click(); }}
+                        );
+                      })}
+
+                      {/* Per-category add button — label/input for iOS compatibility */}
+                      <label
+                        htmlFor={`wo-photo-add-${cat}`}
                         className="aspect-square rounded-xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center gap-1 hover:border-orange-300 hover:bg-orange-50 transition-colors cursor-pointer text-slate-400 hover:text-orange-500"
                       >
                         <Plus className="w-5 h-5" />
                         <span className="text-[10px] font-medium">Add</span>
-                      </button>
+                      </label>
+                      <input
+                        id={`wo-photo-add-${cat}`}
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        className="hidden"
+                        onChange={e => { handlePhotoFiles(e.target.files, cat); e.target.value = ''; }}
+                      />
                     </div>
                   </div>
                 );
