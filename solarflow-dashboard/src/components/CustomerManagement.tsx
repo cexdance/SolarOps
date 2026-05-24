@@ -834,7 +834,7 @@ export const CustomerManagement: React.FC<CustomerManagementProps> = ({ currentU
                             <div>
                               <div className="flex items-center gap-2">
                                 <span className="font-medium text-slate-900 capitalize">
-                                  {interaction.type === 'quote' ? 'Xero Quote' : interaction.type}
+                                  {interaction.type === 'quote' ? 'Quote' : interaction.type}
                                 </span>
                                 {interaction.direction && (
                                   <span className="text-xs text-slate-400">
@@ -864,7 +864,7 @@ export const CustomerManagement: React.FC<CustomerManagementProps> = ({ currentU
                                         rel="noopener noreferrer"
                                         className="ml-2 inline-flex items-center gap-1 text-indigo-600 hover:text-indigo-800 underline"
                                       >
-                                        View in Xero <ExternalLink className="w-3 h-3" />
+                                        View Quote <ExternalLink className="w-3 h-3" />
                                       </a>
                                     )}
                                   </div>

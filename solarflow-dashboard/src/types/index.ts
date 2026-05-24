@@ -155,6 +155,8 @@ export interface WOPhoto {
   dataUrl: string;
   /** ID of the row in the local photoStore (IndexedDB). Set after migration. */
   photoStoreId?: string;
+  /** Public Supabase Storage URL. When set, use this instead of dataUrl for display. */
+  storageUrl?: string;
   createdAt: string;
 }
 
@@ -249,6 +251,9 @@ export interface Job {
   contractorPayDelayBonusAmount?: number;
   contractorAutoPayAt?: string;        // 28 days after completedAt
   archivedAt?: string;                 // ISO timestamp when archived
+  // Site Transfer fields
+  siteTransferInverterSerial?: string; // Inverter serial # for ownership transfer
+  siteTransferSiteId?: string;         // SolarEdge Site ID for ownership transfer
 }
 
 export interface RMAEntry {

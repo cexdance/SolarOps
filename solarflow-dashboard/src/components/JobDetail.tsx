@@ -20,7 +20,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { Job, Customer, User as UserType } from '../types';
-import { createXeroInvoice } from '../lib/xeroService';
+import { notifyAdminForInvoice } from '../lib/quoteService';
 
 interface JobDetailProps {
   job: Job;
@@ -28,7 +28,9 @@ interface JobDetailProps {
   technician: UserType;
   onBack: () => void;
   onUpdateJob: (job: Job) => void;
-  onCreateInvoice: (job: Job, xeroInvoiceId: string) => void;
+  onCreateInvoice?: (job: Job) => void;
+  users?: { id: string; name: string }[];
+  currentUserName?: string;
   isMobile: boolean;
 }
 
@@ -77,13 +79,17 @@ export const JobDetail: React.FC<JobDetailProps> = ({
     } else if (action.to === 'invoiced') {
       setIsLoading(true);
       try {
-        const result = await createXeroInvoice({ customer, job });
-        if (result.success && result.invoiceId) {
-          onUpdateJob({ ...job, status: action.to, xeroInvoiceId: result.invoiceId });
-          onCreateInvoice(job, result.invoiceId);
-        }
+        await notifyAdminForInvoice(
+          job.id,
+          job.woNumber ?? `WO-${job.id.slice(-6)}`,
+          customer.name,
+          job.totalAmount,
+          'Staff',
+          [],
+        );
+        onUpdateJob({ ...job, status: action.to });
       } catch (error) {
-        console.error('Invoice creation failed:', error);
+        console.error('Invoice notification failed:', error);
       } finally {
         setIsLoading(false);
       }
@@ -309,17 +315,11 @@ export const JobDetail: React.FC<JobDetailProps> = ({
           </div>
         </div>
 
-        {job.xeroInvoiceId && (
+        {job.status === 'invoiced' && (
           <div className="mt-3 pt-3 border-t border-slate-100">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-green-600">
-                <CheckCircle className="w-4 h-4" />
-                <span className="text-sm font-medium">Invoiced</span>
-              </div>
-              <button className="text-sm text-blue-600 flex items-center gap-1 hover:underline">
-                <ExternalLink className="w-3 h-3" />
-                View in Xero
-              </button>
+            <div className="flex items-center gap-2 text-purple-600">
+              <CheckCircle className="w-4 h-4" />
+              <span className="text-sm font-medium">Invoiced — Awaiting Payment</span>
             </div>
           </div>
         )}

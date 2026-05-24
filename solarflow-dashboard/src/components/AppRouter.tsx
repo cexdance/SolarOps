@@ -58,9 +58,7 @@ export interface AppRouterProps {
   onSetLinkedContractor: (c: Contractor) => void;
   onSetContractors: React.Dispatch<React.SetStateAction<Contractor[]>>;
   onSetServiceRates: React.Dispatch<React.SetStateAction<any>>;
-  // Xero / SolarEdge
-  onConnectXero: (clientId?: string) => Promise<void>;
-  onXeroDisconnect: () => void;
+  // SolarEdge
   onSaveSolarEdgeApiKey: (key: string) => void;
   onSyncSolarEdge: () => Promise<void>;
   onUpdateFloridaSites?: () => Promise<{ newCount: number; total: number }>;
@@ -97,8 +95,6 @@ export function AppRouter({
   onSetContractors,
   serviceRates,
   onSetServiceRates,
-  onConnectXero,
-  onXeroDisconnect,
   onSaveSolarEdgeApiKey,
   onSyncSolarEdge,
   onUpdateFloridaSites,
@@ -218,22 +214,18 @@ export function AppRouter({
             users={data.users.map(u => ({ id: u.id, name: u.name, username: u.username }))}
             currentUserName={currentUser?.name}
             currentUserRole={currentUser?.role}
-            xeroConnected={data.xeroConfig.connected}
             customer={selectedCustomer}
             onClose={() => onViewChange('jobs')}
             onSave={(partial) => onUpdateJob({ ...selectedJob, ...partial, id: selectedJob.id } as Job)}
             onDeleteJob={(jobId) => { onDeleteJob(jobId); onViewChange('jobs'); }}
             onDispatch={(cj) => onDispatch(cj)}
-            onQuoteSent={(quoteId, quoteNumber, onlineUrl) => {
+            onQuoteSent={(quoteId, quoteNumber) => {
               const crmCustomers = loadCustomers();
               const crmMatch = crmCustomers.find(c => c.email?.toLowerCase() === selectedCustomer?.email?.toLowerCase());
               if (crmMatch) {
                 const interactions = loadInteractions();
                 const label = quoteNumber ? `Quote #${quoteNumber}` : 'Quote';
-                const content = onlineUrl
-                  ? `${label} sent via Xero — ${onlineUrl}`
-                  : `${label} sent via Xero (Quote ID: ${quoteId})`;
-                saveInteractions(addInteraction(interactions, crmMatch.id, 'quote', content, currentUser?.id ?? '', currentUser?.name ?? 'Staff', { subject: `${label} sent via Xero`, direction: 'outbound' }));
+                saveInteractions(addInteraction(interactions, crmMatch.id, 'quote', `${label} emailed to ${selectedCustomer?.email ?? 'customer'}`, currentUser?.id ?? '', currentUser?.name ?? 'Staff', { subject: `${label} sent via email`, direction: 'outbound' }));
               }
             }}
             onViewCustomer={(id) => { onSelectCustomer(id); onViewChange('customers'); }}
@@ -285,9 +277,8 @@ export function AppRouter({
           customers={data.customers}
           users={data.users}
           onUpdateJob={onUpdateJob}
-          xeroConnected={data.xeroConfig.connected}
-          onConnectXero={onConnectXero}
           isMobile={isMobile}
+          currentUserName={currentUser?.name}
         />
       );
 
@@ -373,10 +364,7 @@ export function AppRouter({
       return (
         <Settings
           currentUser={currentUser}
-          xeroConfig={data.xeroConfig}
           solarEdgeConfig={data.solarEdgeConfig}
-          onConnectXero={onConnectXero}
-          onXeroDisconnect={onXeroDisconnect}
           onSaveSolarEdgeApiKey={onSaveSolarEdgeApiKey}
           onSyncSolarEdge={onSyncSolarEdge}
           onLogout={onLogout}

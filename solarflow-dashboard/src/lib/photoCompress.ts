@@ -72,6 +72,40 @@ function fileToDataUrl(file: File): Promise<string> {
   });
 }
 
+/**
+ * Compress a File to a Blob (JPEG) without the base64 round-trip.
+ * Use this when you only need a Blob for upload — saves ~33% memory vs
+ * compressImageToDataUrl + fetch(dataUrl).blob().
+ */
+export async function compressImageToBlob(
+  file: File,
+  maxEdge = 1600,
+  quality = 0.75,
+): Promise<Blob> {
+  if (!file.type.startsWith('image/')) return file;
+
+  const bitmap = await loadBitmap(file);
+  const { width, height } = scaleToFit(bitmap.width, bitmap.height, maxEdge);
+
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return file;
+  ctx.drawImage(bitmap as CanvasImageSource, 0, 0, width, height);
+  if ('close' in bitmap && typeof (bitmap as ImageBitmap).close === 'function') {
+    (bitmap as ImageBitmap).close();
+  }
+
+  return new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob(
+      blob => (blob ? resolve(blob) : reject(new Error('canvas.toBlob returned null'))),
+      'image/jpeg',
+      quality,
+    );
+  });
+}
+
 /** Approximate decoded byte length of a data:*;base64 URL. */
 export function estimateDataUrlBytes(dataUrl: string): number {
   if (!dataUrl.startsWith('data:')) return dataUrl.length;

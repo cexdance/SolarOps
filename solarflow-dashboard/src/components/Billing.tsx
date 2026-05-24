@@ -7,15 +7,13 @@ import {
   Clock,
   Search,
   Send,
-  ExternalLink,
-  FileText,
   ChevronRight,
   LayoutGrid,
   List as ListIcon,
   Calendar,
 } from 'lucide-react';
 import { Job, Customer, User as UserType } from '../types';
-import { createXeroInvoice } from '../lib/xeroService';
+import { notifyAdminForInvoice } from '../lib/quoteService';
 import { WorkOrderCalendar } from './WorkOrderCalendar';
 
 interface BillingProps {
@@ -23,9 +21,8 @@ interface BillingProps {
   customers: Customer[];
   users: UserType[];
   onUpdateJob: (job: Job) => void;
-  xeroConnected: boolean;
-  onConnectXero: () => void;
   isMobile: boolean;
+  currentUserName?: string;
 }
 
 export const Billing: React.FC<BillingProps> = ({
@@ -33,9 +30,8 @@ export const Billing: React.FC<BillingProps> = ({
   customers,
   users,
   onUpdateJob,
-  xeroConnected,
-  onConnectXero,
   isMobile,
+  currentUserName,
 }) => {
   const [filter, setFilter] = useState<'all' | 'unbilled' | 'invoiced' | 'paid'>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -86,20 +82,25 @@ export const Billing: React.FC<BillingProps> = ({
 
   const getCustomer = (customerId: string) => customers.find((c) => c.id === customerId);
 
-  const handleGenerateInvoice = async (job: Job) => {
+  const handleRequestInvoice = async (job: Job) => {
     const customer = getCustomer(job.customerId);
     if (!customer) return;
 
-    setProcessingIds([...processingIds, job.id]);
+    setProcessingIds(prev => [...prev, job.id]);
     try {
-      const result = await createXeroInvoice({ customer, job });
-      if (result.success && result.invoiceId) {
-        onUpdateJob({ ...job, status: 'invoiced', xeroInvoiceId: result.invoiceId });
-      }
+      await notifyAdminForInvoice(
+        job.id,
+        job.woNumber ?? `WO-${job.id.slice(-6)}`,
+        customer.name,
+        job.totalAmount,
+        currentUserName ?? 'Staff',
+        users.map(u => ({ id: u.id, name: u.name })),
+      );
+      onUpdateJob({ ...job, status: 'invoiced' });
     } catch (error) {
-      console.error('Invoice generation failed:', error);
+      console.error('Invoice notification failed:', error);
     } finally {
-      setProcessingIds(processingIds.filter((id) => id !== job.id));
+      setProcessingIds(prev => prev.filter(id => id !== job.id));
     }
   };
 
@@ -127,29 +128,6 @@ export const Billing: React.FC<BillingProps> = ({
         <h1 className="text-2xl font-bold text-slate-900">Billing</h1>
         <p className="text-slate-500 mt-1">Manage invoices and track payments</p>
       </div>
-
-      {/* Xero Connection Banner */}
-      {!xeroConnected && (
-        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-blue-100 rounded-lg">
-              <FileText className="w-5 h-5 text-blue-600" />
-            </div>
-            <div className="flex-1">
-              <p className="font-semibold text-blue-900">Connect to Xero</p>
-              <p className="text-sm text-blue-700">
-                Connect your Xero account to generate invoices automatically
-              </p>
-            </div>
-            <button
-              onClick={onConnectXero}
-              className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              Connect
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
@@ -298,21 +276,21 @@ export const Billing: React.FC<BillingProps> = ({
                           {billingStatus === 'unbilled' && (
                             <>
                               <button
-                                onClick={() => handleGenerateInvoice(job)}
-                                disabled={processingIds.includes(job.id) || !xeroConnected}
-                                className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg text-xs font-medium transition-colors ${xeroConnected ? 'bg-green-600 text-white hover:bg-green-700' : 'bg-slate-200 text-slate-500 cursor-not-allowed'}`}
+                                onClick={() => handleRequestInvoice(job)}
+                                disabled={processingIds.includes(job.id)}
+                                className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg text-xs font-medium transition-colors bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 cursor-pointer"
                               >
-                                <Send className="w-3 h-3" /> Invoice
+                                <Send className="w-3 h-3" /> Notify Daniel
                               </button>
-                              <button onClick={() => handleMarkPaid(job)} className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-50">Paid</button>
+                              <button onClick={() => handleMarkPaid(job)} className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-50 cursor-pointer">Paid</button>
                             </>
                           )}
                           {billingStatus === 'invoiced' && (
                             <>
-                              <button className="flex-1 flex items-center justify-center gap-1 py-1.5 bg-purple-100 text-purple-700 rounded-lg text-xs font-medium hover:bg-purple-200">
-                                <ExternalLink className="w-3 h-3" /> Xero
-                              </button>
-                              <button onClick={() => handleMarkPaid(job)} className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700">Paid</button>
+                              <span className="flex-1 flex items-center justify-center gap-1 py-1.5 bg-purple-100 text-purple-700 rounded-lg text-xs font-medium">
+                                <Clock className="w-3 h-3" /> Awaiting Payment
+                              </span>
+                              <button onClick={() => handleMarkPaid(job)} className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 cursor-pointer">Paid</button>
                             </>
                           )}
                           {billingStatus === 'paid' && (
@@ -383,7 +361,7 @@ export const Billing: React.FC<BillingProps> = ({
                       <span>{job.serviceType}</span>
                       <span>•</span>
                       <span>Completed: {job.completedAt ? new Date(job.completedAt).toLocaleDateString() : 'N/A'}</span>
-                      {job.xeroInvoiceId && (
+                      {job.status === 'invoiced' && (
                         <>
                           <span>•</span>
                           <span className="text-purple-600">Invoiced</span>
@@ -405,32 +383,25 @@ export const Billing: React.FC<BillingProps> = ({
                   {billingStatus === 'unbilled' && (
                     <>
                       <button
-                        onClick={() => handleGenerateInvoice(job)}
-                        disabled={processingIds.includes(job.id) || !xeroConnected}
-                        className={`
-                          flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg font-medium transition-colors
-                          ${xeroConnected
-                            ? 'bg-green-600 text-white hover:bg-green-700'
-                            : 'bg-slate-200 text-slate-500 cursor-not-allowed'
-                          }
-                          ${processingIds.includes(job.id) ? 'opacity-50' : ''}
-                        `}
+                        onClick={() => handleRequestInvoice(job)}
+                        disabled={processingIds.includes(job.id)}
+                        className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg font-medium transition-colors bg-green-600 text-white hover:bg-green-700 cursor-pointer ${processingIds.includes(job.id) ? 'opacity-50' : ''}`}
                       >
                         {processingIds.includes(job.id) ? (
                           <>
                             <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                            Processing...
+                            Notifying...
                           </>
                         ) : (
                           <>
                             <Send className="w-4 h-4" />
-                            Generate Invoice
+                            Notify Daniel to Invoice
                           </>
                         )}
                       </button>
                       <button
                         onClick={() => handleMarkPaid(job)}
-                        className="px-4 py-2.5 border border-slate-200 rounded-lg font-medium text-slate-600 hover:bg-slate-50 transition-colors"
+                        className="px-4 py-2.5 border border-slate-200 rounded-lg font-medium text-slate-600 hover:bg-slate-50 transition-colors cursor-pointer"
                       >
                         Mark Paid
                       </button>
@@ -439,13 +410,13 @@ export const Billing: React.FC<BillingProps> = ({
 
                   {billingStatus === 'invoiced' && (
                     <>
-                      <button className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-purple-100 text-purple-700 rounded-lg font-medium hover:bg-purple-200 transition-colors">
-                        <ExternalLink className="w-4 h-4" />
-                        View in Xero
-                      </button>
+                      <span className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-purple-100 text-purple-700 rounded-lg font-medium">
+                        <Clock className="w-4 h-4" />
+                        Awaiting Payment
+                      </span>
                       <button
                         onClick={() => handleMarkPaid(job)}
-                        className="px-4 py-2.5 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors"
+                        className="px-4 py-2.5 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors cursor-pointer"
                       >
                         Mark Paid
                       </button>

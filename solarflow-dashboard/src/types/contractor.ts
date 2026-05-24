@@ -212,6 +212,10 @@ export interface ServiceRate {
   // Internal service account expense (billed internally, not to client)
   isServiceAccount?: boolean;
 
+  // Admin-team-only WOs: bypass quote approval, skip contractor assignment
+  bypassQuoteApproval?: boolean;
+  adminTeamOnly?: boolean;
+
   // Legacy fields (for backward compatibility)
   unit?: 'hour' | 'flat' | 'panel' | 'kw';
   rate?: number;

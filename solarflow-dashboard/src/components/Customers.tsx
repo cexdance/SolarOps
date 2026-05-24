@@ -1225,9 +1225,6 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
   const [previewGreeting, setPreviewGreeting] = useState('');
   const [previewAccountUpdates, setPreviewAccountUpdates] = useState('');
   const [previewEmail, setPreviewEmail] = useState('');
-  const [xeroInvoices, setXeroInvoices] = useState<any[]>([]);
-  const [xeroLoading, setXeroLoading] = useState(false);
-  const [xeroError, setXeroError] = useState('');
 
   const energyData = energyCache[graphPeriod] || [];
 
@@ -1435,43 +1432,6 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
     fetchEnergy();
   }, [siteId, graphPeriod]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Fetch Xero invoices for this customer
-  useEffect(() => {
-    const fetchXeroInvoices = async () => {
-      setXeroLoading(true);
-      setXeroError('');
-      try {
-        const accessToken = localStorage.getItem('solarops_xero_access_token');
-        const tenantId = localStorage.getItem('solarops_xero_tenant_id');
-        if (!accessToken || !tenantId) {
-          setXeroLoading(false);
-          return;
-        }
-        const contactName = encodeURIComponent(customer.name);
-        const resp = await fetch(
-          `/api/xero-api/api.xro/2.0/Invoices?where=Contact.Name=="${contactName}"&Statuses=AUTHORISED,OVERDUE&order=DueDate`,
-          {
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-              'xero-tenant-id': tenantId,
-              Accept: 'application/json',
-            },
-          }
-        );
-        if (resp.ok) {
-          const data = await resp.json();
-          setXeroInvoices(data.Invoices || []);
-        } else {
-          setXeroError('Could not fetch billing status');
-        }
-      } catch {
-        setXeroError('Xero not connected');
-      }
-      setXeroLoading(false);
-    };
-    fetchXeroInvoices();
-  }, [customer.name]);
-
   // Build the HTML report and open the preview modal
   // NLP-crafted greeting generator with timeframe and system state
   const buildGreeting = (kWh: number, savings: number, uptime: number) => {
@@ -1510,8 +1470,8 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
     if (!showReportPreview || !previewTrackingId) return '';
     const tid = previewTrackingId;
     const trackingPixel = `https://solarflow-dashboard-sooty.vercel.app/api/track?event=open&id=${tid}`;
-    const overdueInvs = xeroInvoices.filter(inv => inv.Status === 'OVERDUE');
-    const hasOverdue = overdueInvs.length > 0;
+    const overdueInvs: any[] = [];
+    const hasOverdue = false;
 
     const periodLabel = graphPeriod === 'week' ? 'Last 7 Days' : graphPeriod === 'month' ? 'Last 30 Days' : graphPeriod === 'quarter' ? 'Last 3 Months' : 'Last 12 Months';
     const systemSize  = siteData?.peakPower?.toFixed(1) || (peakPowerKw > 0 ? peakPowerKw.toFixed(1) : null);
@@ -1834,7 +1794,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
 
     return html;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showReportPreview, previewTrackingId, previewGreeting, previewAccountUpdates, previewDowntimeDays, previewServiceCalls, previewUptime, xeroInvoices, displayKwh, dollarsSaved, specificYield, co2Tons, lifetimeKwh, graphPeriod, peakPowerKw, siteId, siteData, customer]);
+  }, [showReportPreview, previewTrackingId, previewGreeting, previewAccountUpdates, previewDowntimeDays, previewServiceCalls, previewUptime, displayKwh, dollarsSaved, specificYield, co2Tons, lifetimeKwh, graphPeriod, peakPowerKw, siteId, siteData, customer]);
 
   // Approve & Send — sends via SMTP API (IONOS) or falls back to mailto
   const [sendError, setSendError] = useState<string | null>(null);
@@ -1903,7 +1863,6 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
     setSendingReport(false);
   };
 
-  const overdueInvoices = xeroInvoices.filter(inv => inv.Status === 'OVERDUE');
 
   return (
     <div className="space-y-4">
@@ -2072,59 +2031,6 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
             <span>This Month: <strong className="text-slate-700">{(siteOverview?.monthKwh ?? siteData?.monthKwh ?? 0).toFixed(1)} kWh</strong></span>
             <span>Lifetime: <strong className="text-slate-700">{lifetimeKwh >= 1000 ? `${(lifetimeKwh / 1000).toFixed(1)} MWh` : `${lifetimeKwh.toFixed(0)} kWh`}</strong></span>
           </div>
-        )}
-      </div>
-
-      {/* ── Xero Billing Status ───────────────────────────────────────── */}
-      <div className="bg-white rounded-xl border border-slate-200 p-4">
-        <h3 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
-          <DollarSign className="w-4 h-4 text-orange-500" />
-          Billing Status
-          <InfoTooltip text="Live billing status from Xero. Shows overdue or open invoices for this customer." />
-        </h3>
-        {xeroLoading ? (
-          <p className="text-sm text-slate-400">Checking Xero…</p>
-        ) : xeroError ? (
-          <p className="text-sm text-slate-400">{xeroError}</p>
-        ) : overdueInvoices.length > 0 ? (
-          <div className="space-y-2">
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-              <p className="text-sm text-amber-800 font-medium">
-                ⚠️ {overdueInvoices.length} overdue invoice{overdueInvoices.length > 1 ? 's' : ''}
-              </p>
-              <p className="text-xs text-amber-600 mt-1">
-                Friendly reminder will be included in the production report.
-              </p>
-            </div>
-            {overdueInvoices.map((inv: any) => (
-              <div key={inv.InvoiceID} className="flex items-center justify-between bg-slate-50 rounded-lg p-3">
-                <div>
-                  <p className="text-sm font-medium text-slate-700">{inv.InvoiceNumber}</p>
-                  <p className="text-xs text-slate-500">Due: {new Date(inv.DueDate).toLocaleDateString()}</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-bold text-red-600">${inv.AmountDue?.toFixed(2)}</span>
-                  <a
-                    href={`https://invoicing.xero.com/view/${inv.InvoiceID}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="p-1.5 rounded-lg hover:bg-slate-200 transition-colors"
-                    title="View in Xero"
-                  >
-                    <ExternalLink className="w-3.5 h-3.5 text-slate-500" />
-                  </a>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : xeroInvoices.length > 0 ? (
-          <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-            <p className="text-sm text-green-700 font-medium flex items-center gap-1.5">
-              <CheckCircle className="w-4 h-4" /> All invoices current
-            </p>
-          </div>
-        ) : (
-          <p className="text-sm text-slate-400">No invoices found for this customer in Xero.</p>
         )}
       </div>
 

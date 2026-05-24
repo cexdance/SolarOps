@@ -22,18 +22,15 @@ import {
   Camera,
 } from 'lucide-react';
 import { GMAPS_KEY_STORAGE } from './AddressAutocomplete';
-import { User as UserType, XeroConfig, SolarEdgeConfig } from '../types';
-import { XERO_CLIENT_ID_KEY, XERO_CLIENT_SECRET_KEY, getXeroClientSecret, setXeroClientSecret } from '../lib/xeroService';
+import { User as UserType, SolarEdgeConfig } from '../types';
 import { PhotoCleanupCard } from './admin/PhotoCleanupCard';
 import { Avatar } from './ui/Avatar';
-import { compressImageToDataUrl } from '../lib/photoCompress';
+import { compressImageToBlob } from '../lib/photoCompress';
+import { uploadAvatarToStorage } from '../lib/photoStorage';
 
 interface SettingsProps {
   currentUser: UserType | null;
-  xeroConfig: XeroConfig;
   solarEdgeConfig: SolarEdgeConfig;
-  onConnectXero: (clientId?: string) => Promise<void> | void;
-  onXeroDisconnect: () => void;
   onSaveSolarEdgeApiKey: (apiKey: string) => void;
   onSyncSolarEdge: () => void;
   onLogout: () => void;
@@ -43,10 +40,7 @@ interface SettingsProps {
 
 export const Settings: React.FC<SettingsProps> = ({
   currentUser,
-  xeroConfig,
   solarEdgeConfig,
-  onConnectXero,
-  onXeroDisconnect,
   onSaveSolarEdgeApiKey,
   onSyncSolarEdge,
   onLogout,
@@ -54,13 +48,30 @@ export const Settings: React.FC<SettingsProps> = ({
   isMobile,
 }) => {
   const avatarInputRef = useRef<HTMLInputElement>(null);
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const [avatarError, setAvatarError] = useState<string | null>(null);
+
   const handleAvatarFile = async (file: File) => {
     if (!file.type.startsWith('image/')) return;
+    setAvatarError(null);
+    setAvatarUploading(true);
     try {
-      const dataUrl = await compressImageToDataUrl(file, 400, 0.85);
-      onUpdateAvatar?.(dataUrl);
+      const blob = await compressImageToBlob(file, 400, 0.85);
+      if (!currentUser?.id) { setAvatarError('Not logged in'); return; }
+      const result = await uploadAvatarToStorage(blob, currentUser.id);
+      if (result.url) {
+        onUpdateAvatar?.(result.url);
+      } else if (result.error === 'session_expired') {
+        setAvatarError('Session expired — please re-login.');
+      } else {
+        setAvatarError('Avatar upload failed. Try again.');
+        console.error('[Settings] avatar upload failed', result.error);
+      }
     } catch (e) {
-      console.error('[Settings] avatar compress failed', e);
+      console.error('[Settings] avatar compress/upload failed', e);
+      setAvatarError('Avatar upload failed.');
+    } finally {
+      setAvatarUploading(false);
     }
   };
   const [apiKeyInput, setApiKeyInput] = useState(solarEdgeConfig.apiKey || '');
@@ -178,35 +189,6 @@ export const Settings: React.FC<SettingsProps> = ({
 
   const storedGmapsKey = sessionStorage.getItem(GMAPS_KEY_STORAGE);
 
-  // ── Xero state ────────────────────────────────────────────────────────────
-  const [xeroClientIdInput, setXeroClientIdInput] = useState(
-    sessionStorage.getItem(XERO_CLIENT_ID_KEY) || ''
-  );
-  const [xeroClientSecretInput, setXeroClientSecretInput] = useState(
-    getXeroClientSecret()
-  );
-  const [showXeroInput, setShowXeroInput] = useState(
-    !xeroConfig.connected && !sessionStorage.getItem(XERO_CLIENT_ID_KEY)
-  );
-  const [xeroError, setXeroError] = useState('');
-
-  const handleConnectXeroClick = async () => {
-    const id     = xeroClientIdInput.trim();
-    const secret = xeroClientSecretInput.trim();
-    if (!id) return;
-    setXeroError('');
-    if (!window.crypto?.subtle) {
-      setXeroError('Secure context required. Open the app via http://localhost:5173 (not an IP address) or use HTTPS.');
-      return;
-    }
-    if (secret) setXeroClientSecret(secret);
-    try {
-      await onConnectXero(id);
-    } catch (err) {
-      setXeroError(String(err));
-    }
-  };
-
   const handleSaveApiKey = () => {
     if (apiKeyInput.trim()) {
       onSaveSolarEdgeApiKey(apiKeyInput.trim());
@@ -263,18 +245,22 @@ export const Settings: React.FC<SettingsProps> = ({
           <div className="flex items-center gap-4">
             <div className="relative group">
               <Avatar user={currentUser} size="lg" className="w-16 h-16 text-xl" />
-              <button
-                onClick={() => avatarInputRef.current?.click()}
+              <label
+                htmlFor="avatar-upload"
                 title="Change profile photo"
-                className="absolute -bottom-1 -right-1 w-7 h-7 bg-orange-500 hover:bg-orange-600 text-white rounded-full flex items-center justify-center shadow-md border-2 border-white transition-colors"
+                className={`absolute -bottom-1 -right-1 w-7 h-7 text-white rounded-full flex items-center justify-center shadow-md border-2 border-white transition-colors cursor-pointer ${avatarUploading ? 'bg-orange-300' : 'bg-orange-500 hover:bg-orange-600'}`}
               >
-                <Camera className="w-3.5 h-3.5" />
-              </button>
+                {avatarUploading
+                  ? <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  : <Camera className="w-3.5 h-3.5" />
+                }
+              </label>
               <input
+                id="avatar-upload"
                 ref={avatarInputRef}
                 type="file"
                 accept="image/*"
-                className="hidden"
+                className="sr-only"
                 onChange={e => {
                   const file = e.target.files?.[0];
                   if (file) handleAvatarFile(file);
@@ -286,7 +272,10 @@ export const Settings: React.FC<SettingsProps> = ({
               <h2 className="font-semibold text-slate-900 truncate">{currentUser.name}</h2>
               <p className="text-sm text-slate-500 capitalize">{currentUser.role}</p>
               <p className="text-sm text-slate-500 truncate">{currentUser.email}</p>
-              {currentUser.avatar && (
+              {avatarError && (
+                <p className="text-xs text-red-500 mt-1">{avatarError}</p>
+              )}
+              {currentUser.avatar && !avatarUploading && !avatarError && (
                 <button
                   onClick={() => onUpdateAvatar?.(null)}
                   className="text-xs text-slate-400 hover:text-red-500 mt-1"
@@ -303,105 +292,6 @@ export const Settings: React.FC<SettingsProps> = ({
       <div className="bg-white rounded-xl border border-slate-200 mb-6">
         <div className="p-4 border-b border-slate-100">
           <h3 className="font-semibold text-slate-900">Integrations</h3>
-        </div>
-
-        {/* Xero Accounting Integration */}
-        <div className="p-4 border-b border-slate-100">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <div className="p-2 rounded-lg bg-slate-100">
-                <Link className="w-5 h-5 text-slate-600" />
-              </div>
-              <div>
-                <p className="font-medium text-slate-900">Xero Accounting</p>
-                {xeroConfig.connected
-                  ? <p className="text-sm text-green-600">Connected to {xeroConfig.organizationName}</p>
-                  : <p className="text-sm text-slate-500">Sync invoices and contacts</p>
-                }
-              </div>
-            </div>
-            {xeroConfig.connected ? (
-              <span className="flex items-center gap-1 text-sm text-green-600 font-medium">
-                <Check className="w-4 h-4" /> Connected
-              </span>
-            ) : null}
-          </div>
-
-          {xeroConfig.connected ? (
-            <div className="flex items-center gap-2 mt-2">
-              <button
-                onClick={onXeroDisconnect}
-                className="px-3 py-1.5 text-sm border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition-colors cursor-pointer"
-              >
-                Disconnect
-              </button>
-              <button
-                onClick={() => { setShowXeroInput(true); }}
-                className="px-3 py-1.5 text-sm border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer"
-              >
-                Change Credentials
-              </button>
-            </div>
-          ) : (
-            <>
-              {/* Setup instructions */}
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3 text-sm text-blue-800">
-                <p className="font-medium mb-1">Setup required:</p>
-                <ol className="list-decimal list-inside space-y-1 text-xs">
-                  <li>Create a Web App at <span className="font-mono">developer.xero.com</span></li>
-                  <li>Add redirect URI: <code className="bg-orange-100 text-orange-700 px-1 rounded font-mono">{window.location.origin}/xero-callback</code></li>
-                  <li>Copy the Client ID below</li>
-                </ol>
-              </div>
-
-              {xeroError && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-2 text-sm text-red-700">
-                  {xeroError}
-                </div>
-              )}
-
-              {(showXeroInput || !sessionStorage.getItem(XERO_CLIENT_ID_KEY)) ? (
-                <div className="space-y-2">
-                  <input
-                    type="text"
-                    value={xeroClientIdInput}
-                    onChange={e => setXeroClientIdInput(e.target.value)}
-                    placeholder="Xero Client ID"
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-900 bg-white placeholder:text-slate-400"
-                  />
-                  <input
-                    type="password"
-                    value={xeroClientSecretInput}
-                    onChange={e => setXeroClientSecretInput(e.target.value)}
-                    placeholder="Xero Client Secret"
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-900 bg-white placeholder:text-slate-400"
-                  />
-                  <button
-                    onClick={handleConnectXeroClick}
-                    disabled={!xeroClientIdInput.trim()}
-                    className="w-full py-2 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors cursor-pointer"
-                  >
-                    Connect to Xero
-                  </button>
-                </div>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={handleConnectXeroClick}
-                    className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium rounded-lg transition-colors cursor-pointer"
-                  >
-                    Connect to Xero
-                  </button>
-                  <button
-                    onClick={() => setShowXeroInput(true)}
-                    className="px-3 py-2 border border-slate-200 text-slate-600 text-sm rounded-lg hover:bg-slate-50 transition-colors cursor-pointer"
-                  >
-                    Edit
-                  </button>
-                </div>
-              )}
-            </>
-          )}
         </div>
 
         {/* SolarEdge Integration */}
