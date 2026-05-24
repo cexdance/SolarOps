@@ -913,8 +913,10 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
     // Guard: don't remove a photo that's still uploading (would orphan the Storage object)
     if (pendingUploads.current.has(id)) return;
     const photo = woPhotos.find(p => p.id === id);
-    // Remove from UI first (optimistic), then delete from Storage
+    // Remove from UI first (optimistic), then persist + delete from Storage
     setWoPhotos(prev => prev.filter(p => p.id !== id));
+    // Persist the deletion immediately — without this the photo comes back on refresh
+    setTimeout(() => handleSaveRef.current(undefined, true), 0);
     if (photo?.storageUrl) {
       try {
         await deletePhotoFromStorage(photo.storageUrl);

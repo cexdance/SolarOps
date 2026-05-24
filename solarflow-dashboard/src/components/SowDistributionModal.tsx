@@ -189,24 +189,38 @@ const Row: React.FC<{ label: string; value?: string | React.ReactNode; mono?: bo
 );
 
 // ── Print styles injected as <style> ─────────────────────────────────────────
+// IMPORTANT: Do NOT use display:none on the outer modal wrapper — it blocks
+// visibility:visible on children. Instead we restyle the overlay in @media print.
 
 const PRINT_STYLE = `
 @media print {
   @page {
     size: A4 portrait;
-    margin: 16mm 18mm 18mm 18mm;
+    margin: 18mm 18mm 18mm 18mm;
   }
-  body * { visibility: hidden !important; }
-  #sow-dist-print-area, #sow-dist-print-area * { visibility: visible !important; }
-  #sow-dist-print-area {
-    position: fixed !important;
-    inset: 0 !important;
-    padding: 0 !important;
-    margin: 0 !important;
-    overflow: visible !important;
+  /* Remove overlay chrome */
+  .sow-overlay {
+    position: static !important;
     background: white !important;
+    padding: 0 !important;
+    display: block !important;
   }
+  /* Remove modal box chrome */
+  .sow-modal-box {
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    max-height: none !important;
+    max-width: none !important;
+    width: 100% !important;
+  }
+  /* Hide UI toolbar */
   .sow-toolbar { display: none !important; }
+  /* Remove scroll constraint on body */
+  .sow-body {
+    overflow: visible !important;
+    max-height: none !important;
+  }
+  /* Break control */
   .sow-section { break-inside: avoid; }
   .sow-photo-grid { break-inside: avoid; }
   img { break-inside: avoid; }
@@ -273,8 +287,8 @@ export const SowDistributionModal: React.FC<Props> = ({
       {/* Injected print styles */}
       <style>{PRINT_STYLE}</style>
 
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 sm:p-6 print:hidden">
-        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[92vh] flex flex-col">
+      <div className="sow-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 sm:p-6">
+        <div className="sow-modal-box bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[92vh] flex flex-col">
 
           {/* ── Toolbar ── */}
           <div className="sow-toolbar flex items-center justify-between px-5 py-3 border-b border-slate-100 shrink-0">
@@ -297,7 +311,7 @@ export const SowDistributionModal: React.FC<Props> = ({
           </div>
 
           {/* ── Scrollable / printable body ── */}
-          <div className="overflow-y-auto print:overflow-visible" id="sow-dist-print-area">
+          <div className="sow-body overflow-y-auto" id="sow-dist-print-area">
             <div className="p-7 space-y-7">
 
               {/* ── Letterhead ──────────────────────────────────────── */}
@@ -495,10 +509,6 @@ export const SowDistributionModal: React.FC<Props> = ({
         </div>
       </div>
 
-      {/* ── Print-only version (no modal chrome) ── */}
-      <div className="hidden print:block" id="sow-print-page" aria-hidden>
-        {/* This is intentionally empty — the @media print CSS targets #sow-dist-print-area above */}
-      </div>
     </>
   );
 };
