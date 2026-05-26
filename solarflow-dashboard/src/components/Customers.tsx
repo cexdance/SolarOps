@@ -65,6 +65,7 @@ import { WorkOrderPanel } from './WorkOrderPanel';
 import { PhoneLink } from './PhoneLink';
 import { ActivityFeed } from './ui/ActivityFeed';
 import { uploadCustomerFiles, StoredCustomerFile } from '../lib/customerFileStorage';
+import { fireMentionNotifications } from './ui/MentionTextarea';
 import { toast } from 'sonner';
 
 // Client Status Badge Component
@@ -2827,26 +2828,16 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
     });
 
     // Fire @mention notifications (async, non-blocking)
+    // Uses centralized helper: writes to local mentions inbox + Supabase + email
     if (mentionedIds.length > 0) {
-      import('../lib/supabase').then(({ supabase }) => {
-        supabase.auth.getSession().then(({ data: { session } }) => {
-          if (!session?.access_token) return;
-          fetch('/api/notify', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${session.access_token}`,
-            },
-            body: JSON.stringify({
-              mentionedUserIds: mentionedIds,
-              notifierName: currentUser?.name || 'A teammate',
-              customerName: customer.name,
-              customerId: customer.id,
-              message: noteText,
-            }),
-          }).catch(() => {});
-        });
-      });
+      fireMentionNotifications({
+        mentionedUserIds: mentionedIds,
+        notifierName: currentUser?.name || 'A teammate',
+        context: `${customer.clientId ?? ''} ${customer.name}`.trim(),
+        contextId: customer.id,
+        contextType: 'customer',
+        message: noteText,
+      }).catch(() => {});
     }
   };
 

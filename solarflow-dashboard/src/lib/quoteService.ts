@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { fireMentionNotifications } from '../components/ui/MentionTextarea';
 
 interface QuoteEmailPayload {
   customerName: string;
@@ -48,21 +49,12 @@ export async function notifyAdminForInvoice(
     return;
   }
 
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session?.access_token) return;
-
-  await fetch('/api/notify', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${session.access_token}`,
-    },
-    body: JSON.stringify({
-      mentionedUserIds: [daniel.id],
-      notifierName: senderName,
-      customerName,
-      customerId: jobId,
-      message: `${woNumber} is ready for invoicing. Customer: ${customerName}. Total: $${totalAmount.toFixed(2)}. Please send the invoice and mark as paid when received.`,
-    }),
+  await fireMentionNotifications({
+    mentionedUserIds: [daniel.id],
+    notifierName: senderName,
+    context: `${woNumber} ${customerName}`,
+    contextId: jobId,
+    contextType: 'workOrder',
+    message: `${woNumber} is ready for invoicing. Customer: ${customerName}. Total: $${totalAmount.toFixed(2)}. Please send the invoice and mark as paid when received.`,
   }).catch(err => console.error('[quoteService] notify failed:', err));
 }

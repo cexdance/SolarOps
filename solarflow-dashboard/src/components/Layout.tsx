@@ -305,10 +305,17 @@ export const Layout: React.FC<LayoutProps> = ({
                       No notifications yet
                     </div>
                   ) : (
-                    [...myNotifications].reverse().map(notif => (
+                    myNotifications.map(notif => (
                       <button
                         key={notif.id}
-                        onClick={() => onMarkNotificationRead(notif.id)}
+                        onClick={() => {
+                          onMarkNotificationRead(notif.id);
+                          // Navigate to the related customer when available
+                          if (notif.relatedCustomerId && onSelectCustomer) {
+                            onSelectCustomer(notif.relatedCustomerId);
+                            setNotifOpen(false);
+                          }
+                        }}
                         className={`w-full text-left px-4 py-3 hover:bg-slate-50 transition-colors ${!notif.read ? 'bg-orange-50' : ''}`}
                       >
                         <div className="flex items-start gap-2">

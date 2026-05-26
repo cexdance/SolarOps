@@ -2174,12 +2174,7 @@ function App() {
             onUpdateJob={handleUpdateJob}
             isMobile={isMobile}
             notifications={data.notifications}
-            onMarkNotificationRead={(notifId) => {
-              setData(prev => ({
-                ...prev,
-                notifications: prev.notifications.map(n => n.id === notifId ? { ...n, read: true } : n)
-              }));
-            }}
+            onMarkNotificationRead={handleMarkNotificationRead}
             isConnected={true}
           />
         );
@@ -2338,8 +2333,12 @@ function App() {
             currentUser={currentUser}
             onViewChange={handleViewChange}
             onViewCustomer={(customerId) => { setSelectedCustomerId(customerId); setCurrentView('customers'); }}
+            onJobClick={(jobId) => handleViewChange('jobDetail', jobId)}
             onUpdateJob={handleUpdateJob}
             isMobile={isMobile}
+            notifications={data.notifications}
+            onMarkNotificationRead={handleMarkNotificationRead}
+            isConnected={true}
           />
         );
 
@@ -2465,8 +2464,12 @@ function App() {
             currentUser={currentUser}
             onViewChange={handleViewChange}
             onViewCustomer={(customerId) => { setSelectedCustomerId(customerId); setCurrentView('customers'); }}
+            onJobClick={(jobId) => handleViewChange('jobDetail', jobId)}
             onUpdateJob={handleUpdateJob}
             isMobile={isMobile}
+            notifications={data.notifications}
+            onMarkNotificationRead={handleMarkNotificationRead}
+            isConnected={true}
           />
         );
     }
