@@ -134,7 +134,10 @@ export function logUpload(
 /** Drain all unsynced entries to Supabase (call after login / reconnect). */
 export async function flushChangeLog(): Promise<void> {
   const pending = readLog().filter(e => e.syncedAt === null);
-  await Promise.allSettled(pending.map(pushEntry));
+  const BATCH = 10;
+  for (let i = 0; i < pending.length; i += BATCH) {
+    await Promise.allSettled(pending.slice(i, i + BATCH).map(pushEntry));
+  }
 }
 
 /** Return the last N entries for display in a UI (newest first). */

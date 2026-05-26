@@ -1,8 +1,8 @@
 /**
  * SolarOps — Database Client (Phase 2)
  *
- * Routes saves through the new per-record sync engine:
- *   solarflow_data  → pushToSupabase (full blob + per-record rows)
+ * Routes saves through the per-record sync engine:
+ *   solarflow_data  → pushToSupabase (per-record rows + metadata)
  *   KV sync keys    → pushKeyValue (single row per key)
  *   all others      → localStorage only (not synced)
  */
@@ -29,7 +29,7 @@ export const ALL_KEYS = [
 /**
  * Persist a value and sync to Supabase when applicable.
  *
- * solarflow_data   → pushToSupabase (per-record + legacy blob, outbox on fail)
+ * solarflow_data   → pushToSupabase (per-record rows + metadata, outbox on fail)
  * KV sync keys     → pushKeyValue (single row upsert, outbox on fail)
  * everything else  → no-op (localStorage only, not shared across devices)
  */

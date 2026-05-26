@@ -59,7 +59,7 @@ export function useVersionPoll(): VersionPollResult {
       check(true);
     }
 
-    const interval = setInterval(() => check(false), 2 * 60 * 1000);
+    const interval = setInterval(() => check(false), 10 * 60 * 1000);
 
     const onVisible = () => {
       if (document.visibilityState === 'visible') check(false);

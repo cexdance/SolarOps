@@ -595,7 +595,6 @@ export const loadInvites = (): ContractorInvite[] => {
 export const saveInvites = (invites: ContractorInvite[]): void => {
   try {
     localStorage.setItem(INVITES_KEY, JSON.stringify(invites));
-    dbSet(INVITES_KEY, invites);
   } catch (e) {
     console.error('Failed to save invites:', e);
   }
@@ -662,7 +661,6 @@ export const loadNotifications = (): ContractorNotification[] => {
 export const saveNotifications = (notifications: ContractorNotification[]): void => {
   try {
     localStorage.setItem(NOTIFICATIONS_KEY, JSON.stringify(notifications));
-    dbSet(NOTIFICATIONS_KEY, notifications);
   } catch (e) {
     console.error('Failed to save notifications:', e);
   }

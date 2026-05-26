@@ -54,7 +54,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const { data: quote, error } = await supabaseAdmin
     .from('quote_approvals')
-    .select('*')
+    .select('token, wo_number, grand_total, approved_at, expires_at')
     .eq('token', token)
     .single();
 

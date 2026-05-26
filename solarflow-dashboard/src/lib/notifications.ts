@@ -36,7 +36,7 @@ export async function fetchMyNotifications(): Promise<AppNotification[]> {
 
     const { data, error } = await supabase
       .from('notifications')
-      .select('*')
+      .select('id, user_id, type, title, message, related_job_id, related_contractor_id, related_customer_id, read, created_at')
       .eq('user_id', session.user.id)
       .order('created_at', { ascending: false })
       .limit(50);
@@ -86,13 +86,13 @@ export async function markAllNotificationsReadRemote(): Promise<void> {
 let _pollInterval: ReturnType<typeof setInterval> | null = null;
 
 /**
- * Start polling for new notifications every `intervalMs` (default 45 s).
+ * Start polling for new notifications every `intervalMs` (default 5 min).
  * Calls `onNewNotifications` with the full latest list whenever it changes.
  * Call `stopNotificationPolling()` on logout.
  */
 export function startNotificationPolling(
   onNewNotifications: (notifications: AppNotification[]) => void,
-  intervalMs = 45_000,
+  intervalMs = 5 * 60_000,
 ): void {
   stopNotificationPolling();
 

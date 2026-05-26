@@ -62,7 +62,7 @@ export function useSyncEngine({
       });
     };
 
-    const interval = setInterval(syncCycle, 30_000);
+    const interval = setInterval(syncCycle, 5 * 60_000);
     const onFocus  = () => syncCycle();
     const onOnline = () => {
       // Reset the attempt counter so a deadlocked outbox retries on reconnect
@@ -81,8 +81,16 @@ export function useSyncEngine({
   }, []);
 
   // ── Realtime: instant cross-device push (<1s) ─────────────────────────────
+  // Defer until auth session is confirmed to avoid pre-auth CHANNEL_ERROR storm
   useEffect(() => {
-    const unsubscribe = subscribeToChanges({
+    let unsubscribe: (() => void) | null = null;
+    let cancelled = false;
+
+    (async () => {
+      const { supabase } = await import('../lib/supabase');
+      const { data: { session } } = await supabase.auth.getSession();
+      if (cancelled || !session) return;
+      unsubscribe = subscribeToChanges({
       onCustomer: (customer, event) => {
         setData(prev => {
           if (event === 'DELETE') return { ...prev, customers: prev.customers.filter(c => c.id !== customer.id) };
@@ -129,7 +137,11 @@ export function useSyncEngine({
         window.dispatchEvent(new CustomEvent('solarops-solar-site-update', { detail: site }));
       },
     });
-    return unsubscribe;
+    })();
+    return () => {
+      cancelled = true;
+      if (unsubscribe) unsubscribe();
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

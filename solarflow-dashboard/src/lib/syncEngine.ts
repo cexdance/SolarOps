@@ -35,9 +35,6 @@ export const PREFIX = {
   solar:    'solar:',
 } as const;
 
-// Legacy blob keys kept for backward compat write
-const SYNC_KEYS = ['customers', 'jobs', 'solarEdgeExtraSites'] as const;
-
 // Standalone KV keys that are their own single rows
 export const KV_SYNC_KEYS = [
   'solarflow_contractor_jobs',
@@ -96,36 +93,19 @@ async function pushRows(
 }
 
 /**
- * Push all customers as per-record rows + legacy blob row.
+ * Push all customers as per-record rows.
  */
 export async function pushCustomers(customers: Customer[]): Promise<void> {
   const deletedIds = getDeletedCustomerIds();
   const live = customers.filter(c => !deletedIds.has(c.id));
-
-  // Per-record rows (Phase 2)
   await pushRows(live.map(c => ({ key: `${PREFIX.customer}${c.id}`, value: c })));
-
-  // Legacy blob (backward compat) — keep in sync so old clients don't diverge
-  const now = new Date().toISOString();
-  await supabase.from('app_data').upsert(
-    [{ key: 'customers', value: live, updated_at: now }],
-    { onConflict: 'key' },
-  );
 }
 
 /**
- * Push all jobs as per-record rows + legacy blob row.
+ * Push all jobs as per-record rows.
  */
 export async function pushJobs(jobs: Job[]): Promise<void> {
-  // Per-record rows (Phase 2)
   await pushRows(jobs.map(j => ({ key: `${PREFIX.job}${j.id}`, value: j })));
-
-  // Legacy blob
-  const now = new Date().toISOString();
-  await supabase.from('app_data').upsert(
-    [{ key: 'jobs', value: jobs, updated_at: now }],
-    { onConflict: 'key' },
-  );
 }
 
 /**
@@ -151,10 +131,7 @@ export async function pushJob(job: Job): Promise<void> {
 export async function pushKeyValue(key: string, value: unknown): Promise<void> {
   try {
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      console.warn(`[SyncEngine] pushKeyValue(${key}) failed: No active session`);
-      return;
-    }
+    if (!session) return;
 
     const { error } = await supabase
       .from('app_data')
@@ -176,49 +153,65 @@ export async function pushKeyValue(key: string, value: unknown): Promise<void> {
   }
 }
 
-// ── Full AppState push (legacy + Phase 2) ────────────────────────────────────
+// ── Dirty-tracking snapshot ──────────────────────────────────────────────────
+// Stores a hash (JSON string) per record so pushToSupabase only upserts records
+// that actually changed since the last successful push.
+
+const _lastPushed = new Map<string, string>();
+
+function isDirty(key: string, value: unknown): boolean {
+  const json = JSON.stringify(value);
+  if (_lastPushed.get(key) === json) return false;
+  return true;
+}
+
+function markClean(key: string, value: unknown): void {
+  _lastPushed.set(key, JSON.stringify(value));
+}
+
+// ── Full AppState push (Phase 2 — dirty-only) ───────────────────────────────
 
 /**
- * Push the full AppState. Writes both per-record rows AND legacy blobs.
- * Used by outbox drain and initial migration push.
+ * Push changed records from AppState to Supabase.
+ * Compares each record against the last-pushed snapshot and only upserts dirty ones.
+ * Used by the 500ms debounced save and outbox drain.
  */
 export async function pushToSupabase(state: AppState): Promise<void> {
   try {
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      console.warn('[SyncEngine] pushToSupabase failed: No active session');
-      throw new Error('No active session');
-    }
+    if (!session) return;
 
     const deletedIds = Array.from(getDeletedCustomerIds());
 
-    // ── Phase 2: per-record rows ──────────────────────────────────────────────
-    const customerRows = state.customers
+    // ── Dirty customers only ─────────────────────────────────────────────────
+    const dirtyCustomerRows = state.customers
       .filter(c => !deletedIds.includes(c.id))
+      .filter(c => isDirty(`${PREFIX.customer}${c.id}`, c))
       .map(c => ({ key: `${PREFIX.customer}${c.id}`, value: c }));
-    const jobRows = state.jobs
+
+    if (dirtyCustomerRows.length > 0) {
+      await pushRows(dirtyCustomerRows);
+      for (const r of dirtyCustomerRows) markClean(r.key, r.value);
+    }
+
+    // ── Dirty jobs only ──────────────────────────────────────────────────────
+    const dirtyJobRows = state.jobs
+      .filter(j => isDirty(`${PREFIX.job}${j.id}`, j))
       .map(j => ({ key: `${PREFIX.job}${j.id}`, value: j }));
 
-    // Batch upsert customers (small payloads — safe in one call)
-    if (customerRows.length > 0) await pushRows(customerRows);
-
-    // Jobs can carry photo dataURLs; one oversized job would fail the whole
-    // batch and mark the entire push pending. Push individually so a single
-    // bloated row only fails itself — the rest still land.
-    // Rows that fail POISON_THRESHOLD times are marked "poisoned" and skipped
-    // in future pushes so one bad record never blocks all others.
     const failedJobs: Array<{ key: string; error: string }> = [];
-    for (const row of jobRows) {
+    for (const row of dirtyJobRows) {
       if (isRowPoisoned(row.key)) {
         console.warn('[SyncEngine] Skipping poisoned row:', row.key);
-        continue; // blocked permanently until poison is cleared
+        continue;
       }
       try {
         await pushRows([row]);
-        clearRowPoison(row.key); // success — reset any prior failure count
+        clearRowPoison(row.key);
+        markClean(row.key, row.value);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        incRowFailure(row.key, msg); // track towards poison threshold
+        incRowFailure(row.key, msg);
         failedJobs.push({ key: row.key, error: msg });
       }
     }
@@ -227,33 +220,46 @@ export async function pushToSupabase(state: AppState): Promise<void> {
       throw new Error(`Failed to push ${failedJobs.length} job rows: ${failedJobs[0].error}`);
     }
 
-    // ── Legacy blobs (backward compat) ───────────────────────────────────────
+    // ── Lightweight metadata rows (config + tombstones) ─────────────────────
     const now = new Date().toISOString();
-    const legacyRows = [
-      { key: 'customers',           value: state.customers,              updated_at: now },
-      { key: 'jobs',                value: state.jobs,                   updated_at: now },
-      { key: 'solarEdgeExtraSites', value: state.solarEdgeExtraSites ?? [], updated_at: now },
-      { key: 'deleted_customer_ids', value: deletedIds,                  updated_at: now },
-      // API key must sync across devices — push it alongside the other blobs
-      { key: 'solarEdgeConfig',     value: state.solarEdgeConfig,        updated_at: now },
-    ];
+    const metaRows: Array<{ key: string; value: unknown; updated_at: string }> = [];
 
-    const { error } = await supabase
-      .from('app_data')
-      .upsert(legacyRows, { onConflict: 'key' });
-
-    if (error) {
-      console.warn('[SyncEngine] pushToSupabase failed:', error.message);
-      markPushPending(error.message);
-      window.dispatchEvent(new CustomEvent('supabase-sync-error', {
-        detail: { message: 'Failed to sync to cloud. Will retry automatically.', error: error.message },
-      }));
-      throw error;
-    } else {
-      clearPendingPush();
-      setLastSync(now);
-      window.dispatchEvent(new CustomEvent('supabase-sync-success'));
+    const tombstoneKey = 'deleted_customer_ids';
+    if (isDirty(tombstoneKey, deletedIds)) {
+      metaRows.push({ key: tombstoneKey, value: deletedIds, updated_at: now });
     }
+    const seConfigKey = 'solarEdgeConfig';
+    if (isDirty(seConfigKey, state.solarEdgeConfig)) {
+      metaRows.push({ key: seConfigKey, value: state.solarEdgeConfig, updated_at: now });
+    }
+    if (state.solarEdgeExtraSites?.length && isDirty('solarEdgeExtraSites', state.solarEdgeExtraSites)) {
+      metaRows.push({ key: 'solarEdgeExtraSites', value: state.solarEdgeExtraSites, updated_at: now });
+    }
+
+    if (metaRows.length > 0) {
+      const { error } = await supabase
+        .from('app_data')
+        .upsert(metaRows, { onConflict: 'key' });
+
+      if (error) {
+        console.warn('[SyncEngine] pushToSupabase meta failed:', error.message);
+        markPushPending(error.message);
+        window.dispatchEvent(new CustomEvent('supabase-sync-error', {
+          detail: { message: 'Failed to sync to cloud. Will retry automatically.', error: error.message },
+        }));
+        throw error;
+      }
+      for (const r of metaRows) markClean(r.key, r.value);
+    }
+
+    const totalDirty = dirtyCustomerRows.length + dirtyJobRows.length + metaRows.length;
+    if (totalDirty > 0) {
+      console.info(`[SyncEngine] Pushed ${totalDirty} dirty records (${dirtyCustomerRows.length}C ${dirtyJobRows.length}J ${metaRows.length}M)`);
+    }
+
+    clearPendingPush();
+    setLastSync(now);
+    window.dispatchEvent(new CustomEvent('supabase-sync-success'));
   } catch (err) {
     console.warn('[SyncEngine] pushToSupabase error:', err);
     markPushPending(String(err));
@@ -553,6 +559,9 @@ export function subscribeToChanges(handlers: RealtimeHandlers): () => void {
     scheduleFlush();
   };
 
+  let consecutiveErrors = 0;
+  const MAX_REALTIME_ERRORS = 5;
+
   realtimeChannel = supabase
     .channel('solarops-realtime')
     .on(
@@ -574,12 +583,10 @@ export function subscribeToChanges(handlers: RealtimeHandlers): () => void {
           } else if (key.startsWith(PREFIX.job) && payload.eventType === 'DELETE') {
             enqueue(() => handlers.onJob({ id: key.slice(PREFIX.job.length) } as Job, 'DELETE'));
           } else if (key.startsWith(PREFIX.solar) && value && payload.eventType !== 'DELETE') {
-            // Written by the solaredge-poller Edge Function (Step 1)
             if (handlers.onSolarSite) {
               enqueue(() => handlers.onSolarSite!(value as SolarSitePayload));
             }
           } else if (isKVSyncKey(key) && value != null) {
-            // Write to localStorage and notify App.tsx (batched)
             const next = JSON.stringify(value);
             const prev = localStorage.getItem(key);
             if (prev !== next) {
@@ -593,7 +600,21 @@ export function subscribeToChanges(handlers: RealtimeHandlers): () => void {
       },
     )
     .subscribe(status => {
-      console.info('[Realtime]', status);
+      if (status === 'SUBSCRIBED') {
+        consecutiveErrors = 0;
+        console.info('[Realtime] Connected');
+      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        consecutiveErrors++;
+        if (consecutiveErrors >= MAX_REALTIME_ERRORS) {
+          console.warn(`[Realtime] ${consecutiveErrors} consecutive failures — disabling to stop reconnect storm. Poll fallback active.`);
+          if (realtimeChannel) {
+            supabase.removeChannel(realtimeChannel);
+            realtimeChannel = null;
+          }
+        }
+      } else {
+        console.info('[Realtime]', status);
+      }
     });
 
   return () => {
