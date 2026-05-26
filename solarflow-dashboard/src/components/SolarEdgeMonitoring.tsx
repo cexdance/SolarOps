@@ -271,12 +271,13 @@ export const SolarEdgeMonitoring: React.FC<Props> = ({
     setIsRefreshingAlerts(true);
     setAlertRefreshMsg(null);
     try {
-      const bust = bustCache ? `&bust=${Date.now()}` : '';
+      const bust     = bustCache ? `&bust=${Date.now()}` : '';
+      const keyParam = solarEdgeApiKey ? `&api_key=${encodeURIComponent(solarEdgeApiKey)}` : '';
       const pageSize = 100;
       let page = 0;
       const newOverrides = new Map<string, { count: number; impact: string }>();
       while (true) {
-        const res = await fetch(`/api/solaredge?path=/sites/list&size=${pageSize}&startIndex=${page * pageSize}${bust}`);
+        const res = await fetch(`/api/solaredge?path=/sites/list&size=${pageSize}&startIndex=${page * pageSize}${bust}${keyParam}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json() as { sites?: { site?: { id: number; alertQuantity?: number; highestImpact?: number }[] } };
         const sites = data?.sites?.site ?? [];

@@ -2302,6 +2302,7 @@ function App() {
             }}
             onSolarEdgeSites={() => setCurrentView('solaredge')}
             solarEdgeSites={[...FL_SITES, ...(data.solarEdgeExtraSites ?? [])]}
+            solarEdgeApiKey={data.solarEdgeConfig.apiKey || undefined}
             isMobile={isMobile}
             initialCustomerId={selectedCustomerId ?? undefined}
             selectCustomerSeq={selectCustomerSeq}

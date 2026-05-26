@@ -216,6 +216,7 @@ interface CustomersProps {
   onViewCustomer: (customerId: string) => void;
   onSolarEdgeSites?: () => void;
   solarEdgeSites?: import('../lib/solarEdgeSites').SolarEdgeSite[];
+  solarEdgeApiKey?: string;
   isMobile: boolean;
   initialCustomerId?: string;
   selectCustomerSeq?: number;
@@ -238,6 +239,7 @@ export const Customers: React.FC<CustomersProps> = ({
   onViewCustomer,
   onSolarEdgeSites,
   solarEdgeSites = [],
+  solarEdgeApiKey,
   isMobile,
   initialCustomerId,
   selectCustomerSeq,
@@ -271,8 +273,9 @@ export const Customers: React.FC<CustomersProps> = ({
       const pageSize = 100;
       let page = 0;
       const newOverrides = new Map<string, { count: number; impact: string }>();
+      const keyParam = solarEdgeApiKey ? `&api_key=${encodeURIComponent(solarEdgeApiKey)}` : '';
       while (true) {
-        const res = await fetch(`/api/solaredge?path=/sites/list&size=${pageSize}&startIndex=${page * pageSize}&bust=${Date.now()}`);
+        const res = await fetch(`/api/solaredge?path=/sites/list&size=${pageSize}&startIndex=${page * pageSize}&bust=${Date.now()}${keyParam}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json() as { sites?: { site?: { id: number; alertQuantity?: number; highestImpact?: number }[] } };
         const sites = data?.sites?.site ?? [];
