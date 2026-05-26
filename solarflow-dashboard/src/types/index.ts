@@ -256,13 +256,20 @@ export interface Job {
   siteTransferSiteId?: string;         // SolarEdge Site ID for ownership transfer
 }
 
+export type RMAStatus = 'processes' | 'eligible' | 'not_eligible' | 'submitted' | 'paid';
+
 export interface RMAEntry {
   id: string;
   manufacturer: string;
   partDescription: string;
   rmaNumber: string;
   caseNumber?: string;
-  status: 'pending' | 'approved' | 'received';
+  /** @deprecated Use rmaStatus instead */
+  status: 'pending' | 'approved' | 'received' | RMAStatus;
+  rmaStatus?: RMAStatus;
+  compensationCollected?: boolean;
+  compensationCollectedAt?: string;
+  compensationAmount?: number;
   createdAt: string;
   createdBy: string;
 }

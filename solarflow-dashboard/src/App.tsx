@@ -2171,6 +2171,7 @@ function App() {
             onViewChange={handleViewChange}
             onViewCustomer={(customerId) => { setSelectedCustomerId(customerId); setCurrentView('customers'); }}
             onJobClick={(jobId) => handleViewChange('jobDetail', jobId)}
+            onUpdateJob={handleUpdateJob}
             isMobile={isMobile}
             notifications={data.notifications}
             onMarkNotificationRead={(notifId) => {
@@ -2337,6 +2338,7 @@ function App() {
             currentUser={currentUser}
             onViewChange={handleViewChange}
             onViewCustomer={(customerId) => { setSelectedCustomerId(customerId); setCurrentView('customers'); }}
+            onUpdateJob={handleUpdateJob}
             isMobile={isMobile}
           />
         );
@@ -2463,6 +2465,7 @@ function App() {
             currentUser={currentUser}
             onViewChange={handleViewChange}
             onViewCustomer={(customerId) => { setSelectedCustomerId(customerId); setCurrentView('customers'); }}
+            onUpdateJob={handleUpdateJob}
             isMobile={isMobile}
           />
         );

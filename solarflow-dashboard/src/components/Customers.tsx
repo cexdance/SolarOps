@@ -1962,7 +1962,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
               {(() => {
                 const hasPsh = energyData.some(d => d.psh != null);
                 return (
-                <ComposedChart data={energyData} margin={{ top: 4, right: hasPsh ? 8 : 8, left: 0, bottom: 0 }}>
+                <ComposedChart data={energyData} margin={{ top: 18, right: hasPsh ? 8 : 8, left: 0, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                   <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="#94a3b8" />
                   {hasPsh && (
@@ -1989,7 +1989,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
                     formatter={(value: number, name: string) =>
                       name === 'psh'
                         ? [`${value?.toFixed(1)} kWh/m²`, 'Peak Sun Hours']
-                        : [`${value?.toFixed(1)} kWh`, 'Production']
+                        : [`${value?.toFixed(1)} kWh · $${(value * COST_PER_KWH).toFixed(2)}`, 'Production']
                     }
                   />
                   {hasPsh && (
@@ -1998,7 +1998,16 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
                       formatter={(val: string) => val === 'psh' ? 'Peak Sun Hours' : 'Production (kWh)'}
                     />
                   )}
-                  <Bar yAxisId="kwh" dataKey="kWh" fill="#f97316" opacity={0.85} radius={[3, 3, 0, 0]} name="kWh" />
+                  <Bar
+                    yAxisId="kwh" dataKey="kWh" fill="#f97316" opacity={0.85} radius={[3, 3, 0, 0]} name="kWh"
+                    label={({ x, y, width: w, value: v }: { x: number; y: number; width: number; value: number }) =>
+                      v > 0 ? (
+                        <text x={x + w / 2} y={y - 4} textAnchor="middle" fontSize={8} fontWeight={600} fill="#16a34a">
+                          ${(v * COST_PER_KWH).toFixed(0)}
+                        </text>
+                      ) : null
+                    }
+                  />
                   {hasPsh && (
                     <Line
                       yAxisId="psh"
@@ -2242,7 +2251,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
                   </p>
                   <div style={{ height: 160 }}>
                     <ResponsiveContainer width="100%" height="100%">
-                      <ComposedChart data={energyData} margin={{ top: 2, right: 40, left: 0, bottom: 0 }}>
+                      <ComposedChart data={energyData} margin={{ top: 16, right: 40, left: 0, bottom: 0 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                         <XAxis dataKey="date" tick={{ fontSize: 9 }} stroke="#cbd5e1" interval="preserveStartEnd" />
                         <YAxis yAxisId="kwh" tick={{ fontSize: 9 }} stroke="#f97316" unit=" kWh" width={48} />
@@ -2260,10 +2269,19 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
                         <RechartsTooltip
                           contentStyle={{ borderRadius: 8, fontSize: 11, padding: '6px 10px' }}
                           formatter={(value: number, name: string) =>
-                            name === 'psh' ? [`${value?.toFixed(1)} kWh/m²`, 'Peak Sun Hours'] : [`${value?.toFixed(1)} kWh`, 'Production']
+                            name === 'psh' ? [`${value?.toFixed(1)} kWh/m²`, 'Peak Sun Hours'] : [`${value?.toFixed(1)} kWh · $${(value * COST_PER_KWH).toFixed(2)}`, 'Production']
                           }
                         />
-                        <Bar yAxisId="kwh" dataKey="kWh" fill="#f97316" opacity={0.85} radius={[3, 3, 0, 0]} name="kWh" />
+                        <Bar
+                          yAxisId="kwh" dataKey="kWh" fill="#f97316" opacity={0.85} radius={[3, 3, 0, 0]} name="kWh"
+                          label={({ x, y, width: w, value: v }: { x: number; y: number; width: number; value: number }) =>
+                            v > 0 ? (
+                              <text x={x + w / 2} y={y - 3} textAnchor="middle" fontSize={7} fontWeight={600} fill="#16a34a">
+                                ${(v * COST_PER_KWH).toFixed(0)}
+                              </text>
+                            ) : null
+                          }
+                        />
                         {energyData.some(d => d.psh) && (
                           <Line yAxisId="psh" type="monotone" dataKey="psh" stroke="#fbbf24" strokeWidth={2}
                             dot={false} connectNulls name="psh" />

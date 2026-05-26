@@ -150,8 +150,8 @@ When spawning subagents (Agent/Task tool), the routing block is automatically in
 
 ## ctx commands
 
-| Command | Action |
-|---------|--------|
-| `ctx stats` | Call the `ctx_stats` MCP tool and display the full output verbatim |
-| `ctx doctor` | Call the `ctx_doctor` MCP tool, run the returned shell command, display as checklist |
+| Command       | Action                                                                                |
+| ------------- | ------------------------------------------------------------------------------------- |
+| `ctx stats`   | Call the `ctx_stats` MCP tool and display the full output verbatim                    |
+| `ctx doctor`  | Call the `ctx_doctor` MCP tool, run the returned shell command, display as checklist  |
 | `ctx upgrade` | Call the `ctx_upgrade` MCP tool, run the returned shell command, display as checklist |
