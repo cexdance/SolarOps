@@ -1,41 +1,55 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { createClient } from '@supabase/supabase-js';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const supabaseAdmin = createClient(
-  'https://cjmhfagkkayelcsprbai.supabase.co',
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  { auth: { autoRefreshToken: false, persistSession: false } }
-) as any;
+const SUPABASE_URL = 'https://cjmhfagkkayelcsprbai.supabase.co';
+const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET') return res.status(405).end();
 
+  // Validate caller JWT via Supabase Auth REST API
   const token = (req.headers.authorization ?? '').replace('Bearer ', '');
   if (!token) return res.status(401).json({ error: 'Unauthorized' });
 
-  const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
-  if (error || !user) return res.status(401).json({ error: 'Unauthorized' });
+  const verifyRes = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      apikey: SERVICE_ROLE_KEY,
+    },
+  });
+  if (!verifyRes.ok) return res.status(401).json({ error: 'Unauthorized' });
 
-  const { data: { users }, error: listError } = await supabaseAdmin.auth.admin.listUsers();
-  if (listError) return res.status(500).json({ error: 'Failed to fetch users' });
+  // List all users via Supabase Auth Admin REST API
+  const listRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users?per_page=200`, {
+    headers: {
+      Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+      apikey: SERVICE_ROLE_KEY,
+    },
+  });
+  if (!listRes.ok) return res.status(500).json({ error: 'Failed to fetch users' });
 
-  const staff = users
+  const body = await listRes.json() as { users?: Record<string, unknown>[] };
+  const allUsers: Record<string, unknown>[] = body.users ?? [];
+
+  const STAFF_ROLES = new Set(['admin', 'coo', 'support', 'sales', 'technician']);
+
+  const staff = allUsers
     .filter(u => {
-      const role = (u.user_metadata?.role as string) ?? '';
-      return ['admin', 'coo', 'support', 'sales', 'technician'].includes(role);
+      const meta = (u.user_metadata as Record<string, unknown>) ?? {};
+      return STAFF_ROLES.has((meta.role as string) ?? '');
     })
-    .map(u => ({
-      id: u.id,
-      name: u.user_metadata?.name ?? u.email ?? 'Staff',
-      email: u.email ?? '',
-      phone: u.user_metadata?.phone ?? '',
-      role: u.user_metadata?.role ?? 'admin',
-      active: true,
-      username: u.user_metadata?.username ?? '',
-      // Avatar URL stored in user_metadata by the client after Storage upload
-      avatar: (u.user_metadata?.avatar_url as string | undefined) ?? undefined,
-    }));
+    .map(u => {
+      const meta = (u.user_metadata as Record<string, unknown>) ?? {};
+      return {
+        id: u.id as string,
+        name: (meta.name as string) ?? (u.email as string) ?? 'Staff',
+        email: (u.email as string) ?? '',
+        phone: (meta.phone as string) ?? '',
+        role: (meta.role as string) ?? 'admin',
+        active: true,
+        username: (meta.username as string) ?? '',
+        avatar: (meta.avatar_url as string | undefined) ?? undefined,
+      };
+    });
 
   res.setHeader('Cache-Control', 'private, max-age=300');
   return res.status(200).json(staff);
