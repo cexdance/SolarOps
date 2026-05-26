@@ -1,0 +1,7 @@
+{
+	"nodes":[
+		{"id":"a9c86ee029bc9f2c","x":-118,"y":-128,"width":250,"height":60,"type":"text","text":""},
+		{"id":"6ec6b65f3ddb2ae2","x":-120,"y":-120,"width":250,"height":60,"type":"text","text":"Peptides"}
+	],
+	"edges":[]
+}
