@@ -249,6 +249,92 @@ export const SolarEdgeMonitoring: React.FC<Props> = ({
   const [isUpdating, setIsUpdating]     = useState(false);
   const [updateMsg, setUpdateMsg]       = useState<string | null>(null);
   const [groupFilter, setGroupFilter]   = useState<string>('Conexsol Florida');
+
+  // ── Live alert overrides fetched from SolarEdge /sites/list ────────────────
+  const [alertOverrides, setAlertOverrides] = useState<Map<string, { count: number; impact: string }>>(() => {
+    try {
+      const raw = localStorage.getItem('solarops_alert_overrides');
+      return raw ? new Map(JSON.parse(raw) as [string, { count: number; impact: string }][]) : new Map();
+    } catch { return new Map(); }
+  });
+  const [ackedSites, setAckedSites] = useState<Set<string>>(() => {
+    try {
+      const raw = localStorage.getItem('solarops_acked_sites');
+      return raw ? new Set(JSON.parse(raw) as string[]) : new Set();
+    } catch { return new Set(); }
+  });
+  const [isRefreshingAlerts, setIsRefreshingAlerts] = useState(false);
+  const [alertRefreshMsg, setAlertRefreshMsg] = useState<string | null>(null);
+
+  /** Fetch alert counts from SolarEdge /sites/list (paginated). Pass bustCache=true to bypass CDN. */
+  const fetchAlertCounts = useCallback(async (bustCache = false) => {
+    setIsRefreshingAlerts(true);
+    setAlertRefreshMsg(null);
+    try {
+      const bust = bustCache ? `&bust=${Date.now()}` : '';
+      const pageSize = 100;
+      let page = 0;
+      const newOverrides = new Map<string, { count: number; impact: string }>();
+      while (true) {
+        const res = await fetch(`/api/solaredge?path=/sites/list&size=${pageSize}&startIndex=${page * pageSize}${bust}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json() as { sites?: { site?: { id: number; alertQuantity?: number; highestImpact?: number }[] } };
+        const sites = data?.sites?.site ?? [];
+        if (sites.length === 0) break;
+        for (const s of sites) {
+          newOverrides.set(String(s.id), {
+            count: s.alertQuantity ?? 0,
+            impact: String(s.highestImpact ?? '0'),
+          });
+        }
+        if (sites.length < pageSize) break;
+        page++;
+      }
+      setAlertOverrides(newOverrides);
+      localStorage.setItem('solarops_alert_overrides', JSON.stringify(Array.from(newOverrides.entries())));
+      // Auto-clear acks for sites now reporting 0 alerts
+      setAckedSites(prev => {
+        const next = new Set(prev);
+        for (const [siteId, { count }] of newOverrides) {
+          if (count === 0) next.delete(siteId);
+        }
+        localStorage.setItem('solarops_acked_sites', JSON.stringify(Array.from(next)));
+        return next;
+      });
+      const withAlerts = [...newOverrides.values()].filter(v => v.count > 0).length;
+      setAlertRefreshMsg(`✓ ${withAlerts} site${withAlerts !== 1 ? 's' : ''} with active alerts`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Unknown';
+      setAlertRefreshMsg(`✗ Alert fetch failed: ${msg}`);
+    } finally {
+      setIsRefreshingAlerts(false);
+    }
+  }, []);
+
+  // Fetch on mount (uses cached CDN response — free)
+  useEffect(() => { void fetchAlertCounts(); }, [fetchAlertCounts]);
+
+  /** Toggle acknowledge state for a site */
+  const handleAckAlert = useCallback((siteId: string) => {
+    setAckedSites(prev => {
+      const next = new Set(prev);
+      if (next.has(siteId)) next.delete(siteId); else next.add(siteId);
+      localStorage.setItem('solarops_acked_sites', JSON.stringify(Array.from(next)));
+      return next;
+    });
+  }, []);
+
+  /** Effective alert count per site (live override > static fallback) */
+  const effectiveAlerts = useMemo(() => {
+    const count  = new Map<string, number>();
+    const impact = new Map<string, string>();
+    for (const s of ALL_SITES) {
+      const ov = alertOverrides.get(s.siteId);
+      count.set(s.siteId,  ov?.count  ?? s.alerts);
+      impact.set(s.siteId, ov?.impact ?? s.highestImpact);
+    }
+    return { count, impact };
+  }, [ALL_SITES, alertOverrides]);
   const isAdmin = currentUserRole === 'admin';
 
   // ── Column customization ──────────────────────────────────────────────────
@@ -418,8 +504,8 @@ export const SolarEdgeMonitoring: React.FC<Props> = ({
       );
     }
     if (statusFilter !== 'all') rows = rows.filter(s => s.status === statusFilter);
-    if (alertFilter === 'alerts') rows = rows.filter(s => s.alerts > 0);
-    else if (alertFilter === 'none') rows = rows.filter(s => s.alerts === 0);
+    if (alertFilter === 'alerts') rows = rows.filter(s => (effectiveAlerts.count.get(s.siteId) ?? 0) > 0);
+    else if (alertFilter === 'none') rows = rows.filter(s => (effectiveAlerts.count.get(s.siteId) ?? 0) === 0);
     if (clientStatusFilter !== 'all') {
       rows = rows.filter(s => profileMeta[s.siteId]?.clientStatus === clientStatusFilter);
     }
@@ -443,7 +529,7 @@ export const SolarEdgeMonitoring: React.FC<Props> = ({
       });
     }
     return rows;
-  }, [search, statusFilter, alertFilter, woFilter, clientStatusFilter, groupFilter, sortKey, sortDir, wosBySite, profileMeta]);
+  }, [search, statusFilter, alertFilter, woFilter, clientStatusFilter, groupFilter, sortKey, sortDir, wosBySite, profileMeta, effectiveAlerts]);
 
   const stats = useMemo(() => {
     const allJobs  = [...wosBySite.values()].flat();
@@ -458,14 +544,14 @@ export const SolarEdgeMonitoring: React.FC<Props> = ({
     return {
       total:         ALL_SITES.length,
       active:        ALL_SITES.filter(s => s.status === 'Active').length,
-      withAlerts:    ALL_SITES.filter(s => s.alerts > 0).length,
+      withAlerts:    ALL_SITES.filter(s => (effectiveAlerts.count.get(s.siteId) ?? 0) > 0).length,
       totalMonthKwh: ALL_SITES.reduce((s, x) => s + x.monthKwh, 0),
       totalWOs,
       openWOs,
       totalRevenue,
       totalProfit,
     };
-  }, [wosBySite, ALL_SITES]);
+  }, [wosBySite, ALL_SITES, effectiveAlerts]);
 
   const TH: React.FC<{ col: SortKey; label: string }> = ({ col, label }) => (
     <th
@@ -504,6 +590,15 @@ export const SolarEdgeMonitoring: React.FC<Props> = ({
               <Download className="w-4 h-4" />
               Import SolarEdge
             </button>
+            <button
+              onClick={() => fetchAlertCounts(true)}
+              disabled={isRefreshingAlerts}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-red-500 hover:bg-red-600 disabled:bg-red-300 text-white text-sm font-semibold rounded-lg shadow-sm transition-colors"
+              title="Pull fresh alert counts from SolarEdge for all sites"
+            >
+              <AlertTriangle className={`w-4 h-4 ${isRefreshingAlerts ? 'animate-pulse' : ''}`} />
+              {isRefreshingAlerts ? 'Refreshing…' : 'Refresh Alerts'}
+            </button>
             {onUpdateSites && (
               <button
                 onClick={handleUpdateClick}
@@ -516,6 +611,11 @@ export const SolarEdgeMonitoring: React.FC<Props> = ({
               </button>
             )}
           </div>
+          {alertRefreshMsg && (
+            <p className={`text-xs ${alertRefreshMsg.startsWith('✓') ? 'text-emerald-600' : 'text-red-500'}`}>
+              {alertRefreshMsg}
+            </p>
+          )}
           {updateMsg && (
             <p className={`text-xs ${updateMsg.startsWith('✓') ? 'text-emerald-600' : 'text-red-500'}`}>
               {updateMsg}
@@ -683,7 +783,7 @@ export const SolarEdgeMonitoring: React.FC<Props> = ({
 
                   return (
                     <React.Fragment key={site.siteId}>
-                      <tr className={`hover:bg-slate-50 transition-colors duration-150 ${site.alerts > 0 ? 'border-l-2 border-l-orange-400' : ''}`}>
+                      <tr className={`hover:bg-slate-50 transition-colors duration-150 ${(effectiveAlerts.count.get(site.siteId) ?? 0) > 0 && !ackedSites.has(site.siteId) ? 'border-l-2 border-l-orange-400' : ''}`}>
                         {visibleColumns.map(col => {
                           const ctx: CellCtx = {
                             site,
@@ -700,6 +800,9 @@ export const SolarEdgeMonitoring: React.FC<Props> = ({
                             onConfirmRemove: (id) => setConfirmRemove(id),
                             onCancelRemove: () => setConfirmRemove(null),
                             onRemove: handleRemoveSite,
+                            alertOverrides,
+                            ackedSites,
+                            onAckAlert: handleAckAlert,
                           };
                           return (
                             <td

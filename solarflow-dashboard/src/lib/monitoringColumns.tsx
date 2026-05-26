@@ -1,6 +1,6 @@
 // Column registry for SolarEdge Monitoring table
 // Each column is defined with its render logic, making the table fully dynamic
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   AlertTriangle, FileText, MessageSquare, ExternalLink,
   TrendingUp, TrendingDown, Trash2,
@@ -29,6 +29,12 @@ export interface CellCtx {
   onConfirmRemove: (siteId: string) => void;
   onCancelRemove: () => void;
   onRemove: (siteId: string) => void;
+  /** Live alert counts fetched from /sites/list (overrides stale static values) */
+  alertOverrides?: Map<string, { count: number; impact: string }>;
+  /** Sites acknowledged locally in SolarOps */
+  ackedSites?: Set<string>;
+  /** Toggle acknowledge state for a site */
+  onAckAlert?: (siteId: string) => void;
 }
 
 // ── Column definition ────────────────────────────────────────────────────────
@@ -68,18 +74,81 @@ const EnergyCell: React.FC<{ value: number }> = ({ value }) => {
   return <span className="font-mono text-xs text-slate-700">{display}</span>;
 };
 
-const AlertBadge: React.FC<{ alerts: number; impact: string }> = ({ alerts, impact }) => {
-  if (alerts === 0) return <span className="text-slate-400 text-xs">—</span>;
-  const colors: Record<string, string> = {
-    '0': 'bg-slate-100 text-slate-500', '1': 'bg-blue-100 text-blue-600',
-    '2': 'bg-yellow-100 text-yellow-700', '3': 'bg-orange-100 text-orange-700',
-    '4': 'bg-red-100 text-red-700', '5': 'bg-red-200 text-red-800', '6': 'bg-red-300 text-red-900',
-  };
+const IMPACT_COLORS: Record<string, string> = {
+  '0': 'bg-slate-100 text-slate-500', '1': 'bg-blue-100 text-blue-600',
+  '2': 'bg-yellow-100 text-yellow-700', '3': 'bg-orange-100 text-orange-700',
+  '4': 'bg-red-100 text-red-700', '5': 'bg-red-200 text-red-800', '6': 'bg-red-300 text-red-900',
+};
+
+/** Interactive alert cell — shows live count, popover to acknowledge or open SolarEdge */
+const AlertCell: React.FC<{
+  site: SolarEdgeSite;
+  alertOverrides?: Map<string, { count: number; impact: string }>;
+  ackedSites?: Set<string>;
+  onAckAlert?: (siteId: string) => void;
+}> = ({ site, alertOverrides, ackedSites, onAckAlert }) => {
+  const override = alertOverrides?.get(site.siteId);
+  const count  = override?.count  ?? site.alerts;
+  const impact = override?.impact ?? site.highestImpact;
+  const isAcked = ackedSites?.has(site.siteId) ?? false;
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  if (count === 0) return <span className="text-slate-400 text-xs">—</span>;
+
   return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${colors[impact] || 'bg-red-100 text-red-700'}`}>
-      <AlertTriangle className="w-3 h-3" />
-      {alerts}
-    </span>
+    <div ref={ref} className="relative inline-block">
+      {isAcked ? (
+        <button
+          onClick={() => setOpen(o => !o)}
+          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-400 hover:bg-slate-200 transition-colors"
+          title="Acknowledged locally — click for options"
+        >
+          ✓ Acked ({count})
+        </button>
+      ) : (
+        <button
+          onClick={() => setOpen(o => !o)}
+          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium cursor-pointer hover:opacity-80 transition-opacity ${IMPACT_COLORS[impact] || 'bg-red-100 text-red-700'}`}
+          title="Click for alert options"
+        >
+          <AlertTriangle className="w-3 h-3" />
+          {count}
+        </button>
+      )}
+      {open && (
+        <div className="absolute left-0 top-full mt-1 z-50 bg-white border border-slate-200 rounded-lg shadow-xl p-3 w-52 space-y-2">
+          <p className="text-xs font-semibold text-slate-700 border-b border-slate-100 pb-2">
+            {count} active alert{count !== 1 ? 's' : ''}
+          </p>
+          <button
+            onClick={() => { onAckAlert?.(site.siteId); setOpen(false); }}
+            className="w-full text-left text-xs px-2 py-1.5 rounded-md font-medium transition-colors bg-amber-50 hover:bg-amber-100 text-amber-700"
+          >
+            {isAcked ? '✕ Remove acknowledgement' : '✓ Acknowledge in SolarOps'}
+          </button>
+          <a
+            href={`https://monitoring.solaredge.com/monitoring/site/${site.siteId}/alerts`}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => setOpen(false)}
+            className="flex items-center gap-1.5 text-xs px-2 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-md font-medium transition-colors"
+          >
+            <ExternalLink className="w-3 h-3" />
+            View in SolarEdge →
+          </a>
+        </div>
+      )}
+    </div>
   );
 };
 
@@ -268,7 +337,14 @@ export const COLUMN_REGISTRY: MonitoringColumnDef[] = [
     sortKey: 'alerts',
     defaultVisible: true,
     defaultOrder: 9,
-    render: ({ site }) => <AlertBadge alerts={site.alerts} impact={site.highestImpact} />,
+    render: ({ site, alertOverrides, ackedSites, onAckAlert }) => (
+      <AlertCell
+        site={site}
+        alertOverrides={alertOverrides}
+        ackedSites={ackedSites}
+        onAckAlert={onAckAlert}
+      />
+    ),
   },
   {
     id: 'highestImpact',

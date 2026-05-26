@@ -19,7 +19,7 @@ const SOLAREDGE_BASE = 'https://monitoringapi.solaredge.com';
 function getCacheDuration(path: string): number {
   if (path.includes('/energy'))   return 3600;  // 1 hour — graph data
   if (path.includes('/overview')) return 900;   // 15 min — today's stats
-  if (path.includes('/sites'))    return 21600; // 6 hours — site list
+  if (path.includes('/sites'))    return 1800;  // 30 min — site list (shorter for alert freshness)
   return 1800; // 30 min default
 }
 
