@@ -247,6 +247,59 @@ export const Customers: React.FC<CustomersProps> = ({
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
+  // ── Live SolarEdge alert overrides (shared localStorage with SolarEdge Monitoring page) ──
+  const [alertOverrides, setAlertOverrides] = React.useState<Map<string, { count: number; impact: string }>>(() => {
+    try {
+      const raw = localStorage.getItem('solarops_alert_overrides');
+      return raw ? new Map(JSON.parse(raw) as [string, { count: number; impact: string }][]) : new Map();
+    } catch { return new Map(); }
+  });
+  const [ackedSites, setAckedSites] = React.useState<Set<string>>(() => {
+    try {
+      const raw = localStorage.getItem('solarops_acked_sites');
+      return raw ? new Set(JSON.parse(raw) as string[]) : new Set();
+    } catch { return new Set(); }
+  });
+  const [isRefreshingAlerts, setIsRefreshingAlerts] = React.useState(false);
+  const [alertRefreshMsg, setAlertRefreshMsg] = React.useState<string | null>(null);
+
+  /** Pull fresh alert counts from SolarEdge /sites/list and store in localStorage */
+  const fetchAlertCounts = React.useCallback(async () => {
+    setIsRefreshingAlerts(true);
+    setAlertRefreshMsg(null);
+    try {
+      const pageSize = 100;
+      let page = 0;
+      const newOverrides = new Map<string, { count: number; impact: string }>();
+      while (true) {
+        const res = await fetch(`/api/solaredge?path=/sites/list&size=${pageSize}&startIndex=${page * pageSize}&bust=${Date.now()}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json() as { sites?: { site?: { id: number; alertQuantity?: number; highestImpact?: number }[] } };
+        const sites = data?.sites?.site ?? [];
+        if (sites.length === 0) break;
+        for (const s of sites) {
+          newOverrides.set(String(s.id), { count: s.alertQuantity ?? 0, impact: String(s.highestImpact ?? '0') });
+        }
+        if (sites.length < pageSize) break;
+        page++;
+      }
+      setAlertOverrides(newOverrides);
+      localStorage.setItem('solarops_alert_overrides', JSON.stringify(Array.from(newOverrides.entries())));
+      setAckedSites(prev => {
+        const next = new Set(prev);
+        for (const [siteId, { count }] of newOverrides) { if (count === 0) next.delete(siteId); }
+        localStorage.setItem('solarops_acked_sites', JSON.stringify(Array.from(next)));
+        return next;
+      });
+      const withAlerts = [...newOverrides.values()].filter(v => v.count > 0).length;
+      setAlertRefreshMsg(`✓ ${withAlerts} site${withAlerts !== 1 ? 's' : ''} with active alerts`);
+    } catch (err: unknown) {
+      setAlertRefreshMsg(`✗ ${err instanceof Error ? err.message : 'Sync failed'}`);
+    } finally {
+      setIsRefreshingAlerts(false);
+    }
+  }, []);
+
   // ── Column system ──────────────────────────────────────────────────────────
   type ColId = 'name' | 'clientId' | 'type' | 'category' | 'system' | 'status' | 'location' | 'phone' | 'email' | 'workOrders' | 'powerCare' | 'seAlerts';
   const ALL_COLUMNS: { id: ColId; label: string }[] = [
@@ -321,45 +374,50 @@ export const Customers: React.FC<CustomersProps> = ({
       map.get(a.customerId)!.push(a);
     });
 
-    // Source 2: site-level counts from SE Monitoring data (FL_SITES + extraSites)
-    // Build siteId → site lookup
+    // Source 2: site-level counts — prefer live alertOverrides, fall back to static solarEdgeSites
     const siteMap = new Map<string, typeof solarEdgeSites[0]>();
     solarEdgeSites.forEach(s => siteMap.set(s.siteId, s));
 
     customers.forEach(customer => {
       if (!customer.solarEdgeSiteId) return;
-      const site = siteMap.get(customer.solarEdgeSiteId);
-      if (!site || site.alerts === 0) return;
       // Skip if we already have structured records for this customer
       if (map.has(customer.id)) return;
+      // Skip if acknowledged locally
+      if (ackedSites.has(customer.solarEdgeSiteId)) return;
 
-      // Map highestImpact score → severity
-      const impact = parseFloat(site.highestImpact) || 0;
+      const override = alertOverrides.get(customer.solarEdgeSiteId);
+      const site     = siteMap.get(customer.solarEdgeSiteId);
+
+      // Live count takes priority over stale static value
+      const count  = override?.count  ?? site?.alerts  ?? 0;
+      const impactStr = override?.impact ?? site?.highestImpact ?? '0';
+      if (count === 0) return;
+
+      const impact = parseFloat(impactStr) || 0;
       const severity: 'critical' | 'warning' | 'info' =
         impact >= 4 ? 'critical' : impact >= 2 ? 'warning' : 'info';
 
-      // Create one synthetic alert representing the site's alert summary
       map.set(customer.id, [{
-        id:              `site-${site.siteId}`,
-        alertId:         `site-${site.siteId}`,
-        siteId:          site.siteId,
-        siteName:        site.siteName,
-        customerId:      customer.id,
-        customerName:    customer.name,
-        type:            'inverter_error' as const,
+        id:               `site-${customer.solarEdgeSiteId}`,
+        alertId:          `site-${customer.solarEdgeSiteId}`,
+        siteId:           customer.solarEdgeSiteId,
+        siteName:         site?.siteName ?? customer.solarEdgeSiteId,
+        customerId:       customer.id,
+        customerName:     customer.name,
+        type:             'inverter_error' as const,
         severity,
-        title:           `${site.alerts} Active Alert${site.alerts !== 1 ? 's' : ''}`,
-        description:     site.highestImpact !== '0' ? `Highest impact level: ${site.highestImpact}` : '',
-        acknowledged:    false,
-        resolved:        false,
+        title:            `${count} Active Alert${count !== 1 ? 's' : ''}`,
+        description:      impact > 0 ? `Highest impact level: ${impactStr}` : '',
+        acknowledged:     false,
+        resolved:         false,
         workOrderCreated: false,
-        occurredAt:      site.lastUpdate || new Date().toISOString(),
-        createdAt:       site.lastUpdate || new Date().toISOString(),
+        occurredAt:       site?.lastUpdate || new Date().toISOString(),
+        createdAt:        site?.lastUpdate || new Date().toISOString(),
       }]);
     });
 
     return map;
-  }, [customers, solarEdgeSites]);
+  }, [customers, solarEdgeSites, alertOverrides, ackedSites]);
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(() =>
@@ -596,6 +654,25 @@ export const Customers: React.FC<CustomersProps> = ({
           <p className="text-slate-500 mt-1">{sortedCustomers.length} of {customers.length} customers</p>
         </div>
         <div className="flex items-center gap-2">
+          {/* Alert Sync button — only show when any customer has a linked SE site */}
+          {customers.some(c => c.solarEdgeSiteId) && (
+            <div className="flex flex-col items-end gap-0.5">
+              <button
+                onClick={fetchAlertCounts}
+                disabled={isRefreshingAlerts}
+                className="flex items-center gap-2 px-3 py-2.5 bg-red-500 hover:bg-red-600 disabled:bg-red-300 text-white text-sm font-medium rounded-lg transition-colors"
+                title="Pull fresh alert counts from SolarEdge for all linked sites"
+              >
+                <AlertTriangle className={`w-4 h-4 ${isRefreshingAlerts ? 'animate-pulse' : ''}`} />
+                {isRefreshingAlerts ? 'Syncing…' : 'Sync Alerts'}
+              </button>
+              {alertRefreshMsg && (
+                <span className={`text-xs ${alertRefreshMsg.startsWith('✓') ? 'text-emerald-600' : 'text-red-500'}`}>
+                  {alertRefreshMsg}
+                </span>
+              )}
+            </div>
+          )}
           <button
             onClick={() => setShowCreateModal(true)}
             className="flex items-center gap-2 px-4 py-2.5 bg-orange-500 text-white font-medium rounded-lg hover:bg-orange-600 transition-colors"
