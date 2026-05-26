@@ -7,41 +7,58 @@
  * 1. Validates caller JWT
  * 2. Writes AppNotification rows to Supabase (one per mentioned user)
  * 3. Sends email to each mentioned user via Resend (if RESEND_API_KEY is set)
+ *
+ * Uses native fetch only — no SDK dependencies (avoids Vercel bundling issues).
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { createClient } from '@supabase/supabase-js';
-import { Resend } from 'resend';
 
-const supabaseAdmin = createClient(
-  'https://cjmhfagkkayelcsprbai.supabase.co',
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  { auth: { autoRefreshToken: false, persistSession: false } }
-);
+const SUPABASE_URL     = 'https://cjmhfagkkayelcsprbai.supabase.co';
+const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+const RESEND_API_KEY   = process.env.RESEND_API_KEY;
 
-const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
+const supabaseHeaders = {
+  Authorization:  `Bearer ${SERVICE_ROLE_KEY}`,
+  apikey:          SERVICE_ROLE_KEY,
+  'Content-Type':  'application/json',
+};
+
+interface AuthUser {
+  id: string;
+  email?: string;
+  user_metadata?: Record<string, unknown>;
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).end();
 
-  // Validate caller
+  // ── Validate caller JWT ────────────────────────────────────────────────────
   const token = (req.headers.authorization ?? '').replace('Bearer ', '');
   if (!token) return res.status(401).json({ error: 'Unauthorized' });
 
-  const { data: { user: caller }, error: authErr } = await supabaseAdmin.auth.getUser(token);
-  if (authErr || !caller) return res.status(401).json({ error: 'Unauthorized' });
+  const verifyRes = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      apikey: SERVICE_ROLE_KEY,
+    },
+  });
+  if (!verifyRes.ok) return res.status(401).json({ error: 'Unauthorized' });
 
-  const { mentionedUserIds, notifierName, customerName, customerId, message } = req.body ?? {};
+  const { mentionedUserIds, notifierName, customerName, customerId, message } = (req.body ?? {}) as Record<string, unknown>;
   if (!Array.isArray(mentionedUserIds) || mentionedUserIds.length === 0) {
     return res.status(400).json({ error: 'mentionedUserIds required' });
   }
 
-  // Look up mentioned users in Supabase Auth
-  const { data: { users: authUsers }, error: usersErr } = await supabaseAdmin.auth.admin.listUsers();
-  if (usersErr) return res.status(500).json({ error: 'Could not fetch users' });
+  // ── Fetch mentioned users from Supabase Auth Admin ─────────────────────────
+  const listRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users?per_page=200`, {
+    headers: supabaseHeaders,
+  });
+  if (!listRes.ok) return res.status(500).json({ error: 'Could not fetch users' });
 
-  const mentioned = authUsers.filter(u => mentionedUserIds.includes(u.id));
+  const listBody = await listRes.json() as { users?: AuthUser[] };
+  const allUsers: AuthUser[] = listBody.users ?? [];
+  const mentioned = allUsers.filter(u => (mentionedUserIds as string[]).includes(u.id));
 
-  // Insert notification rows (one per mentioned user)
+  // ── Insert notification rows ───────────────────────────────────────────────
   const now = new Date().toISOString();
   const rows = mentioned.map(u => ({
     id: `notif-${u.id}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -49,34 +66,43 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     type: 'mention',
     title: `${notifierName || 'A teammate'} mentioned you`,
     message: message
-      ? `In ${customerName || 'a customer record'}: "${message.slice(0, 200)}${message.length > 200 ? '…' : ''}"`
+      ? `In ${customerName || 'a customer record'}: "${String(message).slice(0, 200)}${String(message).length > 200 ? '…' : ''}"`
       : `You were mentioned in ${customerName || 'a customer record'}`,
     related_customer_id: customerId ?? null,
     read: false,
     created_at: now,
   }));
 
-  const { error: insertErr } = await supabaseAdmin
-    .from('notifications')
-    .insert(rows);
+  const insertRes = await fetch(`${SUPABASE_URL}/rest/v1/notifications`, {
+    method: 'POST',
+    headers: { ...supabaseHeaders, Prefer: 'return=minimal' },
+    body: JSON.stringify(rows),
+  });
 
-  if (insertErr) {
-    console.error('[notify] insert error:', insertErr.message);
+  if (!insertRes.ok) {
+    const detail = await insertRes.text().catch(() => '');
+    console.error('[notify] insert error:', detail);
     return res.status(500).json({ error: 'Failed to save notifications' });
   }
 
-  // Send email to each mentioned user (fire-and-forget per user)
-  if (resend) {
+  // ── Send email to each mentioned user (fire-and-forget) ───────────────────
+  if (RESEND_API_KEY) {
     for (const u of mentioned) {
       const email = u.email;
-      const name = u.user_metadata?.name ?? email;
+      const name  = (u.user_metadata?.name as string) ?? email ?? 'there';
       if (!email) continue;
 
-      resend.emails.send({
-        from: 'SolarOps <notifications@conexsol.us>',
-        to: email,
-        subject: `${notifierName || 'A teammate'} mentioned you in SolarOps`,
-        html: `
+      fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          Authorization:  `Bearer ${RESEND_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from:    'SolarOps <notifications@conexsol.us>',
+          to:      email,
+          subject: `${notifierName || 'A teammate'} mentioned you in SolarOps`,
+          html: `
 <!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
@@ -84,14 +110,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;padding:32px 16px">
     <tr><td align="center">
       <table width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.08)">
-        <!-- Header -->
         <tr>
           <td style="background:linear-gradient(135deg,#f97316,#ea580c);padding:28px 32px">
             <div style="font-size:22px;font-weight:700;color:#fff">☀️ SolarOps</div>
             <div style="font-size:13px;color:rgba(255,255,255,.85);margin-top:4px">You were mentioned by a teammate</div>
           </td>
         </tr>
-        <!-- Body -->
         <tr>
           <td style="padding:32px">
             <p style="margin:0 0 8px;font-size:16px;color:#1e293b">Hi ${name},</p>
@@ -99,9 +123,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               <strong>${notifierName || 'A teammate'}</strong> mentioned you in the customer record for
               <strong>${customerName || 'a customer'}</strong>.
             </p>
-            <!-- Message bubble -->
             <div style="background:#f8fafc;border-left:3px solid #f97316;border-radius:0 8px 8px 0;padding:16px 20px;margin-bottom:24px">
-              <p style="margin:0;font-size:14px;color:#334155;line-height:1.7;white-space:pre-wrap">${(message ?? '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>
+              <p style="margin:0;font-size:14px;color:#334155;line-height:1.7;white-space:pre-wrap">${(String(message ?? '')).replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>
             </div>
             <a href="https://solarflow-dashboard-sooty.vercel.app"
                style="display:inline-block;background:#f97316;color:#fff;font-size:14px;font-weight:600;padding:12px 24px;border-radius:8px;text-decoration:none">
@@ -109,7 +132,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             </a>
           </td>
         </tr>
-        <!-- Footer -->
         <tr>
           <td style="padding:20px 32px;border-top:1px solid #f1f5f9">
             <p style="margin:0;font-size:12px;color:#94a3b8">
@@ -122,6 +144,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   </table>
 </body>
 </html>`,
+        }),
       }).catch((err: unknown) => console.warn('[notify] email failed for', email, err));
     }
   }

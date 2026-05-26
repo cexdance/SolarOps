@@ -7,13 +7,16 @@
  * and returns a branded confirmation page.
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { createClient } from '@supabase/supabase-js';
 
-const supabaseAdmin = createClient(
-  'https://cjmhfagkkayelcsprbai.supabase.co',
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  { auth: { autoRefreshToken: false, persistSession: false } }
-);
+// Native fetch — no SDK dependency (avoids Vercel bundling issues)
+const SUPABASE_URL      = 'https://cjmhfagkkayelcsprbai.supabase.co';
+const SERVICE_ROLE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+
+const supabaseHeaders = {
+  Authorization:  `Bearer ${SERVICE_ROLE_KEY}`,
+  apikey:          SERVICE_ROLE_KEY,
+  'Content-Type':  'application/json',
+};
 
 function htmlPage(title: string, message: string, success: boolean) {
   const color = success ? '#16a34a' : '#dc2626';
@@ -52,13 +55,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .send(htmlPage('Invalid Link', 'This approval link is invalid. Please contact Conexsol Energy for assistance.', false));
   }
 
-  const { data: quote, error } = await supabaseAdmin
-    .from('quote_approvals')
-    .select('token, wo_number, grand_total, approved_at, expires_at')
-    .eq('token', token)
-    .single();
+  // Fetch quote row
+  const selectRes = await fetch(
+    `${SUPABASE_URL}/rest/v1/quote_approvals?token=eq.${encodeURIComponent(token)}&select=token,wo_number,grand_total,approved_at,expires_at&limit=1`,
+    { headers: supabaseHeaders },
+  );
 
-  if (error || !quote) {
+  if (!selectRes.ok) {
+    return res.status(404)
+      .setHeader('Content-Type', 'text/html')
+      .send(htmlPage('Quote Not Found', 'This approval link is no longer valid. The quote may have expired or already been processed.', false));
+  }
+
+  const rows = await selectRes.json() as { token: string; wo_number: string; grand_total: number; approved_at: string | null; expires_at: string }[];
+  const quote = rows[0];
+
+  if (!quote) {
     return res.status(404)
       .setHeader('Content-Type', 'text/html')
       .send(htmlPage('Quote Not Found', 'This approval link is no longer valid. The quote may have expired or already been processed.', false));
@@ -77,13 +89,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // Mark as approved
-  const { error: updateErr } = await supabaseAdmin
-    .from('quote_approvals')
-    .update({ approved_at: new Date().toISOString() })
-    .eq('token', token);
+  const updateRes = await fetch(
+    `${SUPABASE_URL}/rest/v1/quote_approvals?token=eq.${encodeURIComponent(token)}`,
+    {
+      method: 'PATCH',
+      headers: { ...supabaseHeaders, Prefer: 'return=minimal' },
+      body: JSON.stringify({ approved_at: new Date().toISOString() }),
+    },
+  );
 
-  if (updateErr) {
-    console.error('[approve-quote] update error:', updateErr.message);
+  if (!updateRes.ok) {
+    const detail = await updateRes.text().catch(() => '');
+    console.error('[approve-quote] update error:', detail);
     return res.status(500)
       .setHeader('Content-Type', 'text/html')
       .send(htmlPage('Error', 'Something went wrong. Please try again or contact us at (305) 555-0199.', false));

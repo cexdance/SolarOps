@@ -6,19 +6,16 @@
  *
  * Sends a branded HTML quote email to the customer with a one-click approval link.
  * Stores the quote token in Supabase for approval verification.
+ *
+ * Uses native fetch only — no SDK dependencies (avoids Vercel bundling issues).
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { createClient } from '@supabase/supabase-js';
-import { Resend } from 'resend';
 import crypto from 'crypto';
 
-const supabaseAdmin = createClient(
-  'https://cjmhfagkkayelcsprbai.supabase.co',
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  { auth: { autoRefreshToken: false, persistSession: false } }
-);
+const SUPABASE_URL = 'https://cjmhfagkkayelcsprbai.supabase.co';
+const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+const RESEND_API_KEY   = process.env.RESEND_API_KEY!;
 
-const resend = new Resend(process.env.RESEND_API_KEY!);
 const APP_URL = process.env.VERCEL_PROJECT_PRODUCTION_URL
   ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
   : 'https://solarflow-dashboard-sooty.vercel.app';
@@ -33,48 +30,64 @@ interface LineItem {
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).end();
 
+  // ── Auth: verify caller JWT ────────────────────────────────────────────────
   const token = (req.headers.authorization ?? '').replace('Bearer ', '');
   if (!token) return res.status(401).json({ error: 'Unauthorized' });
 
-  const { data: { user }, error: authErr } = await supabaseAdmin.auth.getUser(token);
-  if (authErr || !user) return res.status(401).json({ error: 'Unauthorized' });
+  const verifyRes = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      apikey: SERVICE_ROLE_KEY,
+    },
+  });
+  if (!verifyRes.ok) return res.status(401).json({ error: 'Unauthorized' });
 
+  // ── Parse body ─────────────────────────────────────────────────────────────
   const {
     customerName, customerEmail, address, woNumber, jobId,
     lineItems, laborTotal, partsTotal, grandTotal,
     notes, validDays = 30,
-  } = req.body ?? {};
+  } = (req.body ?? {}) as Record<string, unknown>;
 
   if (!customerEmail || !woNumber || !jobId) {
     return res.status(400).json({ error: 'customerEmail, woNumber, and jobId are required' });
   }
 
   const approvalToken = crypto.randomBytes(32).toString('hex');
-  const expiresAt = new Date(Date.now() + validDays * 24 * 60 * 60 * 1000).toISOString();
+  const expiresAt = new Date(Date.now() + Number(validDays) * 24 * 60 * 60 * 1000).toISOString();
 
-  // Store quote token in Supabase
-  const { error: insertErr } = await supabaseAdmin
-    .from('quote_approvals')
-    .upsert({
-      job_id: jobId,
-      token: approvalToken,
-      customer_email: customerEmail,
-      customer_name: customerName,
-      wo_number: woNumber,
-      grand_total: grandTotal,
-      line_items: lineItems,
-      expires_at: expiresAt,
-      approved_at: null,
-      created_at: new Date().toISOString(),
-    }, { onConflict: 'job_id' });
+  // ── Store quote token in Supabase via REST ─────────────────────────────────
+  const upsertRes = await fetch(`${SUPABASE_URL}/rest/v1/quote_approvals`, {
+    method: 'POST',
+    headers: {
+      Authorization:  `Bearer ${SERVICE_ROLE_KEY}`,
+      apikey:          SERVICE_ROLE_KEY,
+      'Content-Type':  'application/json',
+      Prefer:          'return=minimal,resolution=merge-duplicates',
+    },
+    body: JSON.stringify({
+      job_id:          jobId,
+      token:           approvalToken,
+      customer_email:  customerEmail,
+      customer_name:   customerName,
+      wo_number:       woNumber,
+      grand_total:     grandTotal,
+      line_items:      lineItems,
+      expires_at:      expiresAt,
+      approved_at:     null,
+      created_at:      new Date().toISOString(),
+    }),
+  });
 
-  if (insertErr) {
-    console.error('[send-quote] insert error:', insertErr.message);
+  if (!upsertRes.ok) {
+    const detail = await upsertRes.text().catch(() => '');
+    console.error('[send-quote] insert error:', detail);
     return res.status(500).json({ error: 'Failed to store quote' });
   }
 
+  // ── Build email HTML ───────────────────────────────────────────────────────
   const approvalUrl = `${APP_URL}/api/approve-quote?token=${approvalToken}`;
-  const items: LineItem[] = lineItems ?? [];
+  const items: LineItem[] = Array.isArray(lineItems) ? (lineItems as LineItem[]) : [];
 
   const lineItemsHtml = items.map((item: LineItem) => `
     <tr>
@@ -103,7 +116,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         <!-- Body -->
         <tr>
           <td style="padding:32px">
-            <p style="margin:0 0 8px;font-size:16px;color:#1e293b">Dear ${(customerName || 'Valued Customer').replace(/</g, '&lt;')},</p>
+            <p style="margin:0 0 8px;font-size:16px;color:#1e293b">Dear ${(String(customerName || 'Valued Customer')).replace(/</g, '&lt;')},</p>
             <p style="margin:0 0 24px;font-size:14px;color:#64748b;line-height:1.6">
               Thank you for choosing Conexsol Energy. Please find your service quote below for work order <strong>${woNumber}</strong>.
             </p>
@@ -116,7 +129,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                   <td style="text-align:right"><strong>Valid until:</strong> ${new Date(expiresAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</td>
                 </tr>
                 <tr>
-                  <td colspan="2" style="padding-top:4px"><strong>Address:</strong> ${(address || '').replace(/</g, '&lt;')}</td>
+                  <td colspan="2" style="padding-top:4px"><strong>Address:</strong> ${(String(address || '')).replace(/</g, '&lt;')}</td>
                 </tr>
               </table>
             </div>
@@ -139,7 +152,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 <td style="padding:4px 12px;font-size:14px;color:#334155;text-align:right">$${Number(laborTotal || 0).toFixed(2)}</td>
               </tr>
               <tr>
-                <td style="padding:4px 12px;font-size:14px;color:#64748b">Parts & Materials</td>
+                <td style="padding:4px 12px;font-size:14px;color:#64748b">Parts &amp; Materials</td>
                 <td style="padding:4px 12px;font-size:14px;color:#334155;text-align:right">$${Number(partsTotal || 0).toFixed(2)}</td>
               </tr>
               <tr>
@@ -151,7 +164,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             ${notes ? `
             <div style="background:#fffbeb;border-left:3px solid #f59e0b;border-radius:0 8px 8px 0;padding:12px 16px;margin-bottom:24px">
               <p style="margin:0;font-size:13px;color:#92400e;font-weight:600">Notes</p>
-              <p style="margin:4px 0 0;font-size:13px;color:#78350f;line-height:1.5">${(notes || '').replace(/</g, '&lt;').replace(/\n/g, '<br>')}</p>
+              <p style="margin:4px 0 0;font-size:13px;color:#78350f;line-height:1.5">${(String(notes || '')).replace(/</g, '&lt;').replace(/\n/g, '<br>')}</p>
             </div>
             ` : ''}
 
@@ -180,16 +193,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 </body>
 </html>`;
 
-  try {
-    await resend.emails.send({
-      from: 'Conexsol Energy <notifications@conexsol.us>',
-      to: customerEmail,
-      subject: `Service Quote ${woNumber} — Conexsol Energy`,
+  // ── Send email via Resend REST API ─────────────────────────────────────────
+  const emailRes = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization:  `Bearer ${RESEND_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from:     'Conexsol Energy <notifications@conexsol.us>',
+      to:       customerEmail,
+      subject:  `Service Quote ${woNumber} — Conexsol Energy`,
       html,
-      replyTo: 'daniel.matos@conexsol.us',
-    });
-  } catch (emailErr) {
-    console.error('[send-quote] email error:', emailErr);
+      reply_to: 'daniel.matos@conexsol.us',
+    }),
+  });
+
+  if (!emailRes.ok) {
+    const detail = await emailRes.text().catch(() => '');
+    console.error('[send-quote] email error:', detail);
     return res.status(500).json({ error: 'Failed to send email' });
   }
 
