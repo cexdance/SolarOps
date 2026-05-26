@@ -598,7 +598,12 @@ function App() {
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
       if (!res.ok) return [];
-      return await res.json() as User[];
+      const users = await res.json() as User[];
+      // Strip leading @ from usernames stored as "@handle" in Supabase metadata
+      return users.map(u => ({
+        ...u,
+        username: u.username ? u.username.replace(/^@/, '') : u.username,
+      }));
     } catch {
       return [];
     }
