@@ -331,6 +331,8 @@ export interface WorkOrderPanelProps {
   /** Admin-only: navigate to the linked client card. When provided, the
    *  client name in the WO header + SOW Report becomes a clickable link. */
   onViewCustomer?: (customerId: string) => void;
+  /** Navigate to a top-level view (e.g., 'rma' to open the RMA Tracker). */
+  onViewChange?: (view: string) => void;
   /** Staff users available for @mention. When provided, textareas show a
    *  live dropdown and saving fires notifications to mentioned users. */
   users?: MentionUser[];
@@ -358,6 +360,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
   customer,
   onQuoteSent,
   onViewCustomer,
+  onViewChange,
   users = [],
 }) => {
   const isNew = !job;
@@ -2118,13 +2121,25 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                     <RotateCcw className="w-3.5 h-3.5" />
                     RMA Tracking
                   </p>
-                  <button
-                    onClick={() => setShowRmaForm(v => !v)}
-                    className="flex items-center gap-1 px-2.5 py-1 bg-orange-500 text-white text-xs font-medium rounded-lg hover:bg-orange-600 transition-colors cursor-pointer"
-                  >
-                    <Plus className="w-3 h-3" />
-                    Add RMA
-                  </button>
+                  <div className="flex items-center gap-1.5">
+                    {onViewChange && (
+                      <button
+                        onClick={() => onViewChange('rma')}
+                        className="flex items-center gap-1 px-2 py-1 text-amber-600 hover:text-amber-700 text-[10px] font-semibold rounded-lg hover:bg-amber-50 transition-colors"
+                        title="Open RMA Tracker"
+                      >
+                        <RotateCcw className="w-3 h-3" />
+                        RMA Tracker →
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setShowRmaForm(v => !v)}
+                      className="flex items-center gap-1 px-2.5 py-1 bg-orange-500 text-white text-xs font-medium rounded-lg hover:bg-orange-600 transition-colors cursor-pointer"
+                    >
+                      <Plus className="w-3 h-3" />
+                      Add RMA
+                    </button>
+                  </div>
                 </div>
 
                 {showRmaForm && (

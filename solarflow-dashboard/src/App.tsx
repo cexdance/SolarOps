@@ -29,6 +29,7 @@ const Operations         = lazy(() => import('./components/Operations'));
 const SolarEdgeMonitoring = lazy(() => import('./components/SolarEdgeMonitoring').then(m => ({ default: m.SolarEdgeMonitoring })));
 const DispatchDashboard  = lazy(() => import('./components/DispatchDashboard').then(m => ({ default: m.DispatchDashboard })));
 const LeadLobby          = lazy(() => import('./components/LeadLobby').then(m => ({ default: m.LeadLobby })));
+const RMADashboardPage   = lazy(() => import('./components/RMADashboard').then(m => ({ default: m.RMADashboard })));
 import { supabase } from './lib/supabase';
 import { syncFromDB } from './lib/db';
 import { loadData, saveData } from './lib/dataStore';
@@ -2200,6 +2201,19 @@ function App() {
           />
         );
 
+      case 'rma':
+        return (
+          <RMADashboardPage
+            jobs={data.jobs}
+            customers={data.customers}
+            currentUser={currentUser}
+            onJobClick={(jobId) => handleViewChange('jobDetail', jobId)}
+            onViewCustomer={(customerId) => { setSelectedCustomerId(customerId); setCurrentView('customers'); }}
+            onUpdateJob={handleUpdateJob}
+            onViewChange={handleViewChange}
+          />
+        );
+
       case 'jobDetail':
         if (selectedJob && selectedCustomer) {
           const clientPaidCount = data.jobs.filter(
@@ -2259,6 +2273,7 @@ function App() {
                 setSelectedCustomerId(customerId);
                 setCurrentView('customers');
               }}
+              onViewChange={handleViewChange}
             />
           );
         }

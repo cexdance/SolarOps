@@ -30,6 +30,7 @@ import {
   Download,
   RefreshCw,
   CheckCircle2,
+  RotateCcw,
 } from 'lucide-react';
 import { User as UserType, AppNotification, Customer, Job } from '../types';
 
@@ -58,6 +59,7 @@ const allNavItems = [
   { id: 'dispatch',           label: 'Ops Center',        icon: Crosshair,       dispatch: true,  roles: ['admin', 'coo', 'technician', 'support'] },
   { id: 'dashboard',          label: 'Dashboard',          icon: LayoutDashboard,                  roles: ['admin', 'coo', 'technician', 'support'] },
   { id: 'jobs',               label: 'Work Orders',        icon: Wrench,                           roles: ['admin', 'coo', 'technician', 'support'] },
+  { id: 'rma',               label: 'RMA Tracker',        icon: RotateCcw,       indent: true, parent: 'jobs', roles: ['admin', 'coo', 'support'] },
   { id: 'customers',          label: 'Customers',          icon: Users,                            roles: ['admin', 'coo', 'technician', 'support'] },
   { id: 'lobby',              label: 'Lead Lobby',         icon: Inbox,           indent: true, parent: 'customers', roles: ['admin', 'coo', 'support', 'sales'] },
   { id: 'solaredge',          label: 'SolarEdge Sites',    icon: Sun,             indent: true, parent: 'customers', roles: ['admin', 'coo', 'support'] },
