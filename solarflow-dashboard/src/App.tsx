@@ -37,7 +37,7 @@ import { migrateWoPhotos } from './lib/photoStore';
 import { pickupJobsForContractor, toContractorJobView } from './lib/woHelpers';
 import { logChange, flushChangeLog } from './lib/changeLog';
 import { autoArchiveCompletedJobs } from './lib/jobService';
-import { fetchMyNotifications, markNotificationReadRemote, markAllNotificationsReadRemote, startNotificationPolling, stopNotificationPolling } from './lib/notifications';
+import { fetchMyNotifications, markNotificationReadRemote, markAllNotificationsReadRemote, startNotificationPolling, stopNotificationPolling, subscribeToNotifications, unsubscribeFromNotifications } from './lib/notifications';
 import { processBillingTimers } from './lib/billingService';
 import { loadContractors, saveContractors, loadServiceRates, saveServiceRates, loadContractorJobs, saveContractorJobs, initializeContractorData, findInviteByToken } from './lib/contractorStore';
 import { ContractorInvite as ContractorInviteType } from './types/contractor';
@@ -834,11 +834,15 @@ function App() {
         });
         // Flush any change log entries that were queued while offline
         flushChangeLog().catch(() => {});
-        // Load Supabase notifications and start polling
+        // Load Supabase notifications, start polling + Realtime sub for instant delivery
         fetchMyNotifications().then(notifs => {
           if (notifs.length > 0) mergeRemoteNotifications(notifs);
         });
         startNotificationPolling(mergeRemoteNotifications);
+        // Realtime: new mention notifications appear in the bell instantly
+        subscribeToNotifications(user.id, (notif) => {
+          mergeRemoteNotifications([notif]);
+        });
         // Restore dual-role contractor link on session resume
         const linked = findLinkedContractor(loadContractors(), user.email);
         if (linked) setLinkedContractor(linked);
@@ -854,6 +858,7 @@ function App() {
         setCurrentContractor(null);
         setCurrentView('dashboard');
         stopNotificationPolling();
+        unsubscribeFromNotifications();
       } else if (event === 'TOKEN_REFRESHED' && session) {
         // Session refreshed silently — no action needed
       }
@@ -862,6 +867,7 @@ function App() {
     return () => {
       subscription.unsubscribe();
       stopNotificationPolling();
+      unsubscribeFromNotifications();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

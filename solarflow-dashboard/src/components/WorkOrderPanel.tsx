@@ -950,12 +950,12 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
         mentionedUserIds: entry.mentions,
         notifierName:     currentUserName ?? 'Someone',
         context:          job.woNumber,
-        contextId:        job.id,
+        contextId:        siteId,   // siteId = customer.id — links bell notification to the customer card
         contextType:      'workOrder',
         message:          text,
       });
     }
-  }, [newComment, currentUserName, users, job]);
+  }, [newComment, currentUserName, users, job, siteId]);
 
   const editComment = useCallback((id: string, text: string) => {
     setWoActivities(prev => prev.map(a => a.id === id ? { ...a, description: text } : a));

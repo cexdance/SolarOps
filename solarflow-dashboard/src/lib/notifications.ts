@@ -81,6 +81,39 @@ export async function markAllNotificationsReadRemote(): Promise<void> {
   }
 }
 
+// ── Realtime subscription ─────────────────────────────────────────────────────
+
+let _realtimeChannel: ReturnType<typeof supabase.channel> | null = null;
+
+/**
+ * Subscribe to INSERT events on the notifications table for the current user.
+ * New mention notifications appear in the bell immediately without waiting for
+ * the 5-min poll cycle.
+ */
+export function subscribeToNotifications(
+  userId: string,
+  onNew: (notification: AppNotification) => void,
+): void {
+  unsubscribeFromNotifications();
+  _realtimeChannel = supabase
+    .channel(`notifications:${userId}`)
+    .on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` },
+      (payload) => {
+        if (payload.new) onNew(rowToNotification(payload.new as Record<string, unknown>));
+      },
+    )
+    .subscribe();
+}
+
+export function unsubscribeFromNotifications(): void {
+  if (_realtimeChannel) {
+    supabase.removeChannel(_realtimeChannel);
+    _realtimeChannel = null;
+  }
+}
+
 // ── Polling ───────────────────────────────────────────────────────────────────
 
 let _pollInterval: ReturnType<typeof setInterval> | null = null;
