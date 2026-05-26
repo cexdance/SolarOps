@@ -46,7 +46,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         phone: (meta.phone as string) ?? '',
         role: (meta.role as string) ?? 'admin',
         active: true,
-        username: (meta.username as string) ?? '',
+        username: ((meta.username as string) ?? '').replace(/^@/, ''),
         avatar: (meta.avatar_url as string | undefined) ?? undefined,
       };
     });
