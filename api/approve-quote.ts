@@ -10,7 +10,8 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 // Native fetch — no SDK dependency (avoids Vercel bundling issues)
 const SUPABASE_URL      = 'https://cjmhfagkkayelcsprbai.supabase.co';
-const SERVICE_ROLE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+// .trim() strips trailing \n that Vercel env-pull embeds in quoted values
+const SERVICE_ROLE_KEY  = (process.env.SUPABASE_SERVICE_ROLE_KEY ?? '').trim();
 
 const supabaseHeaders = {
   Authorization:  `Bearer ${SERVICE_ROLE_KEY}`,

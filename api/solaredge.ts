@@ -29,7 +29,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // Use server env var first; fall back to client-supplied key (stored in app Settings)
-  const apiKey = process.env.SOLAREDGE_API_KEY || (req.query['api_key'] as string);
+  // .trim() strips trailing \n that Vercel env-pull can embed in quoted values
+  const apiKey = (process.env.SOLAREDGE_API_KEY || (req.query['api_key'] as string) || '').trim() || undefined;
   if (!apiKey) {
     return res.status(500).json({
       error: 'SolarEdge API key not configured. Add it in Settings or set SOLAREDGE_API_KEY env var.',

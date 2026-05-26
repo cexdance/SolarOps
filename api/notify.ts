@@ -13,8 +13,9 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 const SUPABASE_URL     = 'https://cjmhfagkkayelcsprbai.supabase.co';
-const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-const RESEND_API_KEY   = process.env.RESEND_API_KEY;
+// .trim() strips trailing \n that Vercel env-pull embeds in quoted values
+const SERVICE_ROLE_KEY = (process.env.SUPABASE_SERVICE_ROLE_KEY ?? '').trim();
+const RESEND_API_KEY   = (process.env.RESEND_API_KEY ?? '').trim() || undefined;
 
 const supabaseHeaders = {
   Authorization:  `Bearer ${SERVICE_ROLE_KEY}`,

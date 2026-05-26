@@ -12,9 +12,10 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import crypto from 'crypto';
 
-const SUPABASE_URL = 'https://cjmhfagkkayelcsprbai.supabase.co';
-const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-const RESEND_API_KEY   = process.env.RESEND_API_KEY!;
+const SUPABASE_URL     = 'https://cjmhfagkkayelcsprbai.supabase.co';
+// .trim() strips trailing \n that Vercel env-pull embeds in quoted values
+const SERVICE_ROLE_KEY = (process.env.SUPABASE_SERVICE_ROLE_KEY ?? '').trim();
+const RESEND_API_KEY   = (process.env.RESEND_API_KEY ?? '').trim();
 
 const APP_URL = process.env.VERCEL_PROJECT_PRODUCTION_URL
   ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
