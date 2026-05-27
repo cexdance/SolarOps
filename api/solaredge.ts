@@ -1,15 +1,22 @@
 /**
  * SolarOps — SolarEdge API Proxy
  *
- * Proxies all SolarEdge monitoring API calls server-side to:
+ * Proxies SolarEdge monitoring API calls server-side to:
  *   1. Keep the API key out of client-side JS bundles (uses SOLAREDGE_API_KEY env var)
  *   2. Allow CORS-free requests from the browser
  *   3. Cache responses at CDN/browser layer to minimize daily quota usage
  *
- * SolarEdge free tier: ~300 calls/day. Cache strategy:
- *   - /energy endpoints (graphs): 1 hour  — data updates ~hourly
- *   - /overview / today stats: 15 min    — more frequently updated
- *   - /sites/list: 6 hours               — rarely changes
+ * SolarEdge free tier: ~300 calls/day quota.
+ *
+ * Quota optimization strategy:
+ * - Automated poller (solaredge-poller): 2×/day (9am, 1pm) = ~150 calls/day for alerts
+ * - On-demand user-triggered sync: Energy graphs, equipment details, inventory
+ *
+ * Cache durations by endpoint:
+ *   - /energy endpoints (graphs): 1 hour  — production charts (on-demand via Sync button)
+ *   - /overview / today stats: 15 min    — alerts and current power (automated poller)
+ *   - /details, /equipment: No cache     — on-demand via Sync button
+ *   - /sites/list: 6 hours               — site inventory (rarely changes)
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
@@ -17,10 +24,11 @@ const SOLAREDGE_BASE = 'https://monitoringapi.solaredge.com';
 
 // Cache durations by endpoint pattern (seconds)
 function getCacheDuration(path: string): number {
-  if (path.includes('/energy'))   return 3600;  // 1 hour — graph data
-  if (path.includes('/overview')) return 900;   // 15 min — today's stats
-  if (path.includes('/sites'))    return 1800;  // 30 min — site list (shorter for alert freshness)
-  return 1800; // 30 min default
+  if (path.includes('/energy'))   return 3600;   // 1 hour — production charts (on-demand via Sync)
+  if (path.includes('/overview')) return 21600;  // 6 hours — alerts (covered by 2x/day automated poller)
+  if (path.includes('/equipment')) return 3600;  // 1 hour — equipment/inverter list (on-demand via Sync)
+  if (path.includes('/sites'))    return 21600;  // 6 hours — site list (rarely changes)
+  return 3600; // 1 hour default
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {

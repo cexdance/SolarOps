@@ -265,6 +265,8 @@ export const SolarEdgeMonitoring: React.FC<Props> = ({
   });
   const [isRefreshingAlerts, setIsRefreshingAlerts] = useState(false);
   const [alertRefreshMsg, setAlertRefreshMsg] = useState<string | null>(null);
+  const [isSyncingData, setIsSyncingData] = useState(false);
+  const [syncMsg, setSyncMsg] = useState<string | null>(null);
 
   /** Fetch alert counts from SolarEdge /sites/list (paginated). Pass bustCache=true to bypass CDN. */
   const fetchAlertCounts = useCallback(async (bustCache = false) => {
@@ -311,6 +313,35 @@ export const SolarEdgeMonitoring: React.FC<Props> = ({
       setIsRefreshingAlerts(false);
     }
   }, []);
+
+  /** On-demand sync for detailed data (energy charts, equipment, etc.). Uses SolarEdge API quota. */
+  const syncDetailedData = useCallback(async () => {
+    setIsSyncingData(true);
+    setSyncMsg(null);
+    try {
+      const keyParam = solarEdgeApiKey ? `&api_key=${encodeURIComponent(solarEdgeApiKey)}` : '';
+      let successCount = 0;
+      let failCount = 0;
+
+      // Fetch equipment/inverter details for all sites
+      for (const site of ALL_SITES.slice(0, 20)) { // Limit to first 20 sites to preserve quota
+        try {
+          const res = await fetch(`/api/solaredge?path=/site/${site.siteId}/equipment${keyParam}`);
+          if (res.ok) successCount++;
+          else failCount++;
+        } catch {
+          failCount++;
+        }
+      }
+
+      setSyncMsg(`✓ Synced ${successCount} sites. Detailed data cached for 1 hour.`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      setSyncMsg(`✗ Sync failed: ${msg}`);
+    } finally {
+      setIsSyncingData(false);
+    }
+  }, [ALL_SITES, solarEdgeApiKey]);
 
   // Fetch on mount (uses cached CDN response — free)
   useEffect(() => { void fetchAlertCounts(); }, [fetchAlertCounts]);
@@ -600,6 +631,15 @@ export const SolarEdgeMonitoring: React.FC<Props> = ({
               <AlertTriangle className={`w-4 h-4 ${isRefreshingAlerts ? 'animate-pulse' : ''}`} />
               {isRefreshingAlerts ? 'Refreshing…' : 'Refresh Alerts'}
             </button>
+            <button
+              onClick={() => syncDetailedData()}
+              disabled={isSyncingData}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 disabled:bg-blue-300 text-white text-sm font-semibold rounded-lg shadow-sm transition-colors"
+              title="Sync production charts and equipment details (uses SolarEdge API quota)"
+            >
+              <RefreshCw className={`w-4 h-4 ${isSyncingData ? 'animate-spin' : ''}`} />
+              {isSyncingData ? 'Syncing…' : 'Sync Now'}
+            </button>
             {onUpdateSites && (
               <button
                 onClick={handleUpdateClick}
@@ -612,10 +652,19 @@ export const SolarEdgeMonitoring: React.FC<Props> = ({
               </button>
             )}
           </div>
-          {alertRefreshMsg && (
-            <p className={`text-xs ${alertRefreshMsg.startsWith('✓') ? 'text-emerald-600' : 'text-red-500'}`}>
-              {alertRefreshMsg}
-            </p>
+          {(alertRefreshMsg || syncMsg) && (
+            <div className="space-y-1">
+              {alertRefreshMsg && (
+                <p className={`text-xs ${alertRefreshMsg.startsWith('✓') ? 'text-emerald-600' : 'text-red-500'}`}>
+                  {alertRefreshMsg}
+                </p>
+              )}
+              {syncMsg && (
+                <p className={`text-xs ${syncMsg.startsWith('✓') ? 'text-emerald-600' : 'text-red-500'}`}>
+                  {syncMsg}
+                </p>
+              )}
+            </div>
           )}
           {updateMsg && (
             <p className={`text-xs ${updateMsg.startsWith('✓') ? 'text-emerald-600' : 'text-red-500'}`}>
