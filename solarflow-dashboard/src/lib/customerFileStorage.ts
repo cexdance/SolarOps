@@ -34,6 +34,18 @@ export async function uploadCustomerFile(
   file: CustomerFileUpload,
   customerId: string
 ): Promise<StoredCustomerFile> {
+  // Auth precheck — avoids cryptic 403 from Storage when session expired
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) {
+    throw new Error('Session expired — please re-login to upload files.');
+  }
+
+  // File size guard (Supabase free tier: 50MB max per object)
+  const MAX_SIZE = 20 * 1024 * 1024; // 20MB
+  if (file.size > MAX_SIZE) {
+    throw new Error(`File too large (${Math.round(file.size / 1024 / 1024)}MB). Max 20MB.`);
+  }
+
   // Convert dataURL to Blob
   const response = await fetch(file.dataUrl);
   const blob = await response.blob();
@@ -41,7 +53,6 @@ export async function uploadCustomerFile(
   // Generate path: customerId/YYYY-MM/timestamp-filename
   const date = new Date().toISOString().split('T')[0].slice(0, 7); // YYYY-MM
   const timestamp = Date.now();
-  const ext = file.mimeType.split('/')[1] || 'jpg';
   const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
   const path = `${customerId}/${date}/${timestamp}-${safeName}`;
 
@@ -55,6 +66,13 @@ export async function uploadCustomerFile(
       });
 
     if (error) {
+      // Provide specific error messages for common failures
+      if (error.message?.includes('row-level security') || error.message?.includes('policy')) {
+        throw new Error('Storage permission denied. Check RLS policies on customer-files bucket.');
+      }
+      if (error.message?.includes('not found') || error.message?.includes('does not exist')) {
+        throw new Error('Storage bucket missing. Create "customer-files" bucket in Supabase.');
+      }
       throw new Error(`Upload failed: ${error.message}`);
     }
 
@@ -79,6 +97,7 @@ export async function uploadCustomerFile(
 /**
  * Upload multiple customer files concurrently.
  * Returns array of StoredCustomerFile with URLs.
+ * Throws if ANY file fails (caller should handle).
  */
 export async function uploadCustomerFiles(
   files: CustomerFileUpload[],
@@ -88,6 +107,35 @@ export async function uploadCustomerFiles(
     files.map(file => uploadCustomerFile(file, customerId))
   );
   return results;
+}
+
+/**
+ * Upload multiple files with partial-success semantics.
+ * Returns { uploaded, failed } so caller can save successes + show errors.
+ */
+export async function uploadCustomerFilesPartial(
+  files: CustomerFileUpload[],
+  customerId: string
+): Promise<{
+  uploaded: StoredCustomerFile[];
+  failed: Array<{ file: CustomerFileUpload; error: string }>;
+}> {
+  const results = await Promise.allSettled(
+    files.map(file => uploadCustomerFile(file, customerId))
+  );
+  const uploaded: StoredCustomerFile[] = [];
+  const failed: Array<{ file: CustomerFileUpload; error: string }> = [];
+  results.forEach((result, idx) => {
+    if (result.status === 'fulfilled') {
+      uploaded.push(result.value);
+    } else {
+      failed.push({
+        file: files[idx],
+        error: result.reason instanceof Error ? result.reason.message : String(result.reason),
+      });
+    }
+  });
+  return { uploaded, failed };
 }
 
 /**

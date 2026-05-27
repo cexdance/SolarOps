@@ -985,6 +985,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
 
   // Paste images from clipboard into notes — they become attached photos under "process"
   const [pasteToast, setPasteToast] = useState<string | null>(null);
+  const [pasteError, setPasteError] = useState<string | null>(null);
   const handleNotesPaste = useCallback((e: React.ClipboardEvent<HTMLTextAreaElement>) => {
     const fileItems = Array.from(e.clipboardData.items).filter(i => i.kind === 'file');
     if (fileItems.length === 0) return;
@@ -993,6 +994,12 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
     fileItems.forEach(async (item) => {
       const file = item.getAsFile();
       if (!file || !file.type.startsWith('image/')) return;
+      // File size guard — Supabase free tier max
+      if (file.size > 20 * 1024 * 1024) {
+        setPasteError(`Image too large (${Math.round(file.size / 1024 / 1024)}MB) — max 20MB`);
+        setTimeout(() => setPasteError(null), 5000);
+        return;
+      }
       const photoId = `ph-paste-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
       try {
         const dataUrl = await compressImageToDataUrl(file);
@@ -1019,6 +1026,12 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
             p.id === photoId ? { ...p, storageUrl: result.url!, dataUrl: '' } : p
           ));
         } else {
+          // Surface upload failure to user (was silent console.error)
+          const errMsg = result.error === 'session_expired'
+            ? 'Session expired — please re-login to save photo'
+            : `Photo upload failed: ${result.error || 'Unknown error'}`;
+          setPasteError(errMsg);
+          setTimeout(() => setPasteError(null), 6000);
           console.error('[WorkOrderPanel] paste upload failed', result.error);
         }
         if (pendingUploads.current.size === 0) {
@@ -1027,6 +1040,9 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
       } catch (err) {
         pendingUploads.current.delete(photoId);
         setUploading(pendingUploads.current.size > 0);
+        const errMsg = err instanceof Error ? err.message : 'Failed to process pasted image';
+        setPasteError(`Paste failed: ${errMsg}`);
+        setTimeout(() => setPasteError(null), 6000);
         console.error('[WorkOrderPanel] paste image compression failed', err);
         if (pendingUploads.current.size === 0) {
           setTimeout(() => handleSaveRef.current(undefined, true), 0);
@@ -1822,6 +1838,9 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                 />
                 {pasteToast && (
                   <p className="mt-1 text-xs text-emerald-600 font-medium">📎 {pasteToast}</p>
+                )}
+                {pasteError && (
+                  <p className="mt-1 text-xs text-red-600 font-medium">⚠️ {pasteError}</p>
                 )}
               </div>
 
@@ -2678,6 +2697,12 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                   placeholder="Describe what was done, findings, and any observations… (paste screenshots with Ctrl/Cmd+V)"
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 resize-none"
                 />
+                {pasteToast && (
+                  <p className="mt-1 text-xs text-emerald-600 font-medium">📎 {pasteToast}</p>
+                )}
+                {pasteError && (
+                  <p className="mt-1 text-xs text-red-600 font-medium">⚠️ {pasteError}</p>
+                )}
               </div>
 
               <div>

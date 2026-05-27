@@ -64,7 +64,7 @@ import { AddressLink } from './AddressLink';
 import { WorkOrderPanel } from './WorkOrderPanel';
 import { PhoneLink } from './PhoneLink';
 import { ActivityFeed } from './ui/ActivityFeed';
-import { uploadCustomerFiles, StoredCustomerFile } from '../lib/customerFileStorage';
+import { uploadCustomerFiles, uploadCustomerFilesPartial, StoredCustomerFile } from '../lib/customerFileStorage';
 import { fireMentionNotifications } from './ui/MentionTextarea';
 import { toast } from 'sonner';
 
@@ -2822,30 +2822,65 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
     const fileItems = Array.from(e.clipboardData.items).filter(i => i.kind === 'file');
     if (fileItems.length === 0) return;
     e.preventDefault();
+    let processedCount = 0;
+    let failedCount = 0;
     fileItems.forEach(item => {
       const file = item.getAsFile();
-      if (!file) return;
+      if (!file) {
+        failedCount++;
+        return;
+      }
+      // Pre-validate size to give immediate feedback
+      const MAX_SIZE = 20 * 1024 * 1024;
+      if (file.size > MAX_SIZE) {
+        toast.error(`"${file.name || 'file'}" is ${Math.round(file.size / 1024 / 1024)}MB — max 20MB`);
+        failedCount++;
+        return;
+      }
       const reader = new FileReader();
+      reader.onerror = () => {
+        toast.error(`Failed to read pasted file: ${file.name || 'unnamed'}`);
+        failedCount++;
+      };
       reader.onload = (ev) => {
         const raw = ev.target?.result as string;
-        if (!raw) return;
+        if (!raw) {
+          toast.error('Paste failed — could not read clipboard data');
+          failedCount++;
+          return;
+        }
         const id = `paste-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
         const name = file.name || (file.type.startsWith('image/') ? `image-${Date.now()}.jpg` : `file-${Date.now()}`);
         if (file.type.startsWith('image/')) {
           const img = new Image();
+          img.onerror = () => {
+            toast.error('Pasted image is corrupt or unsupported format');
+            failedCount++;
+          };
           img.onload = () => {
-            const canvas = document.createElement('canvas');
-            const max = 1400;
-            const scale = Math.min(1, max / Math.max(img.width, img.height));
-            canvas.width = Math.round(img.width * scale);
-            canvas.height = Math.round(img.height * scale);
-            canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height);
-            const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
-            setPastedFiles(prev => [...prev, { id, name, dataUrl, mimeType: 'image/jpeg', size: Math.round(dataUrl.length * 0.75) }]);
+            try {
+              const canvas = document.createElement('canvas');
+              const max = 1400;
+              const scale = Math.min(1, max / Math.max(img.width, img.height));
+              canvas.width = Math.round(img.width * scale);
+              canvas.height = Math.round(img.height * scale);
+              canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height);
+              const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+              setPastedFiles(prev => [...prev, { id, name, dataUrl, mimeType: 'image/jpeg', size: Math.round(dataUrl.length * 0.75) }]);
+              processedCount++;
+              if (processedCount === 1) {
+                toast.success('📎 Image pasted — click "Save Note" to upload');
+              }
+            } catch (err) {
+              toast.error('Failed to process pasted image');
+              failedCount++;
+            }
           };
           img.src = raw;
         } else {
           setPastedFiles(prev => [...prev, { id, name, dataUrl: raw, mimeType: file.type || 'application/octet-stream', size: file.size }]);
+          processedCount++;
+          toast.success(`📎 File "${name}" attached — click "Save Note" to upload`);
         }
       };
       reader.readAsDataURL(file);
@@ -2872,21 +2907,34 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
     // This ensures we can restore them if upload fails
     const filesToUpload = pastedFiles;
 
-    // Upload files to Supabase Storage FIRST
+    // Upload files with partial-success semantics
+    // (lets us save successful uploads + show errors for failures)
     let uploadedFiles: StoredCustomerFile[] = [];
-    try {
-      uploadedFiles = await uploadCustomerFiles(filesToUpload, customer.id);
-      toast.success(`📎 ${uploadedFiles.length} file${uploadedFiles.length !== 1 ? 's' : ''} uploaded`);
-    } catch (err) {
-      // Upload failed - show error but DON'T lose user's data
-      toast.error(`Failed to upload files: ${err?.message || 'Check your connection'}`);
-      // Do NOT clear notes or pastedFiles - user can retry
-      return;
+    if (filesToUpload.length > 0) {
+      const { uploaded, failed } = await uploadCustomerFilesPartial(filesToUpload, customer.id);
+      uploadedFiles = uploaded;
+
+      // Report failures (keep failed files in state for retry)
+      if (failed.length > 0) {
+        const firstError = failed[0].error;
+        toast.error(`${failed.length} of ${filesToUpload.length} file${filesToUpload.length !== 1 ? 's' : ''} failed: ${firstError}`);
+        // Keep only the failed files in state so user can retry
+        setPastedFiles(failed.map(f => f.file));
+        // If ALL failed, don't proceed with note save
+        if (uploaded.length === 0) {
+          return;
+        }
+      } else {
+        toast.success(`📎 ${uploaded.length} file${uploaded.length !== 1 ? 's' : ''} uploaded`);
+        setPastedFiles([]);
+      }
     }
 
-    // Upload succeeded - NOW clear UI state and save
+    // Upload succeeded (fully or partially) - NOW clear UI state and save note
     setNotes('');
-    setPastedFiles([]);
+    if (uploadedFiles.length === filesToUpload.length) {
+      setPastedFiles([]);
+    }
     setNoteSaved(true);
     setTimeout(() => setNoteSaved(false), 2000);
 
