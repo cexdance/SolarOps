@@ -14,8 +14,10 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 const TRELLO_BASE = 'https://api.trello.com/1';
-const API_KEY = process.env.TRELLO_API_KEY || '';
-const API_TOKEN = process.env.TRELLO_API_TOKEN || '';
+// Support both server-side (TRELLO_*) and client-side legacy (VITE_TRELLO_*) names.
+// .trim() strips trailing \n that Vercel env-pull can embed in quoted values.
+const API_KEY = (process.env.TRELLO_API_KEY || process.env.VITE_TRELLO_API_KEY || '').trim();
+const API_TOKEN = (process.env.TRELLO_API_TOKEN || process.env.VITE_TRELLO_TOKEN || '').trim();
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET') {
@@ -34,7 +36,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const finalCardId = idMatch ? idMatch[1] : cardId.trim();
 
   if (!API_KEY || !API_TOKEN) {
-    return res.status(500).json({ error: 'Trello credentials not configured' });
+    return res.status(500).json({
+      error: 'Trello credentials not configured. Set TRELLO_API_KEY and TRELLO_API_TOKEN (or VITE_TRELLO_API_KEY/VITE_TRELLO_TOKEN) in Vercel env vars.',
+      debug: {
+        hasKey: !!API_KEY,
+        hasToken: !!API_TOKEN,
+      },
+    });
   }
 
   const url =
