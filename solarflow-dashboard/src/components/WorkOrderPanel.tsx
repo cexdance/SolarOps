@@ -404,6 +404,10 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
   const [rmaEntries, setRmaEntries] = useState<RMAEntry[]>(defaultRmaEntries);
   const [showRmaForm, setShowRmaForm] = useState(false);
   const [rmaForm, setRmaForm] = useState({ manufacturer: '', partDescription: '', rmaNumber: '', status: 'pending' as RMAEntry['status'] });
+
+  // Common manufacturers and parts for autofill
+  const manufacturerSuggestions = ['SolarEdge', 'Enphase', 'SMA', 'Fronius', 'Sungrow', 'Generac', 'Tesla', 'LG', 'Panasonic', 'Canadian Solar', 'First Solar', 'Trina'];
+  const partDescriptionSuggestions = ['Inverter', 'Optimizer', 'Battery', 'Combiner Box', 'DC Disconnect', 'AC Disconnect', 'Breaker', 'Module', 'Rail', 'Conduit', 'Cable', 'Junction Box', 'Monitoring Device'];
   // Travel miles
   const [travelMiles, setTravelMiles] = useState<number>(job?.travelMiles ?? 0);
   const [travelCalcStatus, setTravelCalcStatus] = useState<'idle' | 'loading' | 'done' | 'error'>(
@@ -1047,6 +1051,23 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
     setRmaForm({ manufacturer: '', partDescription: '', rmaNumber: '', status: 'pending' });
     setShowRmaForm(false);
   };
+
+  const handleDeleteRma = (entryId: string) => {
+    setRmaEntries(prev => prev.filter(r => r.id !== entryId));
+  };
+
+  // Auto-save RMA entries when they change (critical piece of information)
+  const prevRmaEntriesRef = useRef<RMAEntry[]>(defaultRmaEntries);
+  useEffect(() => {
+    // Only save if RMA entries actually changed (not on initial mount)
+    if (JSON.stringify(rmaEntries) !== JSON.stringify(prevRmaEntriesRef.current)) {
+      prevRmaEntriesRef.current = rmaEntries;
+      const timeoutId = setTimeout(() => {
+        handleSave(woStatus, true);
+      }, 300);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [rmaEntries]);
 
   // Delete
   const handleDelete = () => {
@@ -2151,8 +2172,12 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                           value={rmaForm.manufacturer}
                           onChange={e => setRmaForm(f => ({ ...f, manufacturer: e.target.value }))}
                           placeholder="SolarEdge, Enphase…"
+                          list="manufacturer-suggestions"
                           className="w-full px-2 py-1.5 text-xs border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-orange-400"
                         />
+                        <datalist id="manufacturer-suggestions">
+                          {manufacturerSuggestions.map(m => <option key={m} value={m} />)}
+                        </datalist>
                       </div>
                       <div>
                         <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-0.5">Part Description *</label>
@@ -2160,8 +2185,12 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                           value={rmaForm.partDescription}
                           onChange={e => setRmaForm(f => ({ ...f, partDescription: e.target.value }))}
                           placeholder="Inverter, optimizer…"
+                          list="part-description-suggestions"
                           className="w-full px-2 py-1.5 text-xs border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-orange-400"
                         />
+                        <datalist id="part-description-suggestions">
+                          {partDescriptionSuggestions.map(p => <option key={p} value={p} />)}
+                        </datalist>
                       </div>
                       <div className="col-span-2">
                         <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-0.5">RMA / Case #</label>
@@ -2229,8 +2258,9 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                             {entry.status.charAt(0).toUpperCase() + entry.status.slice(1)}
                           </span>
                           <button
-                            onClick={() => setRmaEntries(prev => prev.filter(r => r.id !== entry.id))}
+                            onClick={() => handleDeleteRma(entry.id)}
                             className="text-slate-300 hover:text-red-500 transition-colors cursor-pointer"
+                            title="Delete RMA entry"
                           >
                             <X className="w-3.5 h-3.5" />
                           </button>
