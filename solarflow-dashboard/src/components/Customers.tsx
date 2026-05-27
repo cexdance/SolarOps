@@ -1557,14 +1557,49 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
     const periodLabel = graphPeriod === 'week' ? 'Last 7 Days' : graphPeriod === 'month' ? 'Last 30 Days' : graphPeriod === 'quarter' ? 'Last 3 Months' : 'Last 12 Months';
     const systemSize  = siteData?.peakPower?.toFixed(1) || (peakPowerKw > 0 ? peakPowerKw.toFixed(1) : null);
     const reportDate  = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+    const isFirstReport = displayKwh === 0; // Smart empty state
+
+    // Environmental impact equivalents (EPA conversions)
+    const gallonsGasoline = Math.round(displayKwh * 0.000379 * 100) / 100; // kWh × CO2 lb/kWh ÷ gallons/CO2
+    const treesPlantedEquiv = Math.round(co2Tons * 16); // 1 ton CO2 = ~16 trees-year
+    const milesNotDriven = Math.round(displayKwh * 0.85); // EPA: 0.85 miles/kWh equivalent
+
+    // Generate inline SVG production chart from energyData
+    const chartData = energyData.slice(-30); // Last 30 data points
+    const maxKwh = Math.max(...chartData.map(d => d.kWh || 0), 1);
+    const chartWidth = 520;
+    const chartHeight = 120;
+    const barWidth = chartData.length > 0 ? chartWidth / chartData.length : 0;
+    const productionChart = chartData.length > 0 ? `
+      <svg width="100%" viewBox="0 0 ${chartWidth} ${chartHeight + 24}" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" style="display:block;">
+        <defs>
+          <linearGradient id="barGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#f97316" stop-opacity="0.95"/>
+            <stop offset="100%" stop-color="#fb923c" stop-opacity="0.7"/>
+          </linearGradient>
+        </defs>
+        ${chartData.map((d, i) => {
+          const h = Math.max(2, (d.kWh / maxKwh) * chartHeight);
+          const y = chartHeight - h;
+          return `<rect x="${i * barWidth + 1}" y="${y}" width="${Math.max(2, barWidth - 2)}" height="${h}" fill="url(#barGrad)" rx="1.5"/>`;
+        }).join('')}
+        <line x1="0" y1="${chartHeight}" x2="${chartWidth}" y2="${chartHeight}" stroke="#e2e8f0" stroke-width="1"/>
+        <text x="0" y="${chartHeight + 16}" font-size="9" font-weight="600" fill="#94a3b8" font-family="-apple-system,sans-serif">${chartData[0]?.date?.slice(5) || ''}</text>
+        <text x="${chartWidth}" y="${chartHeight + 16}" text-anchor="end" font-size="9" font-weight="600" fill="#94a3b8" font-family="-apple-system,sans-serif">${chartData[chartData.length - 1]?.date?.slice(5) || ''}</text>
+        <text x="${chartWidth}" y="10" text-anchor="end" font-size="9" font-weight="700" fill="#64748b" font-family="-apple-system,sans-serif">PEAK ${maxKwh.toFixed(1)} kWh</text>
+      </svg>
+    ` : '';
 
     /* SVG icon helpers — inline so no external requests */
-    const svgBolt     = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f97316" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`;
-    const svgDollar   = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>`;
-    const svgGauge    = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 12L8 8"/><circle cx="12" cy="12" r="2"/></svg>`;
-    const svgLeaf     = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10z"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/></svg>`;
-    const svgStar     = `<svg width="22" height="22" viewBox="0 0 24 24" fill="#f59e0b" stroke="#f59e0b" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`;
-    const svgCalendar = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`;
+    const svgBolt     = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f97316" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`;
+    const svgDollar   = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>`;
+    const svgGauge    = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 12L8 8"/><circle cx="12" cy="12" r="2"/></svg>`;
+    const svgLeaf     = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10z"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/></svg>`;
+    const svgStar     = `<svg width="20" height="20" viewBox="0 0 24 24" fill="#f59e0b" stroke="#f59e0b" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`;
+    const svgCalendar = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`;
+    const svgCar      = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 16H9m10 0h3v-3.15a1 1 0 0 0-.84-.99L16 11l-2.7-3.6a1 1 0 0 0-.8-.4H5.24a2 2 0 0 0-1.8 1.1l-.8 1.63A6 6 0 0 0 2 12.42V16h2"/><circle cx="6.5" cy="16.5" r="2.5"/><circle cx="16.5" cy="16.5" r="2.5"/></svg>`;
+    const svgGas      = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="22" x2="15" y2="22"/><line x1="4" y1="9" x2="14" y2="9"/><path d="M14 22V4a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v18"/><path d="M14 13h2a2 2 0 0 1 2 2v2a2 2 0 0 0 2 2 2 2 0 0 0 2-2V9.83a2 2 0 0 0-.59-1.42L18 5"/></svg>`;
+    const svgTree     = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 14a5 5 0 1 0-10 0c0 4.4 5 8 5 8s5-3.6 5-8z"/><path d="M12 14V2"/></svg>`;
 
     const html = `<!DOCTYPE html>
 <html lang="en">
@@ -1573,301 +1608,620 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Solar Production Report — ${customer.name}</title>
   <style>
+    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+
     * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { background: #f1f5f9; }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-      background: #f1f5f9; color: #1e293b; padding: 32px 16px;
-      -webkit-font-smoothing: antialiased;
+      font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+      color: #1e293b; padding: 32px 16px;
+      -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
     }
-    .wrap { max-width: 600px; margin: 0 auto; }
+    .display { font-family: 'DM Sans', -apple-system, sans-serif; letter-spacing: -0.02em; }
+    .wrap { max-width: 640px; margin: 0 auto; }
+    .card { background: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04), 0 4px 24px rgba(15, 23, 42, 0.06); }
+
+    /* ── Header bar ── */
+    .header {
+      background: #0f172a; padding: 18px 36px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .header img { height: 22px; filter: brightness(0) invert(1); display: block; }
+    .header .tag {
+      font-size: 9.5px; color: #94a3b8; letter-spacing: 1.6px;
+      text-transform: uppercase; font-weight: 700;
+    }
+
+    /* ── Cover ── */
+    .cover {
+      background: linear-gradient(135deg, #f97316 0%, #ea580c 60%, #c2410c 100%);
+      padding: 56px 36px 48px; position: relative; overflow: hidden;
+    }
+    .cover::before {
+      content: ''; position: absolute; right: -120px; top: -120px;
+      width: 360px; height: 360px; border-radius: 50%;
+      background: radial-gradient(circle, rgba(255,255,255,0.12), transparent 70%);
+    }
+    .cover::after {
+      content: ''; position: absolute; right: 40px; bottom: -100px;
+      width: 220px; height: 220px; border-radius: 50%;
+      background: radial-gradient(circle, rgba(255,255,255,0.08), transparent 70%);
+    }
+    .cover-eyebrow {
+      display: inline-block;
+      font-size: 9.5px; font-weight: 700; letter-spacing: 2.5px; text-transform: uppercase;
+      color: rgba(255,255,255,0.85);
+      padding: 5px 11px; background: rgba(255,255,255,0.15);
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 999px; margin-bottom: 18px;
+    }
+    .cover h1 {
+      font-size: 36px; font-weight: 800; color: #fff; line-height: 1.1;
+      letter-spacing: -0.04em; max-width: 80%;
+    }
+    .cover .subtitle {
+      font-size: 14px; color: rgba(255,255,255,0.85); margin-top: 10px;
+      font-weight: 500;
+    }
+    .cover-meta {
+      display: flex; gap: 24px; margin-top: 28px;
+      padding-top: 22px; border-top: 1px solid rgba(255,255,255,0.18);
+      position: relative; z-index: 2;
+    }
+    .cover-meta-item .cm-label {
+      font-size: 9.5px; font-weight: 700; letter-spacing: 1.4px;
+      text-transform: uppercase; color: rgba(255,255,255,0.6);
+      margin-bottom: 4px;
+    }
+    .cover-meta-item .cm-value {
+      font-size: 13px; font-weight: 600; color: #fff;
+    }
 
     /* ── Greeting ── */
-    .greeting-wrap { padding: 28px 32px 0; }
+    .greeting {
+      padding: 32px 36px 0;
+    }
     .greeting-text {
-      font-size: 13.5px; color: #475569; line-height: 1.85;
-      border-left: 3px solid #e2e8f0; padding: 14px 18px;
-      background: #f8fafc; border-radius: 0 10px 10px 0;
+      font-size: 14.5px; color: #334155; line-height: 1.75;
+      font-weight: 400;
+    }
+    .greeting-text strong { color: #0f172a; font-weight: 600; }
+
+    /* ── Section labels (editorial style) ── */
+    .section { padding: 36px 36px 0; }
+    .section-eyebrow {
+      display: flex; align-items: center; gap: 10px; margin-bottom: 22px;
+    }
+    .section-eyebrow .num {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 22px; height: 22px; border-radius: 50%;
+      background: #fef3c7; color: #d97706;
+      font-size: 11px; font-weight: 800; font-family: 'DM Sans', sans-serif;
+    }
+    .section-eyebrow .label {
+      font-size: 10.5px; font-weight: 700; letter-spacing: 2px;
+      text-transform: uppercase; color: #475569;
+    }
+    .section-title {
+      font-size: 22px; font-weight: 700; color: #0f172a;
+      letter-spacing: -0.02em; margin-bottom: 6px;
+      font-family: 'DM Sans', sans-serif;
+    }
+    .section-sub {
+      font-size: 13px; color: #64748b; line-height: 1.6; margin-bottom: 24px;
     }
 
-    /* ── Service Summary ── */
-    .service-wrap { padding: 24px 32px 0; }
-    .service-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 14px; }
-    .service-card {
-      border: 1px solid #e2e8f0; border-radius: 10px; padding: 18px 16px;
-      text-align: center; background: #fafafa;
+    /* ── Metrics grid ── */
+    .metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .metric {
+      padding: 22px 22px 24px;
+      border: 1px solid #e2e8f0; border-radius: 14px;
+      background: #fff; position: relative;
     }
-    .sc-val { font-size: 30px; font-weight: 800; color: #0f172a; line-height: 1; }
-    .sc-label { font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.6px; margin-top: 6px; }
-    .sc-sub { font-size: 10px; color: #cbd5e1; margin-top: 3px; }
-    .sc-val.green { color: #16a34a; }
-    .sc-val.amber { color: #d97706; }
+    .metric .m-head {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 16px;
+    }
+    .metric .m-icon {
+      width: 36px; height: 36px; border-radius: 10px;
+      display: inline-flex; align-items: center; justify-content: center;
+      background: #fef3c7;
+    }
+    .metric.green .m-icon  { background: #d1fae5; }
+    .metric.blue  .m-icon  { background: #dbeafe; }
+    .metric.teal  .m-icon  { background: #ccfbf1; }
+    .metric .m-trend {
+      font-size: 10px; font-weight: 700; padding: 3px 8px;
+      border-radius: 999px; background: #f1f5f9; color: #64748b;
+      letter-spacing: 0.3px;
+    }
+    .metric .m-value {
+      font-size: 32px; font-weight: 800; color: #0f172a; line-height: 1;
+      letter-spacing: -0.03em; font-family: 'DM Sans', sans-serif;
+    }
+    .metric .m-value .m-unit {
+      font-size: 13px; font-weight: 500; color: #94a3b8;
+      margin-left: 4px; letter-spacing: 0; font-family: 'IBM Plex Sans', sans-serif;
+    }
+    .metric .m-label {
+      font-size: 11.5px; font-weight: 600; color: #475569;
+      text-transform: uppercase; letter-spacing: 0.8px; margin-top: 8px;
+    }
+    .metric .m-sub {
+      font-size: 11px; color: #94a3b8; margin-top: 4px; font-weight: 400;
+    }
+    .metric.green .m-value { color: #047857; }
+    .metric.blue  .m-value { color: #1d4ed8; }
+    .metric.teal  .m-value { color: #0f766e; }
 
-    /* ── Account Updates ── */
-    .updates-wrap { padding: 0 32px 28px; }
-    .updates-inner {
-      border: 1px solid #fed7aa; border-radius: 12px; overflow: hidden;
+    /* ── Chart section ── */
+    .chart-card {
+      margin-top: 18px; padding: 22px 24px 18px;
+      border: 1px solid #e2e8f0; border-radius: 14px;
+      background: linear-gradient(180deg, #fffbf5 0%, #ffffff 100%);
     }
-    .updates-header {
-      background: #fff7ed; padding: 14px 20px; display: flex; align-items: center; gap: 10px;
-      border-bottom: 1px solid #fed7aa;
+    .chart-head {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 14px;
     }
-    .updates-title { font-size: 12px; font-weight: 700; color: #9a3412; letter-spacing: 0.8px; text-transform: uppercase; }
-    .updates-body {
-      padding: 16px 20px; font-size: 13.5px; color: #374151; line-height: 1.8;
-      background: #fffbf7;
+    .chart-title {
+      font-size: 12.5px; font-weight: 700; color: #334155;
+      letter-spacing: 0.3px;
     }
-
-    /* ── Brand bar ── */
-    .brand-bar {
-      background: #0f172a; border-radius: 14px 14px 0 0;
-      padding: 20px 32px; display: flex; align-items: center; justify-content: space-between;
-    }
-    .brand-bar img { height: 26px; filter: brightness(0) invert(1); display: block; }
-    .brand-bar .tag { font-size: 10px; color: #475569; letter-spacing: 1.2px; text-transform: uppercase; font-weight: 600; }
-
-    /* ── Hero ── */
-    .hero { background: #f97316; padding: 44px 32px 40px; position: relative; overflow: hidden; }
-    .hero::before {
-      content: ''; position: absolute; right: -40px; top: -40px;
-      width: 220px; height: 220px; border-radius: 50%;
-      background: rgba(255,255,255,0.06);
-    }
-    .hero::after {
-      content: ''; position: absolute; right: 30px; bottom: -60px;
-      width: 160px; height: 160px; border-radius: 50%;
-      background: rgba(255,255,255,0.04);
-    }
-    .hero .label { font-size: 10px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: rgba(255,255,255,0.65); margin-bottom: 10px; }
-    .hero h1 { font-size: 28px; font-weight: 800; color: #fff; line-height: 1.15; letter-spacing: -0.3px; }
-    .hero .site { font-size: 13px; color: rgba(255,255,255,0.75); margin-top: 6px; font-weight: 400; }
-    .hero .period {
-      display: inline-flex; align-items: center; gap: 5px;
-      margin-top: 20px; background: rgba(255,255,255,0.15);
-      border: 1px solid rgba(255,255,255,0.25); border-radius: 6px;
-      padding: 5px 12px; font-size: 11px; font-weight: 600; color: #fff;
+    .chart-period {
+      font-size: 10.5px; color: #94a3b8; font-weight: 600;
+      letter-spacing: 0.6px; text-transform: uppercase;
     }
 
-    /* ── White body ── */
-    .body { background: #ffffff; }
-
-    /* ── Metrics ── */
-    .metrics-wrap { padding: 36px 32px 28px; }
-    .section-label { font-size: 10px; font-weight: 700; letter-spacing: 1.8px; text-transform: uppercase; color: #94a3b8; margin-bottom: 20px; }
-    .metrics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-    .metric-card { border: 1px solid #e2e8f0; border-radius: 10px; padding: 22px 20px; }
-    .metric-card .m-icon { margin-bottom: 14px; }
-    .metric-card .m-val { font-size: 28px; font-weight: 800; line-height: 1; color: #0f172a; }
-    .metric-card .m-val .m-unit { font-size: 13px; font-weight: 500; color: #94a3b8; margin-left: 2px; }
-    .metric-card .m-label { font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.6px; margin-top: 6px; }
-    .metric-card .m-sub { font-size: 10px; color: #cbd5e1; margin-top: 3px; }
-    .metric-card.green .m-val { color: #16a34a; }
-    .metric-card.blue  .m-val { color: #2563eb; }
-    .metric-card.teal  .m-val { color: #059669; }
-
-    /* ── Lifetime banner ── */
-    .lifetime-row {
-      margin-top: 16px; border: 1px solid #e2e8f0; border-radius: 10px;
-      padding: 16px 20px; display: flex; align-items: center; justify-content: space-between;
+    /* ── Impact band ── */
+    .impact-band {
+      margin-top: 18px; padding: 20px 24px;
+      background: #0f172a; border-radius: 14px;
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;
     }
-    .lifetime-row .lt-left { font-size: 12px; color: #64748b; font-weight: 500; }
-    .lifetime-row .lt-left strong { display: block; font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: #94a3b8; margin-bottom: 2px; }
-    .lifetime-row .lt-val { font-size: 20px; font-weight: 800; color: #f97316; }
+    .impact-item {
+      display: flex; align-items: center; gap: 12px;
+    }
+    .impact-item .ii-icon {
+      width: 36px; height: 36px; border-radius: 10px;
+      background: rgba(249, 115, 22, 0.15); border: 1px solid rgba(249, 115, 22, 0.3);
+      display: inline-flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .impact-item .ii-icon svg { stroke: #fb923c !important; }
+    .impact-item .ii-val {
+      font-size: 18px; font-weight: 800; color: #fff;
+      line-height: 1.05; font-family: 'DM Sans', sans-serif;
+      letter-spacing: -0.02em;
+    }
+    .impact-item .ii-label {
+      font-size: 10px; color: #94a3b8; margin-top: 2px;
+      letter-spacing: 0.4px; line-height: 1.3;
+    }
 
-    /* ── Ruled separator ── */
-    .ruled { height: 1px; background: #f1f5f9; margin: 0 32px; }
+    /* ── First-report empty state ── */
+    .first-report {
+      margin-top: 16px; padding: 24px 26px;
+      background: #fefce8; border: 1px solid #fde68a;
+      border-radius: 14px;
+    }
+    .first-report .fr-eyebrow {
+      font-size: 10px; font-weight: 700; color: #a16207;
+      letter-spacing: 1.4px; text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+    .first-report .fr-title {
+      font-size: 15px; font-weight: 700; color: #713f12;
+      letter-spacing: -0.01em; margin-bottom: 6px;
+      font-family: 'DM Sans', sans-serif;
+    }
+    .first-report .fr-body {
+      font-size: 13px; color: #854d0e; line-height: 1.6;
+    }
+
+    /* ── Service stats ── */
+    .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+    .stat {
+      padding: 20px 18px; text-align: center;
+      border: 1px solid #e2e8f0; border-radius: 12px; background: #fafafa;
+    }
+    .stat .s-val {
+      font-size: 28px; font-weight: 800; color: #0f172a;
+      line-height: 1; letter-spacing: -0.02em;
+      font-family: 'DM Sans', sans-serif;
+    }
+    .stat .s-val .s-unit { font-size: 13px; color: #94a3b8; font-weight: 500; }
+    .stat .s-val.green { color: #047857; }
+    .stat .s-val.amber { color: #b45309; }
+    .stat .s-label {
+      font-size: 10.5px; font-weight: 700; color: #475569;
+      text-transform: uppercase; letter-spacing: 0.8px; margin-top: 8px;
+    }
+    .stat .s-sub {
+      font-size: 10px; color: #94a3b8; margin-top: 3px;
+    }
+
+    /* ── Lifetime stat ── */
+    .lifetime {
+      margin-top: 18px; padding: 22px 26px;
+      border: 1px solid #fed7aa;
+      background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%);
+      border-radius: 14px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .lifetime .lt-left .lt-label {
+      font-size: 10px; font-weight: 700; letter-spacing: 1.4px;
+      text-transform: uppercase; color: #9a3412; margin-bottom: 4px;
+    }
+    .lifetime .lt-left .lt-sub {
+      font-size: 12.5px; color: #7c2d12; font-weight: 500;
+    }
+    .lifetime .lt-val {
+      font-size: 28px; font-weight: 800; color: #c2410c;
+      letter-spacing: -0.02em; font-family: 'DM Sans', sans-serif;
+    }
+    .lifetime .lt-val .lt-unit { font-size: 13px; font-weight: 500; color: #ea580c; }
 
     /* ── System details ── */
-    .details-wrap { padding: 28px 32px; }
-    .detail-row { display: flex; justify-content: space-between; align-items: center; padding: 9px 0; border-bottom: 1px solid #f8fafc; font-size: 13px; }
-    .detail-row:last-child { border-bottom: none; }
-    .dl { color: #94a3b8; font-weight: 500; }
-    .dv { font-weight: 600; color: #1e293b; }
-
-    /* ── Notes (legacy, kept for compat) ── */
-    .notes-wrap { padding: 0 32px 28px; }
-    .notes-body { border-left: 3px solid #f97316; padding: 12px 16px; font-size: 13px; color: #475569; line-height: 1.75; background: #fafafa; border-radius: 0 8px 8px 0; }
-
-    /* ── Invoice alert ── */
-    .alert-wrap { padding: 0 32px 28px; }
-    .alert-inner { border: 1px solid #fcd34d; border-radius: 10px; padding: 20px 22px; background: #fffbeb; }
-    .alert-title { font-size: 12px; font-weight: 700; color: #92400e; letter-spacing: 0.5px; text-transform: uppercase; margin-bottom: 8px; }
-    .alert-body { font-size: 13px; color: #78350f; line-height: 1.65; }
-    .alert-btn { display: inline-block; margin-top: 14px; padding: 10px 24px; background: #f97316; color: #fff !important; text-decoration: none; border-radius: 7px; font-size: 12px; font-weight: 700; letter-spacing: 0.3px; }
-
-    /* ── Google Review CTA ── */
-    .review-wrap { padding: 0 32px 36px; }
-    .review-card {
-      background: #0f172a; border-radius: 10px; padding: 28px 24px; text-align: center;
+    .details {
+      display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;
     }
-    .review-stars { display: flex; justify-content: center; gap: 4px; margin-bottom: 14px; }
-    .review-headline { font-size: 16px; font-weight: 700; color: #fff; margin-bottom: 8px; letter-spacing: -0.2px; }
-    .review-sub { font-size: 12px; color: #94a3b8; line-height: 1.6; margin-bottom: 20px; }
+    .detail-cell {
+      padding: 14px 16px; border: 1px solid #e2e8f0;
+      border-radius: 10px; background: #fafafa;
+    }
+    .detail-cell .dl {
+      font-size: 9.5px; font-weight: 700; color: #64748b;
+      letter-spacing: 1.2px; text-transform: uppercase; margin-bottom: 4px;
+    }
+    .detail-cell .dv {
+      font-size: 13px; font-weight: 600; color: #0f172a;
+    }
+
+    /* ── Account updates ── */
+    .updates {
+      margin: 28px 36px 0; padding: 22px 24px;
+      border: 1px solid #fed7aa; border-radius: 14px;
+      background: #fffbf5;
+    }
+    .updates-header {
+      display: flex; align-items: center; gap: 8px; margin-bottom: 12px;
+    }
+    .updates-title {
+      font-size: 11px; font-weight: 700; color: #9a3412;
+      letter-spacing: 1.4px; text-transform: uppercase;
+    }
+    .updates-body {
+      font-size: 13.5px; color: #374151; line-height: 1.75;
+    }
+
+    /* ── Review CTA ── */
+    .review {
+      margin: 36px 36px 0; padding: 36px 32px;
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+      border-radius: 16px; text-align: center; position: relative; overflow: hidden;
+    }
+    .review::before {
+      content: ''; position: absolute; top: -50px; left: 50%;
+      transform: translateX(-50%); width: 280px; height: 200px;
+      background: radial-gradient(ellipse, rgba(249,115,22,0.15), transparent 70%);
+    }
+    .review-stars {
+      display: flex; justify-content: center; gap: 4px; margin-bottom: 16px;
+      position: relative; z-index: 1;
+    }
+    .review-headline {
+      font-size: 20px; font-weight: 700; color: #fff;
+      margin-bottom: 10px; letter-spacing: -0.02em;
+      font-family: 'DM Sans', sans-serif; position: relative; z-index: 1;
+    }
+    .review-sub {
+      font-size: 13px; color: #94a3b8; line-height: 1.65;
+      margin-bottom: 22px; max-width: 380px;
+      margin-left: auto; margin-right: auto; position: relative; z-index: 1;
+    }
     .review-btn {
-      display: inline-block; padding: 12px 28px;
+      display: inline-block; padding: 13px 32px;
       background: #fff; color: #0f172a !important;
-      text-decoration: none; border-radius: 7px;
-      font-size: 13px; font-weight: 700; letter-spacing: 0.2px;
+      text-decoration: none; border-radius: 10px;
+      font-size: 13px; font-weight: 700; letter-spacing: 0.3px;
+      position: relative; z-index: 1;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+    }
+
+    /* ── Alert ── */
+    .alert {
+      margin: 28px 36px 0; padding: 22px 24px;
+      border: 1px solid #fcd34d; border-radius: 14px; background: #fffbeb;
+    }
+    .alert-title {
+      font-size: 11px; font-weight: 700; color: #92400e;
+      letter-spacing: 1.2px; text-transform: uppercase; margin-bottom: 8px;
+    }
+    .alert-body {
+      font-size: 13.5px; color: #78350f; line-height: 1.7;
+    }
+    .alert-btn {
+      display: inline-block; margin-top: 14px; padding: 10px 22px;
+      background: #f59e0b; color: #fff !important;
+      text-decoration: none; border-radius: 8px;
+      font-size: 12px; font-weight: 700; letter-spacing: 0.3px;
     }
 
     /* ── Footer ── */
-    .footer { background: #f8fafc; border-radius: 0 0 14px 14px; padding: 28px 32px; text-align: center; border-top: 1px solid #e2e8f0; }
-    .footer img { height: 20px; margin-bottom: 12px; display: block; margin-left: auto; margin-right: auto; }
-    .footer p { font-size: 11px; color: #94a3b8; line-height: 1.9; }
-    .footer a { color: #f97316 !important; text-decoration: none; font-weight: 600; }
+    .footer {
+      margin-top: 40px; padding: 28px 36px;
+      background: #f8fafc; border-top: 1px solid #e2e8f0;
+      text-align: center;
+    }
+    .footer-logo {
+      height: 18px; margin: 0 auto 12px; display: block;
+      opacity: 0.6;
+    }
+    .footer p {
+      font-size: 11px; color: #94a3b8; line-height: 1.85;
+    }
+    .footer a {
+      color: #f97316 !important; text-decoration: none; font-weight: 600;
+    }
+    .footer .footer-unsub {
+      color: #cbd5e1; font-size: 10px;
+      display: inline-block; margin-top: 8px;
+    }
+
+    /* ── Print optimization ── */
+    @page {
+      size: letter;
+      margin: 0.5in;
+    }
+    @media print {
+      html, body { background: #fff !important; padding: 0 !important; }
+      .wrap { max-width: 100% !important; }
+      .card {
+        box-shadow: none !important; border: 1px solid #e2e8f0 !important;
+        border-radius: 0 !important;
+      }
+      .review, .header { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .cover { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .impact-band { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .section { page-break-inside: avoid; }
+      .review { page-break-before: avoid; }
+      .footer { page-break-inside: avoid; }
+      a { text-decoration: none !important; color: #0f172a !important; }
+    }
   </style>
 </head>
 <body>
 <div class="wrap">
+  <div class="card">
 
-  <!-- Brand bar -->
-  <div class="brand-bar">
-    <img src="https://solarflow-dashboard-sooty.vercel.app/conexsol-logo.png" alt="Conexsol" />
-    <span class="tag">Production Report</span>
-  </div>
+    <!-- Header -->
+    <div class="header">
+      <img src="https://solarflow-dashboard-sooty.vercel.app/conexsol-logo.png" alt="Conexsol" />
+      <span class="tag">Production Report · ${reportDate}</span>
+    </div>
 
-  <!-- Hero -->
-  <div class="hero">
-    <p class="label">Solar Energy Performance</p>
-    <h1>${customer.name}</h1>
-    <p class="site">${siteData?.siteName || 'SolarEdge System'}${siteId ? '&nbsp;&nbsp;·&nbsp;&nbsp;Site #' + siteId : ''}</p>
-    <span class="period">${svgCalendar}&nbsp;${periodLabel}&nbsp;&nbsp;·&nbsp;&nbsp;${reportDate}</span>
-  </div>
+    <!-- Cover -->
+    <div class="cover">
+      <div class="cover-eyebrow">Solar Performance Report</div>
+      <h1 class="display">${customer.name}</h1>
+      <p class="subtitle">${siteData?.siteName || 'SolarEdge System'}${siteId ? '&nbsp;·&nbsp;Site #' + siteId : ''}</p>
+      <div class="cover-meta">
+        <div class="cover-meta-item">
+          <div class="cm-label">Reporting Period</div>
+          <div class="cm-value">${periodLabel}</div>
+        </div>
+        <div class="cover-meta-item">
+          <div class="cm-label">System Size</div>
+          <div class="cm-value">${systemSize ? systemSize + ' kW' : '—'}</div>
+        </div>
+        <div class="cover-meta-item">
+          <div class="cm-label">Location</div>
+          <div class="cm-value">${[customer.city, customer.state].filter(Boolean).join(', ') || 'Florida'}</div>
+        </div>
+      </div>
+    </div>
 
-  <!-- Greeting -->
-  ${previewGreeting ? `<div class="greeting-wrap"><p class="greeting-text">${previewGreeting.replace(/\n/g, '<br/>')}</p></div>` : ''}
+    <!-- Greeting -->
+    ${previewGreeting ? `
+    <div class="greeting">
+      <p class="greeting-text">${previewGreeting.replace(/\n/g, '<br/>')}</p>
+    </div>` : ''}
 
-  <div class="body">
+    <!-- Section 01: Performance -->
+    <div class="section">
+      <div class="section-eyebrow">
+        <span class="num">01</span>
+        <span class="label">Performance Summary</span>
+      </div>
+      <h2 class="section-title">${isFirstReport ? 'System initialization in progress' : 'Your system delivered measurable results'}</h2>
+      <p class="section-sub">${isFirstReport ? 'Data collection begins once your system completes its commissioning period. Detailed metrics will appear in your next report.' : `Below are the key performance indicators for the ${periodLabel.toLowerCase()}.`}</p>
 
-    <!-- Metrics -->
-    <div class="metrics-wrap">
-      <p class="section-label">Performance Summary</p>
-      <div class="metrics-grid">
-
-        <div class="metric-card">
-          <div class="m-icon">${svgBolt}</div>
-          <div class="m-val">${displayKwh >= 1000 ? (displayKwh / 1000).toFixed(2) : Math.round(displayKwh)}<span class="m-unit">${displayKwh >= 1000 ? 'MWh' : 'kWh'}</span></div>
+      <div class="metrics">
+        <div class="metric">
+          <div class="m-head">
+            <span class="m-icon">${svgBolt}</span>
+            ${isFirstReport ? '' : '<span class="m-trend">' + periodLabel + '</span>'}
+          </div>
+          <div class="m-value">${displayKwh >= 1000 ? (displayKwh / 1000).toFixed(2) : (displayKwh > 0 ? Math.round(displayKwh) : '—')}<span class="m-unit">${displayKwh > 0 ? (displayKwh >= 1000 ? 'MWh' : 'kWh') : ''}</span></div>
           <div class="m-label">Energy Produced</div>
-          <div class="m-sub">${periodLabel}</div>
+          <div class="m-sub">Clean solar electricity generated</div>
         </div>
 
-        <div class="metric-card green">
-          <div class="m-icon">${svgDollar}</div>
-          <div class="m-val">$${dollarsSaved.toLocaleString('en-US', { maximumFractionDigits: 0 })}<span class="m-unit"></span></div>
-          <div class="m-label">Est. Savings</div>
-          <div class="m-sub">@ $${COST_PER_KWH} / kWh</div>
+        <div class="metric green">
+          <div class="m-head">
+            <span class="m-icon">${svgDollar}</span>
+            ${dollarsSaved > 0 ? '<span class="m-trend">@ $' + COST_PER_KWH + '/kWh</span>' : ''}
+          </div>
+          <div class="m-value">${dollarsSaved > 0 ? '$' + dollarsSaved.toLocaleString('en-US', { maximumFractionDigits: 0 }) : '—'}</div>
+          <div class="m-label">Estimated Savings</div>
+          <div class="m-sub">Versus grid electricity costs</div>
         </div>
 
-        <div class="metric-card blue">
-          <div class="m-icon">${svgGauge}</div>
-          <div class="m-val">${specificYield > 0 ? specificYield.toFixed(2) : '—'}<span class="m-unit">${specificYield > 0 ? 'kWh/kWp' : ''}</span></div>
+        <div class="metric blue">
+          <div class="m-head">
+            <span class="m-icon">${svgGauge}</span>
+            ${specificYield > 0 ? '<span class="m-trend">per kWp</span>' : ''}
+          </div>
+          <div class="m-value">${specificYield > 0 ? specificYield.toFixed(2) : '—'}<span class="m-unit">${specificYield > 0 ? 'kWh/kWp' : ''}</span></div>
           <div class="m-label">Specific Yield</div>
-          <div class="m-sub">${periodLabel} per kWp installed</div>
+          <div class="m-sub">System efficiency benchmark</div>
         </div>
 
-        <div class="metric-card teal">
-          <div class="m-icon">${svgLeaf}</div>
-          <div class="m-val">${co2Tons > 0 ? co2Tons.toFixed(2) : '—'}<span class="m-unit">${co2Tons > 0 ? 'tons' : ''}</span></div>
-          <div class="m-label">CO&#x2082; Offset</div>
-          <div class="m-sub">${periodLabel}</div>
+        <div class="metric teal">
+          <div class="m-head">
+            <span class="m-icon">${svgLeaf}</span>
+            ${co2Tons > 0 ? '<span class="m-trend">CO₂</span>' : ''}
+          </div>
+          <div class="m-value">${co2Tons > 0 ? co2Tons.toFixed(2) : '—'}<span class="m-unit">${co2Tons > 0 ? 'tons' : ''}</span></div>
+          <div class="m-label">CO₂ Offset</div>
+          <div class="m-sub">Carbon emissions avoided</div>
         </div>
-
       </div>
 
-      ${lifetimeKwh > 0 ? `
-      <div class="lifetime-row">
-        <div class="lt-left">
-          <strong>Lifetime Total</strong>
-          Since ${siteData?.installDate || 'installation'}
+      ${chartData.length > 0 && displayKwh > 0 ? `
+      <div class="chart-card">
+        <div class="chart-head">
+          <span class="chart-title">Daily Production</span>
+          <span class="chart-period">${periodLabel.toUpperCase()}</span>
         </div>
-        <div class="lt-val">${lifetimeKwh >= 1000 ? (lifetimeKwh / 1000).toFixed(1) + ' MWh' : lifetimeKwh.toFixed(0) + ' kWh'}</div>
+        ${productionChart}
+      </div>` : ''}
+
+      ${isFirstReport ? `
+      <div class="first-report">
+        <div class="fr-eyebrow">Welcome aboard</div>
+        <div class="fr-title">Your solar journey begins now</div>
+        <div class="fr-body">This is your initial performance baseline. Once the system has been actively producing for a full reporting period, you'll see detailed energy production, savings, and environmental impact data here. Most systems begin showing measurable production within 24-48 hours of commissioning.</div>
+      </div>` : ''}
+
+      ${lifetimeKwh > 0 ? `
+      <div class="lifetime">
+        <div class="lt-left">
+          <div class="lt-label">Lifetime Production</div>
+          <div class="lt-sub">Since ${siteData?.installDate || 'installation'}</div>
+        </div>
+        <div class="lt-val">${lifetimeKwh >= 1000 ? (lifetimeKwh / 1000).toFixed(1) : lifetimeKwh.toFixed(0)}<span class="lt-unit"> ${lifetimeKwh >= 1000 ? 'MWh' : 'kWh'}</span></div>
       </div>` : ''}
     </div>
 
-    <!-- Service Summary -->
-    <div class="service-wrap">
-      <p class="section-label" style="padding:0 0 0 0;">System Availability & Service</p>
-      <div class="service-grid" style="grid-template-columns: 1fr 1fr 1fr;">
-        <div class="service-card">
-          <div class="sc-val green">${previewUptime.toFixed(0)}<span style="font-size:14px;color:#94a3b8;">%</span></div>
-          <div class="sc-label">System Uptime</div>
-          <div class="sc-sub">Days with production</div>
+    <!-- Section 02: Environmental Impact -->
+    ${displayKwh > 0 ? `
+    <div class="section">
+      <div class="section-eyebrow">
+        <span class="num">02</span>
+        <span class="label">Real-World Impact</span>
+      </div>
+      <h2 class="section-title">What ${displayKwh >= 1000 ? (displayKwh / 1000).toFixed(1) + ' MWh' : Math.round(displayKwh) + ' kWh'} really means</h2>
+      <p class="section-sub">Your clean energy generation translates into tangible environmental benefits.</p>
+
+      <div class="impact-band">
+        <div class="impact-item">
+          <span class="ii-icon">${svgCar}</span>
+          <div>
+            <div class="ii-val">${milesNotDriven.toLocaleString('en-US')}</div>
+            <div class="ii-label">Miles not driven<br/>in a gas vehicle</div>
+          </div>
         </div>
-        <div class="service-card">
-          <div class="sc-val green">${previewServiceCalls}</div>
-          <div class="sc-label">Service Calls</div>
-          <div class="sc-sub">${periodLabel}</div>
+        <div class="impact-item">
+          <span class="ii-icon">${svgGas}</span>
+          <div>
+            <div class="ii-val">${gallonsGasoline.toFixed(1)}</div>
+            <div class="ii-label">Gallons of gasoline<br/>equivalent</div>
+          </div>
         </div>
-        <div class="service-card">
-          <div class="sc-val${previewDowntimeDays > 0 ? ' amber' : ''}">${previewDowntimeDays}</div>
-          <div class="sc-label">Downtime Days</div>
-          <div class="sc-sub">${periodLabel}</div>
+        <div class="impact-item">
+          <span class="ii-icon">${svgTree}</span>
+          <div>
+            <div class="ii-val">${treesPlantedEquiv}</div>
+            <div class="ii-label">Trees planted<br/>(annual equiv.)</div>
+          </div>
+        </div>
+      </div>
+    </div>` : ''}
+
+    <!-- Section 03: Service Availability -->
+    <div class="section">
+      <div class="section-eyebrow">
+        <span class="num">${displayKwh > 0 ? '03' : '02'}</span>
+        <span class="label">System Availability</span>
+      </div>
+      <h2 class="section-title">Service & uptime</h2>
+      <p class="section-sub">A healthy system runs ${previewUptime >= 95 ? 'consistently — and yours is performing right on track.' : 'predictably. Here\'s how yours performed.'}</p>
+
+      <div class="stats">
+        <div class="stat">
+          <div class="s-val ${previewUptime >= 95 ? 'green' : 'amber'}">${previewUptime.toFixed(0)}<span class="s-unit">%</span></div>
+          <div class="s-label">System Uptime</div>
+          <div class="s-sub">Days with production</div>
+        </div>
+        <div class="stat">
+          <div class="s-val green">${previewServiceCalls}</div>
+          <div class="s-label">Service Calls</div>
+          <div class="s-sub">${periodLabel}</div>
+        </div>
+        <div class="stat">
+          <div class="s-val ${previewDowntimeDays > 0 ? 'amber' : 'green'}">${previewDowntimeDays}</div>
+          <div class="s-label">Downtime Days</div>
+          <div class="s-sub">${periodLabel}</div>
         </div>
       </div>
     </div>
 
-    <div style="height:24px;"></div>
-    <div class="ruled"></div>
+    <!-- Section 04: System Details -->
+    <div class="section" style="padding-bottom: 8px;">
+      <div class="section-eyebrow">
+        <span class="num">${displayKwh > 0 ? '04' : '03'}</span>
+        <span class="label">System Specifications</span>
+      </div>
+      <h2 class="section-title">Equipment & install details</h2>
 
-    <!-- System Details -->
-    <div class="details-wrap">
-      <p class="section-label">System Details</p>
-      ${systemSize ? `<div class="detail-row"><span class="dl">System Size</span><span class="dv">${systemSize} kW</span></div>` : ''}
-      ${siteData?.installDate ? `<div class="detail-row"><span class="dl">Install Date</span><span class="dv">${siteData.installDate}</span></div>` : ''}
-      <div class="detail-row"><span class="dl">System Type</span><span class="dv">${siteData?.systemType || 'SolarEdge'}</span></div>
-      ${siteData?.module ? `<div class="detail-row"><span class="dl">Module</span><span class="dv">${siteData.module}</span></div>` : ''}
-      <div class="detail-row"><span class="dl">Site ID</span><span class="dv">${siteId}</span></div>
-      ${customer.city || customer.state ? `<div class="detail-row"><span class="dl">Location</span><span class="dv">${[customer.city, customer.state].filter(Boolean).join(', ')}</span></div>` : ''}
+      <div class="details">
+        ${systemSize ? `<div class="detail-cell"><div class="dl">System Size</div><div class="dv">${systemSize} kW</div></div>` : ''}
+        ${siteData?.installDate ? `<div class="detail-cell"><div class="dl">Install Date</div><div class="dv">${siteData.installDate}</div></div>` : ''}
+        <div class="detail-cell"><div class="dl">System Type</div><div class="dv">${siteData?.systemType || 'SolarEdge'}</div></div>
+        ${siteData?.module ? `<div class="detail-cell"><div class="dl">Module</div><div class="dv">${siteData.module}</div></div>` : ''}
+        <div class="detail-cell"><div class="dl">Site ID</div><div class="dv">#${siteId}</div></div>
+        ${(customer.city || customer.state) ? `<div class="detail-cell"><div class="dl">Location</div><div class="dv">${[customer.city, customer.state].filter(Boolean).join(', ')}</div></div>` : ''}
+      </div>
     </div>
 
     ${previewAccountUpdates ? `
-    <div class="ruled"></div>
-    <div class="updates-wrap" style="padding-top:28px;">
-      <div class="updates-inner">
-        <div class="updates-header">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#9a3412" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          <span class="updates-title">Account Updates</span>
-        </div>
-        <div class="updates-body">${previewAccountUpdates.replace(/\n/g, '<br/>')}</div>
+    <div class="updates">
+      <div class="updates-header">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9a3412" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        <span class="updates-title">Account Updates</span>
       </div>
+      <div class="updates-body">${previewAccountUpdates.replace(/\n/g, '<br/>')}</div>
     </div>` : ''}
 
     ${hasOverdue ? `
-    <div class="ruled"></div>
-    <div class="alert-wrap" style="padding-top:28px;">
-      <div class="alert-inner">
-        <div class="alert-title">Balance Reminder</div>
-        <div class="alert-body">We noticed an open balance on your account. To ensure uninterrupted service monitoring and support, please submit payment at your earliest convenience.</div>
-        <a href="https://solarflow-dashboard-sooty.vercel.app/api/track?event=click&target=invoice&id=${tid}&redirect=${encodeURIComponent(overdueInvs[0]?.InvoiceID ? 'https://invoicing.xero.com/view/' + overdueInvs[0].InvoiceID : '#')}" class="alert-btn">View Invoice</a>
-      </div>
+    <div class="alert">
+      <div class="alert-title">Balance Reminder</div>
+      <div class="alert-body">We noticed an open balance on your account. To ensure uninterrupted service monitoring and support, please submit payment at your earliest convenience.</div>
+      <a href="https://solarflow-dashboard-sooty.vercel.app/api/track?event=click&target=invoice&id=${tid}&redirect=${encodeURIComponent(overdueInvs[0]?.InvoiceID ? 'https://invoicing.xero.com/view/' + overdueInvs[0].InvoiceID : '#')}" class="alert-btn">View Invoice →</a>
     </div>` : ''}
 
-    <div class="ruled"></div>
-
-    <!-- Google Review CTA -->
-    <div class="review-wrap" style="padding-top:32px;">
-      <div class="review-card">
-        <div class="review-stars">
-          ${svgStar}${svgStar}${svgStar}${svgStar}${svgStar}
-        </div>
-        <div class="review-headline">Enjoying the savings?</div>
-        <div class="review-sub">Your feedback helps us grow and serve more homeowners<br/>in your community. It takes less than 60 seconds.</div>
-        <a href="https://solarflow-dashboard-sooty.vercel.app/api/track?event=click&target=review&id=${tid}&redirect=${encodeURIComponent('https://g.page/r/conexsol/review')}" class="review-btn">Leave Us a Google Review</a>
-      </div>
+    <!-- Review CTA -->
+    <div class="review">
+      <div class="review-stars">${svgStar}${svgStar}${svgStar}${svgStar}${svgStar}</div>
+      <div class="review-headline">Enjoying the savings?</div>
+      <div class="review-sub">Your feedback helps us grow and serve more homeowners in your community. It takes less than 60 seconds.</div>
+      <a href="https://solarflow-dashboard-sooty.vercel.app/api/track?event=click&target=review&id=${tid}&redirect=${encodeURIComponent('https://g.page/r/conexsol/review')}" class="review-btn">Leave Us a Google Review</a>
     </div>
 
-  </div><!-- /body -->
+    <!-- Footer -->
+    <div class="footer">
+      <img class="footer-logo" src="https://solarflow-dashboard-sooty.vercel.app/conexsol-logo.png" alt="Conexsol" />
+      <p>
+        <a href="https://solarflow-dashboard-sooty.vercel.app/api/track?event=click&target=website&id=${tid}&redirect=${encodeURIComponent('https://conexsol.us')}">conexsol.us</a>
+        &nbsp;·&nbsp; Florida Solar Service &nbsp;·&nbsp; Report generated ${reportDate}
+        <br/>
+        <span class="footer-unsub">To stop receiving reports, reply to this email.</span>
+      </p>
+    </div>
 
-  <!-- Footer -->
-  <div class="footer">
-    <img src="https://solarflow-dashboard-sooty.vercel.app/conexsol-logo.png" alt="Conexsol" />
-    <p>
-      <a href="https://solarflow-dashboard-sooty.vercel.app/api/track?event=click&target=website&id=${tid}&redirect=${encodeURIComponent('https://conexsol.us')}">conexsol.us</a>
-      &nbsp;&nbsp;·&nbsp;&nbsp;Florida Solar Service<br/>
-      Report generated ${reportDate}<br/>
-      <span style="color:#cbd5e1;">To stop receiving reports, reply to this email.</span>
-    </p>
-  </div>
-
+  </div><!-- /card -->
 </div>
 <img src="${trackingPixel}" width="1" height="1" alt="" style="display:none;" />
 </body>
@@ -1875,7 +2229,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
 
     return html;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showReportPreview, previewTrackingId, previewGreeting, previewAccountUpdates, previewDowntimeDays, previewServiceCalls, previewUptime, displayKwh, dollarsSaved, specificYield, co2Tons, lifetimeKwh, graphPeriod, peakPowerKw, siteId, siteData, customer]);
+  }, [showReportPreview, previewTrackingId, previewGreeting, previewAccountUpdates, previewDowntimeDays, previewServiceCalls, previewUptime, displayKwh, dollarsSaved, specificYield, co2Tons, lifetimeKwh, graphPeriod, peakPowerKw, siteId, siteData, customer, energyData]);
 
   // Approve & Send — sends via SMTP API (IONOS) or falls back to mailto
   const [sendError, setSendError] = useState<string | null>(null);
