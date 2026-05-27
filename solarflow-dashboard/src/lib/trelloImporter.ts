@@ -1,12 +1,8 @@
 // SolarOps — Trello Card Importer
 // Fetches a Trello card and maps it to SolarOps Customer fields.
-// Credentials are sourced from .env.local (VITE_TRELLO_API_KEY / VITE_TRELLO_TOKEN).
+// Uses backend proxy (/api/trello-card.ts) for secure server-side API calls.
 
 import { Activity, Customer, CustomerFile } from '../types';
-import { uploadTrelloAttachment } from './trelloAttachmentUpload';
-
-const KEY   = import.meta.env.VITE_TRELLO_API_KEY as string;
-const TOKEN = import.meta.env.VITE_TRELLO_TOKEN   as string;
 
 export interface TrelloAttachment {
   name: string;
@@ -43,20 +39,13 @@ export interface TrelloImportResult {
 // ── Fetch ─────────────────────────────────────────────────────────────────────
 
 export async function fetchTrelloCard(urlOrId: string): Promise<TrelloCardData> {
-  const match = urlOrId.match(/trello\.com\/c\/([a-zA-Z0-9]+)/);
-  const cardId = match ? match[1] : urlOrId.trim();
-
-  const url =
-    `https://api.trello.com/1/cards/${cardId}` +
-    `?key=${KEY}&token=${TOKEN}` +
-    `&fields=name,desc,due,shortUrl,labels` +
-    `&attachments=true&attachment_fields=all` +
-    `&actions=commentCard&actions_limit=50`;
+  // Use backend proxy to avoid CORS issues + keep credentials secure
+  const url = `/api/trello-card?cardId=${encodeURIComponent(urlOrId)}`;
 
   const res = await fetch(url);
   if (!res.ok) {
     const body = await res.text().catch(() => '');
-    throw new Error(`Trello API ${res.status}: ${body || res.statusText}`);
+    throw new Error(`Trello API error ${res.status}: ${body || res.statusText}`);
   }
 
   const d = await res.json();
@@ -157,25 +146,11 @@ export async function importTrelloCard(
   const files: CustomerFile[] = await Promise.all(
     card.attachments.map(async (a, i) => {
       const fileId    = `trello-file-${cardKey}-${i}`;
-      const sourceUrl = a.url; // raw Trello attachment URL (no token)
+      const sourceUrl = a.url; // raw Trello attachment URL (publicly accessible)
 
-      // Try to upload to Supabase Storage → get a permanent public URL
-      const permanentUrl = await uploadTrelloAttachment({
-        trelloUrl:   sourceUrl,
-        trelloKey:   KEY,
-        trelloToken: TOKEN,
-        customerId:  customer.id,
-        fileId,
-        fileName:    a.name,
-        mimeType:    a.mimeType,
-      });
-
-      // Fall back to Trello URL + auth params if upload failed
-      const url = permanentUrl ?? (
-        a.previewUrl
-          ? `${a.previewUrl}?key=${KEY}&token=${TOKEN}`
-          : `${sourceUrl}?key=${KEY}&token=${TOKEN}`
-      );
+      // Use preview URL if available, fallback to source URL
+      // (Trello attachment URLs are typically publicly accessible)
+      const url = a.previewUrl ?? sourceUrl;
 
       return {
         id:        fileId,
