@@ -55,33 +55,79 @@ function exactTime(iso: string): string {
   });
 }
 
-// Render text with @mentions as clickable orange chips
+// URL detection regex — matches http(s)://, www., and bare domain.tld URLs
+const URL_REGEX = /(https?:\/\/[^\s<>"']+|www\.[^\s<>"']+|\b[a-zA-Z0-9.\-]+\.(com|net|org|io|co|us|app|dev|gov|edu|info|biz)(\/[^\s<>"']*)?)/g;
+
+// Combined regex for splitting: matches either @mentions, URLs, or email addresses
+const TOKEN_REGEX = /(@[\w.]+|https?:\/\/[^\s<>"']+|www\.[^\s<>"']+|\b[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}\b)/g;
+
+// Render text with @mentions as clickable chips + auto-linked URLs/emails
 const MentionBody: React.FC<{
   text: string;
   users: FeedUser[];
   onMentionClick?: (userId: string) => void;
 }> = ({ text, users, onMentionClick }) => {
-  const parts = text.split(/(@[\w.]+)/g);
+  const parts = text.split(TOKEN_REGEX);
   return (
     <p className="text-sm text-slate-700 whitespace-pre-line leading-relaxed break-words">
       {parts.map((part, i) => {
-        if (!part.startsWith('@')) return <React.Fragment key={i}>{part}</React.Fragment>;
-        const handle = part.slice(1).toLowerCase();
-        const user = users.find(u =>
-          u.username?.toLowerCase() === handle ||
-          u.name.toLowerCase().replace(/\s+/g, '') === handle ||
-          u.name.toLowerCase() === handle,
-        );
-        return (
-          <button
-            key={i}
-            type="button"
-            onClick={() => user && onMentionClick?.(user.id)}
-            className="inline-flex items-center text-orange-600 font-semibold bg-orange-50 hover:bg-orange-100 px-1 rounded transition-colors"
-          >
-            {part}
-          </button>
-        );
+        if (!part) return null;
+
+        // @mention chip
+        if (part.startsWith('@')) {
+          const handle = part.slice(1).toLowerCase();
+          const user = users.find(u =>
+            u.username?.toLowerCase() === handle ||
+            u.name.toLowerCase().replace(/\s+/g, '') === handle ||
+            u.name.toLowerCase() === handle,
+          );
+          if (!user) {
+            // Unknown mention — render as plain text
+            return <span key={i} className="text-slate-500">{part}</span>;
+          }
+          return (
+            <button
+              key={i}
+              type="button"
+              onClick={() => onMentionClick?.(user.id)}
+              title={user.name}
+              className="inline-flex items-center text-orange-600 font-semibold bg-orange-50 hover:bg-orange-100 px-1 rounded transition-colors cursor-pointer"
+            >
+              {part}
+            </button>
+          );
+        }
+
+        // URL → clickable link (opens in new tab)
+        if (part.startsWith('http://') || part.startsWith('https://') || part.startsWith('www.')) {
+          const href = part.startsWith('www.') ? `https://${part}` : part;
+          return (
+            <a
+              key={i}
+              href={href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-600 hover:text-blue-800 underline break-all"
+            >
+              {part}
+            </a>
+          );
+        }
+
+        // Email → mailto link
+        if (/^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/.test(part)) {
+          return (
+            <a
+              key={i}
+              href={`mailto:${part}`}
+              className="text-blue-600 hover:text-blue-800 underline"
+            >
+              {part}
+            </a>
+          );
+        }
+
+        return <React.Fragment key={i}>{part}</React.Fragment>;
       })}
     </p>
   );

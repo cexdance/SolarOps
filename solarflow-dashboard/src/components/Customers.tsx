@@ -3338,6 +3338,10 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                     onEdit={(id, newText) => handleSaveActivity(id, newText)}
                     onDelete={handleDeleteActivity}
                     onReact={handleAddReaction}
+                    onMentionClick={(userId) => {
+                      const u = users.find(x => x.id === userId);
+                      if (u) toast.info(`${u.name}${u.username ? ' (@' + u.username + ')' : ''}${u.role ? ' · ' + u.role : ''}`);
+                    }}
                   />
                 </div>
                 <div className="space-y-3 mt-4">

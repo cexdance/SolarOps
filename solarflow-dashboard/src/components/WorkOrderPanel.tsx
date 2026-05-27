@@ -2828,6 +2828,15 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                   onEdit={editComment}
                   onDelete={deleteComment}
                   onReact={reactComment}
+                  onMentionClick={(userId) => {
+                    const u = (users ?? []).find((x: any) => x.id === userId);
+                    if (u) {
+                      // Could navigate to user profile in future — for now show info
+                      const username = (u as any).username;
+                      const role = (u as any).role;
+                      alert(`${u.name}${username ? ' (@' + username + ')' : ''}${role ? '\nRole: ' + role : ''}`);
+                    }
+                  }}
                   emptyMessage="No comments yet — start the conversation by posting an update above."
                 />
               </div>
