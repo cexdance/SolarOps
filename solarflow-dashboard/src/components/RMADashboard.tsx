@@ -1,7 +1,7 @@
 // SolarOps — RMA Compensation Tracker (standalone page)
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import {
-  RotateCcw, Users, CheckCircle, Plus, Package,
+  RotateCcw, Users, CheckCircle, Plus, Package, LayoutGrid, List, Calendar, ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import { Job, Customer, User, RMAEntry, RMAStatus } from '../types';
 
@@ -47,6 +47,8 @@ export function RMADashboard({
   onUpdateJob,
   onViewChange,
 }: RMADashboardProps) {
+  const [viewMode, setViewMode] = useState<'kanban' | 'list' | 'calendar'>('kanban');
+  const [selectedDate, setSelectedDate] = useState(new Date());
   const getCustomer = (id: string) => customers.find(c => c.id === id);
 
   // ── Build RMA rows from all jobs ──────────────────────────────────────────
@@ -162,25 +164,53 @@ export function RMADashboard({
             </div>
           </div>
 
-          {/* Summary chips */}
-          <div className="hidden sm:flex items-center gap-3">
-            {activeCount > 0 && (
-              <span className="px-3 py-1 bg-amber-100 text-amber-700 text-xs font-semibold rounded-full">
-                {activeCount} active
-              </span>
-            )}
-            {totalComp > 0 && (
-              <div className="text-right">
-                <p className="text-[10px] text-slate-400 uppercase tracking-wide">Compensation</p>
-                <p className="text-sm font-bold text-slate-800">
-                  ${collectedComp.toLocaleString()} <span className="text-slate-400 font-normal">/ ${totalComp.toLocaleString()}</span>
-                </p>
-              </div>
-            )}
+          {/* Summary chips + view toggle */}
+          <div className="flex items-center gap-4 flex-wrap sm:flex-nowrap">
+            <div className="hidden sm:flex items-center gap-3">
+              {activeCount > 0 && (
+                <span className="px-3 py-1 bg-amber-100 text-amber-700 text-xs font-semibold rounded-full">
+                  {activeCount} active
+                </span>
+              )}
+              {totalComp > 0 && (
+                <div className="text-right">
+                  <p className="text-[10px] text-slate-400 uppercase tracking-wide">Compensation</p>
+                  <p className="text-sm font-bold text-slate-800">
+                    ${collectedComp.toLocaleString()} <span className="text-slate-400 font-normal">/ ${totalComp.toLocaleString()}</span>
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* View toggle */}
+            <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1">
+              <button
+                onClick={() => setViewMode('kanban')}
+                className={`p-1.5 rounded transition-colors ${viewMode === 'kanban' ? 'bg-white shadow-sm text-orange-500' : 'text-slate-600 hover:text-slate-900'}`}
+                title="Kanban view"
+              >
+                <LayoutGrid className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setViewMode('list')}
+                className={`p-1.5 rounded transition-colors ${viewMode === 'list' ? 'bg-white shadow-sm text-orange-500' : 'text-slate-600 hover:text-slate-900'}`}
+                title="List view"
+              >
+                <List className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setViewMode('calendar')}
+                className={`p-1.5 rounded transition-colors ${viewMode === 'calendar' ? 'bg-white shadow-sm text-orange-500' : 'text-slate-600 hover:text-slate-900'}`}
+                title="Calendar view"
+              >
+                <Calendar className="w-4 h-4" />
+              </button>
+            </div>
+
             {onViewChange && (
               <button
                 onClick={() => onViewChange('jobs')}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white text-xs font-semibold rounded-lg transition-colors"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white text-xs font-semibold rounded-lg transition-colors whitespace-nowrap"
               >
                 <Plus className="w-3.5 h-3.5" />
                 Add via Work Order
@@ -213,8 +243,8 @@ export function RMADashboard({
         </div>
       )}
 
-      {/* ── Kanban board ───────────────────────────────────────────────────── */}
-      {rmaRows.length > 0 && (
+      {/* ── View panel (Kanban / List / Calendar) ─────────────────────────── */}
+      {rmaRows.length > 0 && viewMode === 'kanban' && (
         <div className="p-4 overflow-x-auto">
           <div className="flex gap-3 min-w-[920px]">
             {COLUMNS.map(col => {
@@ -339,6 +369,161 @@ export function RMADashboard({
                 </div>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {/* ── List view ──────────────────────────────────────────────────────── */}
+      {rmaRows.length > 0 && viewMode === 'list' && (
+        <div className="p-6">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-slate-200 bg-slate-50">
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600">RMA / Case #</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600">Part</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600">Manufacturer</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600">Customer</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600">Work Order</th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold text-slate-600">Status</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-slate-600">Amount</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600">Created</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200">
+                {rmaRows.map((row) => {
+                  const status = resolveStatus(row.entry);
+                  const col = COLUMNS.find(c => c.id === status);
+                  return (
+                    <tr key={`${row.job.id}-${row.entry.id}`} className="hover:bg-slate-50 transition-colors">
+                      <td className="px-4 py-3 text-sm font-bold text-slate-900 font-mono">
+                        #{row.entry.rmaNumber || row.entry.caseNumber || '—'}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-slate-600">{row.entry.partDescription}</td>
+                      <td className="px-4 py-3 text-sm text-slate-500">{row.entry.manufacturer || '—'}</td>
+                      <td className="px-4 py-3">
+                        {row.customer && (
+                          <button
+                            onClick={() => onViewCustomer?.(row.customer!.id)}
+                            className="text-sm text-orange-600 hover:text-orange-700 font-medium"
+                          >
+                            {row.customer.name}
+                          </button>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        {row.job.woNumber && (
+                          <button
+                            onClick={() => onJobClick?.(row.job.id)}
+                            className="text-sm text-blue-600 hover:text-blue-700 font-mono font-semibold"
+                          >
+                            {row.job.woNumber}
+                          </button>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <span className={`inline-block px-2.5 py-1 rounded-full text-[10px] font-semibold ${col?.bgCard} ${col?.color}`}>
+                          {col?.label}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right text-sm font-semibold text-slate-900">
+                        ${(row.entry.compensationAmount ?? 0).toLocaleString()}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-slate-500">
+                        {new Date(row.entry.createdAt).toLocaleDateString()}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ── Calendar view ──────────────────────────────────────────────────── */}
+      {rmaRows.length > 0 && viewMode === 'calendar' && (
+        <div className="p-6">
+          <div className="space-y-4">
+            {/* Calendar header with navigation */}
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-lg font-semibold text-slate-900">
+                {selectedDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+              </h2>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setSelectedDate(new Date(selectedDate.getFullYear(), selectedDate.getMonth() - 1, 1))}
+                  className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                  title="Previous month"
+                >
+                  <ChevronLeft className="w-5 h-5 text-slate-600" />
+                </button>
+                <button
+                  onClick={() => setSelectedDate(new Date())}
+                  className="px-3 py-1.5 text-sm font-medium bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors text-slate-700"
+                >
+                  Today
+                </button>
+                <button
+                  onClick={() => setSelectedDate(new Date(selectedDate.getFullYear(), selectedDate.getMonth() + 1, 1))}
+                  className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                  title="Next month"
+                >
+                  <ChevronRight className="w-5 h-5 text-slate-600" />
+                </button>
+              </div>
+            </div>
+
+            {/* Calendar grid */}
+            <div className="grid grid-cols-7 gap-2">
+              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                <div key={day} className="text-center text-xs font-semibold text-slate-500 py-2">
+                  {day}
+                </div>
+              ))}
+
+              {Array.from({ length: new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 0).getDate() +
+                            new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1).getDay() }, (_, i) => {
+                const firstDayOfMonth = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1).getDay();
+                const dayNum = i - firstDayOfMonth + 1;
+                const isCurrentMonth = dayNum > 0;
+                const date = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), dayNum);
+                const entriesForDate = isCurrentMonth ? rmaRows.filter(r =>
+                  new Date(r.entry.createdAt).toDateString() === date.toDateString()
+                ) : [];
+
+                return (
+                  <div
+                    key={i}
+                    className={`min-h-[100px] p-2 rounded-lg border ${
+                      isCurrentMonth
+                        ? 'bg-white border-slate-200 hover:border-slate-300'
+                        : 'bg-slate-50 border-slate-100'
+                    }`}
+                  >
+                    <div className={`text-xs font-semibold mb-1 ${isCurrentMonth ? 'text-slate-900' : 'text-slate-400'}`}>
+                      {isCurrentMonth ? dayNum : ''}
+                    </div>
+                    <div className="space-y-1">
+                      {entriesForDate.slice(0, 3).map(row => (
+                        <div
+                          key={`${row.job.id}-${row.entry.id}`}
+                          className="text-[9px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-medium truncate cursor-pointer hover:bg-amber-200"
+                          title={`${row.entry.partDescription} - ${row.customer?.name || 'Unknown'}`}
+                        >
+                          #{row.entry.rmaNumber || '?'}
+                        </div>
+                      ))}
+                      {entriesForDate.length > 3 && (
+                        <div className="text-[9px] text-slate-500 px-1.5 py-0.5 italic">
+                          +{entriesForDate.length - 3} more
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
       )}
