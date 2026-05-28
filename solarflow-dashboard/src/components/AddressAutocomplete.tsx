@@ -179,7 +179,7 @@ export const AddressAutocomplete: React.FC<Props> = ({
         onChange={handleChange}
         placeholder={placeholder}
         required={required}
-        autoComplete="new-password" /* prevents browser autocomplete from blocking PAC */
+        autoComplete="off" /* prevents browser autocomplete + password managers from blocking PAC */
         className={`${className} ${status === 'ready' || status === 'loading' ? 'pr-8' : ''}`}
       />
       {/* Status icon */}
