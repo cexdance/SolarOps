@@ -259,7 +259,7 @@ export const Layout: React.FC<LayoutProps> = ({
                             className="w-full text-left px-4 py-2.5 hover:bg-orange-50 transition-colors"
                           >
                             <p className="text-sm font-medium text-slate-800 truncate">
-                              {c.solarEdgeSiteId && <span className="text-orange-500 font-semibold mr-1.5">{c.solarEdgeSiteId}</span>}
+                              {c.clientId && <span className="text-orange-500 font-semibold mr-1.5">{c.clientId}</span>}
                               {c.name}
                             </p>
                             <p className="text-xs text-slate-400 mt-0.5 truncate">
