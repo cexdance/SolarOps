@@ -52,6 +52,7 @@ import {
   Camera,
   Image as ImageIcon,
   Sparkles,
+  Printer,
 } from 'lucide-react';
 import * as _recharts from 'recharts';
 const { ComposedChart, Bar, Line, XAxis, YAxis, Tooltip: RechartsTooltip, ResponsiveContainer, CartesianGrid, Legend } = _recharts as any;
@@ -2607,7 +2608,16 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
             )}
 
             {/* ── Native Report Preview (scrollable) ── */}
-            <div className="flex-1 overflow-y-auto bg-slate-50" style={{ maxHeight: '72vh' }}>
+            <div id="report-printable" className="flex-1 overflow-y-auto bg-slate-50" style={{ maxHeight: '72vh' }}>
+
+              {/* Print-only logo header (hidden on screen, visible when printing) */}
+              <div className="hidden print:flex items-center justify-between px-5 py-4 bg-white border-b border-slate-200">
+                <img src="/conexsol-logo-color.svg" alt="Conexsol" className="h-10" />
+                <div className="text-right">
+                  <p className="text-sm font-bold text-slate-800">Solar Performance Report</p>
+                  <p className="text-xs text-slate-500">{new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>
+                </div>
+              </div>
 
               {/* 1 — Client Info Header */}
               <div className="bg-slate-900 px-5 py-5 flex flex-col sm:flex-row sm:items-start gap-4">
@@ -2772,10 +2782,10 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
                 </div>
               )}
 
-              {/* ConexSol footer bar */}
+              {/* Conexsol footer bar */}
               <div className="mx-5 mb-5 rounded-xl bg-slate-800 px-4 py-3 flex items-center justify-between">
                 <div>
-                  <p className="text-xs font-bold text-white">ConexSol</p>
+                  <p className="text-xs font-bold text-white">Conexsol</p>
                   <p className="text-[10px] text-slate-400">Solar Performance Report</p>
                 </div>
                 <p className="text-[10px] text-slate-500">{new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>
@@ -2811,6 +2821,39 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
                     className="px-4 py-2 text-sm text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg font-medium transition-colors cursor-pointer"
                   >
                     Close
+                  </button>
+                  <button
+                    onClick={() => {
+                      const printArea = document.getElementById('report-printable');
+                      if (!printArea) return;
+                      const win = window.open('', '_blank');
+                      if (!win) return;
+                      win.document.write(`<!DOCTYPE html><html><head><title>Conexsol - Solar Performance Report</title>
+                        <style>
+                          *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+                          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+                          img { max-width: 100%; }
+                          @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+                        </style>
+                        <link href="https://cdn.jsdelivr.net/npm/tailwindcss@3/dist/tailwind.min.css" rel="stylesheet">
+                      </head><body>`);
+                      // Clone report content and make print header visible
+                      const clone = printArea.cloneNode(true) as HTMLElement;
+                      clone.style.maxHeight = 'none';
+                      clone.style.overflow = 'visible';
+                      // Show the print-only logo header
+                      const printHeader = clone.querySelector('.print\\:flex, [class*="print:flex"]');
+                      if (printHeader) {
+                        (printHeader as HTMLElement).style.display = 'flex';
+                        (printHeader as HTMLElement).classList.remove('hidden');
+                      }
+                      win.document.body.innerHTML = clone.outerHTML;
+                      win.document.close();
+                      setTimeout(() => { win.print(); win.close(); }, 600);
+                    }}
+                    className="flex items-center gap-2 px-4 py-2 text-sm text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg font-medium transition-colors cursor-pointer"
+                  >
+                    <Printer className="w-3.5 h-3.5" /> Print
                   </button>
                   <button
                     onClick={handleSendReport}

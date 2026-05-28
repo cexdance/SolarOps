@@ -391,6 +391,6 @@ const LogoHeader: React.FC = () => (
       <Sun className="w-8 h-8 text-white" />
     </div>
     <h1 className="text-2xl font-bold text-white tracking-tight">Contractor Portal</h1>
-    <p className="text-slate-400 text-sm mt-1">ConexSol Field Team Access</p>
+    <p className="text-slate-400 text-sm mt-1">Conexsol Field Team Access</p>
   </div>
 );

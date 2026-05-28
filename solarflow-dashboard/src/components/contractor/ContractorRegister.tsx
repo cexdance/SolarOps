@@ -10,7 +10,7 @@ import {
 import { RegistrationState, RegistrationStep, BusinessType } from '../../types/contractor';
 import { Contractor } from '../../types/contractor';
 import { markInviteUsed } from '../../lib/contractorStore';
-import ConexSolTerms from './ConexSolTerms';
+import ConexsolTerms from './ConexsolTerms';
 
 interface ContractorRegisterProps {
   onComplete: (contractor: Contractor) => void;
@@ -39,7 +39,7 @@ const SAFETY_SECTIONS = [
     bg: 'bg-blue-50',
     border: 'border-blue-200',
     title: 'Our Commitment to Safety',
-    content: `ConexSol Applications LLC operates under a zero-compromise safety culture. Every contractor who works under our brand represents our commitment to the well-being of our team, our clients, and the public.
+    content: `Conexsol Applications LLC operates under a zero-compromise safety culture. Every contractor who works under our brand represents our commitment to the well-being of our team, our clients, and the public.
 
 This guide reflects OSHA 29 CFR 1926 (Construction Industry Standards) and OSHA 29 CFR 1910 (General Industry) standards applicable to photovoltaic system installation and maintenance in Florida.
 
@@ -138,7 +138,7 @@ Florida is subject to high-wind events, afternoon thunderstorms, and seasonal tr
     bg: 'bg-red-50',
     border: 'border-red-200',
     title: '4. Heat Illness Prevention — Florida Critical',
-    content: `Florida's heat and humidity create life-threatening conditions for outdoor workers. Heat stroke kills. ConexSol enforces mandatory heat illness prevention protocols aligned with OSHA's Heat Illness Prevention standard.
+    content: `Florida's heat and humidity create life-threatening conditions for outdoor workers. Heat stroke kills. Conexsol enforces mandatory heat illness prevention protocols aligned with OSHA's Heat Illness Prevention standard.
 
 HEAT INDEX RISK LEVELS:
 • 91–103°F (High Risk) — Mandatory 10-minute break every 60 minutes in shade; 8 oz water every 20 minutes
@@ -223,7 +223,7 @@ COMMUNICATION:
 • Always have your phone charged and accessible on the job site
 • Notify your dispatcher before starting roof work and when you descend
 • If you're working alone and experience an incident: call 911 first, then call the office
-• Emergency contact for ConexSol field operations: on-call dispatcher number is in your ContractorDashboard
+• Emergency contact for Conexsol field operations: on-call dispatcher number is in your ContractorDashboard
 
 ZERO TOLERANCE ITEMS — IMMEDIATE DISMISSAL:
 • Working on a roof without fall protection where required
@@ -333,7 +333,7 @@ export const ContractorRegister: React.FC<ContractorRegisterProps> = ({
     }
 
     if (currentStep === 'terms') {
-      // Complete registration — called after T&C acceptance via ConexSolTerms onAccept
+      // Complete registration — called after T&C acceptance via ConexsolTerms onAccept
       const contractor: Contractor = {
         id: `contractor-${Date.now()}`,
         email: formData.email,
@@ -436,7 +436,7 @@ export const ContractorRegister: React.FC<ContractorRegisterProps> = ({
               {inviteEmail ? (
                 <p className="text-sm text-emerald-700 mt-1 flex items-center gap-1.5">
                   <CheckCircle className="w-4 h-4" />
-                  You were invited by <strong>{invitedBy ?? 'ConexSol'}</strong> — email pre-filled below
+                  You were invited by <strong>{invitedBy ?? 'Conexsol'}</strong> — email pre-filled below
                 </p>
               ) : (
                 <p className="text-sm text-slate-500 mt-1">Your login credentials for the contractor portal.</p>
@@ -720,7 +720,7 @@ export const ContractorRegister: React.FC<ContractorRegisterProps> = ({
             <div>
               <h2 className="text-xl font-bold text-slate-900">Insurance Documentation</h2>
               <p className="text-sm text-slate-500 mt-1">
-                ConexSol requires proof of General Liability and Workers' Compensation insurance before any field work.
+                Conexsol requires proof of General Liability and Workers' Compensation insurance before any field work.
               </p>
             </div>
 
@@ -814,7 +814,7 @@ export const ContractorRegister: React.FC<ContractorRegisterProps> = ({
                 <input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={handleFileUpload} className="hidden" />
               </label>
               <p className="text-xs text-slate-400 mt-1">
-                ConexSol must be listed as an Additional Insured on your policy.
+                Conexsol must be listed as an Additional Insured on your policy.
               </p>
             </div>
           </div>
@@ -844,7 +844,7 @@ export const ContractorRegister: React.FC<ContractorRegisterProps> = ({
                     <ShieldCheck className="w-6 h-6 text-orange-600" />
                   </div>
                   <h3 className="text-base font-bold text-slate-900">CONTRACTOR SAFETY GUIDE</h3>
-                  <p className="text-xs text-slate-500 mt-1">ConexSol Applications LLC — Field Operations Manual</p>
+                  <p className="text-xs text-slate-500 mt-1">Conexsol Applications LLC — Field Operations Manual</p>
                   <p className="text-xs text-slate-400 mt-0.5">OSHA 29 CFR 1926 / 29 CFR 1910 Compliant · Effective January 2026</p>
                 </div>
 
@@ -969,7 +969,7 @@ export const ContractorRegister: React.FC<ContractorRegisterProps> = ({
         return (
           <div className="space-y-4">
             <div className="overflow-y-auto max-h-[60vh] rounded-xl border border-slate-200">
-              <ConexSolTerms
+              <ConexsolTerms
                 onAccept={() => {
                   setFormData(f => ({ ...f, termsAcceptedAt: new Date().toISOString(), termsVersion: 'v2026.1' }));
                   handleNext();

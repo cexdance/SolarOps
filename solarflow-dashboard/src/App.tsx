@@ -2111,6 +2111,7 @@ function App() {
           <LeadLobby
             currentUserId={data.currentUser?.id || 'user-1'}
             currentUserRole={currentUser?.role}
+            customers={data.customers}
             onAddCustomer={handleCreateCustomer}
           />
         );

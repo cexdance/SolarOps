@@ -326,7 +326,7 @@ const LEGACY_DEMO_JOB_IDS = new Set(['cj-1', 'cj-2', 'cj-3', 'cj-4', 'cj-5']);
 // Demo contractor
 const demoContractors: Contractor[] = [
   {
-    // Merged master record: IMPower Marketing LLC (was contractor-1 ConexSol + contractor-2 MPower)
+    // Merged master record: IMPower Marketing LLC (was contractor-1 Conexsol + contractor-2 MPower)
     id: 'contractor-2',
     email: 'cjurado@mpowermarketing.com',
     role: 'contractor',
@@ -538,7 +538,7 @@ export const initializeContractorData = (): void => {
         // Migrate stale name/business data to current seed values
         const needsMigration =
           c.businessName === "Mike's Solar Services" || c.contactName === 'Mike Johnson' ||
-          c.businessName === 'ConexSol' || c.businessName === 'MPower Marketing, LLC';
+          c.businessName === 'Conexsol' || c.businessName === 'MPower Marketing, LLC';
         return {
           ...c,
           email: demo.email,

@@ -1210,7 +1210,7 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
                         autoFocus
                       />
                       <p className="text-xs text-red-600">
-                        This report will be flagged for review by the ConexSol safety team.
+                        This report will be flagged for review by the Conexsol safety team.
                       </p>
                     </div>
                   )}

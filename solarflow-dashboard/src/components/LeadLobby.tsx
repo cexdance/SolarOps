@@ -5,7 +5,7 @@ import * as XLSX from 'xlsx';
 import {
   Inbox, Phone, Mail, Plus, Search, ArrowRight, Tag, X, User,
   Zap, CheckCircle, LayoutGrid, List, ChevronDown, ChevronUp, Upload, Trash2, Link2,
-  Camera, Image as ImageIcon, Sparkles,
+  Camera, Image as ImageIcon, Sparkles, AlertTriangle,
 } from 'lucide-react';
 import { loadCRMData, saveCRMData, addLead, CRMData } from '../lib/crmStore';
 import { fetchTrelloCard, extractContactInfo } from '../lib/trelloImporter';
@@ -15,6 +15,7 @@ import { Lead, LeadStatus, LeadSource, Job, Customer, CRMAttachment } from '../t
 interface LeadLobbyProps {
   currentUserId: string;
   currentUserRole?: string;
+  customers?: Customer[];
   onAddCustomer?: (customer: Partial<Customer>) => void;
 }
 
@@ -203,7 +204,7 @@ function parseSolarEdgeEmail(text: string): Partial<AddFormData> & { addressNote
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserId, currentUserRole, onAddCustomer }) => {
+export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserId, currentUserRole, customers = [], onAddCustomer }) => {
   const [crmData, setCrmData] = useState<CRMData>(() => loadCRMData());
   const [viewMode, setViewMode] = useState<'list' | 'kanban'>('kanban');
   const [searchQuery, setSearchQuery] = useState('');
@@ -320,6 +321,31 @@ export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserId, currentUser
     [crmData.leads]
   );
 
+  // ── Duplicate detection: flag leads that match existing customers ──────────
+  const duplicateIndex = useMemo(() => {
+    const idx: Record<string, Customer> = {};
+    if (!customers.length) return idx;
+    for (const lead of activeLeads) {
+      const leadName = `${lead.firstName} ${lead.lastName}`.trim().toLowerCase();
+      const leadPhone = lead.phone?.replace(/\D/g, '') ?? '';
+      const leadEmail = lead.email?.toLowerCase().trim() ?? '';
+      for (const c of customers) {
+        const custName = (c.name ?? '').toLowerCase();
+        const custPhone = (c.phone ?? '').replace(/\D/g, '');
+        const custEmail = (c.email ?? '').toLowerCase();
+        if (
+          (leadPhone && custPhone && leadPhone === custPhone) ||
+          (leadEmail && custEmail && leadEmail === custEmail) ||
+          (leadName.length > 3 && custName && custName.includes(leadName))
+        ) {
+          idx[lead.id] = c;
+          break;
+        }
+      }
+    }
+    return idx;
+  }, [activeLeads, customers]);
+
   // Filtered by search
   const filteredLeads = useMemo(() => {
     if (!searchQuery) return activeLeads;
@@ -336,11 +362,11 @@ export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserId, currentUser
     [crmData.leads, selectedLeadId]
   );
 
-  // Stats (from all leads including converted for context)
-  const totalCount    = crmData.leads.length;
-  const newCount      = crmData.leads.filter(l => l.status === 'new').length;
-  const serviceCount  = crmData.leads.filter(l => l.leadType === 'service' && l.status !== 'closed_won').length;
-  const salesCount    = crmData.leads.filter(l => (l.leadType ?? 'sales') === 'sales' && l.status !== 'closed_won').length;
+  // Stats — active only (exclude converted/closed_won)
+  const totalCount    = activeLeads.length;
+  const newCount      = activeLeads.filter(l => getLeadCol(l) === 'lead_in').length;
+  const serviceCount  = activeLeads.filter(l => l.leadType === 'service').length;
+  const salesCount    = activeLeads.filter(l => l.leadType === 'sales').length;
 
   const save = (updated: CRMData) => {
     setCrmData(updated);
@@ -803,6 +829,21 @@ export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserId, currentUser
         <p className="text-xs text-slate-400 truncate font-mono">{lead.phone}</p>
         {lead.monthlyBill && (
           <p className="text-xs text-emerald-600 font-semibold mt-1">${lead.monthlyBill}/mo</p>
+        )}
+        {duplicateIndex[lead.id] && (
+          <div className="mt-1.5 flex items-center gap-1.5 px-2 py-1 bg-amber-50 border border-amber-200 rounded-lg">
+            <AlertTriangle className="w-3 h-3 text-amber-600 flex-shrink-0" />
+            <span className="text-[10px] font-semibold text-amber-700 truncate flex-1">
+              Existing: {duplicateIndex[lead.id].solarEdgeClientId && <span className="text-amber-500">{duplicateIndex[lead.id].solarEdgeClientId} </span>}{duplicateIndex[lead.id].name}
+            </span>
+            <button
+              onClick={e => { e.stopPropagation(); handleDeleteLead(lead.id); }}
+              className="text-[10px] font-bold text-red-500 hover:text-red-700 hover:bg-red-50 px-1.5 py-0.5 rounded flex-shrink-0 transition-colors"
+              title="Delete this duplicate lead"
+            >
+              Delete
+            </button>
+          </div>
         )}
       </div>
     );

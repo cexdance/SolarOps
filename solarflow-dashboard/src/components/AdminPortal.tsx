@@ -728,7 +728,7 @@ export default function AdminPortal() {
                         <p className="text-sm font-medium text-slate-900">Safety Protocol Acknowledgment</p>
                         <p className="text-xs text-slate-600 mt-1">
                           I acknowledge that I have read and agree to comply with all safety protocols and requirements
-                          for contractors working on behalf of ConexSol Applications LLC.
+                          for contractors working on behalf of Conexsol Applications LLC.
                         </p>
                       </div>
                     </label>

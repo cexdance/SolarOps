@@ -56,14 +56,14 @@ export const ContractorInvite: React.FC<ContractorInviteProps> = ({
   };
 
   const handleSendEmail = () => {
-    const subject = encodeURIComponent('You\'re invited to join ConexSol as a contractor');
+    const subject = encodeURIComponent('You\'re invited to join Conexsol as a contractor');
     const body = encodeURIComponent(
-      `Hi,\n\nYou've been invited by ${adminName} to register as a contractor with ConexSol Applications LLC.\n\n` +
+      `Hi,\n\nYou've been invited by ${adminName} to register as a contractor with Conexsol Applications LLC.\n\n` +
       (note ? `Message from ${adminName}:\n"${note}"\n\n` : '') +
       `Click the link below to complete your onboarding:\n${inviteLink}\n\n` +
       `This link is tied to your email address (${invite?.email}) and can only be used once.\n\n` +
       `If you have any questions, reply to this email or contact us at ${adminEmail}.\n\n` +
-      `— ConexSol Operations Team`
+      `— Conexsol Operations Team`
     );
     window.open(`mailto:${invite?.email}?subject=${subject}&body=${body}`, '_blank');
   };

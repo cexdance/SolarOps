@@ -111,7 +111,7 @@ function HighlightBox({ children }: HighlightBoxProps) {
 
 function InsuranceTable() {
   const rows = [
-    ["General Liability", "$1M / $2M agg.", "ConexSol named additional insured"],
+    ["General Liability", "$1M / $2M agg.", "Conexsol named additional insured"],
     ["Workers' Comp", "Statutory", "Required if Contractor has employees"],
     ["Commercial Auto", "$500K CSL", "Required for vehicles on job sites"],
     ["Tools & Equipment", "$25K min.", "Covers owned tools and equipment"],
@@ -157,7 +157,7 @@ const SECTIONS = [
     content: () => (
       <>
         <p className="bt">
-          This Agreement is between ConexSol Applications LLC ("Company") and the
+          This Agreement is between Conexsol Applications LLC ("Company") and the
           individual or entity registered on the SolarOps platform ("Contractor").
           The Contractor is an independent business operator — not an employee or
           agent of the Company.
@@ -345,7 +345,7 @@ const SECTIONS = [
           to the claim. Company is not liable for lost profits, consequential, or indirect damages.
         </HighlightBox>
         <p className="bt" style={{ marginTop: 8 }}>
-          Contractor agrees to indemnify ConexSol Applications LLC from claims arising from:
+          Contractor agrees to indemnify Conexsol Applications LLC from claims arising from:
         </p>
         <BulletList items={[
           "Performance of work under any work order.",
@@ -406,12 +406,12 @@ const SECTIONS = [
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-interface ConexSolTermsProps {
+interface ConexsolTermsProps {
   onAccept: () => void;
   onDecline?: () => void;
 }
 
-export default function ConexSolTerms({ onAccept, onDecline }: ConexSolTermsProps) {
+export default function ConexsolTerms({ onAccept, onDecline }: ConexsolTermsProps) {
   const [openSections, setOpenSections] = useState<Record<number, boolean>>({ 0: true });
   const [checked, setChecked] = useState(false);
   const [accepted, setAccepted] = useState(false);
@@ -582,7 +582,7 @@ export default function ConexSolTerms({ onAccept, onDecline }: ConexSolTermsProp
         <div style={styles.logoMark}><SunIcon /></div>
         <div>
           <p style={styles.headerTitle}>Contractor Agreement & Terms of Service</p>
-          <p style={styles.headerSub}>ConexSol Applications LLC — SolarOps Platform · v2026.1</p>
+          <p style={styles.headerSub}>Conexsol Applications LLC — SolarOps Platform · v2026.1</p>
         </div>
       </div>
 
@@ -664,7 +664,7 @@ export default function ConexSolTerms({ onAccept, onDecline }: ConexSolTermsProp
             Decline
           </button>
         )}
-        <p style={styles.version}>ConexSol Applications LLC · Miami, FL · v2026.1</p>
+        <p style={styles.version}>Conexsol Applications LLC · Miami, FL · v2026.1</p>
       </div>
     </div>
   );

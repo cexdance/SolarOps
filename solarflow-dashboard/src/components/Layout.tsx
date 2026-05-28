@@ -154,6 +154,8 @@ export const Layout: React.FC<LayoutProps> = ({
         matchLabel = c.email;
       } else if (c.clientId?.toLowerCase().includes(q)) {
         matchLabel = `Client #${c.clientId}`;
+      } else if (c.solarEdgeClientId?.toLowerCase().includes(q)) {
+        matchLabel = c.solarEdgeClientId;
       } else if (c.address?.toLowerCase().includes(q) || c.city?.toLowerCase().includes(q)) {
         matchLabel = [c.address, c.city, c.state].filter(Boolean).join(', ');
       } else if ((rmaIndex[c.id] ?? []).some(r => r.includes(q))) {
@@ -225,7 +227,7 @@ export const Layout: React.FC<LayoutProps> = ({
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Escape') { setSearchOpen(false); setSearchQuery(''); } }}
-                  placeholder="Search client name or phone…"
+                  placeholder="Search name, US-15XXX, or phone…"
                   className="w-48 sm:w-64 bg-transparent text-sm text-white placeholder-slate-400 pl-3 pr-1 py-2 outline-none"
                 />
               )}
@@ -256,7 +258,10 @@ export const Layout: React.FC<LayoutProps> = ({
                             onClick={() => handleSelectCustomer(c.id)}
                             className="w-full text-left px-4 py-2.5 hover:bg-orange-50 transition-colors"
                           >
-                            <p className="text-sm font-medium text-slate-800 truncate">{c.name}</p>
+                            <p className="text-sm font-medium text-slate-800 truncate">
+                              {c.solarEdgeClientId && <span className="text-orange-500 font-semibold mr-1.5">{c.solarEdgeClientId}</span>}
+                              {c.name}
+                            </p>
                             <p className="text-xs text-slate-400 mt-0.5 truncate">
                               {matchLabel !== c.name ? matchLabel : (c.email || c.phone || c.city || '')}
                             </p>
