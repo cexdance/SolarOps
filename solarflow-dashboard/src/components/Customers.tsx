@@ -14,7 +14,6 @@ import {
   Wrench,
   Calendar,
   FileText,
-  Image,
   Clock,
   CheckCircle,
   Edit,
@@ -50,6 +49,9 @@ import {
   Copy,
   Smile,
   Undo2,
+  Camera,
+  Image as ImageIcon,
+  Sparkles,
 } from 'lucide-react';
 import * as _recharts from 'recharts';
 const { ComposedChart, Bar, Line, XAxis, YAxis, Tooltip: RechartsTooltip, ResponsiveContainer, CartesianGrid, Legend } = _recharts as any;
@@ -3883,7 +3885,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
             <div className="space-y-4">
               <div className="bg-slate-50 rounded-lg p-4">
                 <h3 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
-                  <Image className="w-4 h-4 text-orange-500" />
+                  <ImageIcon className="w-4 h-4 text-orange-500" />
                   Photos & Documents
                   {(customer.files?.length ?? 0) > 0 && (
                     <span className="ml-auto text-xs text-slate-400 font-normal">{customer.files!.length} file{customer.files!.length !== 1 ? 's' : ''}</span>
@@ -5018,6 +5020,89 @@ const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({ onClose, onCr
   const [trelloOk,      setTrelloOk]      = useState('');
   const [trelloOpen,    setTrelloOpen]    = useState(false);
 
+  // Screenshot import — parse a lead email screenshot with Claude Vision
+  const [screenshotOpen,    setScreenshotOpen]    = useState(false);
+  const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null);
+  const [screenshotLoading, setScreenshotLoading] = useState(false);
+  const [screenshotError,   setScreenshotError]   = useState('');
+  const [screenshotOk,      setScreenshotOk]      = useState('');
+  const screenshotInputRef = useRef<HTMLInputElement>(null);
+
+  const handleScreenshotFile = (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      setScreenshotError('Please select an image file.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      setScreenshotPreview(ev.target?.result as string);
+      setScreenshotError('');
+      setScreenshotOk('');
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleScreenshotPaste = (e: React.ClipboardEvent) => {
+    const item = Array.from(e.clipboardData.items).find(i => i.type.startsWith('image/'));
+    if (item) {
+      const file = item.getAsFile();
+      if (file) { e.preventDefault(); handleScreenshotFile(file); }
+    }
+  };
+
+  const handleScreenshotParse = async () => {
+    if (!screenshotPreview) return;
+    setScreenshotLoading(true);
+    setScreenshotError('');
+    setScreenshotOk('');
+    try {
+      // Strip the "data:image/xxx;base64," prefix
+      const [header, imageBase64] = screenshotPreview.split(',');
+      const mimeType = header.match(/data:([^;]+);/)?.[1] ?? 'image/jpeg';
+
+      const resp = await fetch('/api/parse-lead-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageBase64, mimeType }),
+      });
+
+      const data = await resp.json() as {
+        firstName?: string; lastName?: string; email?: string; phone?: string;
+        address?: string; city?: string; state?: string; zip?: string;
+        notes?: string; hsId?: string; contractName?: string; error?: string;
+      };
+
+      if (!resp.ok || data.error) {
+        setScreenshotError(data.error ?? 'Failed to parse image. Try again.');
+        return;
+      }
+
+      const firstName = data.firstName ?? '';
+      const lastName  = data.lastName  ?? '';
+      setFormData(prev => ({
+        ...prev,
+        firstName,
+        lastName,
+        name:          `${firstName} ${lastName}`.trim() || prev.name,
+        email:         data.email   || prev.email,
+        phone:         data.phone   || prev.phone,
+        address:       data.address || prev.address,
+        city:          data.city    || prev.city,
+        state:         data.state   || prev.state,
+        zip:           data.zip     || prev.zip,
+        notes:         [data.notes, data.hsId ? `HS_ID: ${data.hsId}` : '', data.contractName ? `Contract: ${data.contractName}` : ''].filter(Boolean).join('\n') || prev.notes,
+        referralSource: prev.referralSource || 'SolarEdge Leads',
+        clientStatus:  (prev.clientStatus || 'Contacted') as typeof prev.clientStatus,
+      }));
+
+      setScreenshotOk(`Parsed! Check fields below and save.`);
+    } catch (err) {
+      setScreenshotError(err instanceof Error ? err.message : 'Unexpected error');
+    } finally {
+      setScreenshotLoading(false);
+    }
+  };
+
   const handleTrelloImport = async () => {
     const url = trelloUrl.trim();
     if (!url) return;
@@ -5077,6 +5162,76 @@ const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({ onClose, onCr
         </div>
 
         <form onSubmit={handleSubmit} className="p-4 space-y-4">
+
+          {/* ── Import from Screenshot ─────────────────────────────────── */}
+          <div className="border-2 border-orange-200 rounded-xl bg-orange-50/40">
+            <button
+              type="button"
+              onClick={() => { setScreenshotOpen(v => !v); setScreenshotError(''); setScreenshotOk(''); }}
+              className="w-full flex items-center justify-between px-3 py-2.5 text-xs font-semibold text-orange-800 hover:bg-orange-100/60 rounded-xl transition-colors"
+            >
+              <span className="flex items-center gap-2">
+                <Camera className="w-3.5 h-3.5 text-orange-500" />
+                Import from Screenshot
+                <span className="bg-orange-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full">NEW</span>
+              </span>
+              {screenshotOpen ? <ChevronUp className="w-3.5 h-3.5 text-orange-500" /> : <ChevronDown className="w-3.5 h-3.5 text-orange-500" />}
+            </button>
+
+            {screenshotOpen && (
+              <div className="px-3 pb-3 space-y-2.5" onPaste={handleScreenshotPaste}>
+                <p className="text-[11px] text-orange-700">
+                  Take a screenshot of a SolarEdge lead email, then upload or paste it here. AI will extract all the contact info.
+                </p>
+
+                {/* Drop zone / file picker */}
+                <div
+                  className={`relative border-2 border-dashed rounded-lg overflow-hidden transition-colors cursor-pointer ${screenshotPreview ? 'border-orange-300 bg-orange-50' : 'border-slate-300 bg-white hover:border-orange-400 hover:bg-orange-50/30'}`}
+                  onClick={() => screenshotInputRef.current?.click()}
+                >
+                  {screenshotPreview ? (
+                    <div className="relative">
+                      <img src={screenshotPreview} alt="Lead screenshot preview" className="w-full max-h-48 object-contain" />
+                      <div className="absolute inset-0 bg-black/30 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <p className="text-white text-xs font-medium">Click to change image</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="py-6 flex flex-col items-center gap-2">
+                      <ImageIcon className="w-8 h-8 text-slate-300" />
+                      <p className="text-xs text-slate-500 font-medium">Tap to select screenshot</p>
+                      <p className="text-[10px] text-slate-400">or paste from clipboard (⌘V / Ctrl+V)</p>
+                    </div>
+                  )}
+                  <input
+                    ref={screenshotInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => { const f = e.target.files?.[0]; if (f) handleScreenshotFile(f); e.target.value = ''; }}
+                  />
+                </div>
+
+                {screenshotPreview && (
+                  <button
+                    type="button"
+                    onClick={handleScreenshotParse}
+                    disabled={screenshotLoading}
+                    className="w-full py-2 text-xs font-semibold bg-orange-500 hover:bg-orange-600 disabled:bg-slate-300 text-white rounded-lg transition-colors flex items-center justify-center gap-2"
+                  >
+                    {screenshotLoading
+                      ? (<><div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" /> Parsing with AI…</>)
+                      : (<><Sparkles className="w-3.5 h-3.5" /> Extract Lead Info</>)
+                    }
+                  </button>
+                )}
+
+                {screenshotError && <p className="text-[11px] text-red-600 font-medium">⚠ {screenshotError}</p>}
+                {screenshotOk    && <p className="text-[11px] text-green-700 font-medium">✓ {screenshotOk}</p>}
+              </div>
+            )}
+          </div>
+
           {/* Import from Trello — pre-fills form from a Trello card */}
           <div className="border border-slate-200 rounded-lg bg-slate-50/60">
             <button
