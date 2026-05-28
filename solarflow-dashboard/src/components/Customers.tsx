@@ -2824,32 +2824,236 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
                   </button>
                   <button
                     onClick={() => {
-                      const printArea = document.getElementById('report-printable');
-                      if (!printArea) return;
                       const win = window.open('', '_blank');
                       if (!win) return;
-                      win.document.write(`<!DOCTYPE html><html><head><title>Conexsol - Solar Performance Report</title>
-                        <style>
-                          *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-                          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
-                          img { max-width: 100%; }
-                          @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
-                        </style>
-                        <link href="https://cdn.jsdelivr.net/npm/tailwindcss@3/dist/tailwind.min.css" rel="stylesheet">
-                      </head><body>`);
-                      // Clone report content and make print header visible
-                      const clone = printArea.cloneNode(true) as HTMLElement;
-                      clone.style.maxHeight = 'none';
-                      clone.style.overflow = 'visible';
-                      // Show the print-only logo header
-                      const printHeader = clone.querySelector('.print\\:flex, [class*="print:flex"]');
-                      if (printHeader) {
-                        (printHeader as HTMLElement).style.display = 'flex';
-                        (printHeader as HTMLElement).classList.remove('hidden');
-                      }
-                      win.document.body.innerHTML = clone.outerHTML;
+                      const reportDate = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+                      const periodLabel = graphPeriod === 'week' ? 'Last 7 Days' : graphPeriod === 'month' ? 'Last 30 Days' : graphPeriod === 'quarter' ? 'Last 3 Months' : 'Last 12 Months';
+                      const fmtKwh = (v: number) => v >= 1000 ? `${(v/1000).toFixed(2)} MWh` : `${Math.round(v).toLocaleString()} kWh`;
+                      const tableRows = energyData
+                        .filter(d => d.kWh > 0)
+                        .map(d => `<tr><td>${d.date}</td><td style="text-align:right;font-weight:600;color:#ea580c">${d.kWh.toFixed(2)} kWh</td>${d.psh != null ? `<td style="text-align:right;color:#64748b">${d.psh.toFixed(1)} h</td>` : ''}</tr>`)
+                        .join('');
+                      const hasTable = energyData.some(d => d.kWh > 0);
+                      const hasPsh   = energyData.some(d => d.psh != null);
+                      const logoUrl  = `${window.location.origin}/conexsol-logo-color.svg`;
+                      win.document.write(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Solar Performance Report — ${customer.name}</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    @page { size: letter portrait; margin: 18mm 18mm 18mm 18mm; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 11pt;
+      color: #1e293b;
+      background: #fff;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    .page { max-width: 680px; margin: 0 auto; }
+
+    /* ── Header ── */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-bottom: 14px;
+      border-bottom: 3px solid #1e293b;
+      margin-bottom: 20px;
+    }
+    .header img { height: 52px; width: auto; }
+    .header-right { text-align: right; }
+    .header-right .report-title { font-size: 13pt; font-weight: 700; color: #1e293b; }
+    .header-right .report-date  { font-size: 9pt;  color: #64748b; margin-top: 2px; }
+
+    /* ── Section label ── */
+    .section-label {
+      font-size: 7.5pt;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: #94a3b8;
+      margin-bottom: 8px;
+      padding-bottom: 4px;
+      border-bottom: 1px solid #e2e8f0;
+    }
+    .section { margin-bottom: 20px; }
+
+    /* ── Client info box ── */
+    .client-box {
+      background: #0f172a;
+      border-radius: 10px;
+      padding: 16px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 20px;
+    }
+    .client-name  { font-size: 15pt; font-weight: 700; color: #fff; margin-bottom: 4px; }
+    .client-sub   { font-size: 9pt;  color: #94a3b8; margin-top: 3px; }
+    .client-right { text-align: right; }
+    .client-badge { font-size: 8pt; font-weight: 600; color: #fb923c; background: #431407; padding: 2px 8px; border-radius: 20px; display: inline-block; margin-bottom: 6px; }
+    .system-size  { font-size: 20pt; font-weight: 700; color: #fb923c; line-height: 1; }
+    .system-label { font-size: 7.5pt; color: #64748b; text-transform: uppercase; letter-spacing: 0.08em; margin-top: 2px; }
+
+    /* ── Metrics grid ── */
+    .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 20px; }
+    .metric-card {
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 10px 8px;
+      text-align: center;
+      background: #f8fafc;
+    }
+    .metric-value { font-size: 13pt; font-weight: 700; color: #ea580c; }
+    .metric-value.green   { color: #16a34a; }
+    .metric-value.blue    { color: #2563eb; }
+    .metric-value.emerald { color: #059669; }
+    .metric-label { font-size: 7.5pt; color: #64748b; text-transform: uppercase; letter-spacing: 0.08em; margin-top: 4px; }
+
+    /* ── Period badge ── */
+    .period-badge {
+      display: inline-block;
+      background: #fff7ed;
+      color: #c2410c;
+      border: 1px solid #fed7aa;
+      border-radius: 20px;
+      font-size: 8.5pt;
+      font-weight: 600;
+      padding: 3px 12px;
+      margin-bottom: 14px;
+    }
+
+    /* ── Data table ── */
+    table { width: 100%; border-collapse: collapse; font-size: 9.5pt; }
+    th {
+      background: #f1f5f9;
+      text-align: left;
+      padding: 6px 10px;
+      font-size: 8pt;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #64748b;
+      border-bottom: 2px solid #e2e8f0;
+    }
+    th:not(:first-child) { text-align: right; }
+    td { padding: 5px 10px; border-bottom: 1px solid #f1f5f9; color: #334155; }
+    tr:last-child td { border-bottom: none; }
+
+    /* ── Notes ── */
+    .notes-box {
+      background: #fff7ed;
+      border: 1px solid #fed7aa;
+      border-radius: 8px;
+      padding: 12px 14px;
+      font-size: 10pt;
+      color: #7c2d12;
+      white-space: pre-wrap;
+      line-height: 1.6;
+    }
+
+    /* ── Footer ── */
+    .footer {
+      margin-top: 24px;
+      padding-top: 12px;
+      border-top: 2px solid #1e293b;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 8pt;
+      color: #94a3b8;
+    }
+    .footer strong { color: #1e293b; }
+  </style>
+</head>
+<body>
+<div class="page">
+
+  <!-- Header -->
+  <div class="header">
+    <img src="${logoUrl}" alt="Conexsol" />
+    <div class="header-right">
+      <div class="report-title">Solar Performance Report</div>
+      <div class="report-date">${reportDate}</div>
+    </div>
+  </div>
+
+  <!-- Client Info -->
+  <div class="client-box">
+    <div>
+      ${customer.clientId ? `<div class="client-badge">${customer.clientId}</div>` : ''}
+      <div class="client-name">${customer.name}</div>
+      ${[customer.address, customer.city, customer.state].filter(Boolean).length ? `<div class="client-sub">📍 ${[customer.address, customer.city, customer.state].filter(Boolean).join(', ')}</div>` : ''}
+      ${customer.phone ? `<div class="client-sub">📞 ${customer.phone}</div>` : ''}
+      ${customer.email ? `<div class="client-sub">✉️ ${customer.email}</div>` : ''}
+    </div>
+    <div class="client-right">
+      ${peakPowerKw > 0 ? `<div class="system-size">${peakPowerKw.toFixed(1)}<span style="font-size:12pt"> kW</span></div><div class="system-label">System Size</div>` : ''}
+      ${siteId ? `<div style="margin-top:8px;font-size:9pt;color:#94a3b8">Site ID: <strong style="color:#e2e8f0">${siteId}</strong></div>` : ''}
+      ${siteData?.installDate ? `<div style="font-size:9pt;color:#94a3b8">Installed: <strong style="color:#e2e8f0">${new Date(siteData.installDate).toLocaleDateString('en-US',{month:'short',year:'numeric'})}</strong></div>` : ''}
+    </div>
+  </div>
+
+  <!-- Period -->
+  <div class="period-badge">☀ ${periodLabel} Performance</div>
+
+  <!-- Metrics -->
+  <div class="metrics">
+    <div class="metric-card">
+      <div class="metric-value">${fmtKwh(displayKwh)}</div>
+      <div class="metric-label">Energy Generated</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-value green">$${Math.round(dollarsSaved).toLocaleString()}</div>
+      <div class="metric-label">Est. Savings</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-value blue">${specificYield > 0 ? specificYield.toFixed(2) : '—'}</div>
+      <div class="metric-label">Specific Yield</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-value emerald">${co2Tons.toFixed(2)} t</div>
+      <div class="metric-label">CO₂ Offset</div>
+    </div>
+  </div>
+
+  <!-- Production Table -->
+  ${hasTable ? `
+  <div class="section">
+    <div class="section-label">Daily Production — ${periodLabel}</div>
+    <table>
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th style="text-align:right">Energy</th>
+          ${hasPsh ? '<th style="text-align:right">Peak Sun Hrs</th>' : ''}
+        </tr>
+      </thead>
+      <tbody>${tableRows}</tbody>
+    </table>
+  </div>` : ''}
+
+  <!-- Account Notes -->
+  ${previewAccountUpdates?.trim() ? `
+  <div class="section">
+    <div class="section-label">Account Updates</div>
+    <div class="notes-box">${previewAccountUpdates.trim()}</div>
+  </div>` : ''}
+
+  <!-- Footer -->
+  <div class="footer">
+    <span><strong>Conexsol Energy</strong> · Solar Operations &amp; Service</span>
+    <span>Generated ${reportDate}</span>
+  </div>
+
+</div>
+</body>
+</html>`);
                       win.document.close();
-                      setTimeout(() => { win.print(); win.close(); }, 600);
+                      setTimeout(() => { win.print(); }, 500);
                     }}
                     className="flex items-center gap-2 px-4 py-2 text-sm text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg font-medium transition-colors cursor-pointer"
                   >
