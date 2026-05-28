@@ -154,8 +154,8 @@ export const Layout: React.FC<LayoutProps> = ({
         matchLabel = c.email;
       } else if (c.clientId?.toLowerCase().includes(q)) {
         matchLabel = `Client #${c.clientId}`;
-      } else if (c.solarEdgeClientId?.toLowerCase().includes(q)) {
-        matchLabel = c.solarEdgeClientId;
+      } else if (c.solarEdgeSiteId?.toLowerCase().includes(q)) {
+        matchLabel = c.solarEdgeSiteId;
       } else if (c.address?.toLowerCase().includes(q) || c.city?.toLowerCase().includes(q)) {
         matchLabel = [c.address, c.city, c.state].filter(Boolean).join(', ');
       } else if ((rmaIndex[c.id] ?? []).some(r => r.includes(q))) {
@@ -259,7 +259,7 @@ export const Layout: React.FC<LayoutProps> = ({
                             className="w-full text-left px-4 py-2.5 hover:bg-orange-50 transition-colors"
                           >
                             <p className="text-sm font-medium text-slate-800 truncate">
-                              {c.solarEdgeClientId && <span className="text-orange-500 font-semibold mr-1.5">{c.solarEdgeClientId}</span>}
+                              {c.solarEdgeSiteId && <span className="text-orange-500 font-semibold mr-1.5">{c.solarEdgeSiteId}</span>}
                               {c.name}
                             </p>
                             <p className="text-xs text-slate-400 mt-0.5 truncate">

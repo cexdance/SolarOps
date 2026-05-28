@@ -10,7 +10,7 @@ import {
 import { RegistrationState, RegistrationStep, BusinessType } from '../../types/contractor';
 import { Contractor } from '../../types/contractor';
 import { markInviteUsed } from '../../lib/contractorStore';
-import ConexsolTerms from './ConexsolTerms';
+import ConexsolTerms from './ConexSolTerms';
 
 interface ContractorRegisterProps {
   onComplete: (contractor: Contractor) => void;

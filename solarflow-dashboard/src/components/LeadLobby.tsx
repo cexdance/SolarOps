@@ -834,7 +834,7 @@ export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserId, currentUser
           <div className="mt-1.5 flex items-center gap-1.5 px-2 py-1 bg-amber-50 border border-amber-200 rounded-lg">
             <AlertTriangle className="w-3 h-3 text-amber-600 flex-shrink-0" />
             <span className="text-[10px] font-semibold text-amber-700 truncate flex-1">
-              Existing: {duplicateIndex[lead.id].solarEdgeClientId && <span className="text-amber-500">{duplicateIndex[lead.id].solarEdgeClientId} </span>}{duplicateIndex[lead.id].name}
+              Existing: {duplicateIndex[lead.id].solarEdgeSiteId && <span className="text-amber-500">{duplicateIndex[lead.id].solarEdgeSiteId} </span>}{duplicateIndex[lead.id].name}
             </span>
             <button
               onClick={e => { e.stopPropagation(); handleDeleteLead(lead.id); }}
