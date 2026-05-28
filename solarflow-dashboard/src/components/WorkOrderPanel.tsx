@@ -627,8 +627,10 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
   // Serial number tracking (inverter / optimizer swaps)
   const [sowOldSN, setSowOldSN] = useState(job?.oldSerialNumber ?? '');
   const [sowNewSN, setSowNewSN] = useState(job?.newSerialNumber ?? '');
-  const snOldCamRef = useRef<HTMLInputElement>(null);
-  const snNewCamRef = useRef<HTMLInputElement>(null);
+  const snOldCamRef    = useRef<HTMLInputElement>(null);
+  const snNewCamRef    = useRef<HTMLInputElement>(null);
+  const stSerialCamRef = useRef<HTMLInputElement>(null);
+  const stSiteIdCamRef = useRef<HTMLInputElement>(null);
 
   // Service-type helpers
   const isInverterJob  = serviceType.toLowerCase().includes('inverter');
@@ -1644,6 +1646,105 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                 <div className="flex items-center gap-2 rounded-lg bg-teal-50 border border-teal-200 px-3 py-2">
                   <svg className="w-4 h-4 text-teal-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
                   <p className="text-xs text-teal-700 font-medium">Handled by admin team — no contractor assigned</p>
+                </div>
+              )}
+
+              {/* ── Site Transfer IDs (inline in Overview tab) ──────────── */}
+              {isSiteTransfer && (
+                <div className="rounded-xl border-2 border-teal-200 bg-teal-50 p-4 space-y-3">
+                  <p className="text-[10px] font-bold text-teal-800 uppercase tracking-widest">Site Transfer Identifiers</p>
+
+                  {stMissingBoth && (
+                    <div className="flex items-start gap-2 rounded-lg bg-red-50 border border-red-200 p-3">
+                      <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+                      <p className="text-xs text-red-700 font-medium">Provide at least one identifier (Inverter Serial or Site ID) to progress this work order.</p>
+                    </div>
+                  )}
+                  {stMissingOne && (
+                    <div className="flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 p-3">
+                      <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                      <p className="text-xs text-amber-700">Only one identifier provided — contact SolarEdge support for the missing {!stInverterSerial ? 'Inverter Serial Number' : 'Site ID'}.</p>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {/* Inverter Serial */}
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 mb-1.5">
+                        Inverter Serial Number
+                        {!stInverterSerial && stSiteId && <span className="ml-1 text-amber-500 font-normal">(recommended)</span>}
+                      </label>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={stInverterSerial}
+                          onChange={e => setStInverterSerial(e.target.value.trim())}
+                          placeholder="e.g. BF10B459-DC"
+                          className={`flex-1 px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:outline-none font-mono ${
+                            !stInverterSerial && stSiteId ? 'border-amber-300 bg-amber-50 focus:ring-amber-200' : 'border-slate-300 bg-white focus:ring-teal-200'
+                          }`}
+                        />
+                        <button
+                          onClick={() => stSerialCamRef.current?.click()}
+                          title="Scan QR / barcode"
+                          className="px-3 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors cursor-pointer shrink-0"
+                        >
+                          <Camera className="w-4 h-4" />
+                        </button>
+                        <input
+                          ref={stSerialCamRef}
+                          type="file"
+                          accept="image/*"
+                          capture="environment"
+                          className="hidden"
+                          onChange={async e => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            await scanBarcodeFromFile(file, setStInverterSerial);
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Site ID */}
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 mb-1.5">
+                        SolarEdge Site ID
+                        {!stSiteId && stInverterSerial && <span className="ml-1 text-amber-500 font-normal">(recommended)</span>}
+                      </label>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={stSiteId}
+                          onChange={e => setStSiteId(e.target.value.trim())}
+                          placeholder="e.g. 4003521"
+                          className={`flex-1 px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:outline-none font-mono ${
+                            !stSiteId && stInverterSerial ? 'border-amber-300 bg-amber-50 focus:ring-amber-200' : 'border-slate-300 bg-white focus:ring-teal-200'
+                          }`}
+                        />
+                        <button
+                          onClick={() => stSiteIdCamRef.current?.click()}
+                          title="Scan QR / barcode"
+                          className="px-3 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors cursor-pointer shrink-0"
+                        >
+                          <Camera className="w-4 h-4" />
+                        </button>
+                        <input
+                          ref={stSiteIdCamRef}
+                          type="file"
+                          accept="image/*"
+                          capture="environment"
+                          className="hidden"
+                          onChange={async e => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            await scanBarcodeFromFile(file, setStSiteId);
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-teal-700">ℹ️ These values are saved with the work order and used by the admin agentic workflow to execute the SolarEdge ownership transfer.</p>
                 </div>
               )}
               <div className={isSiteTransfer ? 'hidden' : ''}>
