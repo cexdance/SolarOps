@@ -2829,13 +2829,47 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
                       const reportDate = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
                       const periodLabel = graphPeriod === 'week' ? 'Last 7 Days' : graphPeriod === 'month' ? 'Last 30 Days' : graphPeriod === 'quarter' ? 'Last 3 Months' : 'Last 12 Months';
                       const fmtKwh = (v: number) => v >= 1000 ? `${(v/1000).toFixed(2)} MWh` : `${Math.round(v).toLocaleString()} kWh`;
-                      const tableRows = energyData
-                        .filter(d => d.kWh > 0)
-                        .map(d => `<tr><td>${d.date}</td><td style="text-align:right;font-weight:600;color:#ea580c">${d.kWh.toFixed(2)} kWh</td>${d.psh != null ? `<td style="text-align:right;color:#64748b">${d.psh.toFixed(1)} h</td>` : ''}</tr>`)
-                        .join('');
-                      const hasTable = energyData.some(d => d.kWh > 0);
-                      const hasPsh   = energyData.some(d => d.psh != null);
+                      const hasChart = energyData.some(d => d.kWh > 0);
                       const logoUrl  = `${window.location.origin}/conexsol-logo-color.svg`;
+
+                      // ── SVG Bar Chart ─────────────────────────────────────
+                      const chartData = energyData.filter(d => d.kWh > 0);
+                      const svgW = 620, svgH = 200, padL = 52, padR = 12, padT = 16, padB = 36;
+                      const chartW = svgW - padL - padR;
+                      const chartH = svgH - padT - padB;
+                      const maxKwh = Math.max(...chartData.map(d => d.kWh), 1);
+                      const yMax   = Math.ceil(maxKwh / 10) * 10;
+                      const barW   = Math.max(4, Math.floor((chartW / Math.max(chartData.length, 1)) * 0.72));
+                      const gap    = chartW / Math.max(chartData.length, 1);
+                      // Y-axis gridlines (4 lines)
+                      const yLines = [0.25, 0.5, 0.75, 1.0].map(f => {
+                        const val = Math.round(yMax * f);
+                        const y   = padT + chartH - (val / yMax) * chartH;
+                        return `<line x1="${padL}" x2="${svgW - padR}" y1="${y}" y2="${y}" stroke="#e2e8f0" stroke-width="1"/>
+                                <text x="${padL - 4}" y="${y + 4}" text-anchor="end" font-size="8" fill="#94a3b8">${val}</text>`;
+                      }).join('');
+                      // Bars
+                      const bars = chartData.map((d, i) => {
+                        const bh  = (d.kWh / yMax) * chartH;
+                        const bx  = padL + i * gap + (gap - barW) / 2;
+                        const by  = padT + chartH - bh;
+                        // Show label every N bars to avoid crowding
+                        const step = chartData.length > 20 ? 5 : chartData.length > 10 ? 3 : 1;
+                        const lbl = i % step === 0 ? `<text x="${bx + barW/2}" y="${svgH - padB + 14}" text-anchor="middle" font-size="7.5" fill="#64748b">${d.date.replace(/\d{4}/,'').trim()}</text>` : '';
+                        return `<rect x="${bx}" y="${by}" width="${barW}" height="${bh}" rx="2" fill="#f97316"/>
+                                <title>${d.date}: ${d.kWh.toFixed(1)} kWh</title>
+                                ${lbl}`;
+                      }).join('');
+                      // Y-axis label
+                      const yAxisLabel = `<text transform="rotate(-90)" x="${-(padT + chartH/2)}" y="12" text-anchor="middle" font-size="8" fill="#94a3b8">kWh</text>`;
+                      const svgChart = hasChart ? `
+                        <svg viewBox="0 0 ${svgW} ${svgH}" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;display:block;overflow:visible">
+                          ${yAxisLabel}
+                          ${yLines}
+                          <line x1="${padL}" x2="${padL}" y1="${padT}" y2="${padT + chartH}" stroke="#cbd5e1" stroke-width="1.5"/>
+                          <line x1="${padL}" x2="${svgW - padR}" y1="${padT + chartH}" y2="${padT + chartH}" stroke="#cbd5e1" stroke-width="1.5"/>
+                          ${bars}
+                        </svg>` : '';
                       win.document.write(`<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -2863,7 +2897,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
       border-bottom: 3px solid #1e293b;
       margin-bottom: 20px;
     }
-    .header img { height: 52px; width: auto; }
+    .header img { height: 80px; width: auto; }
     .header-right { text-align: right; }
     .header-right .report-title { font-size: 13pt; font-weight: 700; color: #1e293b; }
     .header-right .report-date  { font-size: 9pt;  color: #64748b; margin-top: 2px; }
@@ -3020,27 +3054,27 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
     </div>
   </div>
 
-  <!-- Production Table -->
-  ${hasTable ? `
+  <!-- Bar Chart -->
+  ${hasChart ? `
   <div class="section">
     <div class="section-label">Daily Production — ${periodLabel}</div>
-    <table>
-      <thead>
-        <tr>
-          <th>Date</th>
-          <th style="text-align:right">Energy</th>
-          ${hasPsh ? '<th style="text-align:right">Peak Sun Hrs</th>' : ''}
-        </tr>
-      </thead>
-      <tbody>${tableRows}</tbody>
-    </table>
+    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px 8px 8px 8px;margin-bottom:0">
+      ${svgChart}
+    </div>
   </div>` : ''}
 
-  <!-- Account Notes -->
+  <!-- Message to Client -->
+  ${previewGreeting?.trim() ? `
+  <div class="section" style="margin-top:20px">
+    <div class="section-label">Message to Client</div>
+    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px 16px;font-size:10.5pt;color:#334155;line-height:1.7;white-space:pre-wrap">${previewGreeting.trim().replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>
+  </div>` : ''}
+
+  <!-- Account Updates -->
   ${previewAccountUpdates?.trim() ? `
   <div class="section">
     <div class="section-label">Account Updates</div>
-    <div class="notes-box">${previewAccountUpdates.trim()}</div>
+    <div class="notes-box">${previewAccountUpdates.trim().replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>
   </div>` : ''}
 
   <!-- Footer -->
