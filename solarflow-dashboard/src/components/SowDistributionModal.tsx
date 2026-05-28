@@ -36,18 +36,36 @@ export const SOW_DISTRIBUTION_NAMES = ['Anthony Lopez', 'Daniel Matos', 'Cesar J
 
 const PHOTO_CATEGORIES: WOPhoto['category'][] = ['before', 'after', 'process', 'serial', 'parts'];
 const PHOTO_CATEGORY_LABELS: Record<WOPhoto['category'], string> = {
-  before:  'Before',
-  after:   'After',
-  process: 'In Progress',
-  serial:  'Serial Numbers',
-  parts:   'Parts / Equipment',
+  before:         'Before',
+  after:          'After',
+  process:        'In Progress',
+  serial:         'Serial Numbers',
+  parts:          'Parts / Equipment',
+  progress:       'Install Progress',
+  ppe:            'PPE / Safety',
+  voltage:        'Volt Test',
+  old_serial:     'Old Serial #',
+  string_voltage: 'String Voltages',
+  cabinet_old:    'Old Cabinet',
+  cabinet_new:    'New Cabinet',
+  new_serial:     'New Serial #',
+  inv_overview:   'Wall Overview',
 };
 const CATEGORY_COLOR: Record<WOPhoto['category'], string> = {
-  before:  '#3b82f6',
-  after:   '#10b981',
-  process: '#f59e0b',
-  serial:  '#8b5cf6',
-  parts:   '#64748b',
+  before:         '#3b82f6',
+  after:          '#10b981',
+  process:        '#f59e0b',
+  serial:         '#8b5cf6',
+  parts:          '#64748b',
+  progress:       '#06b6d4',
+  ppe:            '#ef4444',
+  voltage:        '#eab308',
+  old_serial:     '#a78bfa',
+  string_voltage: '#f97316',
+  cabinet_old:    '#78716c',
+  cabinet_new:    '#14b8a6',
+  new_serial:     '#6366f1',
+  inv_overview:   '#ec4899',
 };
 
 // ── WMO Weather Code → label + icon ──────────────────────────────────────────

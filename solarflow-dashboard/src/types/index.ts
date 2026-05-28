@@ -145,7 +145,11 @@ export type WOServiceStatus =
 
 export interface WOPhoto {
   id: string;
-  category: 'before' | 'after' | 'serial' | 'process' | 'parts';
+  category:
+    | 'before' | 'after' | 'serial' | 'process' | 'parts'
+    | 'progress' | 'ppe' | 'voltage'
+    | 'old_serial' | 'string_voltage'
+    | 'cabinet_old' | 'cabinet_new' | 'new_serial' | 'inv_overview';
   name: string;
   /**
    * Inline data URL. Optional after migration: when `photoStoreId` is set, the

@@ -106,31 +106,65 @@ const NEXT_STATUS: Record<WOStatus, WOStatus | null> = {
 };
 
 const LINE_ITEM_TYPES: WOLineItem['type'][] = ['labor', 'part', 'other'];
-const PHOTO_CATEGORIES: WOPhoto['category'][] = ['before', 'after', 'serial', 'process', 'parts'];
+const PHOTO_CATEGORIES: WOPhoto['category'][] = [
+  // General (all jobs)
+  'before', 'after', 'serial', 'process', 'parts',
+  // Field extras
+  'progress', 'ppe', 'voltage',
+  // Inverter-change specific
+  'old_serial', 'string_voltage', 'cabinet_old', 'cabinet_new', 'new_serial', 'inv_overview',
+];
 
 const PHOTO_CATEGORY_LABELS: Record<WOPhoto['category'], string> = {
-  before:  'Before',
-  after:   'After',
-  serial:  'Serial #',
-  process: 'In Progress',
-  parts:   'Parts / Equipment',
+  before:         'Before',
+  after:          'After',
+  serial:         'Serial #',
+  process:        'In Progress',
+  parts:          'Parts / Equipment',
+  progress:       'Installation Progress',
+  ppe:            'PPE / Safety',
+  voltage:        'Volt Test',
+  old_serial:     'Old Serial #',
+  string_voltage: 'String Voltages',
+  cabinet_old:    'Old Cabinet',
+  cabinet_new:    'New Cabinet',
+  new_serial:     'New Serial #',
+  inv_overview:   'Wall Overview',
 };
 
 // Short label for the thumbnail chip
 const PHOTO_CATEGORY_SHORT: Record<WOPhoto['category'], string> = {
-  before:  'Before',
-  after:   'After',
-  serial:  'Serial',
-  process: 'Progress',
-  parts:   'Parts',
+  before:         'Before',
+  after:          'After',
+  serial:         'Serial',
+  process:        'Progress',
+  parts:          'Parts',
+  progress:       'Install',
+  ppe:            'PPE',
+  voltage:        'Volt',
+  old_serial:     'Old S/N',
+  string_voltage: 'Str V',
+  cabinet_old:    'Cab Old',
+  cabinet_new:    'Cab New',
+  new_serial:     'New S/N',
+  inv_overview:   'Overview',
 };
 
 const CATEGORY_CHIP_COLOR: Record<WOPhoto['category'], string> = {
-  before:  'bg-blue-500',
-  after:   'bg-emerald-500',
-  serial:  'bg-violet-500',
-  process: 'bg-amber-500',
-  parts:   'bg-slate-500',
+  before:         'bg-blue-500',
+  after:          'bg-emerald-500',
+  serial:         'bg-violet-500',
+  process:        'bg-amber-500',
+  parts:          'bg-slate-500',
+  progress:       'bg-cyan-500',
+  ppe:            'bg-red-500',
+  voltage:        'bg-yellow-500',
+  old_serial:     'bg-purple-400',
+  string_voltage: 'bg-orange-500',
+  cabinet_old:    'bg-stone-500',
+  cabinet_new:    'bg-teal-500',
+  new_serial:     'bg-indigo-500',
+  inv_overview:   'bg-pink-500',
 };
 
 const SERVICE_STATUS_OPTIONS: { key: WOServiceStatus; label: string; icon: React.ReactNode }[] = [

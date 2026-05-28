@@ -1037,31 +1037,34 @@ function App() {
         completed: 'completed',
       };
 
-      // Map contractor's 14 photo categories → admin's 5 valid WOPhoto categories.
-      // Bug fix: unsafe casts were letting invalid categories (e.g. 'old_serial',
-      // 'progress', 'cabinet_old') into admin Job.woPhotos, making them invisible
-      // to admin filters that only match 'before|after|serial|process|parts'.
+      // All 14 contractor photo categories now map 1:1 to admin WOPhoto categories.
+      // WOPhoto.category was expanded in Phase 2 to include all 14 values — no
+      // more lossy collapse that made PPE/voltage/inverter photos invisible in admin.
+      const VALID_WO_CATEGORIES = new Set([
+        'before', 'after', 'serial', 'process', 'parts',
+        'progress', 'ppe', 'voltage',
+        'old_serial', 'string_voltage', 'cabinet_old', 'cabinet_new', 'new_serial', 'inv_overview',
+      ]);
       const mapContractorCategory = (cat: string): import('./types').WOPhoto['category'] => {
-        if (cat === 'before') return 'before';
-        if (cat === 'after') return 'after';
-        if (cat === 'parts') return 'parts';
-        if (cat === 'serial' || cat === 'old_serial' || cat === 'new_serial') return 'serial';
-        // Everything else (process, progress, ppe, voltage, string_voltage,
-        // cabinet_old, cabinet_new, inv_overview) collapses to 'process'.
-        return 'process';
+        if (VALID_WO_CATEGORIES.has(cat)) return cat as import('./types').WOPhoto['category'];
+        return 'process'; // fallback for any unknown future category
       };
 
-      // Convert contractor photos (object-of-arrays of dataURLs) → admin WOPhoto[]
+      // Convert contractor photos (object-of-arrays of URLs) → admin WOPhoto[]
+      // After Phase 1, URLs from contractor are Storage URLs (https://…), not base64.
+      // Route them to storageUrl so admin renders them from CDN, not inline.
       const contractorPhotosToWoPhotos = (photos: ContractorJob['photos']): import('./types').WOPhoto[] => {
         const out: import('./types').WOPhoto[] = [];
         for (const [cat, urls] of Object.entries(photos)) {
           for (const url of (urls ?? [])) {
             if (!url) continue;
+            const isStorageUrl = url.startsWith('http');
             out.push({
               id: `cp-${cat}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
               category: mapContractorCategory(cat),
               name: `${cat} photo`,
-              dataUrl: url,
+              dataUrl: isStorageUrl ? '' : url,
+              storageUrl: isStorageUrl ? url : undefined,
               createdAt: new Date().toISOString(),
             });
           }
@@ -1073,11 +1076,16 @@ function App() {
         const adminJob = prev.jobs.find(j => j.id === updatedJob.sourceJobId);
         if (!adminJob) return prev;
 
-        // Merge contractor photos into admin woPhotos (deduplicate by dataUrl)
+        // Merge contractor photos into admin woPhotos (deduplicate by effective URL)
+        // After Phase 1, photos from contractor have storageUrl set (not dataUrl).
         const existingWoPhotos = adminJob.woPhotos ?? [];
-        const existingUrls = new Set(existingWoPhotos.map(p => p.dataUrl).filter(Boolean));
+        const effectiveUrl = (p: import('./types').WOPhoto) => p.storageUrl || p.dataUrl || '';
+        const existingUrls = new Set(existingWoPhotos.map(effectiveUrl).filter(Boolean));
         const newPhotos = contractorPhotosToWoPhotos(updatedJob.photos)
-          .filter(p => p.dataUrl && !existingUrls.has(p.dataUrl));
+          .filter(p => {
+            const url = effectiveUrl(p);
+            return url && !existingUrls.has(url);
+          });
         const mergedPhotos = [...existingWoPhotos, ...newPhotos];
 
         // Build the updated admin job with all mirrored fields
