@@ -5,6 +5,7 @@ import * as XLSX from 'xlsx';
 import {
   Inbox, Phone, Mail, Plus, Search, ArrowRight, Tag, X, User,
   Zap, CheckCircle, LayoutGrid, List, ChevronDown, ChevronUp, Upload, Trash2, Link2,
+  Camera, Image as ImageIcon, Sparkles,
 } from 'lucide-react';
 import { loadCRMData, saveCRMData, addLead, CRMData } from '../lib/crmStore';
 import { fetchTrelloCard, extractContactInfo } from '../lib/trelloImporter';
@@ -231,7 +232,14 @@ export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserId, currentUser
 
   // Import state
   const [showImport, setShowImport] = useState(false);
-  const [importTab, setImportTab] = useState<'email' | 'excel' | 'trello'>('email');
+  const [importTab, setImportTab] = useState<'email' | 'excel' | 'trello' | 'screenshot'>('screenshot');
+
+  // Screenshot import
+  const [ssPreview,  setSsPreview]  = useState<string | null>(null);
+  const [ssLoading,  setSsLoading]  = useState(false);
+  const [ssError,    setSsError]    = useState('');
+  const [ssOk,       setSsOk]       = useState('');
+  const ssInputRef = useRef<HTMLInputElement>(null);
   const [pasteText, setPasteText] = useState('');
   const [parsedPreview, setParsedPreview] = useState<(Partial<AddFormData> & { addressNote?: string }) | null>(null);
   const [excelRows, setExcelRows] = useState<ParsedRow[]>([]);
@@ -423,6 +431,65 @@ export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserId, currentUser
   };
 
   const [pendingAddressNote, setPendingAddressNote] = useState('');
+
+  // Screenshot → AI → form fill
+  const handleSsFile = (file: File) => {
+    if (!file.type.startsWith('image/')) { setSsError('Please select an image file.'); return; }
+    const reader = new FileReader();
+    reader.onload = (ev) => { setSsPreview(ev.target?.result as string); setSsError(''); setSsOk(''); };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSsPaste = (e: React.ClipboardEvent) => {
+    const item = Array.from(e.clipboardData.items).find(i => i.type.startsWith('image/'));
+    if (item) { const f = item.getAsFile(); if (f) { e.preventDefault(); handleSsFile(f); } }
+  };
+
+  const handleSsParse = async () => {
+    if (!ssPreview) return;
+    setSsLoading(true); setSsError(''); setSsOk('');
+    try {
+      const [header, imageBase64] = ssPreview.split(',');
+      const mimeType = header.match(/data:([^;]+);/)?.[1] ?? 'image/jpeg';
+      const resp = await fetch('/api/parse-lead-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageBase64, mimeType }),
+      });
+      // Guard: handle non-JSON responses (API not found, etc.)
+      const text = await resp.text();
+      let data: Record<string, string>;
+      try { data = JSON.parse(text); }
+      catch { setSsError(`API error: ${text.slice(0, 80)}`); return; }
+
+      if (!resp.ok || data.error) { setSsError(data.error ?? 'Failed to parse. Try again.'); return; }
+
+      const noteLines = [
+        data.notes,
+        data.hsId        ? `HS_ID: ${data.hsId}` : '',
+        data.contractName ? `Contract: ${data.contractName}` : '',
+        data.address ? `${data.address}, ${data.city}, ${data.state} ${data.zip}`.trim().replace(/^,\s*/, '') : '',
+      ].filter(Boolean).join('\n');
+
+      setAddFormData(prev => ({
+        ...prev,
+        firstName: data.firstName || prev.firstName,
+        lastName:  data.lastName  || prev.lastName,
+        email:     data.email     || prev.email,
+        phone:     data.phone     || prev.phone,
+        source:    'solaredge',
+        leadType:  'service',
+        note:      noteLines || prev.note,
+      }));
+      if (noteLines) setPendingAddressNote(noteLines);
+      setSsOk('✓ Fields filled — review below and save.');
+      setShowImport(false);
+    } catch (err) {
+      setSsError(err instanceof Error ? err.message : 'Unexpected error');
+    } finally {
+      setSsLoading(false);
+    }
+  };
 
   const handleExcelFile = (file: File) => {
     const reader = new FileReader();
@@ -827,7 +894,7 @@ export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserId, currentUser
           {/* Primary CTA — always visible and prominent */}
           <div className="flex items-center gap-2 flex-shrink-0">
             <button
-              onClick={() => { setShowAddForm(true); setShowImport(true); setParsedPreview(null); setExcelRows([]); }}
+              onClick={() => { setShowAddForm(true); setShowImport(true); setImportTab('screenshot'); setParsedPreview(null); setExcelRows([]); setSsPreview(null); setSsError(''); setSsOk(''); }}
               title="Import leads from SolarEdge or Excel"
               className="flex items-center gap-1.5 px-3 py-2 border border-slate-200 text-slate-600 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors"
             >
@@ -1009,7 +1076,15 @@ export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserId, currentUser
             {showImport && (
               <div className="mb-4 border border-blue-200 rounded-xl bg-blue-50/50 p-4">
                 {/* Tabs */}
-                <div className="flex gap-1 mb-3">
+                <div className="flex gap-1 mb-3 flex-wrap">
+                  <button
+                    onClick={() => { setImportTab('screenshot'); setSsError(''); setSsOk(''); }}
+                    className={`flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${importTab === 'screenshot' ? 'bg-orange-500 text-white' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'}`}
+                  >
+                    <Camera className="w-3 h-3" />
+                    Screenshot
+                    <span className="bg-orange-400 text-white text-[8px] font-bold px-1 py-0.5 rounded-full leading-none">AI</span>
+                  </button>
                   <button
                     onClick={() => { setImportTab('email'); setParsedPreview(null); }}
                     className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${importTab === 'email' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'}`}
@@ -1029,6 +1104,51 @@ export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserId, currentUser
                     Trello Card
                   </button>
                 </div>
+
+                {importTab === 'screenshot' && (
+                  <div className="space-y-2.5" onPaste={handleSsPaste}>
+                    <p className="text-xs text-slate-500">
+                      Take a screenshot of the SolarEdge lead email → upload or paste here → AI reads every field instantly.
+                    </p>
+                    {/* Drop zone */}
+                    <div
+                      onClick={() => ssInputRef.current?.click()}
+                      className={`relative border-2 border-dashed rounded-xl overflow-hidden cursor-pointer transition-colors ${ssPreview ? 'border-orange-300' : 'border-slate-300 hover:border-orange-400 hover:bg-orange-50/20'}`}
+                    >
+                      {ssPreview ? (
+                        <div className="relative">
+                          <img src={ssPreview} alt="Preview" className="w-full max-h-44 object-contain bg-white" />
+                          <div className="absolute inset-0 bg-black/30 opacity-0 hover:opacity-100 flex items-center justify-center transition-opacity">
+                            <p className="text-white text-xs font-medium">Tap to change</p>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="py-6 flex flex-col items-center gap-1.5">
+                          <ImageIcon className="w-7 h-7 text-slate-300" />
+                          <p className="text-xs font-medium text-slate-500">Tap to select screenshot</p>
+                          <p className="text-[10px] text-slate-400">or paste from clipboard (⌘V)</p>
+                        </div>
+                      )}
+                      <input ref={ssInputRef} type="file" accept="image/*" className="hidden"
+                        onChange={e => { const f = e.target.files?.[0]; if (f) handleSsFile(f); e.target.value = ''; }} />
+                    </div>
+                    {ssPreview && (
+                      <button
+                        type="button"
+                        onClick={handleSsParse}
+                        disabled={ssLoading}
+                        className="w-full py-2 text-xs font-semibold bg-orange-500 hover:bg-orange-600 disabled:bg-slate-300 text-white rounded-lg transition-colors flex items-center justify-center gap-1.5"
+                      >
+                        {ssLoading
+                          ? <><div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" /> Parsing…</>
+                          : <><Sparkles className="w-3.5 h-3.5" /> Extract Lead Info</>
+                        }
+                      </button>
+                    )}
+                    {ssError && <p className="text-[11px] text-red-600 font-medium">⚠ {ssError}</p>}
+                    {ssOk    && <p className="text-[11px] text-green-700 font-medium">{ssOk}</p>}
+                  </div>
+                )}
 
                 {importTab === 'email' && (
                   <>
