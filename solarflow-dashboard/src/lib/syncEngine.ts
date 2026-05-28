@@ -131,7 +131,12 @@ export async function pushJob(job: Job): Promise<void> {
 export async function pushKeyValue(key: string, value: unknown): Promise<void> {
   try {
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return;
+    if (!session) {
+      window.dispatchEvent(new CustomEvent('supabase-sync-error', {
+        detail: { message: 'Session expired — your changes are saved locally but not synced. Please re-login.' },
+      }));
+      return;
+    }
 
     const { error } = await supabase
       .from('app_data')
@@ -179,7 +184,12 @@ function markClean(key: string, value: unknown): void {
 export async function pushToSupabase(state: AppState): Promise<void> {
   try {
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return;
+    if (!session) {
+      window.dispatchEvent(new CustomEvent('supabase-sync-error', {
+        detail: { message: 'Session expired — your changes are saved locally but not synced. Please re-login.' },
+      }));
+      return;
+    }
 
     const deletedIds = Array.from(getDeletedCustomerIds());
 

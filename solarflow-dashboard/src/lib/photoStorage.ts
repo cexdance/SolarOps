@@ -60,6 +60,27 @@ export async function uploadAvatarToStorage(
   return { url: data.publicUrl, error: null };
 }
 
+// ── Inline→Storage migration helper ──────────────────────────────────────────
+/**
+ * One-shot migration: if the given string is a base64 dataUrl, upload it to
+ * Storage and return the public URL. If it's already a URL, return it as-is.
+ * Call this lazily on first read for any photo that's still a dataUrl.
+ */
+export async function migrateInlinePhoto(
+  dataUrl: string,
+  jobId: string,
+): Promise<string> {
+  if (!dataUrl.startsWith('data:')) return dataUrl; // already a storage URL
+  try {
+    const blob = await (await fetch(dataUrl)).blob();
+    const photoId = `mig-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const result = await uploadPhotoToStorage(blob, jobId, photoId);
+    return result.url ?? dataUrl; // fall back to dataUrl if upload fails
+  } catch {
+    return dataUrl; // non-fatal — return original
+  }
+}
+
 // ── Delete ────────────────────────────────────────────────────────────────────
 export async function deletePhotoFromStorage(storageUrl: string): Promise<void> {
   const marker = '/object/public/' + BUCKET + '/';

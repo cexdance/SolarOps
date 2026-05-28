@@ -15,6 +15,7 @@ import {
   getLevelProgress, loadXpData, AddXpResult, addBonusXp,
 } from '../../lib/contractorGamification';
 import { compressImageToDataUrl } from '../../lib/photoCompress';
+import { uploadPhotoToStorage } from '../../lib/photoStorage';
 
 interface JobDetailProps {
   job: ContractorJob;
@@ -216,6 +217,10 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
     ...emptyPhotosShape(),
     ...job.photos,
   }));
+
+  // Track in-flight Storage uploads so we can gate the Complete button
+  const pendingUploads = useRef(new Set<string>());
+  const [uploadError, setUploadError] = useState<string | null>(null);
   // When the parent swaps in a different job (e.g. server hydration), reset photos
   // to that job's persisted state. Without this, the local state from the previous
   // job would auto-save over the new job's photos.
@@ -318,8 +323,33 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [photos, serviceNotes]);
 
-  const addPhoto = (category: PhotoCategory, dataUrl: string) => {
+  const addPhoto = async (category: PhotoCategory, dataUrl: string) => {
+    const photoId = `ph-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+
+    // Optimistic UI: show dataUrl preview immediately
     setPhotos(prev => ({ ...prev, [category]: [...(prev[category] ?? []), dataUrl] }));
+    setUploadError(null);
+    pendingUploads.current.add(photoId);
+
+    try {
+      const blob = await (await fetch(dataUrl)).blob();
+      const result = await uploadPhotoToStorage(blob, job.id, photoId);
+      pendingUploads.current.delete(photoId);
+
+      if (result.url) {
+        // Swap the preview dataUrl out for the permanent Storage URL
+        setPhotos(prev => ({
+          ...prev,
+          [category]: prev[category].map(p => p === dataUrl ? result.url! : p),
+        }));
+      } else {
+        setUploadError(`Photo upload failed: ${result.error}. Photo saved locally — re-save to retry.`);
+      }
+    } catch (err) {
+      pendingUploads.current.delete(photoId);
+      const msg = err instanceof Error ? err.message : String(err);
+      setUploadError(`Photo upload failed: ${msg}`);
+    }
   };
 
   const removePhoto = (category: PhotoCategory, idx: number) => {
@@ -349,20 +379,45 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
     setPhase('active');
   };
 
-  const handleBeforePhotoCaptured = (dataUrl: string) => {
-    const updatedPhotos = { ...photos, before: [...photos.before, dataUrl] };
-    setPhotos(updatedPhotos);
+  const handleBeforePhotoCaptured = async (dataUrl: string) => {
     setShowBeforeModal(false);
-    onUpdateJob({ ...job, photos: updatedPhotos });
+    // Route through addPhoto so it gets uploaded to Storage
+    await addPhoto('before', dataUrl);
   };
 
   // ── Complete Call: finish immediately, after photo optional ────────────────
-  const handleCompleteCall = (afterPhoto?: string) => {
-    const updatedPhotos = afterPhoto
-      ? { ...photos, after: [...photos.after, afterPhoto] }
+  const handleCompleteCall = async (afterPhoto?: string) => {
+    setShowAfterModal(false);
+
+    // Upload the after photo to Storage inline so we have the URL in scope
+    let resolvedAfterUrl = afterPhoto ?? null;
+    if (afterPhoto) {
+      const photoId = `ph-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      pendingUploads.current.add(photoId);
+      try {
+        const blob = await (await fetch(afterPhoto)).blob();
+        const result = await uploadPhotoToStorage(blob, job.id, photoId);
+        pendingUploads.current.delete(photoId);
+        resolvedAfterUrl = result.url ?? afterPhoto; // fall back to dataUrl on failure
+        if (!result.url) {
+          setUploadError(`After photo upload failed: ${result.error}. Photo kept locally.`);
+        }
+      } catch (err) {
+        pendingUploads.current.delete(photoId);
+        resolvedAfterUrl = afterPhoto; // keep dataUrl as fallback
+      }
+    }
+
+    // Gate: block completion if other photos are still uploading
+    if (pendingUploads.current.size > 0) {
+      setUploadError(`Wait — ${pendingUploads.current.size} photo${pendingUploads.current.size > 1 ? 's' : ''} still uploading. Please try again in a moment.`);
+      return;
+    }
+
+    const updatedPhotos = resolvedAfterUrl
+      ? { ...photos, after: [...photos.after, resolvedAfterUrl] }
       : photos;
     setPhotos(updatedPhotos);
-    setShowAfterModal(false);
 
     let notes = serviceNotes;
     if (safetyConcern && safetyDetails) notes += `\n\n[SAFETY CONCERN]: ${safetyDetails}`;
@@ -714,6 +769,19 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
                   ))}
                 </select>
               </div>
+              {uploadError && (
+                <div className="flex items-start gap-2 rounded-xl bg-red-50 border border-red-200 px-3 py-2">
+                  <AlertTriangle className="w-4 h-4 text-red-500 mt-0.5 shrink-0" />
+                  <p className="text-xs text-red-700 font-medium">{uploadError}</p>
+                  <button onClick={() => setUploadError(null)} className="ml-auto shrink-0 text-red-400 hover:text-red-600"><X className="w-3.5 h-3.5" /></button>
+                </div>
+              )}
+              {pendingUploads.current.size > 0 && (
+                <div className="flex items-center gap-2 rounded-xl bg-blue-50 border border-blue-200 px-3 py-2">
+                  <div className="w-3.5 h-3.5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin shrink-0" />
+                  <p className="text-xs text-blue-700">Uploading {pendingUploads.current.size} photo{pendingUploads.current.size > 1 ? 's' : ''}…</p>
+                </div>
+              )}
               {(photos[activePhotoTab]?.length ?? 0) > 0 && (
                 <div className="grid grid-cols-3 gap-2">
                   {photos[activePhotoTab].map((src, i) => (
