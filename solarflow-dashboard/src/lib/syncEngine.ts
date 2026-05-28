@@ -125,6 +125,22 @@ export async function pushJob(job: Job): Promise<void> {
 
 // ── Per-key push (standalone KV + general) ───────────────────────────────────
 
+/** Strip any remaining base64 dataUrl strings from contractor photos before pushing.
+ *  After Phase 1 photos should be Storage URLs, but legacy data may still have base64. */
+function sanitizeContractorJobsPayload(jobs: unknown): unknown {
+  if (!Array.isArray(jobs)) return jobs;
+  return jobs.map((job: Record<string, unknown>) => {
+    if (!job?.photos || typeof job.photos !== 'object') return job;
+    const cleanPhotos: Record<string, string[]> = {};
+    for (const [cat, urls] of Object.entries(job.photos as Record<string, string[]>)) {
+      cleanPhotos[cat] = (urls ?? []).map((u: string) =>
+        typeof u === 'string' && u.startsWith('data:') ? '' : u
+      ).filter(Boolean);
+    }
+    return { ...job, photos: cleanPhotos };
+  });
+}
+
 /**
  * Upsert a single standalone KV row (contractor jobs, contractors, rates).
  */
@@ -138,9 +154,20 @@ export async function pushKeyValue(key: string, value: unknown): Promise<void> {
       return;
     }
 
+    // For contractor jobs: strip any base64 photos before pushing to avoid row size limits.
+    const payload = key === 'solarflow_contractor_jobs'
+      ? sanitizeContractorJobsPayload(value)
+      : value;
+
+    // Guard: if the row has repeatedly failed, skip it to avoid blocking other saves.
+    if (isRowPoisoned(key)) {
+      console.warn(`[SyncEngine] pushKeyValue(${key}) — row is poisoned, skipping push.`);
+      return;
+    }
+
     const { error } = await supabase
       .from('app_data')
-      .upsert([{ key, value, updated_at: new Date().toISOString() }], { onConflict: 'key' });
+      .upsert([{ key, value: payload, updated_at: new Date().toISOString() }], { onConflict: 'key' });
 
     if (error) {
       console.warn(`[SyncEngine] pushKeyValue(${key}) failed:`, error.message);

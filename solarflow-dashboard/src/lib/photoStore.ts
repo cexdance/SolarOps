@@ -24,7 +24,7 @@ import { supabase } from './supabase';
 const DB_NAME    = 'solarops_photos';
 const DB_VERSION = 1;
 const STORE      = 'rows';
-const BUCKET     = 'wo-photos';
+const BUCKET     = 'customer-files'; // aligned with photoStorage.ts — was 'wo-photos'
 
 export interface PhotoRow {
   id:           string;

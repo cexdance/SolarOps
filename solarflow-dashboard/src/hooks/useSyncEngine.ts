@@ -115,18 +115,24 @@ export function useSyncEngine({
           };
         });
       },
-      onKV: (key) => {
+      onKV: (key, payloadValue) => {
+        // Use the Realtime payload value directly — avoids the stale-localStorage
+        // race where a re-read would get the old value if the write hasn't flushed.
         skipContractorPersist.current = true;
         if (key === 'solarflow_contractor_jobs') {
-          const remote = loadContractorJobs();
+          const remote = Array.isArray(payloadValue)
+            ? (payloadValue as ContractorJob[])
+            : loadContractorJobs(); // fallback to localStorage if payload missing
           setContractorJobs(prev => mergeById(prev, remote));
         }
         if (key === 'solarflow_contractors') {
-          const remote = loadContractors();
+          const remote = Array.isArray(payloadValue)
+            ? (payloadValue as Contractor[])
+            : loadContractors();
           setContractors(prev => mergeById(prev, remote));
         }
         if (key === 'solarflow_service_rates') {
-          const remote = loadServiceRates();
+          const remote = (Array.isArray(payloadValue) ? payloadValue : loadServiceRates()) as ReturnType<typeof loadServiceRates>;
           setServiceRates(prev => mergeById(prev, remote));
         }
         setTimeout(() => { skipContractorPersist.current = false; }, 0);
@@ -149,18 +155,17 @@ export function useSyncEngine({
   useEffect(() => {
     const onRemoteUpdate = (e: Event) => {
       const keys = (e as CustomEvent<{ keys: string[] }>).detail?.keys ?? [];
+      // Always re-read from localStorage for remote-update events (these come from
+      // the pull cycle which has already written fresh data to localStorage).
       skipContractorPersist.current = true;
       if (keys.includes('solarflow_contractor_jobs')) {
-        const remote = loadContractorJobs();
-        setContractorJobs(prev => mergeById(prev, remote));
+        setContractorJobs(prev => mergeById(prev, loadContractorJobs()));
       }
       if (keys.includes('solarflow_contractors')) {
-        const remote = loadContractors();
-        setContractors(prev => mergeById(prev, remote));
+        setContractors(prev => mergeById(prev, loadContractors()));
       }
       if (keys.includes('solarflow_service_rates')) {
-        const remote = loadServiceRates();
-        setServiceRates(prev => mergeById(prev, remote));
+        setServiceRates(prev => mergeById(prev, loadServiceRates() as typeof prev));
       }
       setTimeout(() => { skipContractorPersist.current = false; }, 0);
     };
@@ -170,19 +175,27 @@ export function useSyncEngine({
 }
 
 /**
- * Merge two arrays of records by `id`, preferring REMOTE rows on conflict
- * but keeping any local-only rows (so in-flight local creates aren't dropped
- * before they round-trip through Supabase).
- *
- * Local-only records are preserved indefinitely until they appear in remote
- * with the same id (then remote wins) or are explicitly tombstoned by their
- * domain layer.
+ * Merge two arrays of records by `id`, using NEWEST-WINS semantics on conflict.
+ * Compares `updatedAt` → `completedAt` → `startedAt` → `createdAt` to decide
+ * which version to keep. Local-only records are always preserved.
  */
+function newerOf<T extends { id: string }>(a: T, b: T): T {
+  const ts = (r: T): number => {
+    const candidate = (r as Record<string, unknown>);
+    const t = candidate['updatedAt'] ?? candidate['completedAt'] ?? candidate['startedAt'] ?? candidate['createdAt'];
+    return t ? new Date(t as string).getTime() : 0;
+  };
+  return ts(b) > ts(a) ? b : a;
+}
+
 function mergeById<T extends { id: string }>(local: T[], remote: T[]): T[] {
   if (!Array.isArray(remote) || remote.length === 0) return local;
   const byId = new Map<string, T>();
   for (const r of local) byId.set(r.id, r);
-  // Remote wins on conflict.
-  for (const r of remote) byId.set(r.id, r);
+  // Newest-wins: replace local record only if remote is strictly newer.
+  for (const r of remote) {
+    const existing = byId.get(r.id);
+    byId.set(r.id, existing ? newerOf(existing, r) : r);
+  }
   return Array.from(byId.values());
 }
