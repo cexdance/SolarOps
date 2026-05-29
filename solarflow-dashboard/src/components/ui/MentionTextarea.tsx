@@ -1,4 +1,5 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 
 export interface MentionUser {
   id: string;
@@ -17,7 +18,12 @@ interface Props {
   onPaste?: (e: React.ClipboardEvent<HTMLTextAreaElement>) => void;
 }
 
-/** Textarea with live @mention dropdown. Selecting a user inserts @handle. */
+/** Textarea with live @mention dropdown.
+ *
+ *  The dropdown is rendered through a React portal at document.body and
+ *  positioned with `position:fixed` so it is never clipped by an ancestor
+ *  with overflow:hidden (e.g. the WO panel modal).
+ */
 export const MentionTextarea: React.FC<Props> = ({
   value,
   onChange,
@@ -28,33 +34,43 @@ export const MentionTextarea: React.FC<Props> = ({
   disabled,
   onPaste,
 }) => {
-  const [query, setQuery]       = useState('');
-  const [start, setStart]       = useState(-1);
-  const [open, setOpen]         = useState(false);
+  const [query, setQuery]         = useState('');
+  const [start, setStart]         = useState(-1);
+  const [open, setOpen]           = useState(false);
+  const [activeIdx, setActiveIdx] = useState(0);
+  const [dropPos, setDropPos]     = useState<{ top: number; left: number; width: number } | null>(null);
   const ref = useRef<HTMLTextAreaElement>(null);
+
+  // Re-measure textarea position whenever the dropdown opens or value changes.
+  // This keeps the dropdown anchored when the panel scrolls.
+  useEffect(() => {
+    if (!open || !ref.current) { setDropPos(null); return; }
+    const r = ref.current.getBoundingClientRect();
+    setDropPos({ top: r.bottom + 4, left: r.left, width: r.width });
+  }, [open, value]);
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    const handler = () => setOpen(false);
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val    = e.target.value;
     const cursor = e.target.selectionStart ?? val.length;
     onChange(val);
-    const before   = val.slice(0, cursor);
-    const atMatch  = before.match(/@(\w*)$/);
+    const before  = val.slice(0, cursor);
+    const atMatch = before.match(/@(\w*)$/);
     if (atMatch) {
       setQuery(atMatch[1]);
       setStart(cursor - atMatch[0].length);
+      setActiveIdx(0);
       setOpen(true);
     } else {
       setOpen(false);
     }
-  };
-
-  const select = (user: MentionUser) => {
-    const handle = user.username?.trim() || user.name.replace(/\s+/g, '').toLowerCase();
-    const before = value.slice(0, start);
-    const after  = value.slice(ref.current?.selectionStart ?? value.length);
-    onChange(`${before}@${handle} ${after}`);
-    setOpen(false);
-    setTimeout(() => ref.current?.focus(), 0);
   };
 
   const filtered = (
@@ -66,41 +82,78 @@ export const MentionTextarea: React.FC<Props> = ({
       : users.slice(0, 8)
   ).slice(0, 6);
 
+  const select = (user: MentionUser) => {
+    const handle = user.username?.trim() || user.name.replace(/\s+/g, '').toLowerCase();
+    const cursorPos = ref.current?.selectionStart ?? value.length;
+    const before = value.slice(0, start);
+    const after  = value.slice(cursorPos);
+    onChange(`${before}@${handle} ${after}`);
+    setOpen(false);
+    setTimeout(() => ref.current?.focus(), 0);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (!open || filtered.length === 0) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setActiveIdx(i => Math.min(i + 1, filtered.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setActiveIdx(i => Math.max(i - 1, 0));
+    } else if (e.key === 'Enter' || e.key === 'Tab') {
+      e.preventDefault();
+      select(filtered[activeIdx]);
+    } else if (e.key === 'Escape') {
+      setOpen(false);
+    }
+  };
+
+  const dropdown = open && filtered.length > 0 && dropPos ? createPortal(
+    <ul
+      style={{ position: 'fixed', top: dropPos.top, left: dropPos.left, width: dropPos.width, zIndex: 9999 }}
+      className="bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden"
+      onMouseDown={e => e.preventDefault()} // prevent textarea blur
+    >
+      {filtered.map((u, i) => (
+        <li key={u.id}>
+          <button
+            type="button"
+            onMouseDown={() => select(u)}
+            className={`w-full text-left px-3 py-2 text-sm flex items-center gap-2 transition-colors ${
+              i === activeIdx ? 'bg-orange-50' : 'hover:bg-slate-50'
+            }`}
+          >
+            <span className="w-6 h-6 rounded-full bg-orange-100 text-orange-700 text-xs font-bold flex items-center justify-center shrink-0">
+              {u.name[0]?.toUpperCase()}
+            </span>
+            <div className="min-w-0">
+              <p className="font-medium text-slate-800 truncate">{u.name}</p>
+              {u.username && (
+                <p className="text-xs text-slate-400">@{u.username}</p>
+              )}
+            </div>
+          </button>
+        </li>
+      ))}
+    </ul>,
+    document.body,
+  ) : null;
+
   return (
     <div className="relative">
       <textarea
         ref={ref}
         value={value}
         onChange={handleChange}
+        onKeyDown={handleKeyDown}
         onPaste={onPaste}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
         rows={rows}
         placeholder={placeholder}
         disabled={disabled}
         className={className}
       />
-      {open && filtered.length > 0 && (
-        <ul className="absolute bottom-full mb-1 left-0 z-50 w-56 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
-          {filtered.map(u => (
-            <li key={u.id}>
-              <button
-                type="button"
-                onMouseDown={e => { e.preventDefault(); select(u); }}
-                className="w-full text-left px-3 py-2 text-sm hover:bg-orange-50 flex items-center gap-2 transition-colors"
-              >
-                <span className="w-6 h-6 rounded-full bg-orange-100 text-orange-700 text-xs font-bold flex items-center justify-center shrink-0">
-                  {u.name[0]?.toUpperCase()}
-                </span>
-                <div className="min-w-0">
-                  <p className="font-medium text-slate-800 truncate">{u.name}</p>
-                  {u.username && (
-                    <p className="text-xs text-slate-400">@{u.username}</p>
-                  )}
-                </div>
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
+      {dropdown}
     </div>
   );
 };
@@ -133,16 +186,15 @@ export function parseMentions(text: string, users: MentionUser[]): string[] {
 export async function fireMentionNotifications(opts: {
   mentionedUserIds: string[];
   notifierName: string;
-  context: string;      // e.g. "WO-2604-50310"
-  contextId: string;    // workOrderId or customerId
+  context: string;
+  contextId: string;
   contextType: 'workOrder' | 'customer';
   message: string;
 }): Promise<void> {
   if (opts.mentionedUserIds.length === 0) return;
-  // Add to local mentions inbox immediately (visible in Ops Center widget)
   try {
     const { addMentions } = await import('../../lib/mentionsStore');
-    const snippet = opts.message.length > 240 ? opts.message.slice(0, 237) + '…' : opts.message;
+    const snippet = opts.message.length > 240 ? opts.message.slice(0, 237) + '...' : opts.message;
     addMentions(opts.mentionedUserIds.map(uid => ({
       userId:        uid,
       notifierName:  opts.notifierName,
@@ -173,6 +225,6 @@ export async function fireMentionNotifications(opts: {
       }),
     });
   } catch {
-    // non-blocking — notification failure never breaks the save
+    // non-blocking
   }
 }
