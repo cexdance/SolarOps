@@ -17,7 +17,7 @@ import { loadServiceRates } from '../lib/contractorStore';
 import { searchParts, CatalogPart } from '../lib/partsCatalog';
 import { AddressAutocomplete, GMAPS_KEY_STORAGE, loadGoogleMaps } from './AddressAutocomplete';
 import { AddressLink } from './AddressLink';
-import { MentionTextarea, MentionUser, renderWithMentions, parseMentions, fireMentionNotifications } from './ui/MentionTextarea';
+import { MentionTextarea, MentionUser, renderWithMentions, parseMentions, parseMentionEmails, fireMentionNotifications } from './ui/MentionTextarea';
 import { SowDistributionModal, SOW_DISTRIBUTION_NAMES } from './SowDistributionModal';
 import { ActivityFeed } from './ui/ActivityFeed';
 import { compressImageToDataUrl, compressImageToBlob } from '../lib/photoCompress';
@@ -987,12 +987,13 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
     // Fire mention notifications (non-blocking)
     if (entry.mentions && entry.mentions.length > 0 && job?.woNumber) {
       fireMentionNotifications({
-        mentionedUserIds: entry.mentions,
-        notifierName:     currentUserName ?? 'Someone',
-        context:          job.woNumber,
-        contextId:        siteId,   // siteId = customer.id — links bell notification to the customer card
-        contextType:      'workOrder',
-        message:          text,
+        mentionedUserIds:    entry.mentions,
+        mentionedUserEmails: parseMentionEmails(text, users as (MentionUser & { email?: string })[]),
+        notifierName:        currentUserName ?? 'Someone',
+        context:             job.woNumber,
+        contextId:           siteId,
+        contextType:         'workOrder',
+        message:             text,
       });
     }
   }, [newComment, currentUserName, users, job, siteId]);

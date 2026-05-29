@@ -68,7 +68,7 @@ import { WorkOrderPanel } from './WorkOrderPanel';
 import { PhoneLink } from './PhoneLink';
 import { ActivityFeed } from './ui/ActivityFeed';
 import { uploadCustomerFiles, uploadCustomerFilesPartial, StoredCustomerFile } from '../lib/customerFileStorage';
-import { fireMentionNotifications } from './ui/MentionTextarea';
+import { fireMentionNotifications, parseMentionEmails } from './ui/MentionTextarea';
 import { toast } from 'sonner';
 
 // Client Status Badge Component
@@ -3595,8 +3595,10 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
     // Fire @mention notifications (async, non-blocking)
     // Uses centralized helper: writes to local mentions inbox + Supabase + email
     if (mentionedIds.length > 0) {
+      const mentionedEmails = parseMentionEmails(noteText, users);
       fireMentionNotifications({
-        mentionedUserIds: mentionedIds,
+        mentionedUserIds:    mentionedIds,
+        mentionedUserEmails: mentionedEmails,
         notifierName: currentUser?.name || 'A teammate',
         context: `${customer.clientId ?? ''} ${customer.name}`.trim(),
         contextId: customer.id,

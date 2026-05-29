@@ -182,16 +182,32 @@ export function parseMentions(text: string, users: MentionUser[]): string[] {
   return ids;
 }
 
+/** Extract emails for every @handle found in text (for API matching). */
+export function parseMentionEmails(text: string, users: (MentionUser & { email?: string })[]): string[] {
+  const emails: string[] = [];
+  for (const m of text.match(/@([\w.]+)/g) ?? []) {
+    const handle = m.slice(1).toLowerCase();
+    const user = users.find(u =>
+      u.username?.toLowerCase() === handle ||
+      u.name.toLowerCase().replace(/\s+/g, '') === handle ||
+      u.name.toLowerCase() === handle,
+    );
+    if (user?.email && !emails.includes(user.email)) emails.push(user.email);
+  }
+  return emails;
+}
+
 /** Fire mention notifications via /api/notify (non-blocking) + add to local inbox. */
 export async function fireMentionNotifications(opts: {
   mentionedUserIds: string[];
+  mentionedUserEmails?: string[];
   notifierName: string;
   context: string;
   contextId: string;
   contextType: 'workOrder' | 'customer';
   message: string;
 }): Promise<void> {
-  if (opts.mentionedUserIds.length === 0) return;
+  if (opts.mentionedUserIds.length === 0 && (!opts.mentionedUserEmails || opts.mentionedUserEmails.length === 0)) return;
   try {
     const { addMentions } = await import('../../lib/mentionsStore');
     const snippet = opts.message.length > 240 ? opts.message.slice(0, 237) + '...' : opts.message;
@@ -216,12 +232,13 @@ export async function fireMentionNotifications(opts: {
         Authorization: `Bearer ${session.access_token}`,
       },
       body: JSON.stringify({
-        mentionedUserIds: opts.mentionedUserIds,
-        notifierName:     opts.notifierName,
-        customerName:     opts.context,
-        customerId:       opts.contextId,
-        message:          opts.message,
-        contextType:      opts.contextType,
+        mentionedUserIds:    opts.mentionedUserIds,
+        mentionedUserEmails: opts.mentionedUserEmails ?? [],
+        notifierName:        opts.notifierName,
+        customerName:        opts.context,
+        customerId:          opts.contextId,
+        message:             opts.message,
+        contextType:         opts.contextType,
       }),
     });
   } catch {

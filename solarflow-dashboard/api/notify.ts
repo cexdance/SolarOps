@@ -30,16 +30,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { data: { user: caller }, error: authErr } = await supabaseAdmin.auth.getUser(token);
   if (authErr || !caller) return res.status(401).json({ error: 'Unauthorized' });
 
-  const { mentionedUserIds, notifierName, customerName, customerId, message } = req.body ?? {};
-  if (!Array.isArray(mentionedUserIds) || mentionedUserIds.length === 0) {
-    return res.status(400).json({ error: 'mentionedUserIds required' });
+  const { mentionedUserIds, mentionedUserEmails, notifierName, customerName, customerId, message } = req.body ?? {};
+  // Accept either IDs or emails — at least one list must be non-empty
+  const hasIds    = Array.isArray(mentionedUserIds)    && mentionedUserIds.length > 0;
+  const hasEmails = Array.isArray(mentionedUserEmails) && mentionedUserEmails.length > 0;
+  if (!hasIds && !hasEmails) {
+    return res.status(400).json({ error: 'mentionedUserIds or mentionedUserEmails required' });
   }
 
   // Look up mentioned users in Supabase Auth
   const { data: { users: authUsers }, error: usersErr } = await supabaseAdmin.auth.admin.listUsers();
   if (usersErr) return res.status(500).json({ error: 'Could not fetch users' });
 
-  const mentioned = authUsers.filter(u => mentionedUserIds.includes(u.id));
+  // Match by email first (reliable — internal IDs don't match Supabase UUIDs).
+  // Fall back to UUID match for any future callers that do pass real Supabase IDs.
+  const mentioned = authUsers.filter(u =>
+    (hasEmails && u.email && (mentionedUserEmails as string[]).map((e: string) => e.toLowerCase()).includes(u.email.toLowerCase())) ||
+    (hasIds && (mentionedUserIds as string[]).includes(u.id))
+  );
 
   // Insert notification rows (one per mentioned user)
   const now = new Date().toISOString();
