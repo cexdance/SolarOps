@@ -40,6 +40,7 @@ export const KV_SYNC_KEYS = [
   'solarflow_contractor_jobs',
   'solarflow_contractors',
   'solarflow_service_rates',
+  'solarflow_crm_data',
 ] as const;
 type KVSyncKey = typeof KV_SYNC_KEYS[number];
 
@@ -382,11 +383,44 @@ export async function pullFromSupabase(): Promise<Partial<AppState> | null> {
         }
         if (isKVSyncKey(row.key) && row.value != null) {
           try {
-            const next = JSON.stringify(row.value);
-            const prev = localStorage.getItem(row.key);
-            if (prev !== next) {
-              localStorage.setItem(row.key, next);
-              changedKVKeys.push(row.key);
+            // CRM data: merge leads by ID so neither side loses new entries.
+            if (row.key === 'solarflow_crm_data') {
+              const prev = localStorage.getItem(row.key);
+              const local = prev ? JSON.parse(prev) : null;
+              const remote = row.value as { leads?: { id: string; updatedAt?: string }[] };
+              if (local && Array.isArray(local.leads) && Array.isArray(remote.leads)) {
+                // Build a map of remote leads, then overlay any local lead that is newer.
+                const merged: Record<string, { id: string; updatedAt?: string }> = {};
+                for (const l of remote.leads) merged[l.id] = l;
+                for (const l of local.leads) {
+                  const existing = merged[l.id];
+                  if (!existing || (l.updatedAt && existing.updatedAt && l.updatedAt > existing.updatedAt)) {
+                    merged[l.id] = l;
+                  } else if (!existing) {
+                    merged[l.id] = l; // local-only lead — keep it
+                  }
+                }
+                const finalData = { ...remote, leads: Object.values(merged) };
+                const next = JSON.stringify(finalData);
+                if (prev !== next) {
+                  localStorage.setItem(row.key, next);
+                  changedKVKeys.push(row.key);
+                }
+              } else {
+                // No local data yet — just write remote.
+                const next = JSON.stringify(remote);
+                if (prev !== next) {
+                  localStorage.setItem(row.key, next);
+                  changedKVKeys.push(row.key);
+                }
+              }
+            } else {
+              const next = JSON.stringify(row.value);
+              const prev = localStorage.getItem(row.key);
+              if (prev !== next) {
+                localStorage.setItem(row.key, next);
+                changedKVKeys.push(row.key);
+              }
             }
           } catch (err) {
             console.warn(`[SyncEngine] Error processing KV key ${row.key}:`, err);
