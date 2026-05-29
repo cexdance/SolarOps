@@ -962,7 +962,7 @@ export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserId, currentUser
               }`}
             >
               <RefreshCw className={`w-4 h-4 ${syncState === 'syncing' ? 'animate-spin' : ''}`} />
-              <span className="hidden sm:inline">
+              <span>
                 {syncState === 'syncing' ? 'Syncing...' : syncState === 'ok' ? 'Synced' : syncState === 'error' ? 'Failed' : 'Sync'}
               </span>
             </button>
