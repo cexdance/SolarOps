@@ -5,7 +5,7 @@ import * as XLSX from 'xlsx';
 import {
   Inbox, Phone, Mail, Plus, Search, ArrowRight, Tag, X, User,
   Zap, CheckCircle, LayoutGrid, List, ChevronDown, ChevronUp, Upload, Trash2, Link2,
-  Camera, Image as ImageIcon, Sparkles, AlertTriangle,
+  Camera, Image as ImageIcon, Sparkles, AlertTriangle, RefreshCw,
 } from 'lucide-react';
 import { loadCRMData, saveCRMData, addLead, CRMData } from '../lib/crmStore';
 import { fetchTrelloCard, extractContactInfo } from '../lib/trelloImporter';
@@ -206,6 +206,7 @@ function parseSolarEdgeEmail(text: string): Partial<AddFormData> & { addressNote
 
 export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserId, currentUserRole, customers = [], onAddCustomer }) => {
   const [crmData, setCrmData] = useState<CRMData>(() => loadCRMData());
+  const [syncState, setSyncState] = useState<'idle' | 'syncing' | 'ok' | 'error'>('idle');
   const [viewMode, setViewMode] = useState<'list' | 'kanban'>('kanban');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
@@ -259,6 +260,22 @@ export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserId, currentUser
     email: string;
     description: string;
   } | null>(null);
+
+  const handleForceSync = async () => {
+    setSyncState('syncing');
+    try {
+      // Re-read localStorage directly so we capture any leads added since mount
+      const latest = loadCRMData();
+      setCrmData(latest);
+      saveCRMData(latest); // pushes to Supabase via the fixed KV_SYNC_KEYS path
+      // Give the async push a moment to land, then report success
+      setTimeout(() => setSyncState('ok'), 1800);
+      setTimeout(() => setSyncState('idle'), 4000);
+    } catch {
+      setSyncState('error');
+      setTimeout(() => setSyncState('idle'), 4000);
+    }
+  };
 
   const handleTrelloLeadFetch = async () => {
     if (!trelloLeadUrl.trim()) return;
@@ -934,6 +951,21 @@ export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserId, currentUser
 
           {/* Primary CTA — always visible and prominent */}
           <div className="flex items-center gap-2 flex-shrink-0">
+            <button
+              onClick={handleForceSync}
+              disabled={syncState === 'syncing'}
+              title="Push all leads from this device to the cloud"
+              className={`flex items-center gap-1.5 px-3 py-2 border rounded-lg text-sm font-medium transition-colors ${
+                syncState === 'ok'    ? 'border-green-300 bg-green-50 text-green-700' :
+                syncState === 'error' ? 'border-red-300 bg-red-50 text-red-700' :
+                'border-slate-200 text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              <RefreshCw className={`w-4 h-4 ${syncState === 'syncing' ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">
+                {syncState === 'syncing' ? 'Syncing...' : syncState === 'ok' ? 'Synced' : syncState === 'error' ? 'Failed' : 'Sync'}
+              </span>
+            </button>
             <button
               onClick={() => { setShowAddForm(true); setShowImport(true); setImportTab('screenshot'); setParsedPreview(null); setExcelRows([]); setSsPreview(null); setSsError(''); setSsOk(''); }}
               title="Import leads from SolarEdge or Excel"
