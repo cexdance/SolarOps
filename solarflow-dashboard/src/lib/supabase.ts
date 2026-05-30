@@ -42,3 +42,20 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 });
 
 export type SupabaseUser = Awaited<ReturnType<typeof supabase.auth.getUser>>['data']['user'];
+
+/** Current Supabase access token, or '' when not signed in. */
+export async function getAccessToken(): Promise<string> {
+  const { data } = await supabase.auth.getSession();
+  return data.session?.access_token ?? '';
+}
+
+/**
+ * fetch() that attaches the caller's Supabase JWT as `Authorization: Bearer`.
+ * Use for any /api/* route guarded by requireUser (paid/rate-limited proxies).
+ */
+export async function authedFetch(input: string, init: RequestInit = {}): Promise<Response> {
+  const token = await getAccessToken();
+  const headers = new Headers(init.headers);
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+  return fetch(input, { ...init, headers });
+}

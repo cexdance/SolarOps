@@ -64,6 +64,7 @@ export interface Customer {
   systemType?: SystemType;
   clientStatus?: ClientStatus;
   createdAt: string;
+  updatedAt?: string; // last local edit / push time — drives sync conflict resolution
   notes: string;
   referralSource?: string;
   howFound?: string;
@@ -185,6 +186,7 @@ export interface Job {
   partsCost: number;
   totalAmount: number;
   createdAt: string;
+  updatedAt?: string; // last local edit / push time — drives sync conflict resolution
   urgency: UrgencyLevel;
   isPowercare: boolean;
   contractorId?: string;

@@ -33,6 +33,7 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import { User as UserType, AppNotification, Customer, Job } from '../types';
+import { canSeeFinancials } from '../lib/access';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -63,13 +64,13 @@ const allNavItems = [
   { id: 'customers',          label: 'Customers',          icon: Users,                            roles: ['admin', 'coo', 'technician', 'support'] },
   { id: 'lobby',              label: 'Lead Lobby',         icon: Inbox,           indent: true, parent: 'customers', roles: ['admin', 'coo', 'support', 'sales'] },
   { id: 'solaredge',          label: 'SolarEdge Sites',    icon: Sun,             indent: true, parent: 'customers', roles: ['admin', 'coo', 'support'] },
-  { id: 'billing',            label: 'Billing',            icon: Receipt,         badge: 'unbilled', roles: ['admin', 'coo'] },
-  { id: 'contractor-billing', label: 'Contractor Pay',     icon: DollarSign,      indent: true, parent: 'billing', roles: ['admin', 'coo'] },
-  { id: 'rates',              label: 'Service Rates',      icon: DollarSign,      indent: true, parent: 'billing', roles: ['admin', 'coo'] },
-  { id: 'contractors',        label: 'Contractors',        icon: UserCog,                          roles: ['admin', 'coo'] },
+  { id: 'billing',            label: 'Billing',            icon: Receipt,         badge: 'unbilled', roles: ['admin'] },
+  { id: 'contractor-billing', label: 'Contractor Pay',     icon: DollarSign,      indent: true, parent: 'billing', roles: ['admin'] },
+  { id: 'rates',              label: 'Service Rates',      icon: DollarSign,      indent: true, parent: 'billing', roles: ['admin'] },
+  { id: 'contractors',        label: 'Contractors',        icon: UserCog,                          roles: ['admin', 'coo', 'support'] },
   { id: 'projects',           label: 'New Install',        icon: HardHat,                          roles: ['admin', 'coo', 'support'] },
   { id: 'inventory',          label: 'Inventory',          icon: Package,                          roles: ['admin', 'coo', 'support'] },
-  { id: 'settings',           label: 'Settings',           icon: Settings,                         roles: ['admin', 'coo'] },
+  { id: 'settings',           label: 'Settings',           icon: Settings,                         roles: ['admin', 'coo', 'support'] },
   // Sales-only routes
   { id: 'crm',                label: 'Sales CRM',          icon: TrendingUp,                       roles: ['sales'] },
   { id: 'customers2',         label: 'Clients',            icon: UserCheck,                        roles: ['sales'] },
@@ -610,7 +611,7 @@ export const Layout: React.FC<LayoutProps> = ({
       <main
         className={`
           min-h-screen transition-all duration-200
-          ${isMobile ? 'pt-0' : 'ml-64'}
+          ${isMobile ? 'pt-0 pb-24' : 'ml-64'}
         `}
       >
         {children}
@@ -628,7 +629,10 @@ export const Layout: React.FC<LayoutProps> = ({
               { id: 'dashboard', icon: LayoutDashboard, label: 'Home' },
               { id: 'jobs', icon: Wrench, label: 'Work Orders' },
               { id: 'technician', icon: Phone, label: 'My Work Orders' },
-              { id: 'billing', icon: Receipt, label: 'Billing' },
+              // Billing is admin-only; staff see Ops Center in its place
+              canSeeFinancials(currentUser?.role)
+                ? { id: 'billing', icon: Receipt, label: 'Billing' }
+                : { id: 'dispatch', icon: Crosshair, label: 'Ops Center' },
             ]).map((item) => {
               const Icon = item.icon;
               const isActive = currentView === item.id;

@@ -1,5 +1,14 @@
 # Claude Development Guidelines
 
+## Writing Style Rules
+
+**MANDATORY — applies to all text output, documents, UI copy, comments, and generated content:**
+
+- **No em dashes.** Never use `—` (em dash) in any output. Replace with a comma, colon, period, or rewrite the sentence. This rule has no exceptions — not in documents, not in code comments, not in UI labels, not in reports.
+- **No en dashes** (`–`) as separators. Use a hyphen (`-`) for ranges or rewrite.
+- Prefer short, direct sentences over complex punctuation constructions.
+- **No emojis.** Never use emojis in any output. No exceptions: not in documents, reports, UI labels, code comments, chat responses, or generated files.
+
 ## Design Principles
 
 This section provides links to reference documents for maintaining visual consistency.

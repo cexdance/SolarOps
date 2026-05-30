@@ -84,6 +84,14 @@ async function pushRows(
 ): Promise<void> {
   if (rows.length === 0) return;
   const now = new Date().toISOString();
+  // Stamp updatedAt on each record so conflict resolution has an authoritative
+  // edit time to compare on the next pull. Mutates the value in place so the
+  // same reference held in local state / localStorage also carries the stamp.
+  for (const r of rows) {
+    if (r.value && typeof r.value === 'object') {
+      (r.value as { updatedAt?: string }).updatedAt = now;
+    }
+  }
   const { error } = await supabase
     .from('app_data')
     .upsert(
@@ -322,7 +330,7 @@ async function pullPrefix<T>(
   try {
     let q = supabase
       .from('app_data')
-      .select('key, value')
+      .select('key, value, updated_at')
       .like('key', `${prefix}%`);
 
     if (since) q = q.gt('updated_at', since);
@@ -332,7 +340,15 @@ async function pullPrefix<T>(
       console.warn(`[SyncEngine] pullPrefix failed for prefix ${prefix}:`, error?.message || 'No data returned');
       return [];
     }
-    return data.map(r => r.value as T);
+    // Stamp the authoritative app_data.updated_at onto the value so mergeRemote
+    // can compare it against the local record's updatedAt.
+    return data.map(r => {
+      const v = r.value as T;
+      if (v && typeof v === 'object' && r.updated_at) {
+        (v as { updatedAt?: string }).updatedAt = r.updated_at as string;
+      }
+      return v;
+    });
   } catch (err) {
     console.warn(`[SyncEngine] pullPrefix error for prefix ${prefix}:`, err);
     return [];
@@ -454,16 +470,30 @@ export async function pullFromSupabase(): Promise<Partial<AppState> | null> {
 // ── Merge ─────────────────────────────────────────────────────────────────────
 
 /**
+ * Compare two records by edit time for last-writer-wins resolution.
+ * Returns true if `a` is newer than or equal to `b`. Falls back to createdAt
+ * when updatedAt is absent (legacy records), then to empty string (oldest).
+ * NOTE: timestamps are client-stamped, so a device with a skewed clock can win.
+ * Server-authoritative time (a DB default/trigger on app_data.updated_at) is the
+ * proper fix and is tracked separately (SEC-18).
+ */
+function recordTime(r: { updatedAt?: string; createdAt?: string }): string {
+  return r.updatedAt ?? r.createdAt ?? '';
+}
+function remoteWins(remote: { updatedAt?: string; createdAt?: string }, local: { updatedAt?: string; createdAt?: string }): boolean {
+  return recordTime(remote) >= recordTime(local);
+}
+
+/**
  * Merge remote state into local state.
  *
- * Phase 2 merge is simpler than Phase 1:
- *   - Remote per-record rows are authoritative (last-writer-wins on `updated_at`)
- *   - Records present locally but NOT in remote are kept if outbox has a
- *     pending push (created locally, not yet confirmed)
- *   - Records in tombstone list are always filtered
- *
- * Incremental pull: remote may only contain CHANGED records (since > last_sync).
- * We merge by ID so unchanged local records are preserved.
+ * Conflict resolution is last-writer-wins by record `updatedAt` (then createdAt):
+ *   - On an ID conflict, remote replaces local ONLY if it is newer or equal.
+ *     A newer local edit (e.g. made offline) is preserved.
+ *   - Records present locally but NOT in remote are kept (incremental pull only
+ *     returns rows changed since last_sync, so a freshly created/pushed record
+ *     may not come back and must not be dropped as a ghost).
+ *   - Records in the tombstone list are always filtered.
  */
 export function mergeRemote(local: AppState, remote: Partial<AppState>): AppState {
   const deletedIds    = getDeletedCustomerIds();
@@ -475,12 +505,13 @@ export function mergeRemote(local: AppState, remote: Partial<AppState>): AppStat
     const localMap  = new Map(local.customers.map(c => [c.id, c]));
     const remoteMap = new Map(remote.customers.map(c => [c.id, c]));
 
-    // Merge: remote wins on conflict; keep local-only records (ghost-purge removed
-    // because incremental pulls only return rows changed since `last_sync`, so a
-    // freshly created/pushed record may not come back and would be deleted as a ghost.
-    // Real deletions are handled by the tombstone (deletedIds) filter below.
+    // Merge by ID. On conflict, keep whichever record is newer (LWW). Keep
+    // local-only records — real deletions are handled by the tombstone filter.
     const merged = new Map(localMap);
-    for (const [id, c] of remoteMap) merged.set(id, c);
+    for (const [id, rc] of remoteMap) {
+      const lc = localMap.get(id);
+      merged.set(id, !lc || remoteWins(rc, lc) ? rc : lc);
+    }
 
     customers = Array.from(merged.values()).filter(c => !deletedIds.has(c.id));
 
@@ -500,12 +531,14 @@ export function mergeRemote(local: AppState, remote: Partial<AppState>): AppStat
     for (const [id, remoteJ] of remoteMap) {
       const localJ = localMap.get(id);
       if (!localJ) { merged.set(id, remoteJ); continue; }
-      // Preserve whichever copy has more photos — prevents a stale remote pull
-      // (race with an in-flight pushToSupabase) from wiping locally-uploaded photos.
+      // Last-writer-wins on updatedAt, but always keep whichever copy has more
+      // photos — prevents a stale remote pull (race with an in-flight push) from
+      // wiping locally-uploaded photos regardless of which record wins on time.
+      const winner = remoteWins(remoteJ, localJ) ? remoteJ : localJ;
       const remotePhotos = remoteJ.woPhotos ?? [];
       const localPhotos  = localJ.woPhotos  ?? [];
       merged.set(id, {
-        ...remoteJ,
+        ...winner,
         woPhotos: remotePhotos.length >= localPhotos.length ? remotePhotos : localPhotos,
       });
     }

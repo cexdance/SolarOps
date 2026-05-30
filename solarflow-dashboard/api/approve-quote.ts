@@ -15,6 +15,15 @@ const supabaseAdmin = createClient(
   { auth: { autoRefreshToken: false, persistSession: false } }
 );
 
+function escapeHtml(value: unknown): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function htmlPage(title: string, message: string, success: boolean) {
   const color = success ? '#16a34a' : '#dc2626';
   const icon = success ? '✓' : '✕';
@@ -67,7 +76,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (quote.approved_at) {
     return res.status(200)
       .setHeader('Content-Type', 'text/html')
-      .send(htmlPage('Already Approved', `This quote for <strong>${quote.wo_number}</strong> was already approved on ${new Date(quote.approved_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}. Our team will be in touch shortly.`, true));
+      .send(htmlPage('Already Approved', `This quote for <strong>${escapeHtml(quote.wo_number)}</strong> was already approved on ${new Date(quote.approved_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}. Our team will be in touch shortly.`, true));
   }
 
   if (new Date(quote.expires_at) < new Date()) {
@@ -93,7 +102,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     .setHeader('Content-Type', 'text/html')
     .send(htmlPage(
       'Quote Approved!',
-      `Thank you! Your quote for <strong>${quote.wo_number}</strong> ($${Number(quote.grand_total).toFixed(2)}) has been approved. Our team will schedule your service and contact you shortly.`,
+      `Thank you! Your quote for <strong>${escapeHtml(quote.wo_number)}</strong> ($${Number(quote.grand_total).toFixed(2)}) has been approved. Our team will schedule your service and contact you shortly.`,
       true
     ));
 }

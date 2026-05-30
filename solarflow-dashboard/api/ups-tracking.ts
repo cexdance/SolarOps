@@ -10,6 +10,7 @@
  * Mock implementation for MVP — can be upgraded to real UPS API later
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { requireUser } from './_auth';
 
 export interface UPSTrackingResponse {
   status: 'pending' | 'delivered' | 'error';
@@ -32,6 +33,8 @@ export default async function handler(
       message: 'Method not allowed. Use POST.'
     });
   }
+
+  if (!(await requireUser(req, res))) return;
 
   const { trackingNumber } = req.body as { trackingNumber?: string };
 

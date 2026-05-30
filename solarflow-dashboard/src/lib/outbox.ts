@@ -26,9 +26,24 @@ const POISON_KEY  = 'solarops_poisoned_rows_v1';
 const POISON_THRESHOLD = 3;
 
 interface PendingPush {
-  queuedAt: string;   // ISO — when the first failure was recorded
-  attempts: number;   // consecutive failure count
-  lastError?: string; // last error message for debugging
+  queuedAt: string;       // ISO — when the first failure was recorded
+  attempts: number;       // consecutive failure count
+  lastError?: string;     // last error message for debugging
+  lastAttemptAt?: string; // ISO — when the most recent failure was recorded
+}
+
+// Auto-recovery backoff: instead of permanently locking after a burst of
+// failures, drainOutbox waits an exponentially growing (but capped) interval
+// between retries. This keeps a deadlocked outbox retrying on its own even when
+// the device stays online, while avoiding hammering a failing backend.
+const BACKOFF_BASE_MS = 5_000;       // first retry waits ~5s
+const BACKOFF_MAX_MS  = 5 * 60_000;  // never wait longer than 5 minutes
+
+/** Backoff delay before the next retry, given the consecutive-failure count. */
+function backoffDelayMs(attempts: number): number {
+  if (attempts <= 0) return 0;
+  const delay = BACKOFF_BASE_MS * 2 ** (attempts - 1);
+  return Math.min(delay, BACKOFF_MAX_MS);
 }
 
 interface PoisonEntry {
@@ -155,9 +170,10 @@ export function markPushPending(error?: string): void {
   try {
     const existing = get();
     save({
-      queuedAt:  existing?.queuedAt ?? new Date().toISOString(),
-      attempts:  (existing?.attempts ?? 0) + 1,
-      lastError: error,
+      queuedAt:      existing?.queuedAt ?? new Date().toISOString(),
+      attempts:      (existing?.attempts ?? 0) + 1,
+      lastError:     error,
+      lastAttemptAt: new Date().toISOString(),
     });
   } catch (err) {
     console.warn('[Outbox] Error marking push pending:', err);
@@ -204,11 +220,16 @@ export async function drainOutbox(): Promise<boolean> {
   const pending = get();
   if (!pending) return true;       // nothing pending — already in sync
   if (!navigator.onLine) return false;  // wait for 'online' event
-  if (pending.attempts > 8) {
-    // Persistent failure — skip drain until user action forces a retry.
-    // The UI SyncStatusIndicator will show the warning.
-    console.warn('[Outbox] Too many consecutive failures, skipping drain until user action');
-    return false;
+
+  // Auto-recovery: after repeated failures, wait out an exponential backoff
+  // before the next attempt rather than locking permanently. Once the backoff
+  // window elapses we retry on our own, no user action required.
+  if (pending.attempts > 0 && pending.lastAttemptAt) {
+    const waited = Date.now() - new Date(pending.lastAttemptAt).getTime();
+    const required = backoffDelayMs(pending.attempts);
+    if (waited < required) {
+      return false; // still backing off — the next drain cycle will retry
+    }
   }
 
   try {

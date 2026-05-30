@@ -9,6 +9,7 @@
 import { AppState, Customer, Job, User, ClientStatus, CustomerCategory } from '../types';
 import { mergedCustomerData } from './mergedCustomers';
 import { dbSet } from './db';
+import { authedFetch } from './supabase';
 import { isAllowedCustomer } from './solarEdgeSiteFilter';
 
 const STORAGE_KEY = 'solarflow_data';
@@ -347,10 +348,16 @@ export const saveData = (state: AppState): void => {
       // Stripping ALL woPhotos was the root cause: pullAndMerge reads localStorage, so if
       // the Supabase write hadn't landed yet the merge returned a job without photos and
       // the 500ms debounced save then pushed that stale job back, permanently deleting photos.
+      // ST-3: keep in-flight photos so a reload before the upload finishes does
+      // not lose them. A photo's binary is recoverable elsewhere only when it is
+      // uploaded (storageUrl) or persisted to IndexedDB (photoStoreId); for those
+      // we drop the heavy inline base64. In-flight photos (neither) keep dataUrl.
       woPhotos: j.woPhotos?.length
-        ? j.woPhotos
-            .filter(p => p.storageUrl)       // keep only successfully-uploaded photos
-            .map(p => ({ ...p, dataUrl: '' })) // strip the inline base64 preview
+        ? j.woPhotos.map(p =>
+            (p.storageUrl || p.photoStoreId)
+              ? { ...p, dataUrl: '' } // durable elsewhere — safe to strip base64
+              : p                      // in-flight — keep dataUrl so it survives reload
+          )
         : undefined as any,
     })),
   };
@@ -418,7 +425,7 @@ export const syncPowerCareDeliveryStatus = async (customer: Customer): Promise<v
 
   try {
     // Call UPS tracking API
-    const response = await fetch('/api/ups-tracking', {
+    const response = await authedFetch('/api/ups-tracking', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ trackingNumber: customer.powerCareTrackingNumber }),

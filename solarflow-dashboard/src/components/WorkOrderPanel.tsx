@@ -1231,6 +1231,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
         const woLabel = partialJob.woNumber ?? job?.woNumber ?? 'Work Order';
         fireMentionNotifications({
           mentionedUserIds: mentionedIds,
+          mentionedUserEmails: parseMentionEmails(allText, users as (MentionUser & { email?: string })[]),
           notifierName: currentUserName || 'Staff',
           context: `${siteName} — ${woLabel}`,
           contextId: siteId,
@@ -1245,15 +1246,19 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
     const isNowCompleted =
       effectiveWoStatus === 'completed' && job?.woStatus !== 'completed';
     if (isNowCompleted && users.length > 0) {
-      const distIds = users
+      const distUsers = users
         .filter(u => SOW_DISTRIBUTION_NAMES.some(name =>
           u.name.toLowerCase().includes(name.split(' ')[0].toLowerCase())
-        ))
-        .map(u => u.id);
+        ));
+      const distIds = distUsers.map(u => u.id);
+      const distEmails = distUsers
+        .map(u => (u as MentionUser & { email?: string }).email)
+        .filter((e): e is string => !!e);
       const woLabel = partialJob.woNumber ?? job?.woNumber ?? 'Work Order';
       if (distIds.length > 0) {
         fireMentionNotifications({
           mentionedUserIds: distIds,
+          mentionedUserEmails: distEmails,
           notifierName: currentUserName || 'Staff',
           context: `${siteName} — ${woLabel}`,
           contextId: siteId,

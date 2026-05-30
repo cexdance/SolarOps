@@ -1,7 +1,11 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { requireUser } from './_auth';
 
 // Proxy for all Xero API calls — strips /api/xero-api prefix and forwards to api.xero.com
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  // Authorization carries the Xero token; the app session JWT travels separately.
+  if (!(await requireUser(req, res, 'x-solar-auth'))) return;
+
   const auth = req.headers.authorization;
   if (!auth) return res.status(401).json({ error: 'Unauthorized' });
 

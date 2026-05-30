@@ -6,6 +6,7 @@
 //  3. Copy the Client ID into Settings → Integrations → Xero
 
 import { Job, Customer } from '../types';
+import { authedFetch, getAccessToken } from './supabase';
 
 // ── Storage keys ─────────────────────────────────────────────────────────────
 
@@ -141,7 +142,7 @@ export async function handleXeroCallback(code: string): Promise<{ orgName: strin
   };
   if (clientSecret) params.client_secret = clientSecret;
 
-  const resp = await fetch(XERO_TOKEN_URL, {
+  const resp = await authedFetch(XERO_TOKEN_URL, {
     method:  'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams(params),
@@ -161,7 +162,10 @@ export async function handleXeroCallback(code: string): Promise<{ orgName: strin
   let tenantId = '';
   try {
     const connResp = await fetch(XERO_CONN_URL, {
-      headers: { Authorization: `Bearer ${tokenData.access_token}` },
+      headers: {
+        Authorization: `Bearer ${tokenData.access_token}`,
+        'x-solar-auth': await getAccessToken(),
+      },
     });
     if (connResp.ok) {
       const connections = await connResp.json();
@@ -199,7 +203,7 @@ async function getValidAccessToken(): Promise<string> {
   };
   if (clientSecret) params.client_secret = clientSecret;
 
-  const resp = await fetch(XERO_TOKEN_URL, {
+  const resp = await authedFetch(XERO_TOKEN_URL, {
     method:  'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams(params),
@@ -256,6 +260,7 @@ export async function createXeroInvoice(request: XeroInvoiceRequest): Promise<Xe
       method:  'POST',
       headers: {
         Authorization:    `Bearer ${accessToken}`,
+        'x-solar-auth':   await getAccessToken(),
         'xero-tenant-id': tenantId,
         'Content-Type':   'application/json',
         Accept:           'application/json',
@@ -332,6 +337,7 @@ export async function createXeroQuote(request: XeroQuoteRequest): Promise<XeroQu
       method: 'POST',
       headers: {
         Authorization: `Bearer ${accessToken}`,
+        'x-solar-auth': await getAccessToken(),
         'xero-tenant-id': tenantId,
         'Content-Type': 'application/json',
         Accept: 'application/json',
@@ -392,6 +398,7 @@ export const xeroApi = {
         method:  'POST',
         headers: {
           Authorization:    `Bearer ${accessToken}`,
+          'x-solar-auth':   await getAccessToken(),
           'xero-tenant-id': tenantId,
           'Content-Type':   'application/json',
           Accept:           'application/json',

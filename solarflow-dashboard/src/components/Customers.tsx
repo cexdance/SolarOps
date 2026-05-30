@@ -1,5 +1,6 @@
 // SolarFlow MVP - Customers Component (List View with Split Panel)
 import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { authedFetch } from '../lib/supabase';
 import {
   Plus,
   Search,
@@ -278,7 +279,7 @@ export const Customers: React.FC<CustomersProps> = ({
       const newOverrides = new Map<string, { count: number; impact: string }>();
       const keyParam = solarEdgeApiKey ? `&api_key=${encodeURIComponent(solarEdgeApiKey)}` : '';
       while (true) {
-        const res = await fetch(`/api/solaredge?path=/sites/list&size=${pageSize}&startIndex=${page * pageSize}&bust=${Date.now()}${keyParam}`);
+        const res = await authedFetch(`/api/solaredge?path=/sites/list&size=${pageSize}&startIndex=${page * pageSize}&bust=${Date.now()}${keyParam}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json() as { sites?: { site?: { id: number; alertQuantity?: number; highestImpact?: number }[] } };
         const sites = data?.sites?.site ?? [];
@@ -1369,7 +1370,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
     if (!apiKey) return;
 
     // Overview: lifetime / year / month / today kWh
-    fetch(`/api/solaredge?path=/site/${siteId}/overview&api_key=${encodeURIComponent(apiKey)}`)
+    authedFetch(`/api/solaredge?path=/site/${siteId}/overview&api_key=${encodeURIComponent(apiKey)}`)
       .then(r => r.ok ? r.json() : null)
       .then(json => {
         if (!json || json.error) return;
@@ -1384,7 +1385,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
       .catch(() => {});
 
     // Details: peak power (kW)
-    fetch(`/api/solaredge?path=/site/${siteId}/details&api_key=${encodeURIComponent(apiKey)}`)
+    authedFetch(`/api/solaredge?path=/site/${siteId}/details&api_key=${encodeURIComponent(apiKey)}`)
       .then(r => r.ok ? r.json() : null)
       .then(json => {
         if (!json || json.error) return;
@@ -1476,7 +1477,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
         }
         const endDate = now.toISOString().slice(0, 10);
 
-        const resp = await fetch(
+        const resp = await authedFetch(
           `/api/solaredge?path=/site/${siteId}/energy&startDate=${startDate}&endDate=${endDate}&timeUnit=${timeUnit}&api_key=${encodeURIComponent(apiKey)}`
         );
         if (resp.ok) {
@@ -5343,7 +5344,7 @@ const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({ onClose, onCr
       const [header, imageBase64] = screenshotPreview.split(',');
       const mimeType = header.match(/data:([^;]+);/)?.[1] ?? 'image/jpeg';
 
-      const resp = await fetch('/api/parse-lead-image', {
+      const resp = await authedFetch('/api/parse-lead-image', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ imageBase64, mimeType }),

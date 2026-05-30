@@ -12,8 +12,21 @@
  *   - /sites/list: 6 hours               — rarely changes
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { requireUser } from './_auth';
 
 const SOLAREDGE_BASE = 'https://monitoringapi.solaredge.com';
+
+// Only these SolarEdge path prefixes may be proxied. Prevents the `path` query
+// param from being used to reach arbitrary hosts/paths (SSRF) or escape the base.
+const ALLOWED_PATH_PREFIXES = ['/sites', '/site/', '/version', '/equipment'];
+
+function isAllowedPath(path: string): boolean {
+  // Reject anything that could break out of the base URL or smuggle a host.
+  if (!path.startsWith('/')) return false;
+  if (path.includes('..') || path.includes('//') || path.includes('@')) return false;
+  if (path.includes('://')) return false;
+  return ALLOWED_PATH_PREFIXES.some(p => path === p || path.startsWith(p));
+}
 
 // Cache durations by endpoint pattern (seconds)
 function getCacheDuration(path: string): number {
@@ -28,6 +41,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  if (!(await requireUser(req, res))) return;
+
   // Use server env var first; fall back to client-supplied key (stored in app Settings)
   const apiKey = process.env.SOLAREDGE_API_KEY || (req.query['api_key'] as string);
   if (!apiKey) {
@@ -37,6 +52,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const { path = '/sites/list', ...queryParams } = req.query as Record<string, string>;
+
+  if (!isAllowedPath(path)) {
+    return res.status(400).json({ error: 'Unsupported SolarEdge path' });
+  }
 
   // Build upstream query string — inject api_key server-side, strip client's copy
   const params = new URLSearchParams();

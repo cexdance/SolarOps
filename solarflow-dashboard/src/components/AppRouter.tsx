@@ -211,7 +211,7 @@ export function AppRouter({
             clientPaidJobCount={clientPaidCount}
             contractors={contractors}
             technicians={data.users.filter(u => u.role === 'technician' || u.role === 'coo').map(u => ({ id: u.id, name: u.name }))}
-            users={data.users.map(u => ({ id: u.id, name: u.name, username: u.username }))}
+            users={data.users.map(u => ({ id: u.id, name: u.name, username: u.username, email: u.email }))}
             currentUserName={currentUser?.name}
             currentUserRole={currentUser?.role}
             customer={selectedCustomer}

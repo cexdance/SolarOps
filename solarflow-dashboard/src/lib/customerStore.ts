@@ -2,8 +2,7 @@
 // Source: Trello "SOLAREDGE LEADS (Servicios)" — Conexsol Funnel strategyn
 // Regenerate with: npx tsx scripts/import_from_trello.mts
 
-import { CRMCustomer, CustomerInteraction, CRMAttachment, CustomerStatus, LeadSource, InteractionType, InteractionOutcome } from '../types';
-import { trelloCustomers, trelloInteractions } from './trelloImport';
+import { CRMCustomer, CustomerInteraction } from '../types';
 import { dbSet } from './db';
 
 const CUSTOMER_STORAGE_KEY = 'solarflow_customers';
@@ -11,54 +10,16 @@ const INTERACTIONS_STORAGE_KEY = 'solarflow_interactions';
 const TRELLO_DATA_VERSION = '2026-03-29-trello-import';
 const TRELLO_VERSION_KEY = 'solarflow_crm_version';
 
-// ── Convert Trello data → CRMCustomer / CustomerInteraction ─────────────────
-
-// Deduplicate by trelloCardId (some cards appear twice)
-const seen = new Set<string>();
-const uniqueTrelloCustomers = trelloCustomers.filter(c => {
-  if (seen.has(c.trelloCardId)) return false;
-  seen.add(c.trelloCardId);
-  return true;
-});
-
-export const initialCustomers: CRMCustomer[] = uniqueTrelloCustomers.map((c, i) => ({
-  id: `trello-${c.trelloCardId}`,
-  firstName: c.firstName || '',
-  lastName: c.lastName || '',
-  email: c.email || '',
-  phone: c.phone || '',
-  address: c.address || '',
-  city: c.city || '',
-  state: c.state || 'FL',
-  zip: c.zip || '',
-  status: c.status as CustomerStatus,
-  source: 'solaredge' as LeadSource,
-  notes: c.notes || '',
-  tags: c.tags || [],
-  createdAt: c.createdAt,
-  updatedAt: c.updatedAt,
-  attachments: c.attachments.map(a => ({
-    id: a.id,
-    name: a.name,
-    // Store Trello URL in dataUrl — rendered as external link in the UI
-    dataUrl: a.url,
-    mimeType: a.mimeType,
-    size: a.size,
-    createdAt: a.createdAt,
-  } as CRMAttachment)),
-}));
-
-export const initialInteractions: CustomerInteraction[] = trelloInteractions.map(i => ({
-  id: i.id,
-  customerId: `trello-${i.trelloCardId}`,
-  type: 'note' as InteractionType,
-  direction: 'inbound' as const,
-  content: i.content,
-  userId: i.userId,
-  userName: i.userName,
-  timestamp: i.timestamp,
-  createdAt: i.createdAt,
-}));
+// ── Seed data (SEC-12) ──────────────────────────────────────────────────────
+// The original Trello import (src/lib/trelloImport.ts, ~1.1MB) held 292 real
+// customers' names, emails, phones and addresses. Importing it here shipped all
+// of that PII to every browser in the JS bundle. The org was already seeded into
+// Supabase on 2026-03-29, so authenticated clients hydrate customers from the
+// cloud via the sync engine — the bundled copy is no longer needed at runtime.
+// Defaulting to empty keeps the PII out of the client bundle entirely.
+// To re-seed, run the server-side script: npx tsx scripts/import_from_trello.mts
+export const initialCustomers: CRMCustomer[] = [];
+export const initialInteractions: CustomerInteraction[] = [];
 
 // ── Load / Save with version-based cache busting ─────────────────────────────
 

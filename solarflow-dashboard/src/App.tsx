@@ -30,7 +30,8 @@ const SolarEdgeMonitoring = lazy(() => import('./components/SolarEdgeMonitoring'
 const DispatchDashboard  = lazy(() => import('./components/DispatchDashboard').then(m => ({ default: m.DispatchDashboard })));
 const LeadLobby          = lazy(() => import('./components/LeadLobby').then(m => ({ default: m.LeadLobby })));
 const RMADashboardPage   = lazy(() => import('./components/RMADashboard').then(m => ({ default: m.RMADashboard })));
-import { supabase } from './lib/supabase';
+import { supabase, authedFetch } from './lib/supabase';
+import { canSeeFinancials, isFinancialView } from './lib/access';
 import { syncFromDB } from './lib/db';
 import { loadData, saveData } from './lib/dataStore';
 import { migrateWoPhotos } from './lib/photoStore';
@@ -1553,7 +1554,7 @@ function App() {
 
       while (true) {
         const url = `/api/solaredge?path=/sites/list&size=${SE_PAGE}&startIndex=${seStartIndex}&api_key=${encodeURIComponent(apiKey)}`;
-        const response = await fetch(url);
+        const response = await authedFetch(url);
 
         if (!response.ok) {
           // Try to extract a JSON error body from the proxy
@@ -1714,7 +1715,7 @@ function App() {
     let all: any[] = [];
     let totalCount = 0;
     while (true) {
-      const response = await fetch(
+      const response = await authedFetch(
         `/api/solaredge?path=/sites/list&size=${PAGE}&startIndex=${startIndex}&api_key=${encodeURIComponent(apiKey)}`
       );
       if (!response.ok) {
@@ -2103,6 +2104,24 @@ function App() {
     // Sales reps can only access crm, customers2, and lobby
     if (currentUser?.role === 'sales' && !['crm', 'customers2', 'lobby'].includes(currentView)) {
       return <CRMDashboard currentUserId={data.currentUser?.id || 'user-1'} />;
+    }
+
+    // Financial views are admin-only — block direct/programmatic access by staff
+    if (isFinancialView(currentView) && !canSeeFinancials(currentUser?.role)) {
+      return (
+        <div className="p-6 max-w-md mx-auto text-center">
+          <h2 className="text-lg font-semibold text-slate-900 mb-2">Restricted</h2>
+          <p className="text-sm text-slate-600 mb-4">
+            Financial views are available to administrators only.
+          </p>
+          <button
+            onClick={() => setCurrentView('dashboard')}
+            className="px-4 py-2 bg-orange-500 text-white rounded-lg text-sm font-medium"
+          >
+            Back to Dashboard
+          </button>
+        </div>
+      );
     }
 
     switch (currentView) {
@@ -2531,7 +2550,7 @@ function App() {
 
   return (
     <Suspense fallback={<div className="min-h-screen bg-slate-50 flex items-center justify-center"><div className="w-8 h-8 border-4 border-orange-400 border-t-transparent rounded-full animate-spin" /></div>}>
-      <StorageWarningBanner />
+      <StorageWarningBanner getSnapshot={() => data} />
       <Layout
         currentView={currentView}
         onViewChange={handleViewChange}

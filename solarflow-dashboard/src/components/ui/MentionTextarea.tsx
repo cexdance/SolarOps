@@ -5,6 +5,7 @@ export interface MentionUser {
   id: string;
   name: string;
   username?: string;
+  email?: string;
 }
 
 interface Props {

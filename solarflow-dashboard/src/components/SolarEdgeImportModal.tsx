@@ -3,6 +3,7 @@
 // user accept/reject each individual change before applying.
 
 import React, { useState, useEffect, useMemo } from 'react';
+import { authedFetch } from '../lib/supabase';
 import {
   X, RefreshCw, CheckSquare, Square, AlertTriangle,
   Plus, Edit2, Trash2, Check, ChevronDown, ChevronUp, Loader2, Search,
@@ -64,7 +65,7 @@ async function fetchAllSites(apiKey?: string): Promise<LiveSite[]> {
     // Server-side proxy uses SOLAREDGE_API_KEY env var by default; client key is optional override
     const params = new URLSearchParams({ path: '/sites/list', size: String(PAGE), startIndex: String(start) });
     if (apiKey) params.set('api_key', apiKey);
-    const res = await fetch(`/api/solaredge?${params}`);
+    const res = await authedFetch(`/api/solaredge?${params}`);
     if (!res.ok) throw new Error(`SolarEdge API error ${res.status}`);
     const json = await res.json();
     if (json.errors) throw new Error(json.errors?.error?.[0]?.message || 'API error');

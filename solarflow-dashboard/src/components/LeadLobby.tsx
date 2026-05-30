@@ -1,6 +1,7 @@
 // SolarOps — Lead Lobby
 // Triage view: all incoming leads land here; admins route, sales reps contact/note
 import React, { useState, useMemo, useRef } from 'react';
+import { authedFetch } from '../lib/supabase';
 import * as XLSX from 'xlsx';
 import {
   Inbox, Phone, Mail, Plus, Search, ArrowRight, Tag, X, User,
@@ -494,7 +495,7 @@ export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserId, currentUser
     try {
       const [header, imageBase64] = ssPreview.split(',');
       const mimeType = header.match(/data:([^;]+);/)?.[1] ?? 'image/jpeg';
-      const resp = await fetch('/api/parse-lead-image', {
+      const resp = await authedFetch('/api/parse-lead-image', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ imageBase64, mimeType }),

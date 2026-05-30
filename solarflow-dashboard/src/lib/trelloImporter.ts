@@ -3,6 +3,7 @@
 // Uses backend proxy (/api/trello-card.ts) for secure server-side API calls.
 
 import { Activity, Customer, CustomerFile } from '../types';
+import { authedFetch } from './supabase';
 
 export interface TrelloAttachment {
   name: string;
@@ -42,7 +43,7 @@ export async function fetchTrelloCard(urlOrId: string): Promise<TrelloCardData> 
   // Use backend proxy to avoid CORS issues + keep credentials secure
   const url = `/api/trello-card?cardId=${encodeURIComponent(urlOrId)}`;
 
-  const res = await fetch(url);
+  const res = await authedFetch(url);
   if (!res.ok) {
     const body = await res.text().catch(() => '');
     throw new Error(`Trello API error ${res.status}: ${body || res.statusText}`);

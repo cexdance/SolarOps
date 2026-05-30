@@ -3,6 +3,17 @@
 
 ---
 
+## 0. Writing Style Rules
+
+**MANDATORY for all Claude output in this project:**
+
+- **No em dashes.** Never use `—` (em dash) in any output. Replace with a comma, colon, period, or rewrite the sentence. No exceptions: not in documents, reports, UI copy, code comments, or chat responses.
+- **No en dashes** (`–`) as separators. Use a hyphen (`-`) for ranges or rewrite.
+- Keep sentences short and direct.
+- **No emojis.** Never use emojis in any output. No exceptions: not in documents, reports, UI labels, code comments, chat responses, or generated files.
+
+---
+
 ## 1. Brand Identity
 
 **Product Name:** SolarOps (ConexSol SolarOps Platform)  

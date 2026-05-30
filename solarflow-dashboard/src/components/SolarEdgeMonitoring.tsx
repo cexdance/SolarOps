@@ -1,5 +1,6 @@
 // SolarEdge Monitoring — Florida Sites Table
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { authedFetch } from '../lib/supabase';
 import {
   Sun,
   AlertTriangle,
@@ -279,7 +280,7 @@ export const SolarEdgeMonitoring: React.FC<Props> = ({
       let page = 0;
       const newOverrides = new Map<string, { count: number; impact: string }>();
       while (true) {
-        const res = await fetch(`/api/solaredge?path=/sites/list&size=${pageSize}&startIndex=${page * pageSize}${bust}${keyParam}`);
+        const res = await authedFetch(`/api/solaredge?path=/sites/list&size=${pageSize}&startIndex=${page * pageSize}${bust}${keyParam}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json() as { sites?: { site?: { id: number; alertQuantity?: number; highestImpact?: number }[] } };
         const sites = data?.sites?.site ?? [];
@@ -326,7 +327,7 @@ export const SolarEdgeMonitoring: React.FC<Props> = ({
       // Fetch equipment/inverter details for all sites
       for (const site of ALL_SITES.slice(0, 20)) { // Limit to first 20 sites to preserve quota
         try {
-          const res = await fetch(`/api/solaredge?path=/site/${site.siteId}/equipment${keyParam}`);
+          const res = await authedFetch(`/api/solaredge?path=/site/${site.siteId}/equipment${keyParam}`);
           if (res.ok) successCount++;
           else failCount++;
         } catch {
