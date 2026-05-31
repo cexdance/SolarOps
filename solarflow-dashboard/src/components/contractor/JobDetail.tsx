@@ -1428,6 +1428,49 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
               <p className="text-xs text-slate-400 text-center">Payment processed after accounting review</p>
             </div>
 
+            {/* Add Photos (post-completion) */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-slate-900 flex items-center gap-2">
+                  <Camera className="w-4 h-4 text-orange-500" />
+                  Photos
+                </h3>
+                <select
+                  value={activePhotoTab}
+                  onChange={e => setActivePhotoTab(e.target.value as PhotoCategory)}
+                  className="text-xs px-2 py-1 border border-slate-200 rounded-lg bg-white"
+                >
+                  {photoTabs.map(t => (
+                    <option key={t.id} value={t.id}>{t.label}{(photos[t.id]?.length ?? 0) > 0 ? ` (${photos[t.id].length})` : ''}</option>
+                  ))}
+                </select>
+              </div>
+              {uploadError && (
+                <div className="flex items-start gap-2 rounded-xl bg-red-50 border border-red-200 px-3 py-2">
+                  <AlertTriangle className="w-4 h-4 text-red-500 mt-0.5 shrink-0" />
+                  <p className="text-xs text-red-700 font-medium">{uploadError}</p>
+                  <button onClick={() => setUploadError(null)} className="ml-auto shrink-0 text-red-400 hover:text-red-600"><X className="w-3.5 h-3.5" /></button>
+                </div>
+              )}
+              {(photos[activePhotoTab]?.length ?? 0) > 0 && (
+                <div className="grid grid-cols-3 gap-2">
+                  {photos[activePhotoTab].map((src, i) => (
+                    <div key={i} className="relative aspect-square rounded-xl overflow-hidden bg-slate-100">
+                      <img src={src} alt="" className="w-full h-full object-cover" />
+                    </div>
+                  ))}
+                </div>
+              )}
+              <button
+                onClick={() => setShowPhotoSourceSheet(true)}
+                className="w-full flex items-center justify-center gap-2 py-3 border-2 border-dashed border-slate-200 rounded-xl text-slate-500 text-sm hover:border-orange-300 hover:text-orange-500 transition-colors cursor-pointer"
+              >
+                <Camera className="w-4 h-4" />
+                Add Photo
+              </button>
+              <p className="text-xs text-slate-400 text-center">Photos added here sync automatically</p>
+            </div>
+
             {/* Google Review CTA */}
             <div className="bg-white rounded-2xl border border-slate-200 p-4">
               <div className="flex items-center gap-2 mb-3">

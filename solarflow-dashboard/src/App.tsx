@@ -1032,9 +1032,13 @@ function App() {
     // last-writer-wins instead of whole-blob clobber (CB-3).
     const updatedJob: ContractorJob = { ...incomingJob, updatedAt: new Date().toISOString() };
     // Persist contractorJobs synchronously so a fast reload doesn't drop the update.
-    const nextContractorJobs = contractorJobs.map(j =>
-      j.id === updatedJob.id ? updatedJob : j
+    // Match by id OR by sourceJobId so projected views (cj-view-*) still find their row.
+    const existingIdx = contractorJobs.findIndex(j =>
+      j.id === updatedJob.id || (updatedJob.sourceJobId && j.sourceJobId === updatedJob.sourceJobId)
     );
+    const nextContractorJobs = existingIdx >= 0
+      ? contractorJobs.map((j, i) => i === existingIdx ? updatedJob : j)
+      : [...contractorJobs, updatedJob];
     setContractorJobs(nextContractorJobs);
     saveContractorJobs(nextContractorJobs);
 
@@ -2099,7 +2103,7 @@ function App() {
         contractorName={currentContractor.contactName}
         contractorId={currentContractor.id}
         contractor={currentContractor}
-        jobs={pickupJobsForContractor(currentContractor.id, data.jobs).map(j => toContractorJobView(j))}
+        jobs={pickupJobsForContractor(currentContractor.id, data.jobs).map(j => toContractorJobView(j, contractorJobs.find(cj => cj.sourceJobId === j.id)))}
         onLogout={handleLogout}
         onUpdateJob={handleContractorJobUpdate}
         onUpdateContractor={(updated) => {
@@ -2457,7 +2461,7 @@ function App() {
               contractorName={linkedContractor.contactName}
               contractorId={linkedContractor.id}
               contractor={linkedContractor}
-              jobs={pickupJobsForContractor(linkedContractor.id, data.jobs).map(j => toContractorJobView(j))}
+              jobs={pickupJobsForContractor(linkedContractor.id, data.jobs).map(j => toContractorJobView(j, contractorJobs.find(cj => cj.sourceJobId === j.id)))}
               onLogout={() => setCurrentView('dashboard')}
               onUpdateJob={handleContractorJobUpdate}
               onUpdateContractor={(updated) => {

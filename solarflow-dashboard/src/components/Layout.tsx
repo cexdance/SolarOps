@@ -617,8 +617,8 @@ export const Layout: React.FC<LayoutProps> = ({
         {children}
       </main>
 
-      {/* Mobile Bottom Navigation */}
-      {isMobile && (
+      {/* Mobile Bottom Navigation - hidden when contractor dashboard is active */}
+      {isMobile && currentView !== 'my-jobs' && (
         <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 px-2 py-1 safe-area-pb">
           <div className="flex justify-around">
             {(role === 'sales' ? [

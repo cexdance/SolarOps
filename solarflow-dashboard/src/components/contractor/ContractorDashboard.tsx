@@ -5,7 +5,7 @@ import {
   Wrench, MapPin, Phone, Clock, CheckCircle,
   List, LogOut, Car, Check,
   LayoutGrid, Map, Plus, ChevronRight, X, AlertTriangle, Star,
-  Receipt, Timer,
+  Receipt, Timer, Filter,
 } from 'lucide-react';
 import { Contractor, ContractorJob, JobPriority, JobStatusContractor } from '../../types/contractor';
 import { Lead } from '../../types';
@@ -124,6 +124,7 @@ const COLUMNS: {
 ];
 
 type ViewMode = 'kanban' | 'map' | 'list' | 'billing';
+type StatusFilter = 'all' | JobStatusContractor;
 
 // ─── Billing kanban column config ─────────────────────────────────────────────
 const BILLING_COLUMNS: {
@@ -193,7 +194,8 @@ export const ContractorDashboard: React.FC<ContractorDashboardProps> = ({
   onUpdateJob,
   onUpdateContractor,
 }) => {
-  const [viewMode, setViewMode]         = useState<ViewMode>(() => window.innerWidth < 768 ? 'list' : 'kanban');
+  const [viewMode, setViewMode]         = useState<ViewMode>('list');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [openJob, setOpenJob]           = useState<ContractorJob | null>(null);
   const [xpData, setXpData]             = useState<ContractorXpData>(() => loadXpData(contractorId));
   const [showBadges, setShowBadges]     = useState(false);
@@ -243,6 +245,9 @@ export const ContractorDashboard: React.FC<ContractorDashboardProps> = ({
     return false;
   };
 
+  const filteredJobs  = statusFilter === 'all' ? jobs : jobs.filter(j =>
+    j.status === statusFilter || (statusFilter === 'in_progress' && j.status === 'documentation')
+  );
   const todaysJobs    = jobs.filter(j => j.scheduledDate === today);
   const routeJobs     = jobs.filter(j => j.status === 'en_route');
   const completedJobs = jobs.filter(j => j.status === 'completed');
@@ -610,26 +615,33 @@ export const ContractorDashboard: React.FC<ContractorDashboardProps> = ({
         </div>
       )}
 
-      {/* ── View Toggle ─────────────────────────────────────────────────────── */}
-      <div className="bg-white border-b border-slate-200 px-3 py-1.5 flex items-center gap-1 flex-shrink-0">
+      {/* ── Status Filter Bar ──────────────────────────────────────────────── */}
+      <div className="bg-white border-b border-slate-200 px-3 py-1.5 flex items-center gap-1.5 flex-shrink-0 overflow-x-auto">
+        <Filter className="w-4 h-4 text-slate-400 flex-shrink-0" />
         {([
-          { id: 'kanban',  icon: LayoutGrid, label: 'Board'   },
-          { id: 'map',     icon: Map,        label: 'Map'     },
-          { id: 'list',    icon: List,       label: 'List'    },
-          { id: 'billing', icon: Receipt,    label: 'Billing' },
-        ] as { id: ViewMode; icon: React.ElementType; label: string }[]).map(({ id, icon: Icon, label }) => (
-          <button
-            key={id}
-            onClick={() => setViewMode(id)}
-            className={`flex items-center gap-1.5 px-3 py-2.5 min-h-[44px] rounded-lg text-sm font-medium transition-colors cursor-pointer ${
-              viewMode === id ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-100'
-            }`}
-          >
-            <Icon className="w-4 h-4 flex-shrink-0" />
-            <span className="hidden sm:inline">{label}</span>
-          </button>
-        ))}
-        <span className="ml-auto text-xs text-slate-400 whitespace-nowrap">{jobs.length} WOs</span>
+          { id: 'all'         as StatusFilter, label: 'All'         },
+          { id: 'assigned'    as StatusFilter, label: 'Queue'       },
+          { id: 'en_route'    as StatusFilter, label: 'En Route'    },
+          { id: 'in_progress' as StatusFilter, label: 'In Progress' },
+          { id: 'completed'   as StatusFilter, label: 'Completed'   },
+          { id: 'on_hold'     as StatusFilter, label: 'On Hold'     },
+        ]).map(({ id, label }) => {
+          const count = id === 'all' ? jobs.length : jobs.filter(j => j.status === id || (id === 'in_progress' && j.status === 'documentation')).length;
+          return (
+            <button
+              key={id}
+              onClick={() => setStatusFilter(id)}
+              className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
+                statusFilter === id ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-100'
+              }`}
+            >
+              {label}
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+                statusFilter === id ? 'bg-white/20' : 'bg-slate-100'
+              }`}>{count}</span>
+            </button>
+          );
+        })}
       </div>
 
       {/* ── Toast ───────────────────────────────────────────────────────────── */}
@@ -858,13 +870,15 @@ export const ContractorDashboard: React.FC<ContractorDashboardProps> = ({
       {/* ── LIST ─────────────────────────────────────────────────────────────── */}
       {viewMode === 'list' && (
         <div className="flex-1 overflow-y-auto p-4 space-y-3">
-          {jobs.length === 0 ? (
+          {filteredJobs.length === 0 ? (
             <div className="text-center py-16">
               <Wrench className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-              <p className="text-slate-500 font-medium">No work orders assigned</p>
+              <p className="text-slate-500 font-medium">
+                {statusFilter !== 'all' ? 'No work orders match this filter' : 'No work orders assigned'}
+              </p>
             </div>
           ) : (
-            [...jobs]
+            [...filteredJobs]
               .sort((a, b) => {
                 const ord: Record<JobPriority, number> = { critical: 0, high: 1, normal: 2, low: 3 };
                 return ord[a.priority] - ord[b.priority] ||
