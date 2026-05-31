@@ -836,14 +836,7 @@ function App() {
         // Flush any change log entries that were queued while offline
         flushChangeLog().catch(() => {});
         // Load Supabase notifications, start polling + Realtime sub for instant delivery
-        fetchMyNotifications().then(notifs => {
-          if (notifs.length > 0) mergeRemoteNotifications(notifs);
-        });
-        startNotificationPolling(mergeRemoteNotifications);
-        // Realtime: new mention notifications appear in the bell instantly
-        subscribeToNotifications(user.id, (notif) => {
-          mergeRemoteNotifications([notif]);
-        });
+        setupNotifications(user.id);
         // Restore dual-role contractor link on session resume
         const linked = findLinkedContractor(loadContractors(), user.email);
         if (linked) setLinkedContractor(linked);
@@ -932,6 +925,8 @@ function App() {
         }),
       }));
     });
+    // Wire up the bell on fresh login (resume path does this separately).
+    setupNotifications(user.id);
     if (user.role === 'sales') {
       setCurrentView('crm');
     }
@@ -991,6 +986,19 @@ function App() {
       });
       if (newOnes.length === 0 && updated.every((n, i) => n === prev.notifications[i])) return prev;
       return { ...prev, notifications: [...newOnes, ...updated] };
+    });
+  };
+
+  // Wire up the bell: initial fetch, 5-min poll, and Realtime INSERT subscription.
+  // Both idempotent helpers reset prior state, so this is safe to call on every
+  // login (fresh or session resume).
+  const setupNotifications = (userId: string) => {
+    fetchMyNotifications().then(notifs => {
+      if (notifs.length > 0) mergeRemoteNotifications(notifs);
+    });
+    startNotificationPolling(mergeRemoteNotifications);
+    subscribeToNotifications(userId, (notif) => {
+      mergeRemoteNotifications([notif]);
     });
   };
 
