@@ -338,6 +338,10 @@ export interface ContractorJob {
   payRate: number;
   payUnit: 'hour' | 'flat';
   totalPay: number;
+
+  // Sync metadata — stamped on every contractor-side edit so cross-device
+  // merges can resolve conflicts last-writer-wins instead of whole-blob clobber.
+  updatedAt?: string;
 }
 
 // Registration wizard step types

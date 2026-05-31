@@ -1,6 +1,6 @@
 // SolarFlow - Job Detail / Active Call Flow
 // Flow: Pre-Start → [Before Photo Modal] → Active Call → [After Photo Modal] → Completed
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import {
   ArrowLeft, MapPin, Phone, Clock, AlertTriangle, AlertCircle,
   Play, Pause, Camera, CheckCircle, Package, FileText, Send, X, Plus,
@@ -355,6 +355,56 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
   const removePhoto = (category: PhotoCategory, idx: number) => {
     setPhotos(prev => ({ ...prev, [category]: (prev[category] ?? []).filter((_,i) => i !== idx) }));
   };
+
+  // ── Durable upload retry (CB-2) ───────────────────────────────────────────
+  // A failed upload leaves the base64 dataUrl in state so the photo is never
+  // lost locally. This sweeps any leftover dataUrls and re-uploads them to
+  // Storage, swapping in the permanent URL on success. Runs on mount and
+  // whenever the device comes back online, so a field connectivity drop no
+  // longer permanently strands a photo as base64.
+  const retryInFlight = useRef(false);
+  const retryPendingPhotoUploads = useCallback(async () => {
+    if (retryInFlight.current) return;
+    if (!navigator.onLine) return;
+    // Collect every base64 photo still awaiting upload.
+    const stranded: { category: PhotoCategory; dataUrl: string }[] = [];
+    for (const [cat, urls] of Object.entries(photos)) {
+      for (const u of (urls ?? [])) {
+        if (typeof u === 'string' && u.startsWith('data:')) {
+          stranded.push({ category: cat as PhotoCategory, dataUrl: u });
+        }
+      }
+    }
+    if (stranded.length === 0) return;
+
+    retryInFlight.current = true;
+    try {
+      for (const { category, dataUrl } of stranded) {
+        const photoId = `ph-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+        try {
+          const blob = await (await fetch(dataUrl)).blob();
+          const result = await uploadPhotoToStorage(blob, job.id, photoId);
+          if (result.url) {
+            setPhotos(prev => ({
+              ...prev,
+              [category]: (prev[category] ?? []).map(p => p === dataUrl ? result.url! : p),
+            }));
+          }
+        } catch {
+          // Leave the dataUrl in place; a later retry (next online event) handles it.
+        }
+      }
+    } finally {
+      retryInFlight.current = false;
+    }
+  }, [photos, job.id]);
+
+  useEffect(() => {
+    retryPendingPhotoUploads();
+    const onOnline = () => { retryPendingPhotoUploads(); };
+    window.addEventListener('online', onOnline);
+    return () => window.removeEventListener('online', onOnline);
+  }, [retryPendingPhotoUploads]);
 
   const handleAdditionalPhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -1519,7 +1569,7 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
       </div>
 
       {/* ── Fixed bottom CTAs ──────────────────────────────────────────────── */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 px-4 py-3 pb-safe">
+      <div className="fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-slate-200 px-4 py-3 pb-safe">
         {phase === 'pre_start' && (
           <button
             onClick={handleStartCall}

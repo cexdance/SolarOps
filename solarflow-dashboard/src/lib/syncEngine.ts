@@ -150,6 +150,98 @@ function sanitizeContractorJobsPayload(jobs: unknown): unknown {
   });
 }
 
+/** Photo categories on a ContractorJob.photos object. Union is taken per category
+ *  so a merge never drops a photo that only one side has. */
+type PhotoMap = Record<string, string[]>;
+
+function unionPhotos(a: PhotoMap | undefined, b: PhotoMap | undefined): PhotoMap {
+  const out: PhotoMap = {};
+  const cats = new Set([...Object.keys(a ?? {}), ...Object.keys(b ?? {})]);
+  for (const cat of cats) {
+    const merged = [...(a?.[cat] ?? []), ...(b?.[cat] ?? [])]
+      .filter((u): u is string => typeof u === 'string' && u.length > 0);
+    // De-dup while preserving order.
+    out[cat] = Array.from(new Set(merged));
+  }
+  return out;
+}
+
+type CJobLike = {
+  id: string;
+  sourceJobId?: string;
+  updatedAt?: string;
+  assignedAt?: string;
+  photos?: PhotoMap;
+  [k: string]: unknown;
+};
+
+function cjTime(j: CJobLike): string {
+  return j.updatedAt ?? j.assignedAt ?? '';
+}
+
+/**
+ * Per-record merge for the contractor_jobs blob.
+ *
+ * - Merge by job id. On conflict, the newer record wins (LWW by updatedAt, then
+ *   assignedAt), but photos are always unioned per category so neither side's
+ *   uploads are lost regardless of which record wins on time (CB-3).
+ * - Records present on only one side are kept (never drop a job).
+ * - After the id merge, collapse duplicate jobs that point at the same
+ *   sourceJobId, keeping the newest and unioning their photos (CB-4).
+ */
+export function mergeContractorJobs(localArr: unknown, remoteArr: unknown): CJobLike[] {
+  const local: CJobLike[]  = Array.isArray(localArr)  ? (localArr  as CJobLike[]) : [];
+  const remote: CJobLike[] = Array.isArray(remoteArr) ? (remoteArr as CJobLike[]) : [];
+
+  const byId = new Map<string, CJobLike>();
+  for (const j of local) if (j?.id) byId.set(j.id, j);
+
+  for (const rj of remote) {
+    if (!rj?.id) continue;
+    const lj = byId.get(rj.id);
+    if (!lj) { byId.set(rj.id, rj); continue; }
+    const winner = cjTime(rj) >= cjTime(lj) ? rj : lj;
+    byId.set(rj.id, { ...winner, photos: unionPhotos(lj.photos, rj.photos) });
+  }
+
+  // Collapse duplicates that share a sourceJobId (CB-4).
+  const result: CJobLike[] = [];
+  const bySource = new Map<string, number>(); // sourceJobId -> index in result
+  for (const j of byId.values()) {
+    const src = j.sourceJobId;
+    if (!src) { result.push(j); continue; }
+    const existingIdx = bySource.get(src);
+    if (existingIdx == null) {
+      bySource.set(src, result.length);
+      result.push(j);
+    } else {
+      const existing = result[existingIdx];
+      const winner = cjTime(j) >= cjTime(existing) ? j : existing;
+      result[existingIdx] = { ...winner, photos: unionPhotos(existing.photos, j.photos) };
+    }
+  }
+  return result;
+}
+
+/** Fetch the current remote contractor_jobs blob (raw, un-sanitized) for merge. */
+async function fetchRemoteContractorJobs(): Promise<unknown> {
+  try {
+    const { data, error } = await supabase
+      .from('app_data')
+      .select('value')
+      .eq('key', 'solarflow_contractor_jobs')
+      .maybeSingle();
+    if (error) {
+      console.warn('[SyncEngine] fetchRemoteContractorJobs failed:', error.message);
+      return null;
+    }
+    return data?.value ?? null;
+  } catch (err) {
+    console.warn('[SyncEngine] fetchRemoteContractorJobs error:', err);
+    return null;
+  }
+}
+
 /**
  * Upsert a single standalone KV row (contractor jobs, contractors, rates).
  */
@@ -163,15 +255,20 @@ export async function pushKeyValue(key: string, value: unknown): Promise<void> {
       return;
     }
 
-    // For contractor jobs: strip any base64 photos before pushing to avoid row size limits.
-    const payload = key === 'solarflow_contractor_jobs'
-      ? sanitizeContractorJobsPayload(value)
-      : value;
-
     // Guard: if the row has repeatedly failed, skip it to avoid blocking other saves.
     if (isRowPoisoned(key)) {
-      console.warn(`[SyncEngine] pushKeyValue(${key}) — row is poisoned, skipping push.`);
+      console.warn(`[SyncEngine] pushKeyValue(${key}) - row is poisoned, skipping push.`);
       return;
+    }
+
+    // For contractor jobs: merge against the current remote blob first so a
+    // whole-blob upsert can never clobber another device's jobs or photos
+    // (CB-3), then strip any base64 photos to stay under the row size limit.
+    let payload = value;
+    if (key === 'solarflow_contractor_jobs') {
+      const remote = await fetchRemoteContractorJobs();
+      const merged = mergeContractorJobs(value, remote);
+      payload = sanitizeContractorJobsPayload(merged);
     }
 
     const { error } = await supabase
@@ -429,6 +526,18 @@ export async function pullFromSupabase(): Promise<Partial<AppState> | null> {
                   localStorage.setItem(row.key, next);
                   changedKVKeys.push(row.key);
                 }
+              }
+            } else if (row.key === 'solarflow_contractor_jobs') {
+              // Contractor jobs: merge remote into local per-record so a pull
+              // can never wipe locally-uploaded photos or local-only jobs (CB-3).
+              const prev = localStorage.getItem(row.key);
+              let local: unknown = null;
+              try { local = prev ? JSON.parse(prev) : null; } catch { local = null; }
+              const merged = mergeContractorJobs(local, row.value);
+              const next = JSON.stringify(merged);
+              if (prev !== next) {
+                localStorage.setItem(row.key, next);
+                changedKVKeys.push(row.key);
               }
             } else {
               const next = JSON.stringify(row.value);

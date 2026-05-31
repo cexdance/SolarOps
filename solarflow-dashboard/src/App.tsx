@@ -1027,7 +1027,10 @@ function App() {
     saveContractors(next);
   };
 
-  const handleContractorJobUpdate = (updatedJob: ContractorJob) => {
+  const handleContractorJobUpdate = (incomingJob: ContractorJob) => {
+    // Stamp every contractor-side edit so cross-device merges resolve by
+    // last-writer-wins instead of whole-blob clobber (CB-3).
+    const updatedJob: ContractorJob = { ...incomingJob, updatedAt: new Date().toISOString() };
     // Persist contractorJobs synchronously so a fast reload doesn't drop the update.
     const nextContractorJobs = contractorJobs.map(j =>
       j.id === updatedJob.id ? updatedJob : j

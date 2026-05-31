@@ -5,6 +5,19 @@
 /* ConexSol Brand Fonts */
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
 
+/* Safe-area utilities for fixed bottom bars (home indicator / device chrome).
+   These class names were used in JobDetail and Layout but were never defined,
+   so fixed bottom CTAs sat flush at the screen edge and were overlapped by the
+   device bottom toolbar / home indicator. Define them so the inset is applied. */
+@layer utilities {
+  .pb-safe {
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 0.75rem);
+  }
+  .safe-area-pb {
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 0.25rem);
+  }
+}
+
 @layer base {
   :root {
     --radius: 0.5rem;
