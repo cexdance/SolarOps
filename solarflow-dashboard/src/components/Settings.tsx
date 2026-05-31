@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { GMAPS_KEY_STORAGE } from './AddressAutocomplete';
 import { User as UserType, SolarEdgeConfig } from '../types';
+import { APP_VERSION, DB_VERSION } from '../lib/versionConfig';
 import { PhotoCleanupCard } from './admin/PhotoCleanupCard';
 import { Avatar } from './ui/Avatar';
 import { compressImageToBlob } from '../lib/photoCompress';
@@ -660,7 +661,7 @@ export const Settings: React.FC<SettingsProps> = ({
         <SettingItem
           icon={<SettingsIcon className="w-5 h-5" />}
           label="App Version"
-          value="1.7.5"
+          value={`${APP_VERSION} • db ${DB_VERSION}`}
         />
       </div>
 
