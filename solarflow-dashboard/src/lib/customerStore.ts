@@ -2,7 +2,7 @@
 // Source: Trello "SOLAREDGE LEADS (Servicios)" — Conexsol Funnel strategyn
 // Regenerate with: npx tsx scripts/import_from_trello.mts
 
-import { CRMCustomer, CustomerInteraction } from '../types';
+import { CRMCustomer, CustomerInteraction, CustomerStatus, InteractionType, InteractionOutcome } from '../types';
 import { dbSet } from './db';
 
 const CUSTOMER_STORAGE_KEY = 'solarflow_customers';

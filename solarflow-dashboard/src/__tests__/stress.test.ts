@@ -152,7 +152,7 @@ function generateJobs(
           dataUrl: 'data:image/jpeg;base64,' + 'A'.repeat(500),
           caption: '',
           takenAt: new Date().toISOString(),
-        } as WOPhoto);
+        } as unknown as WOPhoto);
       }
     }
     if (opts.withUrlPhotos) {
@@ -163,7 +163,7 @@ function generateJobs(
           storageUrl: `https://storage.example.com/photos/${i}-${p}.jpg`,
           caption: '',
           takenAt: new Date().toISOString(),
-        } as WOPhoto);
+        } as unknown as WOPhoto);
       }
     }
     if (photos.length) (j as any).woPhotos = photos;

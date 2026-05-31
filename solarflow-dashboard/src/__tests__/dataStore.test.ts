@@ -62,7 +62,7 @@ function minJob(id = 'j1', customerId = 'c1'): Job {
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     source: 'manual',
-  } as Job;
+  } as unknown as Job;
 }
 
 function minState(overrides: Partial<AppState> = {}): AppState {
