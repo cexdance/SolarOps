@@ -617,51 +617,7 @@ export const Layout: React.FC<LayoutProps> = ({
         {children}
       </main>
 
-      {/* Mobile Bottom Navigation - hidden when contractor dashboard is active */}
-      {isMobile && currentView !== 'my-jobs' && currentView !== 'technician' && (
-        <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 px-2 py-1 safe-area-pb">
-          <div className="flex justify-around">
-            {(role === 'sales' ? [
-              { id: 'lobby', icon: Inbox, label: 'Leads' },
-              { id: 'crm', icon: TrendingUp, label: 'Sales CRM' },
-              { id: 'customers2', icon: UserCheck, label: 'Clients' },
-            ] : [
-              { id: 'dashboard', icon: LayoutDashboard, label: 'Home' },
-              { id: 'jobs', icon: Wrench, label: 'Work Orders' },
-              { id: 'technician', icon: Phone, label: 'My Work Orders' },
-              // Billing is admin-only; staff see Ops Center in its place
-              canSeeFinancials(currentUser?.role)
-                ? { id: 'billing', icon: Receipt, label: 'Billing' }
-                : { id: 'dispatch', icon: Crosshair, label: 'Ops Center' },
-            ]).map((item) => {
-              const Icon = item.icon;
-              const isActive = currentView === item.id;
-              const badge = item.id === 'billing' ? unbilledCount : 0;
-
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => onViewChange(item.id)}
-                  className={`
-                    flex flex-col items-center gap-0.5 px-3 py-2 rounded-lg min-w-[64px]
-                    ${isActive ? 'text-orange-500' : 'text-slate-500'}
-                  `}
-                >
-                  <div className="relative">
-                    <Icon className="w-5 h-5" />
-                    {badge > 0 && (
-                      <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center">
-                        {badge}
-                      </span>
-                    )}
-                  </div>
-                  <span className="text-[10px] font-medium">{item.label}</span>
-                </button>
-              );
-            })}
-          </div>
-        </nav>
-      )}
+      {/* Mobile bottom nav removed - sidebar handles all navigation */}
     </div>
   );
 };

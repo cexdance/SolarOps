@@ -53,8 +53,9 @@ export function toContractorJobView(job: Job, existingCj?: ContractorJob): Contr
   if (job.woPhotos) {
     for (const p of job.woPhotos) {
       const cat = p.category as PhotoCategory;
-      if (cat in photos) {
-        (photos as any)[cat] = [...((photos as any)[cat] ?? []), p.dataUrl];
+      const url = p.storageUrl || p.dataUrl;
+      if (cat in photos && url) {
+        (photos as any)[cat] = [...((photos as any)[cat] ?? []), url];
       }
     }
   }
