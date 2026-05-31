@@ -511,11 +511,7 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
       onUpsellLead?.(updated, upsellNotes);
     }
 
-    // Simulate invoice auto-send after 1.5s
-    setTimeout(() => {
-      onUpdateJob({ ...updated, invoiceStatus: 'sent', invoiceSentAt: new Date().toISOString() });
-      setInvoiceSent(true);
-    }, 1500);
+    // Invoice is created manually by admin after reviewing the completed work order.
   };
 
   const handleAfterPhotoCaptured = (dataUrl: string) => handleCompleteCall(dataUrl);
@@ -1338,41 +1334,6 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
               );
             })()}
 
-            {/* Invoice & notifications */}
-            <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-3">
-              <h3 className="font-semibold text-slate-900 flex items-center gap-2">
-                <FileText className="w-4 h-4 text-blue-500" />
-                Client Invoice
-              </h3>
-
-              {!invoiceSent ? (
-                <div className="flex items-center gap-3 px-3 py-3 bg-amber-50 border border-amber-200 rounded-xl">
-                  <div className="w-5 h-5 rounded-full border-2 border-amber-500 border-t-transparent animate-spin flex-shrink-0" />
-                  <div>
-                    <p className="text-sm font-semibold text-amber-800">Generating invoice...</p>
-                    <p className="text-xs text-amber-600">Sending to {job.customerEmail || 'client'}</p>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2 px-3 py-2.5 bg-emerald-50 border border-emerald-200 rounded-xl">
-                    <CheckCircle className="w-4 h-4 text-emerald-500 flex-shrink-0" />
-                    <div>
-                      <p className="text-sm font-semibold text-emerald-800">Invoice sent to client</p>
-                      <p className="text-xs text-emerald-600">{job.customerEmail || job.customerName}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 px-3 py-2.5 bg-emerald-50 border border-emerald-200 rounded-xl">
-                    <CheckCircle className="w-4 h-4 text-emerald-500 flex-shrink-0" />
-                    <div>
-                      <p className="text-sm font-semibold text-emerald-800">SMS notification sent</p>
-                      <p className="text-xs text-emerald-600">{job.customerPhone}</p>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
             {/* Your payment */}
             <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-3">
               <h3 className="font-semibold text-slate-900 flex items-center gap-2">
@@ -1429,11 +1390,11 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
             </div>
 
             {/* Add Photos (post-completion) */}
-            <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-3">
+            <div className="bg-white rounded-2xl border-2 border-orange-200 p-4 space-y-3">
               <div className="flex items-center justify-between">
                 <h3 className="font-semibold text-slate-900 flex items-center gap-2">
                   <Camera className="w-4 h-4 text-orange-500" />
-                  Photos
+                  Add Photos
                 </h3>
                 <select
                   value={activePhotoTab}
@@ -1463,12 +1424,12 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
               )}
               <button
                 onClick={() => setShowPhotoSourceSheet(true)}
-                className="w-full flex items-center justify-center gap-2 py-3 border-2 border-dashed border-slate-200 rounded-xl text-slate-500 text-sm hover:border-orange-300 hover:text-orange-500 transition-colors cursor-pointer"
+                className="w-full flex items-center justify-center gap-2 py-4 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-xl text-sm transition-colors cursor-pointer"
               >
-                <Camera className="w-4 h-4" />
-                Add Photo
+                <Camera className="w-5 h-5" />
+                Upload Photo
               </button>
-              <p className="text-xs text-slate-400 text-center">Photos added here sync automatically</p>
+              <p className="text-xs text-slate-400 text-center">Photos sync automatically to the admin dashboard</p>
             </div>
 
             {/* Google Review CTA */}
