@@ -126,7 +126,10 @@ async function fetchWeatherForDate(address: string, dateISO: string): Promise<We
     const wData = await wRes.json();
 
     const daily = wData?.daily;
-    if (!daily?.weathercode?.[0] == null) return null;
+    // Bail if the forecast is missing. Previously `!daily?.weathercode?.[0] == null`
+    // parsed as `(!value) == null` which is ALWAYS false — the guard never fired and
+    // the non-optional accesses below crashed when `daily`/weathercode was absent.
+    if (daily?.weathercode?.[0] == null) return null;
 
     const code       = daily.weathercode[0] ?? 0;
     const tempMax    = daily.temperature_2m_max[0] ?? 0;

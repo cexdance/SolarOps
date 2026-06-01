@@ -732,7 +732,8 @@ function App() {
 
   // Initialize sync status listeners
   useEffect(() => {
-    initSyncStatusListeners();
+    const cleanup = initSyncStatusListeners();
+    return cleanup;
   }, []);
 
   // ── Sync: poll + realtime + remote-update handler (extracted to hook) ────

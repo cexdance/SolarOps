@@ -102,25 +102,30 @@ export async function withSupabaseError<T>(
   }
 }
 
-// Initialize listeners for sync events
-export function initSyncStatusListeners() {
-  if (typeof window === 'undefined') return;
-  
-  window.addEventListener('supabase-sync-success', () => {
-    setSyncStatus('success', 'All changes saved');
-  });
-  
-  window.addEventListener('supabase-sync-error', (e: Event) => {
+// Initialize listeners for sync events. Returns a cleanup function that removes
+// every listener — previously these 4 window listeners were added with no way to
+// remove them, so each App remount (StrictMode, re-login) stacked duplicate
+// handlers and the sync status flapped/fired N times.
+export function initSyncStatusListeners(): () => void {
+  if (typeof window === 'undefined') return () => {};
+
+  const onSuccess = () => setSyncStatus('success', 'All changes saved');
+  const onError = (e: Event) => {
     const detail = (e as CustomEvent).detail;
     setSyncStatus('error', detail?.message || 'Sync failed', detail?.error);
-  });
-  
-  // Listen for online/offline events
-  window.addEventListener('online', () => {
-    setSyncStatus('idle', 'Back online');
-  });
-  
-  window.addEventListener('offline', () => {
-    setSyncStatus('offline', 'Working offline. Changes will sync when you reconnect.');
-  });
+  };
+  const onOnline = () => setSyncStatus('idle', 'Back online');
+  const onOffline = () => setSyncStatus('offline', 'Working offline. Changes will sync when you reconnect.');
+
+  window.addEventListener('supabase-sync-success', onSuccess);
+  window.addEventListener('supabase-sync-error', onError);
+  window.addEventListener('online', onOnline);
+  window.addEventListener('offline', onOffline);
+
+  return () => {
+    window.removeEventListener('supabase-sync-success', onSuccess);
+    window.removeEventListener('supabase-sync-error', onError);
+    window.removeEventListener('online', onOnline);
+    window.removeEventListener('offline', onOffline);
+  };
 }

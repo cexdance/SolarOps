@@ -795,16 +795,6 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ isMobile }) =>
                     {provider.address}
                   </p>
                 </div>
-                <div className="mt-4 pt-3 border-t border-slate-100 flex gap-2">
-                  <button className="flex-1 flex items-center justify-center gap-2 py-2 border border-slate-200 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50">
-                    <Upload className="w-4 h-4" />
-                    Upload Price List
-                  </button>
-                  <button className="flex-1 flex items-center justify-center gap-2 py-2 border border-slate-200 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50">
-                    <FileText className="w-4 h-4" />
-                    View Lists
-                  </button>
-                </div>
               </div>
             ))}
             {filteredProviders.length === 0 && (

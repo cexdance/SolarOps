@@ -336,8 +336,12 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
       upsellNotes: upsellFlagged ? upsellNotes : undefined,
       ...(isOptimizerJob ? { optimizerCount } : {}),
     });
+  // Depend on EVERY field this effect writes, so a change to serviceStatus,
+  // parts, follow-up or upsell auto-saves on its own instead of waiting for the
+  // next photo/notes edit. `job` is intentionally excluded to avoid a save loop
+  // (onUpdateJob updates job → re-fires); the write already spreads latest job.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [photos, serviceNotes]);
+  }, [photos, serviceNotes, serviceStatus, nextSteps, requireFollowUp, parts, partsReimbursement, upsellFlagged, upsellNotes, optimizerCount]);
 
   const addPhoto = async (category: PhotoCategory, dataUrl: string) => {
     const photoId = `ph-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
@@ -1457,17 +1461,36 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
               <p className="text-xs text-slate-500 mb-3">
                 Send the client our Google review link — reviews help our business grow and support your continued work.
               </p>
-              <a
-                href="https://g.page/r/YOUR-GOOGLE-REVIEW-LINK/review"
-                target="_blank" rel="noopener noreferrer"
-                className="w-full flex items-center justify-center gap-2 py-3.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl text-sm transition-colors cursor-pointer"
-              >
-                <Star className="w-5 h-5" />
-                Open Google Review Link
-              </a>
-              <p className="text-xs text-slate-400 text-center mt-2">
-                Copy the link and share it with {job.customerName} via text or email
-              </p>
+              {(() => {
+                // Read the configured Google review URL (set by an admin in Settings).
+                // Previously this was a hardcoded placeholder that opened a 404 in
+                // front of the CLIENT — never link out unless a real URL is set.
+                const reviewUrl = (typeof localStorage !== 'undefined'
+                  && localStorage.getItem('solarflow_google_review_url')) || '';
+                const configured = /^https?:\/\//.test(reviewUrl) && !reviewUrl.includes('YOUR-GOOGLE-REVIEW-LINK');
+                return configured ? (
+                  <>
+                    <a
+                      href={reviewUrl}
+                      target="_blank" rel="noopener noreferrer"
+                      className="w-full flex items-center justify-center gap-2 py-3.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl text-sm transition-colors cursor-pointer"
+                    >
+                      <Star className="w-5 h-5" />
+                      Open Google Review Link
+                    </a>
+                    <p className="text-xs text-slate-400 text-center mt-2">
+                      Copy the link and share it with {job.customerName} via text or email
+                    </p>
+                  </>
+                ) : (
+                  <div className="flex items-start gap-2 rounded-xl bg-slate-50 border border-slate-200 px-3 py-2.5">
+                    <AlertTriangle className="w-4 h-4 text-slate-400 mt-0.5 shrink-0" />
+                    <p className="text-xs text-slate-500">
+                      Google review link isn't set up yet. An admin can add it in Settings so this button shares your real review page.
+                    </p>
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Upsell confirmation */}
