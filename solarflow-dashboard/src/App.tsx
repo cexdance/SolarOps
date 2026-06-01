@@ -2162,6 +2162,24 @@ function App() {
       );
     }
 
+    // Phase C: a contractor-shaped view derived from the SINGLE source of truth
+    // (data.jobs), overlaying contractor-only fields from the legacy store. Plus
+    // any orphan contractorJobs rows that have no admin Job yet, so nothing is
+    // hidden during the transition. Admin-side contractor views (Projects,
+    // Approvals, contractor-Billing) all read THIS instead of the raw store, so
+    // they can no longer diverge from what the admin board shows.
+    const contractorJobsView: ContractorJob[] = (() => {
+      const linkedIds = new Set<string>();
+      const projected = data.jobs
+        .filter(j => j.contractorId)
+        .map(j => {
+          linkedIds.add(j.id);
+          return toContractorJobView(j, contractorJobs.find(cj => cj.sourceJobId === j.id));
+        });
+      const orphans = contractorJobs.filter(cj => !cj.sourceJobId || !linkedIds.has(cj.sourceJobId));
+      return [...projected, ...orphans];
+    })();
+
     switch (currentView) {
       case 'lobby':
         return (
@@ -2185,7 +2203,7 @@ function App() {
 
       case 'projects':
         return (
-          <SolarProjects customers={data.customers} contractorJobs={contractorJobs} isMobile={isMobile} />
+          <SolarProjects customers={data.customers} contractorJobs={contractorJobsView} isMobile={isMobile} />
         );
 
       case 'operations':
@@ -2205,7 +2223,7 @@ function App() {
         return (
           <ContractorApprovals
             contractors={contractors}
-            contractorJobs={contractorJobs}
+            contractorJobs={contractorJobsView}
             onUpdateStatus={handleContractorStatusUpdate}
             onUpdateContractor={handleContractorUpdate}
             onDeleteContractor={handleContractorDelete}
@@ -2217,7 +2235,7 @@ function App() {
       case 'contractor-billing':
         return (
           <BillingModule
-            jobs={contractorJobs}
+            jobs={contractorJobsView}
             onUpdateJob={handleContractorJobUpdate}
           />
         );
