@@ -1,0 +1,40 @@
+name: CI
+
+# Runs the REAL production build (tsc -b && vite build) + tests on every push
+# and PR to main. This is the guard that was missing when a tsc -b error
+# silently froze production for days: `tsc --noEmit` did not catch it, but the
+# build command does. A red check here now blocks the merge instead.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: solarflow-dashboard
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: solarflow-dashboard/pnpm-lock.yaml
+
+      - name: Install
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Build (tsc -b && vite build)
+        run: pnpm run build
+
+      - name: Test
+        run: pnpm test
