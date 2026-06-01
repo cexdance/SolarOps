@@ -8,6 +8,8 @@ import {
 } from 'lucide-react';
 import { Job, Customer, User, AppNotification, RMAEntry, RMAStatus } from '../types';
 import { canSeeFinancials } from '../lib/access';
+// Shared, cloud-synced todo store — same source of truth as the Ops Center widget.
+import { loadTodos, saveTodos, TodoItem } from '../lib/todoStore';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -19,19 +21,11 @@ interface DashConfig {
   metrics: [MetricKey, MetricKey, MetricKey, MetricKey];
 }
 
-interface TodoItem {
-  id: string;
-  text: string;
-  done: boolean;
-  customerId?: string;
-  customerName?: string;
-  createdAt: string;
-}
+// TodoItem now comes from ../lib/todoStore (shared with the Ops Center widget).
 
 // ── Persistence ───────────────────────────────────────────────────────────────
 
 const CONFIG_KEY = (uid: string) => `solarops_dash_v1_${uid}`;
-const TODO_KEY   = (uid: string) => `solarops_todos_v1_${uid}`;
 
 const DEFAULT_CONFIG: DashConfig = {
   period: 'month',
@@ -49,16 +43,6 @@ const saveConfig = (uid: string, cfg: DashConfig) => {
   try { localStorage.setItem(CONFIG_KEY(uid), JSON.stringify(cfg)); } catch {}
 };
 
-const loadTodos = (uid: string): TodoItem[] => {
-  try {
-    const r = localStorage.getItem(TODO_KEY(uid));
-    if (r) return JSON.parse(r);
-  } catch {}
-  return [];
-};
-const saveTodos = (uid: string, todos: TodoItem[]) => {
-  try { localStorage.setItem(TODO_KEY(uid), JSON.stringify(todos)); } catch {}
-};
 
 // ── Metric metadata ───────────────────────────────────────────────────────────
 
@@ -204,7 +188,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
     } else {
       const todo = todos.find(t => t.id === editingTodoId);
       if (todo) {
-        setEditingTodoText(todo.text);
+        setEditingTodoText(todo.task);
       }
     }
   }, [editingTodoId, todos]);
@@ -215,7 +199,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
     if (!text) return;
     const item: TodoItem = {
       id: `todo-${Date.now()}`,
-      text,
+      task: text,
+      dueDate: '',
       done: false,
       customerId: todoCustomerPick?.id,
       customerName: todoCustomerPick?.name,
@@ -245,7 +230,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const saveEditTodo = (id: string) => {
     const text = editingTodoText.trim();
     if (!text) return;
-    const next = todos.map(t => t.id === id ? { ...t, text } : t);
+    const next = todos.map(t => t.id === id ? { ...t, task: text } : t);
     setTodos(next);
     saveTodos(uid, next);
     setEditingTodoId(null);
@@ -595,9 +580,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
                       ) : (
                         <p
                           className={`text-sm cursor-text ${todo.done ? 'line-through text-slate-400' : 'text-slate-800'}`}
-                          onClick={() => { setEditingTodoId(todo.id); setEditingTodoText(todo.text); }}
+                          onClick={() => { setEditingTodoId(todo.id); setEditingTodoText(todo.task); }}
                         >
-                          {todo.text}
+                          {todo.task}
                         </p>
                       )}
                       {todo.customerName && (
@@ -611,7 +596,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                       )}
                     </div>
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                      <button onClick={() => { setEditingTodoId(todo.id); setEditingTodoText(todo.text); }} className="p-1 text-slate-400 hover:text-slate-600 rounded">
+                      <button onClick={() => { setEditingTodoId(todo.id); setEditingTodoText(todo.task); }} className="p-1 text-slate-400 hover:text-slate-600 rounded">
                         <Pencil className="w-3.5 h-3.5" />
                       </button>
                       <button onClick={() => deleteTodo(todo.id)} className="p-1 text-slate-400 hover:text-red-500 rounded">
