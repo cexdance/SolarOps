@@ -262,6 +262,27 @@ export interface Job {
   // Site Transfer fields
   siteTransferInverterSerial?: string; // Inverter serial # for ownership transfer
   siteTransferSiteId?: string;         // SolarEdge Site ID for ownership transfer
+
+  // ── Contractor-entered fields mirrored onto the single source (Phase D) ──────
+  // So data.jobs holds the COMPLETE work-order record (parts, signatures,
+  // contractor invoice/billing, mileage). These are the durable, per-record-
+  // synced, audit-logged home for what the contractor enters — letting the
+  // contractor view become a pure projection with no separate store to diverge.
+  contractorParts?: { id: string; name: string; partNumber: string; quantity: number; unitPrice: number; totalPrice: number }[];
+  contractorPartsAmount?: number;
+  contractorLaborAmount?: number;
+  markupPercent?: number;
+  clientSignature?: string;
+  signatureDate?: string;
+  contractorInvoiceId?: string;
+  contractorInvoiceStatus?: string;
+  contractorInvoiceSentAt?: string;
+  contractorInvoiceNumber?: string;
+  mileageCost?: number;
+  mileageCharge?: number;
+  contractorPaymentStatus?: string;
+  contractorTotalPay?: number;
+  assignedAt?: string;
 }
 
 export type RMAStatus = 'processes' | 'eligible' | 'not_eligible' | 'submitted' | 'paid';

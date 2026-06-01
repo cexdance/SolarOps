@@ -1141,6 +1141,25 @@ function App() {
           completionNotes: updatedJob.completionNotes ?? adminJob.completionNotes,
           // Mileage (PowerCare)
           travelMiles: updatedJob.miles ?? adminJob.travelMiles,
+          // ── Full contractor record mirror (Phase D) ────────────────────────
+          // Previously these never reached data.jobs, so admin/billing couldn't
+          // see contractor-entered parts, labor, signatures, invoice or mileage.
+          contractorParts: updatedJob.parts ?? adminJob.contractorParts,
+          contractorPartsAmount: updatedJob.partsAmount ?? adminJob.contractorPartsAmount,
+          contractorLaborAmount: updatedJob.laborAmount ?? adminJob.contractorLaborAmount,
+          markupPercent: updatedJob.markupPercent ?? adminJob.markupPercent,
+          signature: updatedJob.signature ?? adminJob.signature,
+          clientSignature: updatedJob.clientSignature ?? adminJob.clientSignature,
+          signatureDate: updatedJob.signatureDate ?? adminJob.signatureDate,
+          contractorInvoiceId: updatedJob.invoiceId ?? adminJob.contractorInvoiceId,
+          contractorInvoiceStatus: updatedJob.invoiceStatus ?? adminJob.contractorInvoiceStatus,
+          contractorInvoiceSentAt: updatedJob.invoiceSentAt ?? adminJob.contractorInvoiceSentAt,
+          contractorInvoiceNumber: updatedJob.contractorInvoiceNumber ?? adminJob.contractorInvoiceNumber,
+          mileageCost: updatedJob.mileageCost ?? adminJob.mileageCost,
+          mileageCharge: updatedJob.mileageCharge ?? adminJob.mileageCharge,
+          contractorPaymentStatus: updatedJob.paymentStatus ?? adminJob.contractorPaymentStatus,
+          contractorTotalPay: updatedJob.contractorTotalPay ?? adminJob.contractorTotalPay,
+          assignedAt: updatedJob.assignedAt ?? adminJob.assignedAt,
         };
 
         const next = {
