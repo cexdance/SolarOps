@@ -3567,12 +3567,12 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
     if (!notes.trim() && pastedFiles.length === 0) return;
     const mentionedIds = parseMentions(notes);
     const noteText = notes.trim();
-    const fileRefs = pastedFiles.map(f => `📎 ${f.name}`).join('\n');
-    const fullText = [noteText, fileRefs].filter(Boolean).join('\n');
     const newActivity: Activity = {
       id: `activity-${Date.now()}`,
       type: 'note_added',
-      description: fullText,
+      // Keep the body as the typed note only — attached files render as
+      // thumbnails (below), not as "📎 filename" text.
+      description: noteText,
       timestamp: new Date().toISOString(),
       userId: currentUser?.id,
       userName: currentUser?.name,
@@ -3624,6 +3624,12 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
       source: 'upload' as const,
       createdAt: f.createdAt,
     }));
+    // Link the uploaded files to this comment so they render as thumbnails.
+    if (uploadedFiles.length > 0) {
+      newActivity.attachments = uploadedFiles.map(f => ({
+        id: f.id, name: f.name, url: f.url, mimeType: f.mimeType,
+      }));
+    }
     const activityHistory = customer.activityHistory || [];
     onUpdateCustomer({
       ...customer,
@@ -4013,6 +4019,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                     activities={customer.activityHistory || []}
                     users={users}
                     currentUser={currentUser}
+                    files={customer.files}
                     onEdit={(id, newText) => handleSaveActivity(id, newText)}
                     onDelete={handleDeleteActivity}
                     onReact={handleAddReaction}

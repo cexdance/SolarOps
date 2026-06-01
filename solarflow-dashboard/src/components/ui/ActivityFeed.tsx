@@ -8,9 +8,16 @@
 // renders the read/edit/react surface only.
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Pencil, Trash2, Smile, Link as LinkIcon, Check } from 'lucide-react';
+import { Pencil, Trash2, Smile, Link as LinkIcon, Check, Paperclip } from 'lucide-react';
 import { Activity } from '../../types';
 import { Avatar } from './Avatar';
+
+export interface FeedFile {
+  id: string;
+  name: string;
+  url: string;
+  mimeType?: string;
+}
 
 export interface FeedUser {
   id: string;
@@ -31,7 +38,14 @@ interface Props {
   // Only these activity types are user-editable; others are auto-generated
   editableTypes?: Activity['type'][];
   emptyMessage?: string;
+  // Customer/job files — used to resolve thumbnails for legacy comments whose
+  // attachment is only referenced as "📎 filename" text in the description.
+  files?: FeedFile[];
 }
+
+const isImageAttachment = (a: { mimeType?: string; name?: string; url?: string }): boolean =>
+  (a.mimeType?.startsWith('image/') ?? false) ||
+  /\.(png|jpe?g|gif|webp|bmp|svg|heic)$/i.test(a.name || a.url || '');
 
 const REACTION_EMOJIS = ['👍', '❤️', '😂', '🔥', '✅', '👀'];
 
@@ -181,6 +195,7 @@ export const ActivityFeed: React.FC<Props> = ({
   onMentionClick,
   editableTypes = ['note_added'],
   emptyMessage = 'No activity yet — start the conversation below.',
+  files = [],
 }) => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState('');
@@ -213,6 +228,21 @@ export const ActivityFeed: React.FC<Props> = ({
         const canEdit = (isAuthor || isAdmin) && editableTypes.includes(a.type);
         const isEditing = editingId === a.id;
         const reactions = a.reactions ?? {};
+
+        // Resolve attachments. Prefer the structured field; otherwise parse legacy
+        // "📎 filename" lines from the description and match them against `files`,
+        // so older comments still render their image as a thumbnail.
+        const legacyNames = a.attachments?.length
+          ? []
+          : (a.description.match(/📎[^\n]*/g) || []).map(s => s.replace(/^📎\s*/, '').trim());
+        const legacyAttachments = legacyNames
+          .map(name => files.find(f => f.name === name))
+          .filter((f): f is FeedFile => !!f);
+        const attachments: FeedFile[] = a.attachments?.length ? a.attachments : legacyAttachments;
+        // If we turned legacy "📎 ..." text into thumbnails, drop those lines from the body.
+        const displayText = legacyAttachments.length
+          ? a.description.split('\n').filter(l => !/^\s*📎/.test(l)).join('\n').trim()
+          : a.description;
 
         return (
           <div
@@ -289,18 +319,52 @@ export const ActivityFeed: React.FC<Props> = ({
               </div>
 
               {/* Body */}
-              <div className="bg-slate-50 rounded-xl px-3 py-2.5 border border-slate-100">
-                {isEditing ? (
-                  <AutoGrowTextarea
-                    value={editingText}
-                    onChange={setEditingText}
-                    onSave={() => { onEdit(a.id, editingText.trim()); setEditingId(null); }}
-                    onCancel={() => setEditingId(null)}
-                  />
-                ) : (
-                  <MentionBody text={a.description} users={users} onMentionClick={onMentionClick} />
-                )}
-              </div>
+              {(isEditing || displayText) && (
+                <div className="bg-slate-50 rounded-xl px-3 py-2.5 border border-slate-100">
+                  {isEditing ? (
+                    <AutoGrowTextarea
+                      value={editingText}
+                      onChange={setEditingText}
+                      onSave={() => { onEdit(a.id, editingText.trim()); setEditingId(null); }}
+                      onCancel={() => setEditingId(null)}
+                    />
+                  ) : (
+                    <MentionBody text={displayText} users={users} onMentionClick={onMentionClick} />
+                  )}
+                </div>
+              )}
+
+              {/* Attachments — image files render as thumbnails, others as a chip link */}
+              {!isEditing && attachments.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-1.5">
+                  {attachments.map(att => (
+                    isImageAttachment(att) ? (
+                      <a
+                        key={att.id}
+                        href={att.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title={att.name}
+                        className="block w-24 h-24 rounded-lg overflow-hidden border border-slate-200 bg-slate-50 hover:border-orange-400 transition-colors"
+                      >
+                        <img src={att.url} alt={att.name} className="w-full h-full object-cover" loading="lazy" />
+                      </a>
+                    ) : (
+                      <a
+                        key={att.id}
+                        href={att.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title={att.name}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-xs text-slate-600 hover:border-orange-400 hover:text-orange-600 transition-colors max-w-[180px]"
+                      >
+                        <Paperclip className="w-3.5 h-3.5 shrink-0" />
+                        <span className="truncate">{att.name}</span>
+                      </a>
+                    )
+                  ))}
+                </div>
+              )}
 
               {/* Reactions row */}
               {Object.keys(reactions).length > 0 && (

@@ -45,6 +45,8 @@ export interface Activity {
   userName?: string;
   mentions?: string[]; // user IDs of @mentioned users
   reactions?: Record<string, string[]>; // emoji → array of userIds
+  // File attachments on this comment (image attachments render as thumbnails).
+  attachments?: { id: string; name: string; url: string; mimeType: string }[];
 }
 
 export interface Customer {
