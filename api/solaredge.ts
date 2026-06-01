@@ -74,9 +74,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(403).json({ error: 'Invalid SolarEdge API key or access denied.' });
     }
 
-    // Cache successful responses to preserve daily quota
+    // Cache successful responses to preserve daily quota.
+    // SolarEdge monitoring data is org-wide (identical for every staff user), so
+    // cache at the SHARED CDN edge (s-maxage), not just per-browser (private).
+    // One upstream call now serves the cached response to ALL staff for the window,
+    // instead of every browser burning its own quota slice. stale-while-revalidate
+    // lets the edge serve slightly-stale data while it refreshes in the background.
     if (upstream.ok) {
-      res.setHeader('Cache-Control', `private, max-age=${cacheSecs}`);
+      res.setHeader(
+        'Cache-Control',
+        `public, max-age=${cacheSecs}, s-maxage=${cacheSecs}, stale-while-revalidate=${cacheSecs}`,
+      );
     }
 
     return res.status(upstream.status).json(data);
