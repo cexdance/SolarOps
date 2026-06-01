@@ -513,11 +513,22 @@ export const loadContractorJobs = (): ContractorJob[] => {
 };
 
 export const saveContractorJobs = (jobs: ContractorJob[]): void => {
+  // Always push to the cloud first — the Supabase write does NOT depend on
+  // localStorage and is the durable copy, so it must run even if localStorage
+  // is full. (Previously a quota throw on setItem skipped dbSet entirely.)
+  dbSet(CONTRACTOR_JOBS_KEY, jobs);
   try {
     localStorage.setItem(CONTRACTOR_JOBS_KEY, JSON.stringify(jobs));
-    dbSet(CONTRACTOR_JOBS_KEY, jobs);
   } catch (e) {
-    console.error('Failed to save contractor jobs:', e);
+    // localStorage quota exceeded (heavy base64 photos). The cloud write above
+    // still ran, so data is not lost — but surface the warning instead of
+    // failing silently, so the contractor knows to get online / export a backup.
+    console.error('Failed to save contractor jobs to localStorage (quota):', e);
+    try {
+      window.dispatchEvent(new CustomEvent('solarops:storage-warning', {
+        detail: { kind: 'failed', reason: 'quota-exceeded', source: 'contractor_jobs' },
+      }));
+    } catch { /* non-browser env */ }
   }
 };
 
