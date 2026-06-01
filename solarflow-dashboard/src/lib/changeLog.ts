@@ -151,6 +151,101 @@ export function getRecentLog(limit = 100): ChangeEntry[] {
   return readLog().slice(-limit).reverse();
 }
 
+// ── Field-level diff + per-entity history (WO audit) ────────────────────────
+
+// Heavy fields are summarized by count, not dumped, so the audit payload stays small.
+const HEAVY_DIFF_FIELDS = new Set([
+  'woPhotos', 'photos', 'lineItems', 'rmaEntries', 'activityHistory', 'parts',
+]);
+
+/**
+ * Shallow field-level diff between two entity snapshots → { field: {before, after} }.
+ * Objects/arrays compared by JSON; heavy array fields reported as a count change.
+ */
+export function diffEntity(
+  before: Record<string, unknown> | undefined,
+  after: Record<string, unknown> | undefined,
+): Record<string, { before: unknown; after: unknown }> {
+  const out: Record<string, { before: unknown; after: unknown }> = {};
+  const keys = new Set([...Object.keys(before ?? {}), ...Object.keys(after ?? {})]);
+  for (const k of keys) {
+    const b = (before ?? {})[k];
+    const a = (after ?? {})[k];
+    if (HEAVY_DIFF_FIELDS.has(k)) {
+      const bl = Array.isArray(b) ? b.length : (b ? 1 : 0);
+      const al = Array.isArray(a) ? a.length : (a ? 1 : 0);
+      if (bl !== al) out[k] = { before: `${bl}`, after: `${al}` };
+      continue;
+    }
+    const bs = typeof b === 'object' ? JSON.stringify(b) : b;
+    const as = typeof a === 'object' ? JSON.stringify(a) : a;
+    if (bs !== as) out[k] = { before: b, after: a };
+  }
+  return out;
+}
+
+/**
+ * Log a job mutation with a field-level diff (what changed), not a blind snapshot.
+ * Skips the write entirely if nothing changed.
+ */
+export function logJobChange(
+  opType: string,
+  jobId: string,
+  before: Record<string, unknown> | undefined,
+  after: Record<string, unknown>,
+  actor: string,
+): ChangeEntry | null {
+  const changed = before ? diffEntity(before, after) : null;
+  if (changed && Object.keys(changed).length === 0) return null; // no-op edit
+  return logChange(opType, 'job', jobId, {
+    changed: changed ?? '(new record)',
+    woNumber: (after as any).woNumber,
+    status: (after as any).woStatus ?? (after as any).status,
+  }, actor);
+}
+
+/** Local-only history for one entity (this device's log). */
+export function getLogForEntity(entityType: string, entityId: string, limit = 100): ChangeEntry[] {
+  return readLog().filter(e => e.entityType === entityType && e.entityId === entityId).slice(-limit).reverse();
+}
+
+/**
+ * Cross-device history for one entity: queries Supabase change_log (so an admin
+ * sees the CONTRACTOR's edits made on another device), merged with the local log
+ * (covers entries not yet synced). Newest first, deduped by id.
+ */
+export async function fetchLogForEntity(entityType: string, entityId: string, limit = 100): Promise<ChangeEntry[]> {
+  const local = getLogForEntity(entityType, entityId, limit);
+  try {
+    const { data, error } = await supabase
+      .from('change_log')
+      .select('*')
+      .eq('entity_type', entityType)
+      .eq('entity_id', entityId)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    if (error || !data) return local;
+    const remote: ChangeEntry[] = data.map((r: any) => ({
+      id: r.id,
+      opType: r.op_type,
+      entityType: r.entity_type,
+      entityId: r.entity_id,
+      payload: r.payload,
+      userEmail: r.user_email ?? 'unknown',
+      deviceId: r.device_id ?? '',
+      device: (r.payload?._device as DeviceInfo) ?? ({} as DeviceInfo),
+      durationMs: r.payload?._ms ?? null,
+      createdAt: r.created_at,
+      syncedAt: r.created_at,
+    }));
+    const byId = new Map<string, ChangeEntry>();
+    for (const e of [...remote, ...local]) byId.set(e.id, e);
+    return [...byId.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, limit);
+  } catch {
+    return local;
+  }
+}
+
 // ── Internal ───────────────────────────────────────────────────────────────
 
 async function pushEntry(entry: ChangeEntry): Promise<void> {

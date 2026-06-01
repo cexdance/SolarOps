@@ -22,7 +22,7 @@ import { SowDistributionModal, SOW_DISTRIBUTION_NAMES } from './SowDistributionM
 import { ActivityFeed } from './ui/ActivityFeed';
 import { compressImageToDataUrl, compressImageToBlob } from '../lib/photoCompress';
 import { uploadPhotoToStorage, deletePhotoFromStorage } from '../lib/photoStorage';
-import { logUpload } from '../lib/changeLog';
+import { logUpload, fetchLogForEntity, ChangeEntry } from '../lib/changeLog';
 
 // ─── constants ────────────────────────────────────────────────────────────────
 
@@ -734,7 +734,19 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
   const applyRecurringDiscount = discountType !== ''; // kept for legacy compat
 
   // Active tab
-  const [activeTab, setActiveTab] = useState<'overview' | 'parts' | 'photos' | 'report' | 'comments'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'parts' | 'photos' | 'report' | 'comments' | 'history'>('overview');
+  // WO audit trail (Phase B) — loaded lazily when the History tab is opened.
+  const [historyEntries, setHistoryEntries] = useState<ChangeEntry[] | null>(null);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  useEffect(() => {
+    if (activeTab !== 'history' || !job?.id) return;
+    let cancelled = false;
+    setHistoryLoading(true);
+    fetchLogForEntity('job', job.id, 100)
+      .then(rows => { if (!cancelled) setHistoryEntries(rows); })
+      .finally(() => { if (!cancelled) setHistoryLoading(false); });
+    return () => { cancelled = true; };
+  }, [activeTab, job?.id]);
 
   // Team comments & activity (mirrors Customer.activityHistory)
   const [woActivities, setWoActivities] = useState<import('../types').Activity[]>(job?.activityHistory ?? []);
@@ -1294,6 +1306,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
     { key: 'photos',   label: `Photos${woPhotos.length ? ` (${woPhotos.length})` : ''}`, icon: <Camera className="w-4 h-4" /> },
     { key: 'report',   label: 'Service Report',  icon: <FileText className="w-4 h-4" /> },
     { key: 'comments', label: `Comments${woActivities.length ? ` (${woActivities.length})` : ''}`, icon: <Users className="w-4 h-4" /> },
+    { key: 'history',  label: 'History',         icon: <History className="w-4 h-4" /> },
   ] as const;
 
   return (
@@ -2981,6 +2994,46 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                   emptyMessage="No comments yet — start the conversation by posting an update above."
                 />
               </div>
+            </div>
+          )}
+
+          {activeTab === 'history' && (
+            <div className="p-6 space-y-3">
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                <History className="w-3.5 h-3.5" />
+                Change History — who created, modified, or updated this work order
+              </p>
+              {historyLoading && !historyEntries && (
+                <p className="text-sm text-slate-400 py-6 text-center">Loading history…</p>
+              )}
+              {historyEntries && historyEntries.length === 0 && (
+                <p className="text-sm text-slate-400 py-6 text-center">No recorded changes yet for this work order.</p>
+              )}
+              {historyEntries && historyEntries.length > 0 && (
+                <ul className="space-y-2">
+                  {historyEntries.map(e => {
+                    const p = (e.payload ?? {}) as { changed?: Record<string, unknown> };
+                    const changed = p.changed && typeof p.changed === 'object' ? Object.keys(p.changed) : [];
+                    const label = e.opType.replace(/^job\./, '').replace(/_/g, ' ');
+                    return (
+                      <li key={e.id} className="border border-slate-100 rounded-lg px-3 py-2.5 bg-slate-50/50">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-semibold text-slate-700 truncate">{e.userEmail || 'unknown'}</span>
+                          <span className="text-[11px] text-slate-400 shrink-0" title={new Date(e.createdAt).toLocaleString()}>
+                            {new Date(e.createdAt).toLocaleString()}
+                          </span>
+                        </div>
+                        <div className="mt-0.5 flex items-center gap-2 flex-wrap">
+                          <span className="text-[10px] uppercase tracking-wide text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded font-semibold">{label}</span>
+                          {changed.length > 0 && (
+                            <span className="text-[11px] text-slate-500">changed: {changed.slice(0, 8).join(', ')}{changed.length > 8 ? '…' : ''}</span>
+                          )}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
             </div>
           )}
         </div>

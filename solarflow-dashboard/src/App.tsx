@@ -36,7 +36,7 @@ import { syncFromDB } from './lib/db';
 import { loadData, saveData } from './lib/dataStore';
 import { migrateWoPhotos } from './lib/photoStore';
 import { pickupJobsForContractor, toContractorJobView } from './lib/woHelpers';
-import { logChange, flushChangeLog } from './lib/changeLog';
+import { logChange, logJobChange, flushChangeLog } from './lib/changeLog';
 import { autoArchiveCompletedJobs } from './lib/jobService';
 import { fetchMyNotifications, markNotificationReadRemote, markAllNotificationsReadRemote, startNotificationPolling, stopNotificationPolling, subscribeToNotifications, unsubscribeFromNotifications } from './lib/notifications';
 import { processBillingTimers } from './lib/billingService';
@@ -1037,11 +1037,23 @@ function App() {
     const existingIdx = contractorJobs.findIndex(j =>
       j.id === updatedJob.id || (updatedJob.sourceJobId && j.sourceJobId === updatedJob.sourceJobId)
     );
+    const prevCj = existingIdx >= 0 ? contractorJobs[existingIdx] : undefined;
     const nextContractorJobs = existingIdx >= 0
       ? contractorJobs.map((j, i) => i === existingIdx ? updatedJob : j)
       : [...contractorJobs, updatedJob];
     setContractorJobs(nextContractorJobs);
     saveContractorJobs(nextContractorJobs);
+
+    // Audit the contractor-side write itself (previously unlogged) with a field-
+    // level diff and the contractor as the actor — keyed to the admin Job id when
+    // linked so it shows in that work order's history.
+    logJobChange(
+      'job.contractor_update',
+      updatedJob.sourceJobId || updatedJob.id,
+      prevCj as unknown as Record<string, unknown> | undefined,
+      updatedJob as unknown as Record<string, unknown>,
+      resolveActor(),
+    );
 
     // ── Phase 1: Full bidirectional mirror to admin-side Job ────────────
     // Mirror ALL field-side data back to admin Job — not just status.
@@ -1245,7 +1257,7 @@ function App() {
       requiresFollowUp: job.requiresFollowUp,
       nextSteps: job.nextSteps,
     };
-    logChange('job.create', 'job', newJob.id, newJob, data.currentUser?.email ?? 'unknown');
+    logChange('job.create', 'job', newJob.id, newJob, resolveActor());
     setData(prev => {
       const next = { ...prev, jobs: [...prev.jobs, newJob] };
       saveData(next);
@@ -1256,6 +1268,11 @@ function App() {
     return newJob;
   };
 
+  // Resolve who performed an action for audit attribution: admin email, else the
+  // signed-in contractor's name/id. Never the bare string 'unknown'.
+  const resolveActor = (): string =>
+    data.currentUser?.email || currentContractor?.contactName || currentContractor?.id || 'system';
+
   const handleUpdateJob = (updatedJob: Job, role: 'admin' | 'contractor' | 'technician' = 'admin') => {
     const newActivity = {
       id: `activity-${Date.now()}`,
@@ -1263,7 +1280,12 @@ function App() {
       description: `Work order ${updatedJob.woNumber ?? updatedJob.id} updated — ${updatedJob.serviceType} · ${updatedJob.status}`,
       timestamp: new Date().toISOString(),
     };
-    logChange('job.update', 'job', updatedJob.id, updatedJob, data.currentUser?.email ?? 'unknown');
+    // Field-level audit: log WHAT changed (before→after) and WHO, not a blind snapshot.
+    const prevJob = data.jobs.find(j => j.id === updatedJob.id) as unknown as Record<string, unknown> | undefined;
+    logJobChange(
+      role === 'contractor' ? 'job.contractor_update' : role === 'technician' ? 'job.tech_update' : 'job.update',
+      updatedJob.id, prevJob, updatedJob as unknown as Record<string, unknown>, resolveActor(),
+    );
     setData(prev => {
       const next = {
         ...prev,
@@ -2297,6 +2319,7 @@ function App() {
                 const updated = [...contractorJobs, contractorJob];
                 setContractorJobs(updated);
                 saveContractorJobs(updated);
+                logChange('contractor_job.dispatch', 'contractor_job', contractorJob.id, contractorJob, resolveActor());
               }}
               onQuoteSent={(quoteId, quoteNumber) => {
                 const crmCustomers = loadCustomers();
