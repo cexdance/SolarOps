@@ -64,20 +64,30 @@ export const MentionsWidget: React.FC<Props> = ({ userId, users, onOpenCustomer,
               {unreadCount} unread
             </span>
           )}
-          <div className="flex rounded-md border border-slate-200 overflow-hidden">
-            <button
-              onClick={() => setFilter('unread')}
-              className={`px-2 py-0.5 text-[10px] font-medium ${filter === 'unread' ? 'bg-slate-800 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}
+          {/* Only show unread — iOS-style toggle switch */}
+          <button
+            type="button"
+            role="switch"
+            aria-checked={filter === 'unread'}
+            aria-label="Only show unread mentions"
+            onClick={() => setFilter(filter === 'unread' ? 'all' : 'unread')}
+            className="flex items-center gap-1.5 group"
+          >
+            <span className="text-[10px] font-medium text-slate-500 group-hover:text-slate-700 select-none">
+              Only show unread
+            </span>
+            <span
+              className={`relative inline-flex h-4 w-7 flex-shrink-0 rounded-full transition-colors ${
+                filter === 'unread' ? 'bg-orange-500' : 'bg-slate-300'
+              }`}
             >
-              Unread
-            </button>
-            <button
-              onClick={() => setFilter('all')}
-              className={`px-2 py-0.5 text-[10px] font-medium ${filter === 'all' ? 'bg-slate-800 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}
-            >
-              All
-            </button>
-          </div>
+              <span
+                className={`absolute top-0.5 left-0.5 inline-block h-3 w-3 rounded-full bg-white shadow transition-transform ${
+                  filter === 'unread' ? 'translate-x-3' : 'translate-x-0'
+                }`}
+              />
+            </span>
+          </button>
         </div>
       </div>
 
