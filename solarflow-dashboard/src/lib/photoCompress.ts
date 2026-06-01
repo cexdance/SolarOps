@@ -16,12 +16,11 @@ export async function compressImageToDataUrl(
     return await fileToDataUrl(file);
   }
 
-  // HEIC/HEIF: Canvas cannot decode these on non-WebKit engines (iOS Chrome).
-  // Fall back to FileReader so callers still get a usable dataURL.
-  if (file.type === 'image/heic' || file.type === 'image/heif') {
-    return await fileToDataUrl(file);
-  }
-
+  // NOTE: do NOT preemptively bail on HEIC/HEIF. iPhone photos are HEIC by
+  // default, and bailing stored the RAW multi-MB file as base64 — a single
+  // photo could blow the ~5MB localStorage cap and trigger "Storage full".
+  // loadBitmap() decodes HEIC on iOS Safari via createImageBitmap/<img>; the
+  // catch below falls back to the raw file only if decoding genuinely fails.
   try {
     const bitmap = await loadBitmap(file);
     const { width, height } = scaleToFit(bitmap.width, bitmap.height, maxEdge);
@@ -95,11 +94,9 @@ export async function compressImageToBlob(
 ): Promise<Blob> {
   if (!file.type.startsWith('image/')) return file;
 
-  // HEIC/HEIF: iOS camera default. iOS Safari auto-converts when reading from the
-  // Photos library, but iOS Chrome may give raw HEIC. Canvas cannot decode HEIC —
-  // skip compression and upload the original file directly.
-  if (file.type === 'image/heic' || file.type === 'image/heif') return file;
-
+  // Do NOT preemptively bail on HEIC/HEIF — loadBitmap decodes it on iOS Safari
+  // via createImageBitmap/<img>, and the catch below uploads the original file
+  // only if decoding genuinely fails. Compressing keeps the upload payload small.
   try {
     const bitmap = await loadBitmap(file);
     const { width, height } = scaleToFit(bitmap.width, bitmap.height, maxEdge);
