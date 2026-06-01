@@ -49,15 +49,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: 'mentionedUserIds required' });
   }
 
-  // ── Fetch mentioned users from Supabase Auth Admin ─────────────────────────
-  const listRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users?per_page=200`, {
-    headers: supabaseHeaders,
-  });
-  if (!listRes.ok) return res.status(500).json({ error: 'Could not fetch users' });
-
-  const listBody = await listRes.json() as { users?: AuthUser[] };
-  const allUsers: AuthUser[] = listBody.users ?? [];
-  const mentioned = allUsers.filter(u => (mentionedUserIds as string[]).includes(u.id));
+  // ── Fetch ONLY the mentioned users by id (targeted lookups) ────────────────
+  // Previously this listed up to 200 users and filtered in-memory — O(all-users)
+  // and silently missed anyone past the page limit. Mentions are typically 1-3
+  // users, so fetch each by id directly. Correct and scales to any org size.
+  const ids = mentionedUserIds as string[];
+  const lookups = await Promise.all(
+    ids.map(async (id) => {
+      try {
+        const r = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${id}`, { headers: supabaseHeaders });
+        if (!r.ok) return null;
+        return await r.json() as AuthUser;
+      } catch {
+        return null;
+      }
+    }),
+  );
+  const mentioned = lookups.filter((u): u is AuthUser => !!u && !!u.id);
+  if (mentioned.length === 0) return res.status(404).json({ error: 'No matching users found' });
 
   // ── Insert notification rows ───────────────────────────────────────────────
   const now = new Date().toISOString();

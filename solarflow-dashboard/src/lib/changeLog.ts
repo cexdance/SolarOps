@@ -133,6 +133,12 @@ export function logUpload(
 
 /** Drain all unsynced entries to Supabase (call after login / reconnect). */
 export async function flushChangeLog(): Promise<void> {
+  // Check the session ONCE for the whole flush instead of once per entry.
+  // getSession() was previously called inside pushEntry for every row, so a
+  // 50-entry backlog meant 50 redundant session reads. One check up front.
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return; // not logged in — flush on next login
+
   const pending = readLog().filter(e => e.syncedAt === null);
   const BATCH = 10;
   for (let i = 0; i < pending.length; i += BATCH) {
@@ -148,10 +154,8 @@ export function getRecentLog(limit = 100): ChangeEntry[] {
 // ── Internal ───────────────────────────────────────────────────────────────
 
 async function pushEntry(entry: ChangeEntry): Promise<void> {
+  // Session is verified once in flushChangeLog before this is called.
   try {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return; // not logged in — will be flushed on next login
-
     const { error } = await supabase.from('change_log').upsert({
       id:          entry.id,
       op_type:     entry.opType,
