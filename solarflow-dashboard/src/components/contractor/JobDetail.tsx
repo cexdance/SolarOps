@@ -315,11 +315,27 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
   );
 
   // Auto-save photos + notes whenever they change — applies in any phase so uploads
-  // before "Start Call" or after "Complete" still persist.
+  // before "Start Call" or after "Complete" still persist. Writes the FULL current
+  // editor snapshot (not just photos+notes) so this save never clobbers other live
+  // fields (serviceStatus, nextSteps, parts, ...) back to the prop's older values.
   const isMounted = useRef(false);
   useEffect(() => {
     if (!isMounted.current) { isMounted.current = true; return; }
-    onUpdateJob({ ...job, photos, operationalNotes: serviceNotes });
+    const partsTotal = parts.reduce((s, p) => s + p.totalPrice, 0);
+    onUpdateJob({
+      ...job,
+      photos,
+      operationalNotes: serviceNotes,
+      serviceStatus,
+      nextSteps,
+      requiresFollowUp: requireFollowUp,
+      parts,
+      partsAmount: partsTotal,
+      partsReimbursementRequested: parts.length > 0 ? partsReimbursement : false,
+      upsellFlagged,
+      upsellNotes: upsellFlagged ? upsellNotes : undefined,
+      ...(isOptimizerJob ? { optimizerCount } : {}),
+    });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [photos, serviceNotes]);
 
