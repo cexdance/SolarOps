@@ -67,8 +67,17 @@ This section defines how Claude leverages persistent memory and knowledge organi
 - **Memory Storage:** `~/.claude/projects/-Users-cex-SolarOps-/memory/` persists across all sessions
 - **Memory Files:** Reference [[project_ui_skill]], [[project_responsive_fixes]], [[project_kiniela]] for patterns and decisions
 - **Context Convention:** This CLAUDE.md loads automatically at session start; update monthly with new patterns discovered
-- **Wiki Links:** Use `[[ComponentName]]`, `[[FeatureName]]` to establish backlinks—helps Claude find related context
+- **Wiki Links:** Use `[[ComponentName]]`, `[[FeatureName]]` to establish backlinks — helps Claude find related context
 - **Never Pollute Vault:** Keep generated plans and logs in ~/.claude/, not in code
+
+### Post-Deployment Obsidian Update (MANDATORY)
+
+After every `git push` to `main` (i.e., every deployment), Claude MUST immediately:
+
+1. Write a dated note to `/Users/cex/SolarOps÷/YYYY-MM-DD.md` (use today's date). If a note for today already exists, append to it under a new `##` heading.
+2. Update `~/.claude/projects/-Users-cex-SolarOps-/memory/MEMORY.md` index to reference the new note and bump the `_Last updated` date.
+3. The note must include: commit hash(es), what changed and why, files modified, any patterns worth reusing, and any pending follow-ups.
+4. This step is non-optional. Do not skip it even for small hotfixes.
 
 ## Common Development Workflows
 

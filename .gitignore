@@ -10,6 +10,7 @@
 node_modules/
 dist/
 build/
+node-compile-cache/
 
 # Auto-generated at build time by vite.config.ts — never commit
 solarflow-dashboard/public/version.json
