@@ -416,14 +416,23 @@ export const Jobs: React.FC<JobsProps> = ({
       </div>
 
       {/* Kanban View */}
-      {viewMode === 'kanban' && (
+      {viewMode === 'kanban' && (() => {
+        const COLUMN_STATUSES = ['new', 'assigned', 'in_progress', 'completed', 'invoiced', 'paid'] as JobStatus[];
+        return (
         <div className="flex gap-4 overflow-x-auto pb-4">
-          {(['new', 'assigned', 'in_progress', 'completed', 'invoiced', 'paid'] as JobStatus[]).map(status => (
+          {COLUMN_STATUSES.map(status => (
             <KanbanColumn
               key={status}
               status={status}
               title={status.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
-              columnJobs={filteredJobs.filter(j => j.status === status)}
+              // Catch jobs whose status is undefined or outside the 6 known columns
+              // (e.g. RMA work orders never normalized to a board status) in the
+              // "New" column so they are NEVER silently dropped from the board.
+              columnJobs={filteredJobs.filter(j =>
+                status === 'new'
+                  ? (j.status === status || !COLUMN_STATUSES.includes(j.status))
+                  : j.status === status
+              )}
               allJobs={jobs}
               draggedJobId={draggedJobId}
               customers={customers}
@@ -436,7 +445,8 @@ export const Jobs: React.FC<JobsProps> = ({
             />
           ))}
         </div>
-      )}
+        );
+      })()}
 
       {/* List View */}
       {viewMode === 'list' && (
