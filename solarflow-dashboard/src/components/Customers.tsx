@@ -68,7 +68,7 @@ import { AddressLink } from './AddressLink';
 import { WorkOrderPanel } from './WorkOrderPanel';
 import { PhoneLink } from './PhoneLink';
 import { ActivityFeed } from './ui/ActivityFeed';
-import { uploadCustomerFiles, uploadCustomerFilesPartial, StoredCustomerFile } from '../lib/customerFileStorage';
+import { uploadCustomerFiles, uploadCustomerFilesPartial, StoredCustomerFile, CustomerFileUpload } from '../lib/customerFileStorage';
 import { fireMentionNotifications, parseMentionEmails } from './ui/MentionTextarea';
 import { toast } from 'sonner';
 
@@ -3179,6 +3179,44 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
   const [undoStack, setUndoStack] = useState<Array<{ action: 'delete' | 'edit'; entry: Activity; previousText?: string }>>([]);
   const [showEmojiPicker, setShowEmojiPicker] = useState<string | null>(null);
 
+  // Files tab — "+ Upload Files" upload (previously a dead button with no handler)
+  const filesInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingFiles, setUploadingFiles] = useState(false);
+  const handleUploadCustomerFiles = async (fileList: FileList | null) => {
+    if (!fileList || fileList.length === 0) return;
+    setUploadingFiles(true);
+    try {
+      // uploadCustomerFilesPartial expects CustomerFileUpload[] (name+dataUrl+meta),
+      // so read each File to a base64 dataURL first.
+      const toUpload: CustomerFileUpload[] = await Promise.all(
+        Array.from(fileList).map(async (file) => ({
+          id: `cf-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          name: file.name,
+          dataUrl: await new Promise<string>((resolve, reject) => {
+            const r = new FileReader();
+            r.onload = () => resolve(r.result as string);
+            r.onerror = () => reject(r.error ?? new Error('read failed'));
+            r.readAsDataURL(file);
+          }),
+          mimeType: file.type || 'application/octet-stream',
+          size: file.size,
+        })),
+      );
+      const { uploaded, failed } = await uploadCustomerFilesPartial(toUpload, customer.id);
+      if (uploaded.length > 0) {
+        onUpdateCustomer({ ...customer, files: [...uploaded, ...(customer.files ?? [])] });
+        toast.success(`${uploaded.length} file${uploaded.length !== 1 ? 's' : ''} uploaded`);
+      }
+      if (failed.length > 0) {
+        toast.error(`${failed.length} file${failed.length !== 1 ? 's' : ''} failed to upload`);
+      }
+    } catch {
+      toast.error('File upload failed. Please try again.');
+    } finally {
+      setUploadingFiles(false);
+    }
+  };
+
   const handleDeleteActivity = (id: string) => {
     const entry = (customer.activityHistory ?? []).find(a => a.id === id);
     if (entry) setUndoStack(prev => [...prev.slice(-4), { action: 'delete', entry }]);
@@ -4218,9 +4256,20 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                   </div>
                 )}
 
-                <button className="mt-3 w-full py-2 border-2 border-dashed border-slate-300 rounded-lg text-slate-500 text-sm hover:border-orange-500 hover:text-orange-500 cursor-pointer transition-colors">
-                  + Upload Files
+                <button
+                  onClick={() => filesInputRef.current?.click()}
+                  disabled={uploadingFiles}
+                  className="mt-3 w-full py-2 border-2 border-dashed border-slate-300 rounded-lg text-slate-500 text-sm hover:border-orange-500 hover:text-orange-500 cursor-pointer transition-colors disabled:opacity-60 disabled:cursor-wait"
+                >
+                  {uploadingFiles ? 'Uploading…' : '+ Upload Files'}
                 </button>
+                <input
+                  ref={filesInputRef}
+                  type="file"
+                  multiple
+                  className="hidden"
+                  onChange={e => { handleUploadCustomerFiles(e.target.files); e.target.value = ''; }}
+                />
               </div>
             </div>
           )}
