@@ -16,6 +16,7 @@ import {
 } from '../../lib/contractorGamification';
 import { compressImageToDataUrl } from '../../lib/photoCompress';
 import { uploadPhotoToStorage } from '../../lib/photoStorage';
+import { appendPhoto, getPhoto, flushPendingMirrors, listPhotosForJob } from '../../lib/photoStore';
 
 interface JobDetailProps {
   job: ContractorJob;
@@ -344,31 +345,38 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
   }, [photos, serviceNotes, serviceStatus, nextSteps, requireFollowUp, parts, partsReimbursement, upsellFlagged, upsellNotes, optimizerCount]);
 
   const addPhoto = async (category: PhotoCategory, dataUrl: string) => {
-    const photoId = `ph-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-
-    // Optimistic UI: show dataUrl preview immediately
-    setPhotos(prev => ({ ...prev, [category]: [...(prev[category] ?? []), dataUrl] }));
     setUploadError(null);
-    pendingUploads.current.add(photoId);
+    // Show base64 preview immediately — display only, never written to localStorage.
+    // saveContractorJobs strips base64 before setItem so localStorage stays small.
+    setPhotos(prev => ({ ...prev, [category]: [...(prev[category] ?? []), dataUrl] }));
 
     try {
       const blob = await (await fetch(dataUrl)).blob();
-      const result = await uploadPhotoToStorage(blob, job.id, photoId);
-      pendingUploads.current.delete(photoId);
+      // IDB-FIRST: blob is durable in IndexedDB before any upload attempt.
+      // This means the photo survives an offline session, a localStorage-full event,
+      // or an app close/reopen — IndexedDB has orders of magnitude more quota than
+      // localStorage. appendPhoto fires a background Supabase mirror automatically.
+      const row = await appendPhoto({ jobId: job.id, category, blob });
+      pendingUploads.current.add(row.id);
 
-      if (result.url) {
-        // Swap the preview dataUrl out for the permanent Storage URL
-        setPhotos(prev => ({
-          ...prev,
-          [category]: prev[category].map(p => p === dataUrl ? result.url! : p),
-        }));
-      } else {
-        setUploadError(`Photo upload failed: ${result.error}. Photo saved locally — re-save to retry.`);
-      }
+      // One-shot check: if the background mirror finished quickly, swap the
+      // preview base64 → the permanent https:// URL in state. Anything not done
+      // in time will be handled by flushPendingMirrors on the next reconnect.
+      setTimeout(async () => {
+        try {
+          const updated = await getPhoto(row.id);
+          if (updated?.supabaseUrl) {
+            setPhotos(prev => ({
+              ...prev,
+              [category]: prev[category].map(p => p === dataUrl ? updated.supabaseUrl! : p),
+            }));
+          }
+        } catch { /* keep base64 preview; retry sweep will handle */ }
+        pendingUploads.current.delete(row.id);
+      }, 8000);
     } catch (err) {
-      pendingUploads.current.delete(photoId);
       const msg = err instanceof Error ? err.message : String(err);
-      setUploadError(`Photo upload failed: ${msg}`);
+      setUploadError(`Photo capture failed: ${msg}`);
     }
   };
 
@@ -386,38 +394,76 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
   const retryPendingPhotoUploads = useCallback(async () => {
     if (retryInFlight.current) return;
     if (!navigator.onLine) return;
-    // Collect every base64 photo still awaiting upload.
-    const stranded: { category: PhotoCategory; dataUrl: string }[] = [];
-    for (const [cat, urls] of Object.entries(photos)) {
-      for (const u of (urls ?? [])) {
-        if (typeof u === 'string' && u.startsWith('data:')) {
-          stranded.push({ category: cat as PhotoCategory, dataUrl: u });
-        }
-      }
-    }
-    if (stranded.length === 0) return;
-
     retryInFlight.current = true;
     try {
-      for (const { category, dataUrl } of stranded) {
-        const photoId = `ph-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-        try {
-          const blob = await (await fetch(dataUrl)).blob();
-          const result = await uploadPhotoToStorage(blob, job.id, photoId);
-          if (result.url) {
-            setPhotos(prev => ({
-              ...prev,
-              [category]: (prev[category] ?? []).map(p => p === dataUrl ? result.url! : p),
-            }));
-          }
-        } catch {
-          // Leave the dataUrl in place; a later retry (next online event) handles it.
+      // 1. Flush all IDB-pending mirrors — the primary durability path.
+      await flushPendingMirrors();
+
+      // 2. Swap base64 previews → https:// for any IDB rows that are now uploaded.
+      //    FIFO: for each uploaded row, replace the first base64 in that category.
+      const rows = await listPhotosForJob(job.id);
+      for (const row of rows.filter(r => r.supabaseUrl)) {
+        const url = row.supabaseUrl!;
+        setPhotos(prev => {
+          const cat = row.category as PhotoCategory;
+          if (!(cat in prev)) return prev;
+          let swapped = false;
+          const updated = prev[cat].map(p => {
+            if (!swapped && p.startsWith('data:')) { swapped = true; return url; }
+            return p;
+          });
+          return swapped ? { ...prev, [cat]: updated } : prev;
+        });
+      }
+
+      // 3. Sweep any residual in-session base64 not yet in IDB (edge case:
+      //    photos captured before this code was deployed).
+      for (const [cat, urls] of Object.entries(photos)) {
+        for (const u of (urls ?? [])) {
+          if (typeof u !== 'string' || !u.startsWith('data:')) continue;
+          try {
+            const blob = await (await fetch(u)).blob();
+            const row = await appendPhoto({ jobId: job.id, category: cat as PhotoCategory, blob });
+            await new Promise(r => setTimeout(r, 1500));
+            const done = await getPhoto(row.id);
+            if (done?.supabaseUrl) {
+              setPhotos(prev => ({
+                ...prev,
+                [cat]: (prev[cat as PhotoCategory] ?? []).map(p => p === u ? done.supabaseUrl! : p),
+              }));
+            }
+          } catch { /* leave base64; next retry will attempt */ }
         }
       }
     } finally {
       retryInFlight.current = false;
     }
   }, [photos, job.id]);
+
+  // On mount: restore any IDB-uploaded photos that were stripped from localStorage
+  // (base64 is never written to localStorage, so an uploaded photo's https:// URL
+  // must come from IDB on re-open if localStorage was cleared or quota-hit).
+  useEffect(() => {
+    void (async () => {
+      try {
+        const rows = await listPhotosForJob(job.id);
+        const uploaded = rows.filter(r => r.supabaseUrl);
+        if (uploaded.length === 0) return;
+        setPhotos(prev => {
+          const next = { ...prev };
+          for (const row of uploaded) {
+            const cat = row.category as PhotoCategory;
+            if (!(cat in next)) continue;
+            if (!next[cat].includes(row.supabaseUrl!)) {
+              next[cat] = [...next[cat], row.supabaseUrl!];
+            }
+          }
+          return next;
+        });
+      } catch { /* IDB unavailable (SSR / incognito restricted), skip */ }
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [job.id]);
 
   useEffect(() => {
     retryPendingPhotoUploads();

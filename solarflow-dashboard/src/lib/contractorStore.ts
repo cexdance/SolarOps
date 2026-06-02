@@ -516,9 +516,22 @@ export const saveContractorJobs = (jobs: ContractorJob[]): void => {
   // Always push to the cloud first — the Supabase write does NOT depend on
   // localStorage and is the durable copy, so it must run even if localStorage
   // is full. (Previously a quota throw on setItem skipped dbSet entirely.)
+  // Push full payload (incl. base64) to cloud — Supabase handles large data fine.
   dbSet(CONTRACTOR_JOBS_KEY, jobs);
   try {
-    localStorage.setItem(CONTRACTOR_JOBS_KEY, JSON.stringify(jobs));
+    // Strip base64 photo strings before writing to localStorage to prevent quota overflow.
+    // Photos are durably stored in IndexedDB (via photoStore.appendPhoto) and the
+    // https:// URL is kept once uploaded. base64 only lives in React state during a session.
+    const slim = jobs.map(j => ({
+      ...j,
+      photos: Object.fromEntries(
+        Object.entries(j.photos ?? {}).map(([cat, urls]) => [
+          cat,
+          (urls as string[]).filter((u: string) => !u.startsWith('data:')),
+        ])
+      ) as typeof j.photos,
+    }));
+    localStorage.setItem(CONTRACTOR_JOBS_KEY, JSON.stringify(slim));
   } catch (e) {
     // localStorage quota exceeded (heavy base64 photos). The cloud write above
     // still ran, so data is not lost — but surface the warning instead of
