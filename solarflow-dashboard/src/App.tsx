@@ -37,6 +37,7 @@ import { loadData, saveData } from './lib/dataStore';
 import { migrateWoPhotos } from './lib/photoStore';
 import { pickupJobsForContractor, toContractorJobView } from './lib/woHelpers';
 import { logChange, logJobChange, flushChangeLog } from './lib/changeLog';
+import { foldContractorJobsIntoJobs } from './lib/woMigration';
 import { autoArchiveCompletedJobs } from './lib/jobService';
 import { fetchMyNotifications, markNotificationReadRemote, markAllNotificationsReadRemote, startNotificationPolling, stopNotificationPolling, subscribeToNotifications, unsubscribeFromNotifications } from './lib/notifications';
 import { processBillingTimers } from './lib/billingService';
@@ -734,6 +735,24 @@ function App() {
   useEffect(() => {
     const cleanup = initSyncStatusListeners();
     return cleanup;
+  }, []);
+
+  // Phase D: one-time, idempotent fold of the legacy contractorJobs store into
+  // data.jobs (gap-fill only — never overwrites Job data, never deletes the
+  // store). After this, data.jobs is the complete single source; the projection
+  // reads Job first and uses contractorJobs only as a transition fallback.
+  const foldedContractorJobs = useRef(false);
+  useEffect(() => {
+    if (foldedContractorJobs.current) return;
+    foldedContractorJobs.current = true;
+    setData(prev => {
+      const { jobs: folded, changed } = foldContractorJobsIntoJobs(prev.jobs, contractorJobs);
+      if (!changed) return prev;
+      const next = { ...prev, jobs: folded };
+      saveData(next);
+      return next;
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── Sync: poll + realtime + remote-update handler (extracted to hook) ────
