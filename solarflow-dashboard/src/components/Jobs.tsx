@@ -33,6 +33,20 @@ const COLUMN_TO_WOSTATUS: Record<string, WOStatus> = {
   new: 'quote_approved', assigned: 'scheduled', in_progress: 'in_progress',
   completed: 'completed', invoiced: 'invoiced', paid: 'paid',
 };
+
+// Precise pipeline-stage labels (match the WO panel). The card badge shows THIS,
+// not the coarse 6-bucket name, so the badge and the panel pipeline always agree
+// (e.g. a quote_approved WO reads "Quote Approved", not the coarse "new").
+const WO_STATUS_LABEL: Record<string, string> = {
+  draft: 'Draft', quote_sent: 'Quote Sent', contact_client: 'Contact Client',
+  quote_approved: 'Quote Approved', scheduled: 'Scheduled', in_progress: 'In Progress',
+  completed: 'Completed', invoiced: 'Invoiced', paid: 'Paid', archived: 'Archived',
+};
+function badgeLabel(job: Job): string {
+  if (job.status === 'archived') return 'Archived';
+  if (job.woStatus && WO_STATUS_LABEL[job.woStatus]) return WO_STATUS_LABEL[job.woStatus];
+  return boardStatus(job).replace('_', ' ');
+}
 import { WorkOrderPanel } from './WorkOrderPanel';
 
 // ─── Standalone sub-components (defined outside Jobs to prevent remount on parent re-render) ───
@@ -103,7 +117,7 @@ const JobCard: React.FC<JobCardProps> = ({ job, customer, technician, contractor
       </div>
       <div className="flex flex-col items-end gap-1 ml-2 shrink-0">
         <span className={`text-xs px-2 py-1 rounded-full border ${statusColors[boardStatus(job)]}`}>
-          {boardStatus(job).replace('_', ' ')}
+          {badgeLabel(job)}
         </span>
         {job.urgency && (
           <span className={`text-[10px] px-1.5 py-0.5 rounded-full border ${urgencyColors[job.urgency]}`}>
