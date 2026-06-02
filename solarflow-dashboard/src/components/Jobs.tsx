@@ -7,7 +7,20 @@ import {
   startOfWeek, endOfWeek, startOfMonth, endOfMonth, subMonths,
 } from 'date-fns';
 import { WorkOrderCalendar } from './WorkOrderCalendar';
-import { Job, Customer, User as UserType, JobStatus, UrgencyLevel, ServiceType } from '../types';
+import { Job, Customer, User as UserType, JobStatus, UrgencyLevel, ServiceType, WO_TO_JOB_STATUS, WOStatus } from '../types';
+
+// The board groups by `status`, but RMA/imported work orders often carry a stale
+// or undefined `status` while their real pipeline state lives in `woStatus`.
+// Respect `status` when it's a valid column (so drag-drop — which writes only
+// `status` — keeps working), otherwise derive the column from `woStatus`, and
+// finally fall back to "new" so NO work order is ever invisible on the board.
+const BOARD_COLUMN_STATUSES: JobStatus[] = ['new', 'assigned', 'in_progress', 'completed', 'invoiced', 'paid'];
+function boardStatus(job: Job): JobStatus {
+  if (job.status === 'archived') return 'archived' as JobStatus;
+  if (job.status && BOARD_COLUMN_STATUSES.includes(job.status)) return job.status;
+  const fromWo = job.woStatus ? WO_TO_JOB_STATUS[job.woStatus as WOStatus] : undefined;
+  return fromWo ?? 'new';
+}
 import { WorkOrderPanel } from './WorkOrderPanel';
 
 // ─── Standalone sub-components (defined outside Jobs to prevent remount on parent re-render) ───
@@ -278,7 +291,7 @@ export const Jobs: React.FC<JobsProps> = ({
       customer?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       customer?.address.toLowerCase().includes(searchQuery.toLowerCase()) ||
       job.notes.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus = filterStatus === 'all' || job.status === filterStatus;
+    const matchesStatus = filterStatus === 'all' || boardStatus(job) === filterStatus;
     // Period filter — uses scheduledDate or createdAt
     let matchesPeriod = true;
     if (periodRange) {
@@ -416,23 +429,17 @@ export const Jobs: React.FC<JobsProps> = ({
       </div>
 
       {/* Kanban View */}
-      {viewMode === 'kanban' && (() => {
-        const COLUMN_STATUSES = ['new', 'assigned', 'in_progress', 'completed', 'invoiced', 'paid'] as JobStatus[];
-        return (
+      {viewMode === 'kanban' && (
         <div className="flex gap-4 overflow-x-auto pb-4">
-          {COLUMN_STATUSES.map(status => (
+          {BOARD_COLUMN_STATUSES.map(status => (
             <KanbanColumn
               key={status}
               status={status}
               title={status.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
-              // Catch jobs whose status is undefined or outside the 6 known columns
-              // (e.g. RMA work orders never normalized to a board status) in the
-              // "New" column so they are NEVER silently dropped from the board.
-              columnJobs={filteredJobs.filter(j =>
-                status === 'new'
-                  ? (j.status === status || !COLUMN_STATUSES.includes(j.status))
-                  : j.status === status
-              )}
+              // Group by the EFFECTIVE board status (derives from woStatus when the
+              // raw status is stale/undefined) so RMA/imported work orders land in
+              // the right column WITHOUT needing a manual save, and none vanish.
+              columnJobs={filteredJobs.filter(j => boardStatus(j) === status)}
               allJobs={jobs}
               draggedJobId={draggedJobId}
               customers={customers}
@@ -445,8 +452,7 @@ export const Jobs: React.FC<JobsProps> = ({
             />
           ))}
         </div>
-        );
-      })()}
+      )}
 
       {/* List View */}
       {viewMode === 'list' && (
