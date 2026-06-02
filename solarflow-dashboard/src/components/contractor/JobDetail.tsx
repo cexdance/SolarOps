@@ -16,7 +16,7 @@ import {
 } from '../../lib/contractorGamification';
 import { compressImageToDataUrl } from '../../lib/photoCompress';
 import { uploadPhotoToStorage } from '../../lib/photoStorage';
-import { appendPhoto, getPhoto, flushPendingMirrors, listPhotosForJob } from '../../lib/photoStore';
+import { appendPhoto, getPhoto, flushPendingMirrors, listPhotosForJob, dataUrlToBlob } from '../../lib/photoStore';
 
 interface JobDetailProps {
   job: ContractorJob;
@@ -351,7 +351,9 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
     setPhotos(prev => ({ ...prev, [category]: [...(prev[category] ?? []), dataUrl] }));
 
     try {
-      const blob = await (await fetch(dataUrl)).blob();
+      // Use atob-based conversion — iOS Safari cannot fetch() a data: URL.
+      const blob = dataUrlToBlob(dataUrl);
+      if (!blob) throw new Error('Could not decode photo — unsupported format.');
 
       // IDB-FIRST: persist blob in IndexedDB for offline durability BEFORE upload.
       // This guarantees the photo survives app close, quota events, or a network drop.
@@ -423,7 +425,8 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
         for (const u of (urls ?? [])) {
           if (typeof u !== 'string' || !u.startsWith('data:')) continue;
           try {
-            const blob = await (await fetch(u)).blob();
+            const blob = dataUrlToBlob(u);
+            if (!blob) continue;
             const row = await appendPhoto({ jobId: job.id, category: cat as PhotoCategory, blob });
             await new Promise(r => setTimeout(r, 1500));
             const done = await getPhoto(row.id);
@@ -512,7 +515,7 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
       const photoId = `ph-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
       pendingUploads.current.add(photoId);
       try {
-        const blob = await (await fetch(afterPhoto)).blob();
+        const blob = dataUrlToBlob(afterPhoto) ?? await (await fetch(afterPhoto)).blob();
         const result = await uploadPhotoToStorage(blob, job.id, photoId);
         pendingUploads.current.delete(photoId);
         resolvedAfterUrl = result.url ?? afterPhoto; // fall back to dataUrl on failure

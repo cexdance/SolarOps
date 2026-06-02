@@ -156,7 +156,7 @@ interface WoPhotoLike {
   createdAt: string;
 }
 
-function dataUrlToBlob(dataUrl: string): Blob | null {
+export function dataUrlToBlob(dataUrl: string): Blob | null {
   const m = /^data:([^;]+);base64,(.+)$/.exec(dataUrl);
   if (!m) return null;
   const mime = m[1];
