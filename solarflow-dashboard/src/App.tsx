@@ -1087,6 +1087,10 @@ function App() {
         for (const [cat, urls] of Object.entries(photos)) {
           for (const url of (urls ?? [])) {
             if (!url) continue;
+            // NEVER mirror base64 into solarflow_data — that blob overflows localStorage.
+            // base64 only lives in React state + IndexedDB (IDB); it will be mirrored
+            // here automatically once the IDB background mirror produces an https:// URL.
+            if (url.startsWith('data:')) continue;
             const isStorageUrl = url.startsWith('http');
             out.push({
               id: `cp-${cat}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
