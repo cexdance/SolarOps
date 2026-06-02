@@ -352,28 +352,29 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
 
     try {
       const blob = await (await fetch(dataUrl)).blob();
-      // IDB-FIRST: blob is durable in IndexedDB before any upload attempt.
-      // This means the photo survives an offline session, a localStorage-full event,
-      // or an app close/reopen — IndexedDB has orders of magnitude more quota than
-      // localStorage. appendPhoto fires a background Supabase mirror automatically.
+
+      // IDB-FIRST: persist blob in IndexedDB for offline durability BEFORE upload.
+      // This guarantees the photo survives app close, quota events, or a network drop.
       const row = await appendPhoto({ jobId: job.id, category, blob });
       pendingUploads.current.add(row.id);
 
-      // One-shot check: if the background mirror finished quickly, swap the
-      // preview base64 → the permanent https:// URL in state. Anything not done
-      // in time will be handled by flushPendingMirrors on the next reconnect.
-      setTimeout(async () => {
-        try {
-          const updated = await getPhoto(row.id);
-          if (updated?.supabaseUrl) {
-            setPhotos(prev => ({
-              ...prev,
-              [category]: prev[category].map(p => p === dataUrl ? updated.supabaseUrl! : p),
-            }));
-          }
-        } catch { /* keep base64 preview; retry sweep will handle */ }
-        pendingUploads.current.delete(row.id);
-      }, 8000);
+      // DIRECT UPLOAD: also attempt Supabase immediately (same as original CB-2 fix)
+      // using the IDB row id. This gives an instant https:// URL swap when online —
+      // no timeout guessing — so admin sees the photo as soon as the WO is saved.
+      const result = await uploadPhotoToStorage(blob, job.id, row.id);
+      pendingUploads.current.delete(row.id);
+
+      if (result.url) {
+        // Swap base64 preview → permanent Storage URL in state.
+        // The auto-save effect fires and mirrors this https:// URL to the admin side.
+        setPhotos(prev => ({
+          ...prev,
+          [category]: prev[category].map(p => p === dataUrl ? result.url! : p),
+        }));
+      } else {
+        // Offline / network error — blob safe in IDB; retry on reconnect.
+        setUploadError('Photo saved offline — will upload when connected.');
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       setUploadError(`Photo capture failed: ${msg}`);
