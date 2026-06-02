@@ -17,10 +17,22 @@ import { Job, Customer, User as UserType, JobStatus, UrgencyLevel, ServiceType, 
 const BOARD_COLUMN_STATUSES: JobStatus[] = ['new', 'assigned', 'in_progress', 'completed', 'invoiced', 'paid'];
 function boardStatus(job: Job): JobStatus {
   if (job.status === 'archived') return 'archived' as JobStatus;
-  if (job.status && BOARD_COLUMN_STATUSES.includes(job.status)) return job.status;
+  // `woStatus` is the authoritative pipeline stage (the WO panel advances it).
+  // The coarse `status` can drift — e.g. a board drag set it without updating
+  // woStatus — which made the list badge disagree with the panel. Derive the
+  // column from woStatus when present, then fall back to status.
   const fromWo = job.woStatus ? WO_TO_JOB_STATUS[job.woStatus as WOStatus] : undefined;
-  return fromWo ?? 'new';
+  if (fromWo) return fromWo;
+  if (job.status && BOARD_COLUMN_STATUSES.includes(job.status)) return job.status;
+  return 'new';
 }
+// Representative woStatus for each board column, used when a drag moves a card to
+// a column its current woStatus doesn't already map to — keeps status + woStatus
+// in sync so they can never drift apart again.
+const COLUMN_TO_WOSTATUS: Record<string, WOStatus> = {
+  new: 'quote_approved', assigned: 'scheduled', in_progress: 'in_progress',
+  completed: 'completed', invoiced: 'invoiced', paid: 'paid',
+};
 import { WorkOrderPanel } from './WorkOrderPanel';
 
 // ─── Standalone sub-components (defined outside Jobs to prevent remount on parent re-render) ───
@@ -90,8 +102,8 @@ const JobCard: React.FC<JobCardProps> = ({ job, customer, technician, contractor
         </p>
       </div>
       <div className="flex flex-col items-end gap-1 ml-2 shrink-0">
-        <span className={`text-xs px-2 py-1 rounded-full border ${statusColors[job.status]}`}>
-          {job.status.replace('_', ' ')}
+        <span className={`text-xs px-2 py-1 rounded-full border ${statusColors[boardStatus(job)]}`}>
+          {boardStatus(job).replace('_', ' ')}
         </span>
         {job.urgency && (
           <span className={`text-[10px] px-1.5 py-0.5 rounded-full border ${urgencyColors[job.urgency]}`}>
@@ -168,7 +180,14 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({
     const jobId = e.dataTransfer.getData('jobId');
     if (!jobId) return;
     const job = allJobs.find(j => j.id === jobId);
-    if (job && job.status !== status) onUpdateJob({ ...job, status });
+    if (job && boardStatus(job) !== status) {
+      // Keep the fine-grained woStatus if it already maps to the target column;
+      // otherwise move it to a representative woStatus so the coarse `status` and
+      // the pipeline `woStatus` stay consistent (no more invoiced-vs-quote drift).
+      const keepWo = job.woStatus && WO_TO_JOB_STATUS[job.woStatus as WOStatus] === status;
+      const woStatus = keepWo ? job.woStatus : COLUMN_TO_WOSTATUS[status];
+      onUpdateJob({ ...job, status, woStatus });
+    }
   };
 
   return (
