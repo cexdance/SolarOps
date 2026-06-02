@@ -59,11 +59,11 @@ interface LayoutProps {
 const allNavItems = [
   { id: 'dispatch',           label: 'Ops Center',        icon: Crosshair,       dispatch: true,  roles: ['admin', 'coo', 'technician', 'support'] },
   { id: 'dashboard',          label: 'Dashboard',          icon: LayoutDashboard,                  roles: ['admin', 'coo', 'technician', 'support'] },
-  { id: 'jobs',               label: 'Work Orders',        icon: Wrench,                           roles: ['admin', 'coo', 'technician', 'support'] },
-  { id: 'rma',               label: 'RMA Tracker',        icon: RotateCcw,                           roles: ['admin', 'coo', 'support'] },
   { id: 'customers',          label: 'Customers',          icon: Users,                            roles: ['admin', 'coo', 'technician', 'support'] },
   { id: 'lobby',              label: 'Lead Lobby',         icon: Inbox,           indent: true, parent: 'customers', roles: ['admin', 'coo', 'support', 'sales'] },
   { id: 'solaredge',          label: 'SolarEdge Sites',    icon: Sun,             indent: true, parent: 'customers', roles: ['admin', 'coo', 'support'] },
+  { id: 'jobs',               label: 'Work Orders',        icon: Wrench,                           roles: ['admin', 'coo', 'technician', 'support'] },
+  { id: 'rma',               label: 'RMA Tracker',        icon: RotateCcw,                           roles: ['admin', 'coo', 'support'] },
   { id: 'billing',            label: 'Billing',            icon: Receipt,         badge: 'unbilled', roles: ['admin'] },
   { id: 'contractor-billing', label: 'Contractor Pay',     icon: DollarSign,      indent: true, parent: 'billing', roles: ['admin'] },
   { id: 'rates',              label: 'Service Rates',      icon: DollarSign,      indent: true, parent: 'billing', roles: ['admin'] },
