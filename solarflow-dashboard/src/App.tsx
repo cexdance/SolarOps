@@ -1614,7 +1614,7 @@ function App() {
       let seTotalCount = 0;
 
       while (true) {
-        const url = `/api/solaredge?path=/sites/list&size=${SE_PAGE}&startIndex=${seStartIndex}&api_key=${encodeURIComponent(apiKey)}`;
+        const url = `/api/solaredge?path=/sites/list&size=${SE_PAGE}&startIndex=${seStartIndex}`;
         const response = await authedFetch(url);
 
         if (!response.ok) {
@@ -1777,7 +1777,7 @@ function App() {
     let totalCount = 0;
     while (true) {
       const response = await authedFetch(
-        `/api/solaredge?path=/sites/list&size=${PAGE}&startIndex=${startIndex}&api_key=${encodeURIComponent(apiKey)}`
+        `/api/solaredge?path=/sites/list&size=${PAGE}&startIndex=${startIndex}`
       );
       if (!response.ok) {
         if (response.status === 401 || response.status === 403)

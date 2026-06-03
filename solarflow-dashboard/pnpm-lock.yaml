@@ -36,8 +36,8 @@ importers:
         specifier: ^1.0.7
         version: 1.0.7(tailwindcss@3.4.16)
       xlsx:
-        specifier: ^0.18.5
-        version: 0.18.5
+        specifier: https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz
+        version: https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz
       zod:
         specifier: ^3.24.1
         version: 3.24.2
@@ -62,7 +62,7 @@ importers:
         version: 5.6.15(rollup@4.39.0)
       '@vitejs/plugin-react':
         specifier: ^4.3.4
-        version: 4.3.4(vite@6.2.6(@types/node@22.14.1)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.7.1))
+        version: 4.3.4(vite@6.3.7(@types/node@22.14.1)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.7.1))
       '@vitest/ui':
         specifier: ^4.1.7
         version: 4.1.7(vitest@4.1.7)
@@ -97,14 +97,14 @@ importers:
         specifier: ^8.15.0
         version: 8.29.1(eslint@9.24.0(jiti@1.21.7))(typescript@5.6.3)
       vite:
-        specifier: ^6.0.1
-        version: 6.2.6(@types/node@22.14.1)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.7.1)
+        specifier: ~6.3.6
+        version: 6.3.7(@types/node@22.14.1)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.7.1)
       vite-plugin-source-identifier:
         specifier: 1.1.2
-        version: 1.1.2(vite@6.2.6(@types/node@22.14.1)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.7.1))
+        version: 1.1.2(vite@6.3.7(@types/node@22.14.1)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.7.1))
       vitest:
         specifier: ^4.1.7
-        version: 4.1.7(@edge-runtime/vm@3.2.0)(@types/node@22.14.1)(@vitest/ui@4.1.7)(jsdom@29.1.1)(vite@6.2.6(@types/node@22.14.1)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.7.1))
+        version: 4.1.7(@edge-runtime/vm@3.2.0)(@types/node@22.14.1)(@vitest/ui@4.1.7)(jsdom@29.1.1)(vite@6.3.7(@types/node@22.14.1)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.7.1))
 
 packages:
 
@@ -1129,10 +1129,6 @@ packages:
     engines: {node: '>=0.4.0'}
     hasBin: true
 
-  adler-32@1.3.1:
-    resolution: {integrity: sha512-ynZ4w/nUUv5rrsR8UUGoe1VC9hZj6V5hU9Qw1HlMDJGEJw5S7TfTErWTjMys6M7vr0YWcPqs3qAr4ss0nDfP+A==}
-    engines: {node: '>=0.8'}
-
   agent-base@7.1.4:
     resolution: {integrity: sha512-MnA+YT8fwfJPgBx3m60MNqakm30XOkyIoH1y6huTQvC0PwZG7ki8NacLBcrPbNoo8vEZy7Jpuk7+jMO+CUovTQ==}
     engines: {node: '>= 14'}
@@ -1241,10 +1237,6 @@ packages:
   caniuse-lite@1.0.30001713:
     resolution: {integrity: sha512-wCIWIg+A4Xr7NfhTuHdX+/FKh3+Op3LBbSp2N5Pfx6T/LhdQy3GTyoTg48BReaW/MyMNZAkTadsBtai3ldWK0Q==}
 
-  cfb@1.2.2:
-    resolution: {integrity: sha512-KfdUZsSOw19/ObEWasvBP/Ac4reZvAGauZhs6S/gqNhXhI7cKwvlH7ulj+dOEYnca4bm4SGo8C1bTAQvnTjgQA==}
-    engines: {node: '>=0.8'}
-
   chai@6.2.2:
     resolution: {integrity: sha512-NUPRluOfOiTKBKvWPtSD4PhFvWCqOi0BGStNWs57X9js7XGTprSmFoz5F0tWhR4WPjNeR9jXqdC7/UpSJTnlRg==}
     engines: {node: '>=18'}
@@ -1271,10 +1263,6 @@ packages:
   code-block-writer@10.1.1:
     resolution: {integrity: sha512-67ueh2IRGst/51p0n6FvPrnRjAGHY5F8xdjkgrYE7DDzpJe6qA07RYQ9VcoUeo5ATOjSOiWpSL3SWBRRbempMw==}
 
-  codepage@1.15.0:
-    resolution: {integrity: sha512-3g6NUTPd/YtuuGrhMnOMRjFc+LJw/bnMp3+0r/Wcz3IXUuCosKRJvMphm5+Q+bvTVGcJJuRvVLuYba+WojaFaA==}
-    engines: {node: '>=0.8'}
-
   color-convert@2.0.1:
     resolution: {integrity: sha512-RRECPsj7iu/xb5oKYcsFHSppFNnsj/52OVTRKb4zP5onXwVF3zVmmToNcOfGC+CRDpfK/U584fMg38ZHCaElKQ==}
     engines: {node: '>=7.0.0'}
@@ -1299,11 +1287,6 @@ packages:
 
   convert-source-map@2.0.0:
     resolution: {integrity: sha512-Kvp459HrV2FEJ1CAsi1Ku+MY3kasH19TFykTz2xWmMeq6bk2NU3XXvfJ+Q61m0xktWwt+1HSYf3JZsTms3aRJg==}
-
-  crc-32@1.2.2:
-    resolution: {integrity: sha512-ROmzCKrTnOwybPcJApAA6WBWij23HVfGVNKqqrZpuyZOHqK2CwHSvpGuyt/UNNvaIjEd8X5IFGp4Mh+Ie1IHJQ==}
-    engines: {node: '>=0.8'}
-    hasBin: true
 
   cross-spawn@7.0.6:
     resolution: {integrity: sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA==}
@@ -1585,10 +1568,6 @@ packages:
   foreground-child@3.3.1:
     resolution: {integrity: sha512-gIXjKqtFuWEgzFRJA9WCQeSJLZDjgJUOMCMzxtvFq/37KojM1BFGufqsCy0r4qSQmYLsZYMeyRqzIWOMup03sw==}
     engines: {node: '>=14'}
-
-  frac@1.1.2:
-    resolution: {integrity: sha512-w/XBfkibaTl3YDqASwfDUqkna4Z2p9cFSr1aHDt0WoMTECnRfBOv2WArlZILlqgWlmdIlALXGpM2AOhEk5W3IA==}
-    engines: {node: '>=0.8'}
 
   fraction.js@4.3.7:
     resolution: {integrity: sha512-ZsDfxO51wGAXREY55a7la9LScWpwv9RxIrYABrlvOFBlH/ShPnrtsXeuUIfXKKOVicNxQ+o8JTbJvjS4M89yew==}
@@ -2236,10 +2215,6 @@ packages:
     resolution: {integrity: sha512-UXWMKhLOwVKb728IUtQPXxfYU+usdybtUrK/8uGE8CQMvrhOpwvzDBwj0QhSL7MQc7vIsISBG8VQ8+IDQxpfQA==}
     engines: {node: '>=0.10.0'}
 
-  ssf@0.11.2:
-    resolution: {integrity: sha512-+idbmIXoYET47hH+d7dfm2epdOMUDjqcB4648sTZ+t2JwoyBFL/insLfB/racrDmsKB3diwsDA696pZMieAC5g==}
-    engines: {node: '>=0.8'}
-
   stackback@0.0.2:
     resolution: {integrity: sha512-1XMJE5fQo1jGH6Y/7ebnwPOBEkIEnT4QF32d5R1+VXdXveM0IBMJt8zfaxX1P3QhVwrYe+576+jkANtSS2mBbw==}
 
@@ -2443,8 +2418,8 @@ packages:
     peerDependencies:
       vite: '>=5.0.0'
 
-  vite@6.2.6:
-    resolution: {integrity: sha512-9xpjNl3kR4rVDZgPNdTL0/c6ao4km69a/2ihNQbcANz8RuCOK3hQBmLSJf3bRKVQjVMda+YvizNE8AwvogcPbw==}
+  vite@6.3.7:
+    resolution: {integrity: sha512-mQYaKepA0NGMBsz8Xktt3tJUG5ELE2iT7IJ+ssXI6nxVdE2sFc/d/6w/JByqMLvWg8hNKHpPgzjgOkrhpKFnrA==}
     engines: {node: ^18.0.0 || ^20.0.0 || >=22.0.0}
     hasBin: true
     peerDependencies:
@@ -2556,17 +2531,9 @@ packages:
     engines: {node: '>=8'}
     hasBin: true
 
-  wmf@1.0.2:
-    resolution: {integrity: sha512-/p9K7bEh0Dj6WbXg4JG0xvLQmIadrner1bi45VMJTfnbVHsc7yIajZyoSoK60/dtVBs12Fm6WkUI5/3WAVsNMw==}
-    engines: {node: '>=0.8'}
-
   word-wrap@1.2.5:
     resolution: {integrity: sha512-BN22B5eaMMI9UMtjrGd5g5eCYPpCPDUy0FJXbYsaT5zYxjFOckS53SQDE3pWkVoWpHXVb3BrYcEN4Twa55B5cA==}
     engines: {node: '>=0.10.0'}
-
-  word@0.3.0:
-    resolution: {integrity: sha512-OELeY0Q61OXpdUfTp+oweA/vtLVg5VDOXh+3he3PNzLGG/y0oylSOC1xRVj0+l4vQ3tj/bB1HVHv1ocXkQceFA==}
-    engines: {node: '>=0.8'}
 
   wrap-ansi@7.0.0:
     resolution: {integrity: sha512-YVGIj2kamLSTxw6NsZjoBxfSwsn0ycdesmc4p+Q21c5zPuZ1pl+NfxVdxPtdHvmNVOQ6XSYG4AUtyt/Fi7D16Q==}
@@ -2588,8 +2555,9 @@ packages:
       utf-8-validate:
         optional: true
 
-  xlsx@0.18.5:
-    resolution: {integrity: sha512-dmg3LCjBPHZnQp5/F/+nnTa+miPJxUXB6vtk42YjBBKayDNagxGEeIdWApkYPOf3Z3pm3k62Knjzp7lMeTEtFQ==}
+  xlsx@https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz:
+    resolution: {tarball: https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz}
+    version: 0.20.3
     engines: {node: '>=0.8'}
     hasBin: true
 
@@ -3156,7 +3124,7 @@ snapshots:
     dependencies:
       '@types/estree': 1.0.7
       estree-walker: 2.0.2
-      picomatch: 4.0.3
+      picomatch: 4.0.4
     optionalDependencies:
       rollup: 4.39.0
 
@@ -3462,7 +3430,7 @@ snapshots:
       glob: 13.0.6
       graceful-fs: 4.2.11
       node-gyp-build: 4.8.4
-      picomatch: 4.0.3
+      picomatch: 4.0.4
       resolve-from: 5.0.0
     transitivePeerDependencies:
       - encoding
@@ -3515,14 +3483,14 @@ snapshots:
       json-schema-to-ts: 1.6.4
       ts-morph: 12.0.0
 
-  '@vitejs/plugin-react@4.3.4(vite@6.2.6(@types/node@22.14.1)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.7.1))':
+  '@vitejs/plugin-react@4.3.4(vite@6.3.7(@types/node@22.14.1)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.7.1))':
     dependencies:
       '@babel/core': 7.26.10
       '@babel/plugin-transform-react-jsx-self': 7.25.9(@babel/core@7.26.10)
       '@babel/plugin-transform-react-jsx-source': 7.25.9(@babel/core@7.26.10)
       '@types/babel__core': 7.20.5
       react-refresh: 0.14.2
-      vite: 6.2.6(@types/node@22.14.1)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.7.1)
+      vite: 6.3.7(@types/node@22.14.1)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.7.1)
     transitivePeerDependencies:
       - supports-color
 
@@ -3535,13 +3503,13 @@ snapshots:
       chai: 6.2.2
       tinyrainbow: 3.1.0
 
-  '@vitest/mocker@4.1.7(vite@6.2.6(@types/node@22.14.1)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.7.1))':
+  '@vitest/mocker@4.1.7(vite@6.3.7(@types/node@22.14.1)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.7.1))':
     dependencies:
       '@vitest/spy': 4.1.7
       estree-walker: 3.0.3
       magic-string: 0.30.21
     optionalDependencies:
-      vite: 6.2.6(@types/node@22.14.1)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.7.1)
+      vite: 6.3.7(@types/node@22.14.1)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.7.1)
 
   '@vitest/pretty-format@4.1.7':
     dependencies:
@@ -3570,7 +3538,7 @@ snapshots:
       sirv: 3.0.2
       tinyglobby: 0.2.16
       tinyrainbow: 3.1.0
-      vitest: 4.1.7(@edge-runtime/vm@3.2.0)(@types/node@22.14.1)(@vitest/ui@4.1.7)(jsdom@29.1.1)(vite@6.2.6(@types/node@22.14.1)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.7.1))
+      vitest: 4.1.7(@edge-runtime/vm@3.2.0)(@types/node@22.14.1)(@vitest/ui@4.1.7)(jsdom@29.1.1)(vite@6.3.7(@types/node@22.14.1)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.7.1))
 
   '@vitest/utils@4.1.7':
     dependencies:
@@ -3604,8 +3572,6 @@ snapshots:
       acorn: 8.14.1
 
   acorn@8.14.1: {}
-
-  adler-32@1.3.1: {}
 
   agent-base@7.1.4: {}
 
@@ -3706,11 +3672,6 @@ snapshots:
 
   caniuse-lite@1.0.30001713: {}
 
-  cfb@1.2.2:
-    dependencies:
-      adler-32: 1.3.1
-      crc-32: 1.2.2
-
   chai@6.2.2: {}
 
   chalk@4.1.2:
@@ -3738,8 +3699,6 @@ snapshots:
 
   code-block-writer@10.1.1: {}
 
-  codepage@1.15.0: {}
-
   color-convert@2.0.1:
     dependencies:
       color-name: 1.1.4
@@ -3755,8 +3714,6 @@ snapshots:
   convert-hrtime@3.0.0: {}
 
   convert-source-map@2.0.0: {}
-
-  crc-32@1.2.2: {}
 
   cross-spawn@7.0.6:
     dependencies:
@@ -4075,8 +4032,6 @@ snapshots:
     dependencies:
       cross-spawn: 7.0.6
       signal-exit: 4.1.0
-
-  frac@1.1.2: {}
 
   fraction.js@4.3.7: {}
 
@@ -4661,10 +4616,6 @@ snapshots:
 
   source-map-js@1.2.1: {}
 
-  ssf@0.11.2:
-    dependencies:
-      frac: 1.1.2
-
   stackback@0.0.2: {}
 
   standardwebhooks@1.0.0:
@@ -4888,7 +4839,7 @@ snapshots:
       d3-time: 3.1.0
       d3-timer: 3.0.1
 
-  vite-plugin-source-identifier@1.1.2(vite@6.2.6(@types/node@22.14.1)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.7.1)):
+  vite-plugin-source-identifier@1.1.2(vite@6.3.7(@types/node@22.14.1)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.7.1)):
     dependencies:
       '@babel/core': 7.26.10
       '@babel/parser': 7.27.0
@@ -4896,15 +4847,18 @@ snapshots:
       '@babel/types': 7.27.0
       '@vue/compiler-dom': 3.5.20
       magic-string: 0.30.18
-      vite: 6.2.6(@types/node@22.14.1)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.7.1)
+      vite: 6.3.7(@types/node@22.14.1)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.7.1)
     transitivePeerDependencies:
       - supports-color
 
-  vite@6.2.6(@types/node@22.14.1)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.7.1):
+  vite@6.3.7(@types/node@22.14.1)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.7.1):
     dependencies:
       esbuild: 0.25.2
+      fdir: 6.5.0(picomatch@4.0.4)
+      picomatch: 4.0.4
       postcss: 8.5.3
       rollup: 4.39.0
+      tinyglobby: 0.2.16
     optionalDependencies:
       '@types/node': 22.14.1
       fsevents: 2.3.3
@@ -4912,10 +4866,10 @@ snapshots:
       tsx: 4.21.0
       yaml: 2.7.1
 
-  vitest@4.1.7(@edge-runtime/vm@3.2.0)(@types/node@22.14.1)(@vitest/ui@4.1.7)(jsdom@29.1.1)(vite@6.2.6(@types/node@22.14.1)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.7.1)):
+  vitest@4.1.7(@edge-runtime/vm@3.2.0)(@types/node@22.14.1)(@vitest/ui@4.1.7)(jsdom@29.1.1)(vite@6.3.7(@types/node@22.14.1)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.7.1)):
     dependencies:
       '@vitest/expect': 4.1.7
-      '@vitest/mocker': 4.1.7(vite@6.2.6(@types/node@22.14.1)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.7.1))
+      '@vitest/mocker': 4.1.7(vite@6.3.7(@types/node@22.14.1)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.7.1))
       '@vitest/pretty-format': 4.1.7
       '@vitest/runner': 4.1.7
       '@vitest/snapshot': 4.1.7
@@ -4932,7 +4886,7 @@ snapshots:
       tinyexec: 1.2.3
       tinyglobby: 0.2.16
       tinyrainbow: 3.1.0
-      vite: 6.2.6(@types/node@22.14.1)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.7.1)
+      vite: 6.3.7(@types/node@22.14.1)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.7.1)
       why-is-node-running: 2.3.0
     optionalDependencies:
       '@edge-runtime/vm': 3.2.0
@@ -4974,11 +4928,7 @@ snapshots:
       siginfo: 2.0.0
       stackback: 0.0.2
 
-  wmf@1.0.2: {}
-
   word-wrap@1.2.5: {}
-
-  word@0.3.0: {}
 
   wrap-ansi@7.0.0:
     dependencies:
@@ -4994,15 +4944,7 @@ snapshots:
 
   ws@8.19.0: {}
 
-  xlsx@0.18.5:
-    dependencies:
-      adler-32: 1.3.1
-      cfb: 1.2.2
-      codepage: 1.15.0
-      crc-32: 1.2.2
-      ssf: 0.11.2
-      wmf: 1.0.2
-      word: 0.3.0
+  xlsx@https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz: {}
 
   xml-name-validator@5.0.0: {}
 

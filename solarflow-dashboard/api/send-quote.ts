@@ -12,8 +12,9 @@ import { createClient } from '@supabase/supabase-js';
 import { Resend } from 'resend';
 import crypto from 'crypto';
 
+const SUPABASE_URL = process.env.SUPABASE_URL || 'https://cjmhfagkkayelcsprbai.supabase.co';
 const supabaseAdmin = createClient(
-  'https://cjmhfagkkayelcsprbai.supabase.co',
+  SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
   { auth: { autoRefreshToken: false, persistSession: false } }
 );

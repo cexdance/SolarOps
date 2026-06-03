@@ -12,13 +12,26 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 import { Resend } from 'resend';
 
+const SUPABASE_URL = process.env.SUPABASE_URL || 'https://cjmhfagkkayelcsprbai.supabase.co';
 const supabaseAdmin = createClient(
-  'https://cjmhfagkkayelcsprbai.supabase.co',
+  SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
   { auth: { autoRefreshToken: false, persistSession: false } }
 );
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
+
+function escapeHtml(value: unknown): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+const RATE_LIMIT = 10;
+const RATE_WINDOW_MS = 60_000;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).end();
@@ -30,6 +43,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { data: { user: caller }, error: authErr } = await supabaseAdmin.auth.getUser(token);
   if (authErr || !caller) return res.status(401).json({ error: 'Unauthorized' });
 
+  const now = Date.now();
+  const bucket = rateLimitMap.get(caller.id);
+  if (bucket && bucket.resetAt > now) {
+    if (bucket.count >= RATE_LIMIT) {
+      return res.status(429).json({ error: 'Too many requests. Try again shortly.' });
+    }
+    bucket.count++;
+  } else {
+    rateLimitMap.set(caller.id, { count: 1, resetAt: now + RATE_WINDOW_MS });
+  }
+
   const { mentionedUserIds, mentionedUserEmails, notifierName, customerName, customerId, message } = req.body ?? {};
   // Accept either IDs or emails — at least one list must be non-empty
   const hasIds    = Array.isArray(mentionedUserIds)    && mentionedUserIds.length > 0;
@@ -38,9 +62,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: 'mentionedUserIds or mentionedUserEmails required' });
   }
 
-  // Look up mentioned users in Supabase Auth
-  const { data: { users: authUsers }, error: usersErr } = await supabaseAdmin.auth.admin.listUsers();
-  if (usersErr) return res.status(500).json({ error: 'Could not fetch users' });
+  // Look up mentioned users in Supabase Auth (paginated, max 1000)
+  let authUsers: any[] = [];
+  let page = 1;
+  while (page <= 10) {
+    const { data: { users: batch }, error: usersErr } = await supabaseAdmin.auth.admin.listUsers({ page, perPage: 100 });
+    if (usersErr) return res.status(500).json({ error: 'Could not fetch users' });
+    authUsers = authUsers.concat(batch);
+    if (batch.length < 100) break;
+    page++;
+  }
 
   // Match by email first (reliable — internal IDs don't match Supabase UUIDs).
   // Fall back to UUID match for any future callers that do pass real Supabase IDs.
@@ -102,10 +133,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         <!-- Body -->
         <tr>
           <td style="padding:32px">
-            <p style="margin:0 0 8px;font-size:16px;color:#1e293b">Hi ${name},</p>
+            <p style="margin:0 0 8px;font-size:16px;color:#1e293b">Hi ${escapeHtml(name)},</p>
             <p style="margin:0 0 24px;font-size:14px;color:#64748b;line-height:1.6">
-              <strong>${notifierName || 'A teammate'}</strong> mentioned you in the customer record for
-              <strong>${customerName || 'a customer'}</strong>.
+              <strong>${escapeHtml(notifierName || 'A teammate')}</strong> mentioned you in the customer record for
+              <strong>${escapeHtml(customerName || 'a customer')}</strong>.
             </p>
             <!-- Message bubble -->
             <div style="background:#f8fafc;border-left:3px solid #f97316;border-radius:0 8px 8px 0;padding:16px 20px;margin-bottom:24px">

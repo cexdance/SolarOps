@@ -2244,7 +2244,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
     setSendError(null);
 
     const smtpUser = localStorage.getItem('solarops_smtp_user');
-    const smtpPass = localStorage.getItem('solarops_smtp_pass');
+    const smtpPass = sessionStorage.getItem('solarops_smtp_pass');
     const smtpHost = localStorage.getItem('solarops_smtp_host') || 'smtp.ionos.com';
     const smtpPort = parseInt(localStorage.getItem('solarops_smtp_port') || '465');
     const fromName = localStorage.getItem('solarops_smtp_from_name') || 'Conexsol Energy';
