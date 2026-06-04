@@ -21,6 +21,7 @@ const GUARDED_HANDLERS = [
   '../../api/xero-connections.ts',
   '../../api/parse-lead-image.ts',
   '../../api/ups-tracking.ts',
+  '../../api/users.ts',
   '../../api/health.ts',
 ];
 
