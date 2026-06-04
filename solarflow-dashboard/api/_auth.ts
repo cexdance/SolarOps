@@ -7,15 +7,26 @@
  * just the public anon key, is required to reach them.
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { createClient, type User } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient, type User } from '@supabase/supabase-js';
+import { env } from './_env';
 
-const SUPABASE_URL =
-  (process.env.SUPABASE_URL || 'https://cjmhfagkkayelcsprbai.supabase.co').trim();
-const SERVICE_ROLE_KEY = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
+const SUPABASE_URL = env('SUPABASE_URL') || 'https://cjmhfagkkayelcsprbai.supabase.co';
+const SERVICE_ROLE_KEY = env('SUPABASE_SERVICE_ROLE_KEY') || '';
 
-const supabaseAdmin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
-  auth: { autoRefreshToken: false, persistSession: false },
-});
+// Lazily construct the admin client. `createClient` throws `supabaseKey is
+// required.` when the key is empty, and doing that at module top-level crashes
+// the whole serverless function on import (FUNCTION_INVOCATION_FAILED) before
+// the graceful guard below can run. Defer it so a missing key returns a clean
+// 500 instead of taking down every endpoint that imports this module.
+let _supabaseAdmin: SupabaseClient | null = null;
+function getSupabaseAdmin(): SupabaseClient {
+  if (!_supabaseAdmin) {
+    _supabaseAdmin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+  }
+  return _supabaseAdmin;
+}
 
 /**
  * Returns the authenticated user, or null after writing a 401/500 response.
@@ -44,7 +55,7 @@ export async function requireUser(
     return null;
   }
 
-  const { data, error } = await supabaseAdmin.auth.getUser(token);
+  const { data, error } = await getSupabaseAdmin().auth.getUser(token);
   if (error || !data.user) {
     res.status(401).json({ error: 'Unauthorized' });
     return null;

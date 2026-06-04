@@ -1,6 +1,7 @@
 // SolarEdge Monitoring — Florida Sites Table
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { authedFetch } from '../lib/supabase';
+import { resilientJson } from '../lib/resilientFetch';
 import {
   Sun,
   AlertTriangle,
@@ -280,9 +281,18 @@ export const SolarEdgeMonitoring: React.FC<Props> = ({
       let page = 0;
       const newOverrides = new Map<string, { count: number; impact: string }>();
       while (true) {
-        const res = await authedFetch(`/api/solaredge?path=/sites/list&size=${pageSize}&startIndex=${page * pageSize}${bust}${keyParam}`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json() as { sites?: { site?: { id: number; alertQuantity?: number; highestImpact?: number }[] } };
+        // Resilient fetch: retries transient 5xx/network failures, then reports
+        // a structured failure. On any non-ok result we keep the last cached
+        // alert counts rather than wiping the view (fault tolerance).
+        const result = await resilientJson<{ sites?: { site?: { id: number; alertQuantity?: number; highestImpact?: number }[] } }>(
+          `/api/solaredge?path=/sites/list&size=${pageSize}&startIndex=${page * pageSize}${bust}${keyParam}`,
+        );
+        if (!result.ok) {
+          // Preserve cached overrides already in state/localStorage; degrade, don't break.
+          setAlertRefreshMsg(`⚠ Showing cached alerts - ${result.message}`);
+          return;
+        }
+        const data = result.data ?? {};
         const sites = data?.sites?.site ?? [];
         if (sites.length === 0) break;
         for (const s of sites) {
