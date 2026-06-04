@@ -246,6 +246,44 @@ export async function fetchLogForEntity(entityType: string, entityId: string, li
   }
 }
 
+/**
+ * Cross-device activity history for ONE user (by email): queries Supabase
+ * change_log so an admin sees everything that user did on any device, merged
+ * with the local log (covers not-yet-synced entries). Newest first, deduped.
+ */
+export async function fetchLogForUser(userEmail: string, limit = 200): Promise<ChangeEntry[]> {
+  const email = (userEmail ?? '').trim();
+  const local = readLog().filter(e => (e.userEmail ?? '').trim().toLowerCase() === email.toLowerCase())
+    .slice(-limit).reverse();
+  try {
+    const { data, error } = await supabase
+      .from('change_log')
+      .select('*')
+      .eq('user_email', email)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    if (error || !data) return local;
+    const remote: ChangeEntry[] = data.map((r: any) => ({
+      id: r.id,
+      opType: r.op_type,
+      entityType: r.entity_type,
+      entityId: r.entity_id,
+      payload: r.payload,
+      userEmail: r.user_email ?? 'unknown',
+      deviceId: r.device_id ?? '',
+      device: (r.payload?._device as DeviceInfo) ?? ({} as DeviceInfo),
+      durationMs: r.payload?._ms ?? null,
+      createdAt: r.created_at,
+      syncedAt: r.created_at,
+    }));
+    const byId = new Map<string, ChangeEntry>();
+    for (const e of [...remote, ...local]) byId.set(e.id, e);
+    return [...byId.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, limit);
+  } catch {
+    return local;
+  }
+}
+
 // ── Internal ───────────────────────────────────────────────────────────────
 
 async function pushEntry(entry: ChangeEntry): Promise<void> {

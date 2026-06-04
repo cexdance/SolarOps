@@ -367,7 +367,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
         {/* ── Widget 1: Metrics (financial — admin only) ──────────────────── */}
-        {canSeeFinancials(currentUser?.role) && (
+        {canSeeFinancials(currentUser) && (
         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 flex flex-col">
           <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
             <h2 className="font-semibold text-slate-900 text-sm">Performance</h2>
@@ -418,7 +418,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         )}
 
         {/* ── Widget 2: Work Orders Pending Payment (financial — admin only) ── */}
-        {canSeeFinancials(currentUser?.role) && (
+        {canSeeFinancials(currentUser) && (
         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 flex flex-col">
           <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
             <div className="flex items-center gap-2">

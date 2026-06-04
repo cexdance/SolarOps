@@ -2,6 +2,27 @@
 
 export type UserRole = 'admin' | 'technician' | 'coo' | 'support' | 'sales';
 
+/**
+ * Granular permits, layered on top of role. Stored in Supabase
+ * user_metadata.permissions as an array of granted keys. When a user has no
+ * permissions array yet, the defaults are derived from their role (see
+ * lib/access.ts) so no backfill migration is required.
+ */
+export type Permission =
+  | 'financials.view'   // billing, rates, payouts, margins
+  | 'workorders.edit'   // create/edit work orders
+  | 'customers.delete'  // delete customer records
+  | 'inventory.manage'  // manage equipment, tools, providers
+  | 'users.manage';     // open the User Permissions panel, manage staff
+
+export const ALL_PERMISSIONS: Permission[] = [
+  'financials.view',
+  'workorders.edit',
+  'customers.delete',
+  'inventory.manage',
+  'users.manage',
+];
+
 export interface User {
   id: string;
   name: string;
@@ -11,6 +32,8 @@ export interface User {
   avatar?: string;
   active: boolean;
   username?: string;
+  /** Granted permits. Absent = derive from role (see lib/access.ts). */
+  permissions?: Permission[];
 }
 
 export type CustomerType = 'residential' | 'commercial';

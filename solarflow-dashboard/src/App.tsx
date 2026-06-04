@@ -2168,7 +2168,7 @@ function App() {
     }
 
     // Financial views are admin-only — block direct/programmatic access by staff
-    if (isFinancialView(currentView) && !canSeeFinancials(currentUser?.role)) {
+    if (isFinancialView(currentView) && !canSeeFinancials(currentUser)) {
       return (
         <div className="p-6 max-w-md mx-auto text-center">
           <h2 className="text-lg font-semibold text-slate-900 mb-2">Restricted</h2>
@@ -2560,6 +2560,15 @@ function App() {
             onSaveSolarEdgeApiKey={handleSaveSolarEdgeApiKey}
             onSyncSolarEdge={handleSyncSolarEdge}
             onLogout={handleLogout}
+            onNavigateToEntity={(entityType, entityId) => {
+              // Deep-link from a user's audit log straight to the affected card.
+              if (entityType === 'customer') {
+                setSelectedCustomerId(entityId);
+                setCurrentView('customers');
+              } else if (entityType === 'job') {
+                handleViewChange('jobDetail', entityId);
+              }
+            }}
             onUpdateAvatar={(dataUrl) => {
               if (!currentUser) return;
               logChange('user.avatar_update', 'user', currentUser.id,

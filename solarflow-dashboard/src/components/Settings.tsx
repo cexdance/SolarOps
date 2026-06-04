@@ -30,6 +30,8 @@ import { compressImageToBlob } from '../lib/photoCompress';
 import { uploadAvatarToStorage } from '../lib/photoStorage';
 import { logUpload } from '../lib/changeLog';
 import { LogViewer } from './admin/LogViewer';
+import { UserPermissionsPanel } from './admin/UserPermissionsPanel';
+import { canManageUsers } from '../lib/access';
 
 interface SettingsProps {
   currentUser: UserType | null;
@@ -38,6 +40,7 @@ interface SettingsProps {
   onSyncSolarEdge: () => void;
   onLogout: () => void;
   onUpdateAvatar?: (dataUrl: string | null) => void;
+  onNavigateToEntity?: (entityType: string, entityId: string) => void;
   isMobile: boolean;
 }
 
@@ -48,6 +51,7 @@ export const Settings: React.FC<SettingsProps> = ({
   onSyncSolarEdge,
   onLogout,
   onUpdateAvatar,
+  onNavigateToEntity,
   isMobile,
 }) => {
   const avatarInputRef = useRef<HTMLInputElement>(null);
@@ -625,6 +629,11 @@ export const Settings: React.FC<SettingsProps> = ({
         <div className="mb-6">
           <PhotoCleanupCard />
         </div>
+      )}
+
+      {/* User Permissions — requires users.manage permit */}
+      {canManageUsers(currentUser) && (
+        <UserPermissionsPanel currentUser={currentUser} onNavigate={onNavigateToEntity} />
       )}
 
       {/* Activity Log — admin only */}
