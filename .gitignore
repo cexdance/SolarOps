@@ -32,6 +32,13 @@ extracted_package/
 # Misc images / logs
 *.png
 *.jpg
+# Favicon assets must ship to the deploy (override *.png above)
+!solarflow-dashboard/public/favicon-16.png
+!solarflow-dashboard/public/favicon-32.png
+!solarflow-dashboard/public/favicon-48.png
+!solarflow-dashboard/public/favicon-192.png
+!solarflow-dashboard/public/favicon-512.png
+!solarflow-dashboard/public/apple-touch-icon.png
 *.log
 *.zip
 .aider*
