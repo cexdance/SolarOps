@@ -1,10 +1,11 @@
 // SolarFlow - Inventory Module
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import {
   Package,
   Wrench,
   Users,
   Plus,
+  PackagePlus,
   Search,
   Filter,
   Edit,
@@ -120,11 +121,18 @@ import {
   ToolCategory,
   UnitOfMeasure,
   ToolStatus,
+  StockReceipt,
+  Job,
+  User,
+  RMAEntry,
 } from '../types';
 import { loadInventory, saveInventory } from '../lib/inventoryStore';
 
 interface InventoryModuleProps {
   isMobile?: boolean;
+  jobs?: Job[];
+  onUpdateJob?: (job: Job) => void;
+  currentUser?: User | null;
 }
 
 // Demo data
@@ -360,11 +368,12 @@ const toolStatusLabels: Record<ToolStatus, string> = {
   lost: 'Lost',
 };
 
-export const InventoryModule: React.FC<InventoryModuleProps> = ({ isMobile }) => {
+export const InventoryModule: React.FC<InventoryModuleProps> = ({ isMobile, jobs = [], onUpdateJob, currentUser }) => {
   const [activeTab, setActiveTab] = useState<'equipment' | 'tools' | 'providers'>('equipment');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showReceiveModal, setShowReceiveModal] = useState(false);
   const [showProviderModal, setShowProviderModal] = useState(false);
   const [showToolModal, setShowToolModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -427,13 +436,23 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ isMobile }) =>
           <h1 className="text-xl font-bold text-slate-900">Inventory</h1>
           <div className="flex gap-2">
             {activeTab === 'equipment' && (
-              <button
-                onClick={() => setShowAddModal(true)}
-                className="flex items-center gap-2 px-3 py-2 bg-orange-500 text-white rounded-lg text-sm font-medium hover:bg-orange-600"
-              >
-                <Plus className="w-4 h-4" />
-                Add Item
-              </button>
+              <>
+                <button
+                  onClick={() => setShowReceiveModal(true)}
+                  title="Quickly receive stock with a provenance photo (invoice / RMA label)"
+                  className="flex items-center gap-2 px-3 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700"
+                >
+                  <PackagePlus className="w-4 h-4" />
+                  Receive Stock
+                </button>
+                <button
+                  onClick={() => setShowAddModal(true)}
+                  className="flex items-center gap-2 px-3 py-2 bg-orange-500 text-white rounded-lg text-sm font-medium hover:bg-orange-600"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add Item
+                </button>
+              </>
             )}
             {activeTab === 'tools' && (
               <button
@@ -818,6 +837,21 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ isMobile }) =>
         />
       )}
 
+      {/* Receive Stock Modal */}
+      {showReceiveModal && (
+        <ReceiveStockModal
+          items={inventoryItems}
+          jobs={jobs}
+          currentUser={currentUser}
+          onClose={() => setShowReceiveModal(false)}
+          onReceive={(updatedItems) => {
+            updateInventory(updatedItems);
+            setShowReceiveModal(false);
+          }}
+          onUpdateJob={onUpdateJob}
+        />
+      )}
+
       {/* Add Tool Modal */}
       {showToolModal && (
         <AddToolModal onClose={() => setShowToolModal(false)} />
@@ -862,6 +896,231 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ isMobile }) =>
 };
 
 // Add Inventory Modal
+// ── Receive Stock — quick add into stock with a provenance photo + open-RMA match ──
+interface ReceiveStockModalProps {
+  items: InventoryItem[];
+  jobs: Job[];
+  currentUser?: User | null;
+  onClose: () => void;
+  onReceive: (updatedItems: InventoryItem[]) => void;
+  onUpdateJob?: (job: Job) => void;
+}
+
+const RECEIVE_CATEGORIES: InventoryCategory[] = ['panel', 'optimizer', 'inverter', 'cable', 'racking', 'label', 'battery', 'bos'];
+
+const ReceiveStockModal: React.FC<ReceiveStockModalProps> = ({ items, jobs, currentUser, onClose, onReceive, onUpdateJob }) => {
+  const [mode, setMode] = useState<'existing' | 'new'>(items.length ? 'existing' : 'new');
+  const [existingId, setExistingId] = useState('');
+  const [itemSearch, setItemSearch] = useState('');
+  const [name, setName] = useState('');
+  const [sku, setSku] = useState('');
+  const [category, setCategory] = useState<InventoryCategory>('bos');
+  const [location, setLocation] = useState('');
+  const [unitCost, setUnitCost] = useState('');
+  const [qty, setQty] = useState('1');
+  const [image, setImage] = useState<string | undefined>(undefined);
+  const [provType, setProvType] = useState<'invoice' | 'rma_label' | 'other'>('invoice');
+  const [rmaKey, setRmaKey] = useState('');
+  const [markReceived, setMarkReceived] = useState(true);
+  const [note, setNote] = useState('');
+  const [err, setErr] = useState<string | null>(null);
+
+  // Open RMAs across all work orders — awaiting a replacement-part delivery.
+  const openRmas = useMemo(() => {
+    const out: { key: string; jobId: string; entry: RMAEntry; label: string }[] = [];
+    for (const j of jobs) {
+      for (const e of (j.rmaEntries ?? [])) {
+        const s = e.rmaStatus ?? e.status;
+        if (s === 'paid' || s === 'received') continue; // already closed / delivered
+        out.push({
+          key: `${j.id}::${e.id}`,
+          jobId: j.id,
+          entry: e,
+          label: `${e.rmaNumber} · ${e.manufacturer} ${e.partDescription}`,
+        });
+      }
+    }
+    return out;
+  }, [jobs]);
+
+  const filteredItems = useMemo(() => {
+    const q = itemSearch.trim().toLowerCase();
+    if (!q) return items;
+    return items.filter(i => i.name.toLowerCase().includes(q) || i.sku.toLowerCase().includes(q));
+  }, [items, itemSearch]);
+
+  const submit = () => {
+    setErr(null);
+    const q = parseInt(qty, 10);
+    if (!q || q <= 0) { setErr('Enter a quantity greater than 0.'); return; }
+    const sel = rmaKey ? openRmas.find(r => r.key === rmaKey) : undefined;
+
+    const receipt: StockReceipt = {
+      id: `rcpt-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      receivedAt: new Date().toISOString(),
+      quantity: q,
+      provenanceImage: image,
+      provenanceType: provType,
+      rmaEntryId: sel?.entry.id,
+      rmaNumber: sel?.entry.rmaNumber,
+      jobId: sel?.jobId,
+      note: note.trim() || undefined,
+      receivedBy: currentUser?.name ?? currentUser?.email ?? undefined,
+    };
+
+    let updatedItems: InventoryItem[];
+    if (mode === 'existing') {
+      if (!existingId) { setErr('Pick the item this delivery goes into.'); return; }
+      updatedItems = items.map(i =>
+        i.id === existingId
+          ? { ...i, quantity: i.quantity + q, receipts: [...(i.receipts ?? []), receipt] }
+          : i,
+      );
+    } else {
+      if (!name.trim() || !sku.trim()) { setErr('A new item needs at least a name and SKU.'); return; }
+      const newItem: InventoryItem = {
+        id: `inv-${Date.now()}`,
+        sku: sku.trim(),
+        name: name.trim(),
+        category,
+        description: '',
+        quantity: q,
+        unitOfMeasure: 'unit',
+        location: location.trim() || 'Unassigned',
+        minStockThreshold: 0,
+        unitCost: parseFloat(unitCost) || 0,
+        purchaseDate: new Date().toISOString().slice(0, 10),
+        createdAt: new Date().toISOString(),
+        receipts: [receipt],
+      };
+      updatedItems = [...items, newItem];
+    }
+
+    onReceive(updatedItems);
+
+    // Match the requested RMA to this delivery → mark it received.
+    if (sel && markReceived && onUpdateJob) {
+      const job = jobs.find(j => j.id === sel.jobId);
+      if (job) {
+        const updatedEntries = (job.rmaEntries ?? []).map(e =>
+          e.id === sel.entry.id ? { ...e, status: 'received' as const } : e,
+        );
+        onUpdateJob({ ...job, rmaEntries: updatedEntries });
+      }
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between p-4 border-b border-slate-100 sticky top-0 bg-white">
+          <div className="flex items-center gap-2">
+            <PackagePlus className="w-5 h-5 text-emerald-600" />
+            <h3 className="font-semibold text-slate-900">Receive Stock</h3>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100"><X className="w-4 h-4" /></button>
+        </div>
+
+        <div className="p-4 space-y-4">
+          {err && (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-50 text-red-600 text-xs">
+              <AlertTriangle className="w-3.5 h-3.5" /> {err}
+            </div>
+          )}
+
+          {/* Existing vs new */}
+          <div className="inline-flex rounded-lg border border-slate-200 p-0.5 text-sm">
+            <button type="button" onClick={() => setMode('existing')} className={`px-3 py-1.5 rounded-md ${mode === 'existing' ? 'bg-slate-900 text-white' : 'text-slate-600'}`}>Existing item</button>
+            <button type="button" onClick={() => setMode('new')} className={`px-3 py-1.5 rounded-md ${mode === 'new' ? 'bg-slate-900 text-white' : 'text-slate-600'}`}>New item</button>
+          </div>
+
+          {mode === 'existing' ? (
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-slate-700">Item</label>
+              <input value={itemSearch} onChange={e => setItemSearch(e.target.value)} placeholder="Search name or SKU…" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+              <select value={existingId} onChange={e => setExistingId(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white">
+                <option value="">Select an item…</option>
+                {filteredItems.map(i => <option key={i.id} value={i.id}>{i.name} · {i.sku} (qty {i.quantity})</option>)}
+              </select>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block col-span-2">
+                <span className="text-sm font-medium text-slate-700">Name</span>
+                <input value={name} onChange={e => setName(e.target.value)} className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+              </label>
+              <label className="block">
+                <span className="text-sm font-medium text-slate-700">SKU</span>
+                <input value={sku} onChange={e => setSku(e.target.value)} className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+              </label>
+              <label className="block">
+                <span className="text-sm font-medium text-slate-700">Category</span>
+                <select value={category} onChange={e => setCategory(e.target.value as InventoryCategory)} className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white">
+                  {RECEIVE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </label>
+              <label className="block">
+                <span className="text-sm font-medium text-slate-700">Location</span>
+                <input value={location} onChange={e => setLocation(e.target.value)} placeholder="Unassigned" className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+              </label>
+              <label className="block">
+                <span className="text-sm font-medium text-slate-700">Unit cost ($)</span>
+                <input type="number" value={unitCost} onChange={e => setUnitCost(e.target.value)} className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+              </label>
+            </div>
+          )}
+
+          <label className="block">
+            <span className="text-sm font-medium text-slate-700">Quantity received</span>
+            <input type="number" min={1} value={qty} onChange={e => setQty(e.target.value)} className="mt-1 w-32 border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+          </label>
+
+          {/* Provenance photo */}
+          <div className="space-y-2">
+            <ImageUploader value={image} onChange={setImage} label="Provenance photo (invoice / RMA label)" />
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs text-slate-500">Type:</span>
+              {(['invoice', 'rma_label', 'other'] as const).map(t => (
+                <button key={t} type="button" onClick={() => setProvType(t)} className={`px-2 py-1 rounded-full text-xs ${provType === t ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                  {t === 'rma_label' ? 'RMA label' : t.charAt(0).toUpperCase() + t.slice(1)}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Open RMA match */}
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-slate-700">Match an open RMA (optional)</label>
+            <select value={rmaKey} onChange={e => setRmaKey(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white">
+              <option value="">No RMA — regular stock</option>
+              {openRmas.map(r => <option key={r.key} value={r.key}>{r.label}</option>)}
+            </select>
+            {openRmas.length === 0 && <p className="text-xs text-slate-400">No open RMAs found.</p>}
+            {rmaKey && (
+              <label className="flex items-center gap-2 text-xs text-slate-600">
+                <input type="checkbox" checked={markReceived} onChange={e => setMarkReceived(e.target.checked)} />
+                Mark this RMA as received (matched by this delivery)
+              </label>
+            )}
+          </div>
+
+          <label className="block">
+            <span className="text-sm font-medium text-slate-700">Note (optional)</span>
+            <input value={note} onChange={e => setNote(e.target.value)} className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+          </label>
+        </div>
+
+        <div className="p-4 border-t border-slate-100 flex justify-end gap-2 sticky bottom-0 bg-white">
+          <button onClick={onClose} className="px-3 py-2 rounded-lg text-sm text-slate-600 hover:bg-slate-100">Cancel</button>
+          <button onClick={submit} className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700">
+            <PackagePlus className="w-4 h-4" /> Receive
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 interface AddInventoryModalProps {
   onClose: () => void;
   onAdd: (item: InventoryItem) => void;

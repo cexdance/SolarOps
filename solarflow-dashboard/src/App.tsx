@@ -2478,7 +2478,7 @@ function App() {
         );
 
       case 'inventory':
-        return <InventoryModule isMobile={isMobile} />;
+        return <InventoryModule isMobile={isMobile} jobs={data.jobs} onUpdateJob={handleUpdateJob} currentUser={currentUser} />;
 
       case 'solaredge':
         return (

@@ -419,6 +419,22 @@ export interface InventoryItem {
   purchaseDate: string;
   createdAt: string;
   imageUrl?: string;
+  /** Receiving / provenance history — each delivery into stock with its proof image and optional RMA match. */
+  receipts?: StockReceipt[];
+}
+
+/** A single receiving event into stock: provenance image (invoice / RMA label) + optional RMA match. */
+export interface StockReceipt {
+  id: string;
+  receivedAt: string;            // ISO timestamp
+  quantity: number;              // units received in this delivery
+  provenanceImage?: string;      // data URL or URL of the invoice / RMA label photo
+  provenanceType?: 'invoice' | 'rma_label' | 'other';
+  rmaEntryId?: string;           // linked open RMA entry, if this delivery fulfills one
+  rmaNumber?: string;
+  jobId?: string;                // the work order the linked RMA belongs to
+  note?: string;
+  receivedBy?: string;
 }
 
 export interface ToolItem {
