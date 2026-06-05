@@ -16,6 +16,9 @@
  * SECURITY: never returns secret values; only booleans + var NAMES.
  * No auth required: monitoring must reach it even when auth is broken, and it
  * exposes nothing sensitive.
+ *
+ * (Cutover marker: this file's presence on /api/health proves the dash tree is
+ * the deployed one once Root Directory = solarflow-dashboard takes effect.)
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
