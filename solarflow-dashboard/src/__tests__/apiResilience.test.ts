@@ -22,7 +22,6 @@ const GUARDED_HANDLERS = [
   '../../api/parse-lead-image.ts',
   '../../api/ups-tracking.ts',
   '../../api/users.ts',
-  '../../api/health.ts',
 ];
 
 function clearServerEnv() {
