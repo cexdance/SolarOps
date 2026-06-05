@@ -135,6 +135,7 @@ import { loadInventory, saveInventory } from '../lib/inventoryStore';
 import { RmaCreateModal } from './RmaCreateModal';
 import { uploadPhotoToStorage } from '../lib/photoStorage';
 import { compressImageToDataUrlUnder } from '../lib/photoCompress';
+import { Contractor } from '../types/contractor';
 
 interface InventoryModuleProps {
   isMobile?: boolean;
@@ -144,6 +145,7 @@ interface InventoryModuleProps {
   standaloneRmas?: RMAEntry[];
   onCreateStandaloneRma?: (entry: RMAEntry) => void;
   onUpdateStandaloneRma?: (entry: RMAEntry) => void;
+  contractors?: Contractor[];
 }
 
 // Demo data
@@ -379,7 +381,7 @@ const toolStatusLabels: Record<ToolStatus, string> = {
   lost: 'Lost',
 };
 
-export const InventoryModule: React.FC<InventoryModuleProps> = ({ isMobile, jobs = [], onUpdateJob, currentUser, standaloneRmas = [], onCreateStandaloneRma, onUpdateStandaloneRma }) => {
+export const InventoryModule: React.FC<InventoryModuleProps> = ({ isMobile, jobs = [], onUpdateJob, currentUser, standaloneRmas = [], onCreateStandaloneRma, onUpdateStandaloneRma, contractors = [] }) => {
   const [activeTab, setActiveTab] = useState<'equipment' | 'tools' | 'providers'>('equipment');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState<string>('all');
@@ -762,6 +764,9 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ isMobile, jobs
                             <span className="flex items-center gap-1 text-slate-500">
                               <MapPin className="w-3 h-3" />{r.location ?? item.location}
                             </span>
+                            {r.alarmBadge && (
+                              <span className="px-1.5 py-0.5 rounded-full bg-red-50 text-red-600 font-medium">Alarm: {r.alarmBadge}</span>
+                            )}
                             {r.receivedBy && (
                               <span className="flex items-center gap-1 text-slate-500">
                                 <Users className="w-3 h-3" />{r.receivedBy}
@@ -943,6 +948,7 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ isMobile, jobs
           items={inventoryItems}
           jobs={jobs}
           currentUser={currentUser}
+          contractors={contractors}
           standaloneRmas={standaloneRmas}
           onCreateStandaloneRma={onCreateStandaloneRma}
           onUpdateStandaloneRma={onUpdateStandaloneRma}
@@ -1092,6 +1098,7 @@ interface ReceiveStockModalProps {
   items: InventoryItem[];
   jobs: Job[];
   currentUser?: User | null;
+  contractors?: Contractor[];
   standaloneRmas?: RMAEntry[];
   onCreateStandaloneRma?: (entry: RMAEntry) => void;
   onUpdateStandaloneRma?: (entry: RMAEntry) => void;
@@ -1102,7 +1109,14 @@ interface ReceiveStockModalProps {
 
 const RECEIVE_CATEGORIES: InventoryCategory[] = ['panel', 'optimizer', 'inverter', 'cable', 'racking', 'label', 'battery', 'bos'];
 
-const ReceiveStockModal: React.FC<ReceiveStockModalProps> = ({ items, jobs, currentUser, standaloneRmas = [], onCreateStandaloneRma, onUpdateStandaloneRma, onClose, onReceive, onUpdateJob }) => {
+type WarehouseType = '' | '985' | 'conexsol_van' | 'office' | 'contractor' | 'pickup';
+const WAREHOUSE_LABELS: Record<Exclude<WarehouseType, '' | 'contractor' | 'pickup'>, string> = {
+  '985': '985',
+  conexsol_van: 'Conexsol Van',
+  office: 'Office',
+};
+
+const ReceiveStockModal: React.FC<ReceiveStockModalProps> = ({ items, jobs, currentUser, contractors = [], standaloneRmas = [], onCreateStandaloneRma, onUpdateStandaloneRma, onClose, onReceive, onUpdateJob }) => {
   const [showCreateRma, setShowCreateRma] = useState(false);
   const [mode, setMode] = useState<'existing' | 'new'>(items.length ? 'existing' : 'new');
   const [existingId, setExistingId] = useState('');
@@ -1110,7 +1124,10 @@ const ReceiveStockModal: React.FC<ReceiveStockModalProps> = ({ items, jobs, curr
   const [name, setName] = useState('');
   const [sku, setSku] = useState('');
   const [category, setCategory] = useState<InventoryCategory>('bos');
-  const [location, setLocation] = useState('');
+  const [warehouse, setWarehouse] = useState<WarehouseType>('');
+  const [contractorId, setContractorId] = useState('');
+  const [pickupLocation, setPickupLocation] = useState('');
+  const [alarmBadge, setAlarmBadge] = useState('');
   const [unitCost, setUnitCost] = useState('');
   const [qty, setQty] = useState('1');
   const [image, setImage] = useState<string | undefined>(undefined);
@@ -1163,6 +1180,9 @@ const ReceiveStockModal: React.FC<ReceiveStockModalProps> = ({ items, jobs, curr
     if (!q || q <= 0) { setErr('Enter a quantity greater than 0.'); return; }
     if (mode === 'existing' && !existingId) { setErr('Pick the item this delivery goes into.'); return; }
     if (mode === 'new' && (!name.trim() || !sku.trim())) { setErr('A new item needs at least a name and SKU.'); return; }
+    if (!warehouse) { setErr('Select a warehouse / location.'); return; }
+    if (warehouse === 'contractor' && !contractorId) { setErr('Select the contractor.'); return; }
+    if (warehouse === 'pickup' && !pickupLocation.trim()) { setErr('Enter the pickup location.'); return; }
 
     setSaving(true);
     const sel = rmaKey ? openRmas.find(r => r.key === rmaKey) : undefined;
@@ -1183,15 +1203,21 @@ const ReceiveStockModal: React.FC<ReceiveStockModalProps> = ({ items, jobs, curr
     }
     setSaving(false);
 
-    const receiptLocation = location.trim()
-      || (mode === 'existing' ? items.find(i => i.id === existingId)?.location : undefined)
-      || 'Unassigned';
+    const selectedContractor = contractors.find(c => c.id === contractorId);
+    const receiptLocation =
+      warehouse === 'contractor'
+        ? `Contractor: ${selectedContractor?.businessName || selectedContractor?.email || 'unknown'}`
+        : warehouse === 'pickup'
+          ? `Pickup${pickupLocation.trim() ? ': ' + pickupLocation.trim() : ''}`
+          : WAREHOUSE_LABELS[warehouse as Exclude<WarehouseType, '' | 'contractor' | 'pickup'>] ?? 'Unassigned';
 
     const receipt: StockReceipt = {
       id: receiptId,
       receivedAt: new Date().toISOString(),
       quantity: q,
       location: receiptLocation,
+      contractorId: warehouse === 'contractor' ? contractorId : undefined,
+      alarmBadge: warehouse === 'pickup' ? (alarmBadge.trim() || undefined) : undefined,
       provenanceImage: provenanceUrl,
       provenanceType: provType,
       rmaEntryId: sel?.entry.id,
@@ -1219,7 +1245,7 @@ const ReceiveStockModal: React.FC<ReceiveStockModalProps> = ({ items, jobs, curr
         description: '',
         quantity: q,
         unitOfMeasure: 'unit',
-        location: location.trim() || 'Unassigned',
+        location: receiptLocation,
         minStockThreshold: 0,
         unitCost: parseFloat(unitCost) || 0,
         purchaseDate: new Date().toISOString().slice(0, 10),
@@ -1278,11 +1304,7 @@ const ReceiveStockModal: React.FC<ReceiveStockModalProps> = ({ items, jobs, curr
               <input value={itemSearch} onChange={e => setItemSearch(e.target.value)} placeholder="Search name or SKU…" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
               <select
                 value={existingId}
-                onChange={e => {
-                  setExistingId(e.target.value);
-                  const it = items.find(i => i.id === e.target.value);
-                  if (it) setLocation(it.location); // prefill warehouse from the item
-                }}
+                onChange={e => setExistingId(e.target.value)}
                 className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
               >
                 <option value="">Select an item…</option>
@@ -1315,13 +1337,44 @@ const ReceiveStockModal: React.FC<ReceiveStockModalProps> = ({ items, jobs, curr
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
               <span className="text-sm font-medium text-slate-700">Warehouse / location</span>
-              <input value={location} onChange={e => setLocation(e.target.value)} placeholder="e.g. Warehouse A - Rack 1" className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+              <select value={warehouse} onChange={e => setWarehouse(e.target.value as WarehouseType)} className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white">
+                <option value="">Select…</option>
+                <option value="985">985</option>
+                <option value="conexsol_van">Conexsol Van</option>
+                <option value="office">Office</option>
+                <option value="contractor">Contractor</option>
+                <option value="pickup">Pickup</option>
+              </select>
             </label>
             <label className="block">
               <span className="text-sm font-medium text-slate-700">Quantity received</span>
               <input type="number" min={1} value={qty} onChange={e => setQty(e.target.value)} className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
             </label>
           </div>
+
+          {warehouse === 'contractor' && (
+            <label className="block">
+              <span className="text-sm font-medium text-slate-700">Contractor</span>
+              <select value={contractorId} onChange={e => setContractorId(e.target.value)} className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white">
+                <option value="">Select contractor…</option>
+                {contractors.map(c => <option key={c.id} value={c.id}>{c.businessName || c.email}</option>)}
+              </select>
+              {contractors.length === 0 && <span className="text-xs text-slate-400">No contractors found.</span>}
+            </label>
+          )}
+
+          {warehouse === 'pickup' && (
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block">
+                <span className="text-sm font-medium text-slate-700">Pickup location</span>
+                <input value={pickupLocation} onChange={e => setPickupLocation(e.target.value)} placeholder="Address / site" className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+              </label>
+              <label className="block">
+                <span className="text-sm font-medium text-slate-700">Alarm badge</span>
+                <input value={alarmBadge} onChange={e => setAlarmBadge(e.target.value)} placeholder="Badge / access code" className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+              </label>
+            </div>
+          )}
 
           {/* Provenance photo */}
           <div className="space-y-2">

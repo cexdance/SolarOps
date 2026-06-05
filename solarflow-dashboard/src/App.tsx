@@ -2501,7 +2501,7 @@ function App() {
         );
 
       case 'inventory':
-        return <InventoryModule isMobile={isMobile} jobs={data.jobs} onUpdateJob={handleUpdateJob} currentUser={currentUser} standaloneRmas={data.standaloneRmas ?? []} onCreateStandaloneRma={handleCreateStandaloneRma} onUpdateStandaloneRma={handleUpdateStandaloneRma} />;
+        return <InventoryModule isMobile={isMobile} jobs={data.jobs} onUpdateJob={handleUpdateJob} currentUser={currentUser} standaloneRmas={data.standaloneRmas ?? []} onCreateStandaloneRma={handleCreateStandaloneRma} onUpdateStandaloneRma={handleUpdateStandaloneRma} contractors={contractors} />;
 
       case 'solaredge':
         return (

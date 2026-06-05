@@ -434,7 +434,9 @@ export interface StockReceipt {
   id: string;
   receivedAt: string;            // ISO timestamp
   quantity: number;              // units received in this delivery
-  location?: string;             // warehouse location the delivery went to
+  location?: string;             // warehouse location the delivery went to (composed label)
+  contractorId?: string;         // when location = a contractor
+  alarmBadge?: string;           // when location = pickup: alarm badge / access code
   provenanceImage?: string;      // data URL or URL of the invoice / RMA label photo
   provenanceType?: 'invoice' | 'rma_label' | 'other';
   rmaEntryId?: string;           // linked open RMA entry, if this delivery fulfills one
