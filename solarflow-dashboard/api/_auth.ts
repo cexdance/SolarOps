@@ -41,17 +41,23 @@ export async function requireUser(
   res: VercelResponse,
   headerName = 'authorization',
 ): Promise<User | null> {
-  if (!SERVICE_ROLE_KEY) {
-    console.error('[auth] SUPABASE_SERVICE_ROLE_KEY not configured');
-    res.status(500).json({ error: 'Server auth not configured' });
-    return null;
-  }
-
+  // Reject unauthenticated callers FIRST, before checking server config. An
+  // anonymous request must always get 401 - never a 500 that leaks whether the
+  // server is misconfigured. (Previously a missing key returned 500 even with
+  // no token, which surfaced as FUNCTION_INVOCATION_FAILED-style 500s on
+  // unauthenticated probes.)
   const rawHeader = req.headers[headerName.toLowerCase()];
   const headerValue = Array.isArray(rawHeader) ? rawHeader[0] : (rawHeader ?? '');
   const token = headerValue.replace(/^Bearer\s+/i, '').trim();
   if (!token) {
     res.status(401).json({ error: 'Unauthorized' });
+    return null;
+  }
+
+  // Token present but server can't verify it: configuration error (500).
+  if (!SERVICE_ROLE_KEY) {
+    console.error('[auth] SUPABASE_SERVICE_ROLE_KEY not configured');
+    res.status(500).json({ error: 'Server auth not configured' });
     return null;
   }
 

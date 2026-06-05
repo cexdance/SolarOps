@@ -84,10 +84,22 @@ describe('requireUser degrades gracefully without a service-role key', () => {
     vi.resetModules();
   });
 
-  it('returns a clean 500 (not a crash) when key is missing', async () => {
+  it('returns 401 (not 500) for an UNAUTHENTICATED request even when key is missing', async () => {
+    // Anonymous probes must never receive a 500 that leaks server config state.
     const { requireUser } = await import('../../api/_auth.ts');
     const { res, out } = makeRes();
     const req = { headers: {}, query: {}, method: 'GET' } as never;
+
+    const user = await requireUser(req, res as never);
+
+    expect(user).toBeNull();
+    expect(out.statusCode).toBe(401);
+  });
+
+  it('returns a clean 500 (not a crash) when a token is sent but the key is missing', async () => {
+    const { requireUser } = await import('../../api/_auth.ts');
+    const { res, out } = makeRes();
+    const req = { headers: { authorization: 'Bearer some-token' }, query: {}, method: 'GET' } as never;
 
     const user = await requireUser(req, res as never);
 
