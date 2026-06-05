@@ -38,9 +38,14 @@ const ImageUploader: React.FC<{
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => onChange(reader.result as string);
-    reader.readAsDataURL(file);
+    // Auto-downscale/recompress to < 1 MB before storing the data URL.
+    compressImageToDataUrlUnder(file)
+      .then(onChange)
+      .catch(() => {
+        const reader = new FileReader();
+        reader.onload = () => onChange(reader.result as string);
+        reader.readAsDataURL(file);
+      });
   };
 
   const handleUrlApply = () => {
@@ -129,6 +134,7 @@ import {
 import { loadInventory, saveInventory } from '../lib/inventoryStore';
 import { RmaCreateModal } from './RmaCreateModal';
 import { uploadPhotoToStorage } from '../lib/photoStorage';
+import { compressImageToDataUrlUnder } from '../lib/photoCompress';
 
 interface InventoryModuleProps {
   isMobile?: boolean;

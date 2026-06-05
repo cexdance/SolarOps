@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { compressImageUnderBytes } from './photoCompress';
 
 const BUCKET = 'customer-files';
 
@@ -21,13 +22,15 @@ export async function uploadPhotoToStorage(
   const authErr = await assertSession();
   if (authErr) return { url: null, error: authErr };
 
+  // Auto-downscale/recompress any oversized image to < 1 MB before upload.
+  const toUpload = await compressImageUnderBytes(file).catch(() => file);
   const ext =
-    file instanceof File && file.name.includes('.') ? file.name.split('.').pop() : 'jpg';
+    toUpload instanceof File && toUpload.name.includes('.') ? toUpload.name.split('.').pop() : 'jpg';
   const path = `wo-photos/${jobId}/${photoId}.${ext}`;
 
   const { error } = await supabase.storage
     .from(BUCKET)
-    .upload(path, file, { contentType: file.type || 'image/jpeg', upsert: true });
+    .upload(path, toUpload, { contentType: toUpload.type || 'image/jpeg', upsert: true });
 
   if (error) {
     console.error('[photoStorage] upload failed', error);
@@ -46,10 +49,11 @@ export async function uploadAvatarToStorage(
   const authErr = await assertSession();
   if (authErr) return { url: null, error: authErr };
 
+  const toUpload = await compressImageUnderBytes(file).catch(() => file);
   const path = `avatars/${userId}.jpg`;
   const { error } = await supabase.storage
     .from(BUCKET)
-    .upload(path, file, { contentType: 'image/jpeg', upsert: true });
+    .upload(path, toUpload, { contentType: 'image/jpeg', upsert: true });
 
   if (error) {
     console.error('[photoStorage] avatar upload failed', error);

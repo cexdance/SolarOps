@@ -124,6 +124,54 @@ export async function compressImageToBlob(
   }
 }
 
+const ONE_MB = 1024 * 1024;
+
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error ?? new Error('read failed'));
+    reader.readAsDataURL(blob);
+  });
+}
+
+/**
+ * Compress an image so the result is GUARANTEED under `maxBytes` (default 1 MB)
+ * whenever achievable. Non-images and already-small inputs pass through
+ * unchanged. Steps down max edge, then JPEG quality, until under budget;
+ * returns the smallest result achieved even if a stubborn image stays slightly
+ * over. This is the hard cap applied before anything is committed to storage.
+ */
+export async function compressImageUnderBytes(
+  input: File | Blob,
+  maxBytes = ONE_MB,
+): Promise<Blob> {
+  if (!input.type.startsWith('image/')) return input;
+  if (input.size <= maxBytes) return input;
+  const file = input instanceof File
+    ? input
+    : new File([input], 'image', { type: input.type || 'image/jpeg' });
+  let best: Blob = input;
+  for (const edge of [1600, 1280, 1024, 800, 640]) {
+    for (const q of [0.75, 0.6, 0.45, 0.3]) {
+      const blob = await compressImageToBlob(file, edge, q);
+      if (blob.size < best.size) best = blob;
+      if (blob.size <= maxBytes) return blob;
+    }
+  }
+  return best;
+}
+
+/** Like compressImageUnderBytes but returns a JPEG dataURL under `maxBytes`. */
+export async function compressImageToDataUrlUnder(
+  file: File,
+  maxBytes = ONE_MB,
+): Promise<string> {
+  if (!file.type.startsWith('image/')) return await fileToDataUrl(file);
+  const blob = await compressImageUnderBytes(file, maxBytes);
+  return await blobToDataUrl(blob);
+}
+
 /** Approximate decoded byte length of a data:*;base64 URL. */
 export function estimateDataUrlBytes(dataUrl: string): number {
   if (!dataUrl.startsWith('data:')) return dataUrl.length;
