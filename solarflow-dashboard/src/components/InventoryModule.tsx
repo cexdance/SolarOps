@@ -393,6 +393,13 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ isMobile, jobs
     setInventoryItems(items);
     saveInventory(items);
   };
+
+  const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
+  const toggleItemExpand = (id: string) => setExpandedItems(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
   const [toolItems, setToolItems] = useState<ToolItem[]>(demoTools);
   const [providerItems, setProviderItems] = useState<Provider[]>(demoProviders);
 
@@ -682,6 +689,18 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ isMobile, jobs
                       Total: ${(item.quantity * item.unitCost).toLocaleString()}
                     </span>
                     <button
+                      onClick={() => toggleItemExpand(item.id)}
+                      title="Receiving history"
+                      className="p-1.5 text-slate-500 hover:bg-slate-100 rounded-lg transition-colors flex items-center gap-1"
+                    >
+                      {(item.receipts?.length ?? 0) > 0 && (
+                        <span className="text-xs font-medium">{item.receipts!.length}</span>
+                      )}
+                      {expandedItems.has(item.id)
+                        ? <ChevronUp className="w-4 h-4" />
+                        : <ChevronDown className="w-4 h-4" />}
+                    </button>
+                    <button
                       onClick={() => {
                         setEditingItem(item);
                         setShowEditModal(true);
@@ -702,6 +721,43 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ isMobile, jobs
                     </button>
                   </div>
                 </div>
+
+                {/* Receiving history (chevron) */}
+                {expandedItems.has(item.id) && (
+                  <div className="mt-3 pt-3 border-t border-slate-100">
+                    <p className="text-xs font-medium text-slate-600 mb-2">Receiving history</p>
+                    {(item.receipts?.length ?? 0) === 0 ? (
+                      <p className="text-xs text-slate-400">No receiving history recorded for this item.</p>
+                    ) : (
+                      <div className="space-y-1.5">
+                        {[...(item.receipts ?? [])].reverse().map((r) => (
+                          <div key={r.id} className="flex items-center gap-2 text-xs flex-wrap bg-slate-50 rounded-lg px-2 py-1.5">
+                            <span className="font-semibold text-emerald-700">+{r.quantity}</span>
+                            <span className="text-slate-500">{new Date(r.receivedAt).toLocaleDateString()}</span>
+                            <span className="flex items-center gap-1 text-slate-500">
+                              <MapPin className="w-3 h-3" />{r.location ?? item.location}
+                            </span>
+                            {r.receivedBy && (
+                              <span className="flex items-center gap-1 text-slate-500">
+                                <Users className="w-3 h-3" />{r.receivedBy}
+                              </span>
+                            )}
+                            {r.rmaNumber && (
+                              <span className="px-1.5 py-0.5 rounded-full bg-orange-50 text-orange-600 font-medium">RMA {r.rmaNumber}</span>
+                            )}
+                            {r.provenanceImage && (
+                              <a href={r.provenanceImage} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-blue-600 hover:underline">
+                                <ImageIcon className="w-3 h-3" />
+                                {r.provenanceType === 'rma_label' ? 'RMA label' : r.provenanceType === 'invoice' ? 'Invoice' : 'Photo'}
+                              </a>
+                            )}
+                            {r.note && <span className="text-slate-400 italic truncate">{r.note}</span>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             ))}
             {filteredInventory.length === 0 && (
@@ -1000,10 +1056,15 @@ const ReceiveStockModal: React.FC<ReceiveStockModalProps> = ({ items, jobs, curr
     }
     setSaving(false);
 
+    const receiptLocation = mode === 'existing'
+      ? items.find(i => i.id === existingId)?.location
+      : (location.trim() || 'Unassigned');
+
     const receipt: StockReceipt = {
       id: receiptId,
       receivedAt: new Date().toISOString(),
       quantity: q,
+      location: receiptLocation,
       provenanceImage: provenanceUrl,
       provenanceType: provType,
       rmaEntryId: sel?.entry.id,
