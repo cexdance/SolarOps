@@ -72,12 +72,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // ── GET: list staff. Available to any authenticated staff member. ──────────
   if (req.method === 'GET') {
-    const listRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users?per_page=200`, {
-      headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}`, apikey: SERVICE_ROLE_KEY },
-    });
-    if (!listRes.ok) return res.status(500).json({ error: 'Failed to fetch users' });
-    const body = await listRes.json() as { users?: Record<string, any>[] };
-    const staff = (body.users ?? [])
+    // Paginate through ALL auth users. The GoTrue admin endpoint caps page size,
+    // so a single call hid any staff member beyond the first page once the auth
+    // project grew past it (staff + contractors + customers share auth.users).
+    const PER_PAGE = 200;
+    const MAX_PAGES = 50; // safety bound (10k users) so a bad upstream can't loop forever
+    const allUsers: Record<string, any>[] = [];
+    for (let page = 1; page <= MAX_PAGES; page++) {
+      const listRes = await fetch(
+        `${SUPABASE_URL}/auth/v1/admin/users?page=${page}&per_page=${PER_PAGE}`,
+        { headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}`, apikey: SERVICE_ROLE_KEY } },
+      );
+      if (!listRes.ok) {
+        // Surface the real upstream status instead of a generic 500 — a 401/403
+        // here means SUPABASE_SERVICE_ROLE_KEY is not a valid admin key.
+        const detail = await listRes.text().catch(() => '');
+        console.error(`[api/users] admin list page ${page} failed ${listRes.status}: ${detail.slice(0, 200)}`);
+        return res.status(502).json({ error: `Failed to fetch users (upstream ${listRes.status})` });
+      }
+      const body = await listRes.json() as { users?: Record<string, any>[] };
+      const pageUsers = body.users ?? [];
+      allUsers.push(...pageUsers);
+      if (pageUsers.length < PER_PAGE) break; // last page reached
+    }
+    const staff = allUsers
       .filter(u => STAFF_ROLES.has(((u.user_metadata as any)?.role as string) ?? ''))
       .map(mapUser);
     res.setHeader('Cache-Control', 'private, max-age=300');
