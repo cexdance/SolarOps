@@ -2,13 +2,18 @@
 import React, { useState, useMemo } from 'react';
 import {
   RotateCcw, Users, CheckCircle, Plus, Package, LayoutGrid, List, Calendar, ChevronLeft, ChevronRight,
+  AlertTriangle, Link2,
 } from 'lucide-react';
 import { Job, Customer, User, RMAEntry, RMAStatus } from '../types';
+import { RmaCreateModal } from './RmaCreateModal';
 
 interface RMADashboardProps {
   jobs: Job[];
   customers: Customer[];
   currentUser: User | null;
+  standaloneRmas?: RMAEntry[];
+  onCreateStandaloneRma?: (entry: RMAEntry) => void;
+  onUpdateStandaloneRma?: (entry: RMAEntry) => void;
   onJobClick?: (jobId: string) => void;
   onViewCustomer?: (customerId: string) => void;
   onUpdateJob?: (job: Job) => void;
@@ -42,6 +47,9 @@ export function RMADashboard({
   jobs,
   customers,
   currentUser,
+  standaloneRmas = [],
+  onCreateStandaloneRma,
+  onUpdateStandaloneRma,
   onJobClick,
   onViewCustomer,
   onUpdateJob,
@@ -49,7 +57,9 @@ export function RMADashboard({
 }: RMADashboardProps) {
   const [viewMode, setViewMode] = useState<'kanban' | 'list' | 'calendar'>('kanban');
   const [selectedDate, setSelectedDate] = useState(new Date());
+  const [showCreateRma, setShowCreateRma] = useState(false);
   const getCustomer = (id: string) => customers.find(c => c.id === id);
+  const jobById = (id?: string) => (id ? jobs.find(j => j.id === id) : undefined);
 
   // ── Build RMA rows from all jobs ──────────────────────────────────────────
   const rmaJobs = jobs.filter(j =>
@@ -207,6 +217,16 @@ export function RMADashboard({
               </button>
             </div>
 
+            {onCreateStandaloneRma && (
+              <button
+                onClick={() => setShowCreateRma(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg transition-colors whitespace-nowrap"
+                title="Create an RMA (with or without a work order)"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                New RMA
+              </button>
+            )}
             {onViewChange && (
               <button
                 onClick={() => onViewChange('jobs')}
@@ -220,8 +240,66 @@ export function RMADashboard({
         </div>
       </div>
 
+      {/* ── Standalone / unlinked RMAs ──────────────────────────────────────── */}
+      {standaloneRmas.length > 0 && (
+        <div className="px-4 pt-4">
+          <div className="bg-white rounded-xl border border-slate-200">
+            <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-red-500" />
+              <h3 className="font-semibold text-slate-900 text-sm">Standalone RMAs</h3>
+              <span className="text-xs text-slate-400">created outside a work order</span>
+            </div>
+            <div className="divide-y divide-slate-100">
+              {standaloneRmas.map(e => {
+                const linkedJob = jobById(e.linkedJobId);
+                return (
+                  <div key={e.id} className="p-3 flex items-center gap-3 flex-wrap">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-medium text-slate-900 text-sm">{e.rmaNumber || '(no RMA #)'}</span>
+                        {!e.linkedJobId ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-50 text-red-600 text-xs font-medium border border-red-200">
+                            <AlertTriangle className="w-3 h-3" /> No work order
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => linkedJob && onJobClick?.(linkedJob.id)}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-xs font-medium border border-emerald-200 hover:bg-emerald-100"
+                          >
+                            <Link2 className="w-3 h-3" /> {linkedJob ? (linkedJob.woNumber ?? linkedJob.id) : 'linked'}
+                          </button>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-500 truncate">{e.manufacturer} · {e.partDescription}</p>
+                    </div>
+                    <select
+                      value={e.status}
+                      onChange={ev => onUpdateStandaloneRma?.({ ...e, status: ev.target.value as RMAEntry['status'] })}
+                      className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white capitalize"
+                    >
+                      {['pending', 'submitted', 'approved', 'received', 'paid'].map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                    {!e.linkedJobId && jobs.length > 0 && (
+                      <select
+                        value=""
+                        onChange={ev => ev.target.value && onUpdateStandaloneRma?.({ ...e, linkedJobId: ev.target.value })}
+                        className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white"
+                        title="Link this RMA to a work order"
+                      >
+                        <option value="">Link to WO…</option>
+                        {jobs.map(j => <option key={j.id} value={j.id}>{j.woNumber ?? j.id}</option>)}
+                      </select>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Empty state ────────────────────────────────────────────────────── */}
-      {rmaRows.length === 0 && (
+      {rmaRows.length === 0 && standaloneRmas.length === 0 && (
         <div className="flex flex-col items-center justify-center py-24 gap-4">
           <div className="p-4 bg-slate-100 rounded-full">
             <Package className="w-8 h-8 text-slate-400" />
@@ -526,6 +604,14 @@ export function RMADashboard({
             </div>
           </div>
         </div>
+      )}
+      {showCreateRma && onCreateStandaloneRma && (
+        <RmaCreateModal
+          jobs={jobs}
+          currentUserName={currentUser?.name ?? currentUser?.email}
+          onClose={() => setShowCreateRma(false)}
+          onCreate={onCreateStandaloneRma}
+        />
       )}
     </div>
   );

@@ -324,6 +324,10 @@ export interface RMAEntry {
   compensationAmount?: number;
   createdAt: string;
   createdBy: string;
+  /** Work order this RMA links to. Absent on standalone RMAs (shown with a red "No work order" flag). */
+  linkedJobId?: string;
+  /** Last edit time — used to resolve sync merges of standalone RMAs. */
+  updatedAt?: string;
 }
 
 export interface AuditEntry {
@@ -395,6 +399,8 @@ export interface AppState {
   notifications: AppNotification[];
   /** Sites pulled from the API that are not in the static FL_SITES list */
   solarEdgeExtraSites?: SolarEdgeExtraSite[];
+  /** RMAs created outside a work order (red-flagged as unlinked). Synced as a KV blob. */
+  standaloneRmas?: RMAEntry[];
 }
 
 // Inventory Types

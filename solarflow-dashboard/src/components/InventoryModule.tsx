@@ -127,12 +127,16 @@ import {
   RMAEntry,
 } from '../types';
 import { loadInventory, saveInventory } from '../lib/inventoryStore';
+import { RmaCreateModal } from './RmaCreateModal';
 
 interface InventoryModuleProps {
   isMobile?: boolean;
   jobs?: Job[];
   onUpdateJob?: (job: Job) => void;
   currentUser?: User | null;
+  standaloneRmas?: RMAEntry[];
+  onCreateStandaloneRma?: (entry: RMAEntry) => void;
+  onUpdateStandaloneRma?: (entry: RMAEntry) => void;
 }
 
 // Demo data
@@ -368,7 +372,7 @@ const toolStatusLabels: Record<ToolStatus, string> = {
   lost: 'Lost',
 };
 
-export const InventoryModule: React.FC<InventoryModuleProps> = ({ isMobile, jobs = [], onUpdateJob, currentUser }) => {
+export const InventoryModule: React.FC<InventoryModuleProps> = ({ isMobile, jobs = [], onUpdateJob, currentUser, standaloneRmas = [], onCreateStandaloneRma, onUpdateStandaloneRma }) => {
   const [activeTab, setActiveTab] = useState<'equipment' | 'tools' | 'providers'>('equipment');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState<string>('all');
@@ -843,6 +847,9 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ isMobile, jobs
           items={inventoryItems}
           jobs={jobs}
           currentUser={currentUser}
+          standaloneRmas={standaloneRmas}
+          onCreateStandaloneRma={onCreateStandaloneRma}
+          onUpdateStandaloneRma={onUpdateStandaloneRma}
           onClose={() => setShowReceiveModal(false)}
           onReceive={(updatedItems) => {
             updateInventory(updatedItems);
@@ -901,6 +908,9 @@ interface ReceiveStockModalProps {
   items: InventoryItem[];
   jobs: Job[];
   currentUser?: User | null;
+  standaloneRmas?: RMAEntry[];
+  onCreateStandaloneRma?: (entry: RMAEntry) => void;
+  onUpdateStandaloneRma?: (entry: RMAEntry) => void;
   onClose: () => void;
   onReceive: (updatedItems: InventoryItem[]) => void;
   onUpdateJob?: (job: Job) => void;
@@ -908,7 +918,8 @@ interface ReceiveStockModalProps {
 
 const RECEIVE_CATEGORIES: InventoryCategory[] = ['panel', 'optimizer', 'inverter', 'cable', 'racking', 'label', 'battery', 'bos'];
 
-const ReceiveStockModal: React.FC<ReceiveStockModalProps> = ({ items, jobs, currentUser, onClose, onReceive, onUpdateJob }) => {
+const ReceiveStockModal: React.FC<ReceiveStockModalProps> = ({ items, jobs, currentUser, standaloneRmas = [], onCreateStandaloneRma, onUpdateStandaloneRma, onClose, onReceive, onUpdateJob }) => {
+  const [showCreateRma, setShowCreateRma] = useState(false);
   const [mode, setMode] = useState<'existing' | 'new'>(items.length ? 'existing' : 'new');
   const [existingId, setExistingId] = useState('');
   const [itemSearch, setItemSearch] = useState('');
@@ -927,21 +938,32 @@ const ReceiveStockModal: React.FC<ReceiveStockModalProps> = ({ items, jobs, curr
 
   // Open RMAs across all work orders — awaiting a replacement-part delivery.
   const openRmas = useMemo(() => {
-    const out: { key: string; jobId: string; entry: RMAEntry; label: string }[] = [];
+    const out: { key: string; kind: 'job' | 'standalone'; jobId?: string; entry: RMAEntry; label: string }[] = [];
     for (const j of jobs) {
       for (const e of (j.rmaEntries ?? [])) {
         const s = e.rmaStatus ?? e.status;
         if (s === 'paid' || s === 'received') continue; // already closed / delivered
         out.push({
-          key: `${j.id}::${e.id}`,
+          key: `job::${j.id}::${e.id}`,
+          kind: 'job',
           jobId: j.id,
           entry: e,
           label: `${e.rmaNumber} · ${e.manufacturer} ${e.partDescription}`,
         });
       }
     }
+    for (const e of standaloneRmas) {
+      const s = e.rmaStatus ?? e.status;
+      if (s === 'paid' || s === 'received') continue;
+      out.push({
+        key: `sa::${e.id}`,
+        kind: 'standalone',
+        entry: e,
+        label: `${e.rmaNumber} · ${e.manufacturer} ${e.partDescription}${e.linkedJobId ? '' : ' (unlinked)'}`,
+      });
+    }
     return out;
-  }, [jobs]);
+  }, [jobs, standaloneRmas]);
 
   const filteredItems = useMemo(() => {
     const q = itemSearch.trim().toLowerCase();
@@ -999,18 +1021,23 @@ const ReceiveStockModal: React.FC<ReceiveStockModalProps> = ({ items, jobs, curr
     onReceive(updatedItems);
 
     // Match the requested RMA to this delivery → mark it received.
-    if (sel && markReceived && onUpdateJob) {
-      const job = jobs.find(j => j.id === sel.jobId);
-      if (job) {
-        const updatedEntries = (job.rmaEntries ?? []).map(e =>
-          e.id === sel.entry.id ? { ...e, status: 'received' as const } : e,
-        );
-        onUpdateJob({ ...job, rmaEntries: updatedEntries });
+    if (sel && markReceived) {
+      if (sel.kind === 'job' && onUpdateJob) {
+        const job = jobs.find(j => j.id === sel.jobId);
+        if (job) {
+          const updatedEntries = (job.rmaEntries ?? []).map(e =>
+            e.id === sel.entry.id ? { ...e, status: 'received' as const } : e,
+          );
+          onUpdateJob({ ...job, rmaEntries: updatedEntries });
+        }
+      } else if (sel.kind === 'standalone' && onUpdateStandaloneRma) {
+        onUpdateStandaloneRma({ ...sel.entry, status: 'received' });
       }
     }
   };
 
   return (
+    <>
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between p-4 border-b border-slate-100 sticky top-0 bg-white">
@@ -1090,7 +1117,14 @@ const ReceiveStockModal: React.FC<ReceiveStockModalProps> = ({ items, jobs, curr
 
           {/* Open RMA match */}
           <div className="space-y-2">
-            <label className="block text-sm font-medium text-slate-700">Match an open RMA (optional)</label>
+            <div className="flex items-center justify-between">
+              <label className="block text-sm font-medium text-slate-700">Match an open RMA (optional)</label>
+              {onCreateStandaloneRma && (
+                <button type="button" onClick={() => setShowCreateRma(true)} className="flex items-center gap-1 text-xs text-orange-600 hover:text-orange-700">
+                  <Plus className="w-3.5 h-3.5" /> New RMA
+                </button>
+              )}
+            </div>
             <select value={rmaKey} onChange={e => setRmaKey(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white">
               <option value="">No RMA — regular stock</option>
               {openRmas.map(r => <option key={r.key} value={r.key}>{r.label}</option>)}
@@ -1118,6 +1152,15 @@ const ReceiveStockModal: React.FC<ReceiveStockModalProps> = ({ items, jobs, curr
         </div>
       </div>
     </div>
+    {showCreateRma && onCreateStandaloneRma && (
+      <RmaCreateModal
+        jobs={jobs}
+        currentUserName={currentUser?.name ?? currentUser?.email}
+        onClose={() => setShowCreateRma(false)}
+        onCreate={(entry) => { onCreateStandaloneRma(entry); setRmaKey(`sa::${entry.id}`); }}
+      />
+    )}
+    </>
   );
 };
 

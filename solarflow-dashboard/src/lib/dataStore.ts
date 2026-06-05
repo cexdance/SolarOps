@@ -63,6 +63,7 @@ const generateDefaultState = (): AppState => ({
   solarEdgeConfig: { apiKey: '' },
   currentUser:   undefined as any,
   notifications: [],
+  standaloneRmas: [],
 });
 
 // ── Tombstone list — customers explicitly deleted by the user ──────────────────

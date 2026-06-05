@@ -42,7 +42,7 @@ import { fetchMyNotifications, markNotificationReadRemote, markAllNotificationsR
 import { processBillingTimers } from './lib/billingService';
 import { loadContractors, saveContractors, loadServiceRates, saveServiceRates, loadContractorJobs, saveContractorJobs, initializeContractorData, findInviteByToken } from './lib/contractorStore';
 import { ContractorInvite as ContractorInviteType } from './types/contractor';
-import { AppState, Job, Customer, User, AppNotification, CRMCustomer, InteractionOutcome, SolarEdgeExtraSite } from './types';
+import { AppState, Job, Customer, User, AppNotification, CRMCustomer, InteractionOutcome, SolarEdgeExtraSite, RMAEntry } from './types';
 import { FL_SITES } from './lib/solarEdgeSites';
 import { isFloridaSite, isAllowedCustomer } from './lib/solarEdgeSiteFilter';
 import { getDeletedCustomerIds, markJobDeleted } from './lib/dataStore';
@@ -1296,6 +1296,26 @@ function App() {
   const resolveActor = (): string =>
     data.currentUser?.email || currentContractor?.contactName || currentContractor?.id || 'system';
 
+  const handleCreateStandaloneRma = (entry: RMAEntry) => {
+    setData(prev => {
+      const next = { ...prev, standaloneRmas: [...(prev.standaloneRmas ?? []), entry] };
+      saveData(next);
+      return next;
+    });
+  };
+
+  const handleUpdateStandaloneRma = (entry: RMAEntry) => {
+    setData(prev => {
+      const next = {
+        ...prev,
+        standaloneRmas: (prev.standaloneRmas ?? []).map(e =>
+          e.id === entry.id ? { ...entry, updatedAt: new Date().toISOString() } : e),
+      };
+      saveData(next);
+      return next;
+    });
+  };
+
   const handleUpdateJob = (updatedJob: Job, role: 'admin' | 'contractor' | 'technician' = 'admin') => {
     const newActivity = {
       id: `activity-${Date.now()}`,
@@ -2320,6 +2340,9 @@ function App() {
             jobs={data.jobs}
             customers={data.customers}
             currentUser={currentUser}
+            standaloneRmas={data.standaloneRmas ?? []}
+            onCreateStandaloneRma={handleCreateStandaloneRma}
+            onUpdateStandaloneRma={handleUpdateStandaloneRma}
             onJobClick={(jobId) => handleViewChange('jobDetail', jobId)}
             onViewCustomer={(customerId) => { setSelectedCustomerId(customerId); setCurrentView('customers'); }}
             onUpdateJob={handleUpdateJob}
@@ -2478,7 +2501,7 @@ function App() {
         );
 
       case 'inventory':
-        return <InventoryModule isMobile={isMobile} jobs={data.jobs} onUpdateJob={handleUpdateJob} currentUser={currentUser} />;
+        return <InventoryModule isMobile={isMobile} jobs={data.jobs} onUpdateJob={handleUpdateJob} currentUser={currentUser} standaloneRmas={data.standaloneRmas ?? []} onCreateStandaloneRma={handleCreateStandaloneRma} onUpdateStandaloneRma={handleUpdateStandaloneRma} />;
 
       case 'solaredge':
         return (

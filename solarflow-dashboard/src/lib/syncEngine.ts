@@ -378,6 +378,9 @@ export async function pushToSupabase(state: AppState): Promise<void> {
     if (state.solarEdgeExtraSites?.length && isDirty('solarEdgeExtraSites', state.solarEdgeExtraSites)) {
       metaRows.push({ key: 'solarEdgeExtraSites', value: state.solarEdgeExtraSites, updated_at: now });
     }
+    if (isDirty('standaloneRmas', state.standaloneRmas ?? [])) {
+      metaRows.push({ key: 'standaloneRmas', value: state.standaloneRmas ?? [], updated_at: now });
+    }
 
     if (metaRows.length > 0) {
       const { error } = await supabase
@@ -476,7 +479,7 @@ export async function pullFromSupabase(): Promise<Partial<AppState> | null> {
     const { data: kvData, error: kvError } = await supabase
       .from('app_data')
       .select('key, value')
-      .in('key', ['deleted_customer_ids', 'solarEdgeConfig', ...KV_SYNC_KEYS]);
+      .in('key', ['deleted_customer_ids', 'solarEdgeConfig', 'standaloneRmas', ...KV_SYNC_KEYS]);
 
     if (kvError) {
       console.warn('[SyncEngine] pullFromSupabase KV data fetch error:', kvError.message);
@@ -564,11 +567,13 @@ export async function pullFromSupabase(): Promise<Partial<AppState> | null> {
 
     // Extract solarEdgeConfig from kvData if present
     const remoteSEConfig = kvData?.find(r => r.key === 'solarEdgeConfig')?.value as AppState['solarEdgeConfig'] | undefined;
+    const remoteStandaloneRmas = kvData?.find(r => r.key === 'standaloneRmas')?.value as AppState['standaloneRmas'] | undefined;
 
     const result: Partial<AppState> = {};
     if (customers.length > 0)  result.customers       = customers;
     if (jobs.length > 0)       result.jobs            = jobs;
     if (remoteSEConfig?.apiKey) result.solarEdgeConfig = remoteSEConfig;
+    if (Array.isArray(remoteStandaloneRmas)) result.standaloneRmas = remoteStandaloneRmas;
     return result;
   } catch (err) {
     console.warn('[SyncEngine] pullFromSupabase error:', err);
@@ -669,7 +674,24 @@ export function mergeRemote(local: AppState, remote: Partial<AppState>): AppStat
     ? { ...local.solarEdgeConfig, ...remote.solarEdgeConfig }
     : local.solarEdgeConfig;
 
-  return { ...local, customers, jobs, solarEdgeExtraSites, solarEdgeConfig };
+  // ── Standalone RMAs — merge the synced blob by id (newest updatedAt wins) ──
+  const standaloneRmas = (() => {
+    const localList = local.standaloneRmas ?? [];
+    const remoteList = remote.standaloneRmas ?? [];
+    if (remoteList.length === 0) return localList;
+    if (localList.length === 0) return remoteList;
+    const byId = new Map(localList.map(e => [e.id, e]));
+    for (const e of remoteList) {
+      const cur = byId.get(e.id);
+      if (!cur) { byId.set(e.id, e); continue; }
+      const t1 = cur.updatedAt ?? cur.createdAt ?? '';
+      const t2 = e.updatedAt ?? e.createdAt ?? '';
+      if (t2 > t1) byId.set(e.id, e);
+    }
+    return Array.from(byId.values());
+  })();
+
+  return { ...local, customers, jobs, solarEdgeExtraSites, solarEdgeConfig, standaloneRmas };
 }
 
 // ── Full sync on login ────────────────────────────────────────────────────────
