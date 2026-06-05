@@ -442,6 +442,9 @@ export interface StockReceipt {
   jobId?: string;                // the work order the linked RMA belongs to
   note?: string;
   receivedBy?: string;
+  /** Set when an admin edits this receipt after the fact. */
+  editedAt?: string;
+  editedBy?: string;
 }
 
 export interface ToolItem {

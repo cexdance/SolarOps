@@ -406,6 +406,25 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ isMobile, jobs
     if (next.has(id)) next.delete(id); else next.add(id);
     return next;
   });
+
+  const isAdmin = currentUser?.role === 'admin';
+  const [editingReceipt, setEditingReceipt] = useState<{ itemId: string; receipt: StockReceipt } | null>(null);
+
+  // Admin edit of a receiving-history entry. Adjusts the item quantity by the
+  // change in this receipt's quantity, and stamps editedAt/editedBy.
+  const applyReceiptEdit = (itemId: string, updated: StockReceipt) => {
+    updateInventory(inventoryItems.map(i => {
+      if (i.id !== itemId) return i;
+      const old = (i.receipts ?? []).find(r => r.id === updated.id);
+      const qtyDelta = (updated.quantity ?? 0) - (old?.quantity ?? 0);
+      return {
+        ...i,
+        quantity: Math.max(0, i.quantity + qtyDelta),
+        receipts: (i.receipts ?? []).map(r => r.id === updated.id ? updated : r),
+      };
+    }));
+    setEditingReceipt(null);
+  };
   const [toolItems, setToolItems] = useState<ToolItem[]>(demoTools);
   const [providerItems, setProviderItems] = useState<Provider[]>(demoProviders);
 
@@ -758,6 +777,20 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ isMobile, jobs
                               </a>
                             )}
                             {r.note && <span className="text-slate-400 italic truncate">{r.note}</span>}
+                            {r.editedAt && (
+                              <span className="text-amber-600 italic">
+                                edited {new Date(r.editedAt).toLocaleDateString()}{r.editedBy ? ` by ${r.editedBy}` : ''}
+                              </span>
+                            )}
+                            {isAdmin && (
+                              <button
+                                onClick={() => setEditingReceipt({ itemId: item.id, receipt: r })}
+                                title="Edit entry (admin only)"
+                                className="ml-auto p-1 text-blue-600 hover:bg-blue-50 rounded"
+                              >
+                                <Edit className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                           </div>
                         ))}
                       </div>
@@ -922,6 +955,16 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ isMobile, jobs
         />
       )}
 
+      {/* Edit receiving entry (admin only) */}
+      {editingReceipt && isAdmin && (
+        <ReceiptEditModal
+          receipt={editingReceipt.receipt}
+          editorName={currentUser?.name ?? currentUser?.email}
+          onClose={() => setEditingReceipt(null)}
+          onSave={(updated) => applyReceiptEdit(editingReceipt.itemId, updated)}
+        />
+      )}
+
       {/* Add Tool Modal */}
       {showToolModal && (
         <AddToolModal onClose={() => setShowToolModal(false)} />
@@ -967,6 +1010,84 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ isMobile, jobs
 
 // Add Inventory Modal
 // ── Receive Stock — quick add into stock with a provenance photo + open-RMA match ──
+// ── Admin edit of a single receiving-history entry ──────────────────────────────
+interface ReceiptEditModalProps {
+  receipt: StockReceipt;
+  editorName?: string;
+  onClose: () => void;
+  onSave: (updated: StockReceipt) => void;
+}
+
+const ReceiptEditModal: React.FC<ReceiptEditModalProps> = ({ receipt, editorName, onClose, onSave }) => {
+  const [qty, setQty] = useState(String(receipt.quantity));
+  const [location, setLocation] = useState(receipt.location ?? '');
+  const [receivedDate, setReceivedDate] = useState(receipt.receivedAt.slice(0, 10));
+  const [note, setNote] = useState(receipt.note ?? '');
+  const [err, setErr] = useState<string | null>(null);
+
+  const save = () => {
+    setErr(null);
+    const q = parseInt(qty, 10);
+    if (!q || q <= 0) { setErr('Quantity must be greater than 0.'); return; }
+    const receivedAt = receivedDate === receipt.receivedAt.slice(0, 10)
+      ? receipt.receivedAt
+      : new Date(receivedDate + 'T12:00:00').toISOString();
+    onSave({
+      ...receipt,
+      quantity: q,
+      location: location.trim() || undefined,
+      receivedAt,
+      note: note.trim() || undefined,
+      editedAt: new Date().toISOString(),
+      editedBy: editorName || 'admin',
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between p-4 border-b border-slate-100">
+          <h3 className="font-semibold text-slate-900">Edit receiving entry</h3>
+          <button onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100"><X className="w-4 h-4" /></button>
+        </div>
+        <div className="p-4 space-y-3">
+          {err && (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-50 text-red-600 text-xs">
+              <AlertTriangle className="w-3.5 h-3.5" /> {err}
+            </div>
+          )}
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block">
+              <span className="text-sm font-medium text-slate-700">Quantity</span>
+              <input type="number" min={1} value={qty} onChange={e => setQty(e.target.value)} className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+            </label>
+            <label className="block">
+              <span className="text-sm font-medium text-slate-700">Date received</span>
+              <input type="date" value={receivedDate} onChange={e => setReceivedDate(e.target.value)} className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+            </label>
+          </div>
+          <label className="block">
+            <span className="text-sm font-medium text-slate-700">Warehouse / location</span>
+            <input value={location} onChange={e => setLocation(e.target.value)} className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+          </label>
+          <label className="block">
+            <span className="text-sm font-medium text-slate-700">Note</span>
+            <input value={note} onChange={e => setNote(e.target.value)} className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+          </label>
+          <p className="text-xs text-slate-400">
+            Created {new Date(receipt.receivedAt).toLocaleString()}{receipt.receivedBy ? ` by ${receipt.receivedBy}` : ''}.
+            {receipt.editedAt && ` Last edited ${new Date(receipt.editedAt).toLocaleString()}${receipt.editedBy ? ` by ${receipt.editedBy}` : ''}.`}
+          </p>
+        </div>
+        <div className="p-4 border-t border-slate-100 flex justify-end gap-2">
+          <button onClick={onClose} className="px-3 py-2 rounded-lg text-sm text-slate-600 hover:bg-slate-100">Cancel</button>
+          <button onClick={save} className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700">Save</button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 interface ReceiveStockModalProps {
   items: InventoryItem[];
   jobs: Job[];
@@ -1062,9 +1183,9 @@ const ReceiveStockModal: React.FC<ReceiveStockModalProps> = ({ items, jobs, curr
     }
     setSaving(false);
 
-    const receiptLocation = mode === 'existing'
-      ? items.find(i => i.id === existingId)?.location
-      : (location.trim() || 'Unassigned');
+    const receiptLocation = location.trim()
+      || (mode === 'existing' ? items.find(i => i.id === existingId)?.location : undefined)
+      || 'Unassigned';
 
     const receipt: StockReceipt = {
       id: receiptId,
@@ -1155,7 +1276,15 @@ const ReceiveStockModal: React.FC<ReceiveStockModalProps> = ({ items, jobs, curr
             <div className="space-y-2">
               <label className="block text-sm font-medium text-slate-700">Item</label>
               <input value={itemSearch} onChange={e => setItemSearch(e.target.value)} placeholder="Search name or SKU…" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
-              <select value={existingId} onChange={e => setExistingId(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white">
+              <select
+                value={existingId}
+                onChange={e => {
+                  setExistingId(e.target.value);
+                  const it = items.find(i => i.id === e.target.value);
+                  if (it) setLocation(it.location); // prefill warehouse from the item
+                }}
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
+              >
                 <option value="">Select an item…</option>
                 {filteredItems.map(i => <option key={i.id} value={i.id}>{i.name} · {i.sku} (qty {i.quantity})</option>)}
               </select>
@@ -1177,20 +1306,22 @@ const ReceiveStockModal: React.FC<ReceiveStockModalProps> = ({ items, jobs, curr
                 </select>
               </label>
               <label className="block">
-                <span className="text-sm font-medium text-slate-700">Location</span>
-                <input value={location} onChange={e => setLocation(e.target.value)} placeholder="Unassigned" className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
-              </label>
-              <label className="block">
                 <span className="text-sm font-medium text-slate-700">Unit cost ($)</span>
                 <input type="number" value={unitCost} onChange={e => setUnitCost(e.target.value)} className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
               </label>
             </div>
           )}
 
-          <label className="block">
-            <span className="text-sm font-medium text-slate-700">Quantity received</span>
-            <input type="number" min={1} value={qty} onChange={e => setQty(e.target.value)} className="mt-1 w-32 border border-slate-200 rounded-lg px-3 py-2 text-sm" />
-          </label>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block">
+              <span className="text-sm font-medium text-slate-700">Warehouse / location</span>
+              <input value={location} onChange={e => setLocation(e.target.value)} placeholder="e.g. Warehouse A - Rack 1" className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+            </label>
+            <label className="block">
+              <span className="text-sm font-medium text-slate-700">Quantity received</span>
+              <input type="number" min={1} value={qty} onChange={e => setQty(e.target.value)} className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+            </label>
+          </div>
 
           {/* Provenance photo */}
           <div className="space-y-2">
