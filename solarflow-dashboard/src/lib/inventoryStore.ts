@@ -63,7 +63,13 @@ export function loadInventory(): InventoryItem[] {
 }
 
 export function saveInventory(items: InventoryItem[]): void {
-  localStorage.setItem(INVENTORY_KEY, JSON.stringify(items));
+  try {
+    localStorage.setItem(INVENTORY_KEY, JSON.stringify(items));
+  } catch (err) {
+    // QuotaExceededError (e.g. an oversized inline image) must NOT abort the
+    // save and lose the item — fall through to the DB write below.
+    console.warn('[inventory] localStorage save failed (likely quota); persisting to DB only', err);
+  }
   dbSet(INVENTORY_KEY, items);
 }
 

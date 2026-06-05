@@ -128,6 +128,7 @@ import {
 } from '../types';
 import { loadInventory, saveInventory } from '../lib/inventoryStore';
 import { RmaCreateModal } from './RmaCreateModal';
+import { uploadPhotoToStorage } from '../lib/photoStorage';
 
 interface InventoryModuleProps {
   isMobile?: boolean;
@@ -971,17 +972,39 @@ const ReceiveStockModal: React.FC<ReceiveStockModalProps> = ({ items, jobs, curr
     return items.filter(i => i.name.toLowerCase().includes(q) || i.sku.toLowerCase().includes(q));
   }, [items, itemSearch]);
 
-  const submit = () => {
+  const [saving, setSaving] = useState(false);
+
+  const submit = async () => {
     setErr(null);
     const q = parseInt(qty, 10);
     if (!q || q <= 0) { setErr('Enter a quantity greater than 0.'); return; }
+    if (mode === 'existing' && !existingId) { setErr('Pick the item this delivery goes into.'); return; }
+    if (mode === 'new' && (!name.trim() || !sku.trim())) { setErr('A new item needs at least a name and SKU.'); return; }
+
+    setSaving(true);
     const sel = rmaKey ? openRmas.find(r => r.key === rmaKey) : undefined;
+    const receiptId = `rcpt-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+
+    // Upload the provenance image to Storage and keep only the URL. Storing the
+    // base64 data URL inline overflows the localStorage quota and silently loses
+    // the whole item on save.
+    let provenanceUrl: string | undefined = image && !image.startsWith('data:') ? image : undefined;
+    if (image && image.startsWith('data:')) {
+      try {
+        const blob = await (await fetch(image)).blob();
+        const { url } = await uploadPhotoToStorage(blob, 'stock-receipt', receiptId);
+        provenanceUrl = url ?? undefined;
+      } catch {
+        provenanceUrl = undefined;
+      }
+    }
+    setSaving(false);
 
     const receipt: StockReceipt = {
-      id: `rcpt-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      id: receiptId,
       receivedAt: new Date().toISOString(),
       quantity: q,
-      provenanceImage: image,
+      provenanceImage: provenanceUrl,
       provenanceType: provType,
       rmaEntryId: sel?.entry.id,
       rmaNumber: sel?.entry.rmaNumber,
@@ -1146,8 +1169,8 @@ const ReceiveStockModal: React.FC<ReceiveStockModalProps> = ({ items, jobs, curr
 
         <div className="p-4 border-t border-slate-100 flex justify-end gap-2 sticky bottom-0 bg-white">
           <button onClick={onClose} className="px-3 py-2 rounded-lg text-sm text-slate-600 hover:bg-slate-100">Cancel</button>
-          <button onClick={submit} className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700">
-            <PackagePlus className="w-4 h-4" /> Receive
+          <button onClick={submit} disabled={saving} className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 disabled:opacity-60">
+            <PackagePlus className="w-4 h-4" /> {saving ? 'Saving…' : 'Receive'}
           </button>
         </div>
       </div>
