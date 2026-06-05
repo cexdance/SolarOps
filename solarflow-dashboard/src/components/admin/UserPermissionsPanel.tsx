@@ -12,6 +12,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   Users, UserPlus, Trash2, KeyRound, ScrollText, Loader2, Check, X, AlertCircle,
+  ChevronDown, ChevronRight,
 } from 'lucide-react';
 import { authedFetch, supabase } from '../../lib/supabase';
 import { logChange } from '../../lib/changeLog';
@@ -44,8 +45,17 @@ export const UserPermissionsPanel: React.FC<UserPermissionsPanelProps> = ({ curr
   const [toast, setToast] = useState<string | null>(null);
   const [logUser, setLogUser] = useState<User | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   const actor = currentUser?.email ?? 'unknown';
+
+  const toggleExpanded = useCallback((id: string) => {
+    setExpanded(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
 
   const flash = useCallback((msg: string) => {
     setToast(msg);
@@ -206,10 +216,20 @@ export const UserPermissionsPanel: React.FC<UserPermissionsPanelProps> = ({ curr
               const isAdminUser = user.role === 'admin';
               const isSelf = user.id === currentUser?.id;
               const busy = busyId === user.id;
+              const isOpen = expanded.has(user.id);
+              const grantedCount = isAdminUser ? ALL_PERMISSIONS.length : permits.length;
               return (
-                <div key={user.id} className="border border-slate-200 rounded-xl p-3">
-                  {/* Identity row */}
-                  <div className="flex items-center gap-3 flex-wrap">
+                <div key={user.id} className="border border-slate-200 rounded-xl overflow-hidden">
+                  {/* Collapsible header — click to expand */}
+                  <button
+                    type="button"
+                    onClick={() => toggleExpanded(user.id)}
+                    aria-expanded={isOpen}
+                    className="w-full flex items-center gap-3 p-3 text-left hover:bg-slate-50 transition-colors"
+                  >
+                    {isOpen
+                      ? <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
+                      : <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />}
                     <Avatar user={user} size="md" />
                     <div className="min-w-0 flex-1">
                       <p className="font-medium text-slate-900 text-sm truncate">
@@ -217,64 +237,78 @@ export const UserPermissionsPanel: React.FC<UserPermissionsPanelProps> = ({ curr
                       </p>
                       <p className="text-xs text-slate-500 truncate">{user.email}</p>
                     </div>
+                    <span className="shrink-0 text-xs font-medium text-slate-600 bg-slate-100 rounded-full px-2 py-0.5 capitalize">
+                      {user.role}
+                    </span>
+                    <span className="shrink-0 hidden sm:inline text-xs text-slate-400 tabular-nums">
+                      {grantedCount}/{ALL_PERMISSIONS.length} permits
+                    </span>
+                  </button>
 
-                    <select
-                      value={user.role}
-                      disabled={busy || (isSelf && isAdminUser)}
-                      onChange={e => changeRole(user, e.target.value as UserRole)}
-                      className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white disabled:opacity-50"
-                    >
-                      {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
-                    </select>
-
-                    <button
-                      onClick={() => setLogUser(user)}
-                      title="View activity log"
-                      className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs text-slate-600 hover:bg-slate-100"
-                    >
-                      <ScrollText className="w-3.5 h-3.5" /> Log
-                    </button>
-                    <button
-                      onClick={() => sendReset(user)}
-                      disabled={busy}
-                      title="Send set-password / reset email"
-                      className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs text-blue-600 hover:bg-blue-50 disabled:opacity-50"
-                    >
-                      <KeyRound className="w-3.5 h-3.5" /> Reset
-                    </button>
-                    <button
-                      onClick={() => deleteUser(user)}
-                      disabled={busy || isSelf}
-                      title={isSelf ? 'You cannot delete yourself' : 'Delete user'}
-                      className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs text-red-600 hover:bg-red-50 disabled:opacity-40"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-
-                  {/* Permits row */}
-                  <div className="mt-3 flex flex-wrap gap-1.5">
-                    {ALL_PERMISSIONS.map(permit => {
-                      const granted = isAdminUser || permits.includes(permit);
-                      return (
-                        <button
-                          key={permit}
-                          disabled={busy || isAdminUser}
-                          onClick={() => togglePermit(user, permit, !granted)}
-                          className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium transition-colors disabled:cursor-not-allowed ${
-                            granted
-                              ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
-                              : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
-                          } ${isAdminUser ? 'opacity-70' : ''}`}
+                  {/* Expanded body — actions + permits */}
+                  {isOpen && (
+                    <div className="px-3 pb-3 pt-3 border-t border-slate-100">
+                      {/* Actions row */}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <select
+                          value={user.role}
+                          disabled={busy || (isSelf && isAdminUser)}
+                          onChange={e => changeRole(user, e.target.value as UserRole)}
+                          className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white disabled:opacity-50"
                         >
-                          {granted ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />}
-                          {PERMIT_LABELS[permit]}
+                          {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                        </select>
+
+                        <button
+                          onClick={() => setLogUser(user)}
+                          title="View activity log"
+                          className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs text-slate-600 hover:bg-slate-100"
+                        >
+                          <ScrollText className="w-3.5 h-3.5" /> Log
                         </button>
-                      );
-                    })}
-                  </div>
-                  {isAdminUser && (
-                    <p className="text-xs text-slate-400 mt-1.5">Admins hold every permit by default.</p>
+                        <button
+                          onClick={() => sendReset(user)}
+                          disabled={busy}
+                          title="Send set-password / reset email"
+                          className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs text-blue-600 hover:bg-blue-50 disabled:opacity-50"
+                        >
+                          <KeyRound className="w-3.5 h-3.5" /> Reset
+                        </button>
+                        <button
+                          onClick={() => deleteUser(user)}
+                          disabled={busy || isSelf}
+                          title={isSelf ? 'You cannot delete yourself' : 'Delete user'}
+                          className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs text-red-600 hover:bg-red-50 disabled:opacity-40"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+
+                      {/* Permits row */}
+                      <div className="mt-3 flex flex-wrap gap-1.5">
+                        {ALL_PERMISSIONS.map(permit => {
+                          const granted = isAdminUser || permits.includes(permit);
+                          return (
+                            <button
+                              key={permit}
+                              disabled={busy || isAdminUser}
+                              onClick={() => togglePermit(user, permit, !granted)}
+                              className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium transition-colors disabled:cursor-not-allowed ${
+                                granted
+                                  ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+                                  : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                              } ${isAdminUser ? 'opacity-70' : ''}`}
+                            >
+                              {granted ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />}
+                              {PERMIT_LABELS[permit]}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {isAdminUser && (
+                        <p className="text-xs text-slate-400 mt-1.5">Admins hold every permit by default.</p>
+                      )}
+                    </div>
                   )}
                 </div>
               );
