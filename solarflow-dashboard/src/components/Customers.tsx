@@ -4164,7 +4164,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                               const active = i === curIdx;
                               const dateStr = (done || active) ? fmtD(stage.getDate(job)) : null;
                               return (
-                                <React.Fragment key={stage.key}>
+                                <div key={stage.key} className="contents">
                                   {i > 0 && (
                                     <div className={`flex-1 h-[2px] mt-[8px] transition-colors ${i <= curIdx ? 'bg-orange-400' : 'bg-slate-200'}`} />
                                   )}
@@ -4183,7 +4183,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                                       <span className="text-[7px] text-slate-400 leading-tight text-center">{dateStr}</span>
                                     ) : <span className="text-[7px] leading-tight">&nbsp;</span>}
                                   </div>
-                                </React.Fragment>
+                                </div>
                               );
                             })}
                           </div>

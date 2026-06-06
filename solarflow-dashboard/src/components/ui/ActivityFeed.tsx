@@ -141,7 +141,7 @@ const MentionBody: React.FC<{
           );
         }
 
-        return <React.Fragment key={i}>{part}</React.Fragment>;
+        return <span key={i}>{part}</span>;
       })}
     </p>
   );
