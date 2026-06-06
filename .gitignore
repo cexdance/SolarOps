@@ -39,6 +39,8 @@ extracted_package/
 !solarflow-dashboard/public/favicon-192.png
 !solarflow-dashboard/public/favicon-512.png
 !solarflow-dashboard/public/apple-touch-icon.png
+# UI screen catalog screenshots must be committed (override *.png above)
+!ui-catalog/screens/**/*.png
 *.log
 *.zip
 .aider*

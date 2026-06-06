@@ -77,7 +77,14 @@ After every `git push` to `main` (i.e., every deployment), Claude MUST immediate
 1. Write a dated note to `/Users/cex/SolarOps÷/YYYY-MM-DD.md` (use today's date). If a note for today already exists, append to it under a new `##` heading.
 2. Update `~/.claude/projects/-Users-cex-SolarOps-/memory/MEMORY.md` index to reference the new note and bump the `_Last updated` date.
 3. The note must include: commit hash(es), what changed and why, files modified, any patterns worth reusing, and any pending follow-ups.
-4. This step is non-optional. Do not skip it even for small hotfixes.
+4. If the deploy touched any UI/UX (components, pages, layout, styles, nav), refresh the visual UI catalog by running `/snap-ui` (captures screenshots and rebuilds `UI_SCREEN_CATALOG.md`). Commit the updated `ui-catalog/` PNGs and catalog. If a new screen or nav item shipped, first add it to `solarflow-dashboard/scripts/ui-screens.manifest.json`. Skip only when the deploy was purely backend/config with zero visual impact.
+5. This step is non-optional. Do not skip it even for small hotfixes.
+
+### UI Screen Catalog (visual, agent-readable)
+
+- **Live visual map:** `UI_SCREEN_CATALOG.md` (repo root) embeds a full-page screenshot of every screen plus macro purpose and detail notes. Agents needing a global view of the app UI should read this first; the text-only routing reference is `UI_UX_SCREEN_MAP.md`.
+- **Source of truth:** `solarflow-dashboard/scripts/ui-screens.manifest.json` (screen list) + `scripts/capture-screens.mjs` (capture engine). Screenshots land in `ui-catalog/screens/<role>/`.
+- **Refresh:** `/snap-ui` (manual) and automatically as part of the post-deploy step above. Login uses `SNAP_UI_EMAIL` / `SNAP_UI_PASSWORD` in `.env.local` (gitignored).
 
 ## Common Development Workflows
 
