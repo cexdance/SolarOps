@@ -640,6 +640,10 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
   const isOptimizerJob = serviceType.toLowerCase().includes('optimizer');
   const isSerialJob    = isInverterJob || isOptimizerJob;
   const isSiteTransfer = serviceCode === 'SITE-TRX' || serviceType === 'Site Transfer';
+  // Optimizer-only gate: the Optimizer Replacement Pricing Calculator should
+  // appear only on optimizer-service WOs (service code OPT-*), never on inverter
+  // or other PowerCare work.
+  const isOptimizerService = serviceCode.toUpperCase().startsWith('OPT-') || isOptimizerJob;
 
   // Site transfer state
   const [stInverterSerial, setStInverterSerial] = useState(job?.siteTransferInverterSerial ?? '');
@@ -2058,8 +2062,8 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
           {activeTab === 'parts' && (
             <div className="p-6 space-y-4">
 
-              {/* ── Optimizer Pricing Calculator (PowerCare only) ─────────────── */}
-              {isPowercare && (
+              {/* ── Optimizer Pricing Calculator (optimizer-service WOs only) ─── */}
+              {isOptimizerService && (
                 <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 space-y-4">
                   <div className="flex items-center gap-2">
                     <Zap className="w-4 h-4 text-indigo-600 shrink-0" />
