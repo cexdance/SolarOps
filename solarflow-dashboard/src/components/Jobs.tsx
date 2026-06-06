@@ -2,7 +2,9 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
   Plus, Search, Calendar, MapPin, User, Clock, X, Wrench, Zap, LayoutGrid, List as ListIcon, Filter,
+  Power, Cpu, ClipboardCheck,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import {
   startOfWeek, endOfWeek, startOfMonth, endOfMonth, subMonths,
 } from 'date-fns';
@@ -58,6 +60,26 @@ const serviceTypes: { value: ServiceType; label: string; color: string }[] = [
   { value: 'inspection', label: 'Inspection', color: 'bg-green-100 text-green-700' },
   { value: 'emergency', label: 'Emergency', color: 'bg-red-100 text-red-700' },
 ];
+
+// Work-type badge: flags whether the WO is an Inverter, Optimizer, or simple
+// site visit. Derived from the service code first, then a text fallback so older
+// WOs without a code still classify. Site Transfer is intentionally excluded.
+type WoCategory = { label: string; color: string; Icon: LucideIcon };
+function woCategory(job: Job): WoCategory | null {
+  const code = (job.serviceCode ?? '').toUpperCase();
+  const text = `${job.title ?? ''} ${job.description ?? ''} ${job.notes ?? ''} ${(job.lineItems ?? []).map(l => l.description ?? '').join(' ')}`.toLowerCase();
+  if (code === 'SITE-TRX') return null;
+  if (code.startsWith('INV-') || /\binverter\b/.test(text)) {
+    return { label: 'Inverter', color: 'bg-orange-100 text-orange-700', Icon: Power };
+  }
+  if (code.startsWith('OPT-') || /optimizer|micro[\s-]?inverter/.test(text)) {
+    return { label: 'Optimizer', color: 'bg-cyan-100 text-cyan-700', Icon: Cpu };
+  }
+  if (code.startsWith('SITE-') || /site visit|inspection/.test(text)) {
+    return { label: 'Site Visit', color: 'bg-teal-100 text-teal-700', Icon: ClipboardCheck };
+  }
+  return null;
+}
 
 const statusColors: Record<JobStatus, string> = {
   new: 'bg-blue-100 text-blue-700 border-blue-200',
@@ -127,6 +149,14 @@ const JobCard: React.FC<JobCardProps> = ({ job, customer, technician, contractor
       </div>
     </div>
     <div className="flex items-center gap-2 mb-3 flex-wrap">
+      {(() => {
+        const cat = woCategory(job);
+        return cat ? (
+          <span className={`text-xs px-2 py-1 rounded-full flex items-center gap-1 font-medium ${cat.color}`}>
+            <cat.Icon className="w-3 h-3" />{cat.label}
+          </span>
+        ) : null;
+      })()}
       <span className={`text-xs px-2 py-1 rounded-full ${serviceTypes.find(s => s.value === job.serviceType)?.color ?? 'bg-slate-100'}`}>
         {job.serviceType}
       </span>

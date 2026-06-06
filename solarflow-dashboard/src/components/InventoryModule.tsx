@@ -30,7 +30,9 @@ const ImageUploader: React.FC<{
   value?: string;
   onChange: (dataUrl: string | undefined) => void;
   label?: string;
-}> = ({ value, onChange, label = 'Thumbnail' }) => {
+  /** Hard cap applied to the file before storing. Defaults to the 1 MB cap. */
+  maxBytes?: number;
+}> = ({ value, onChange, label = 'Thumbnail', maxBytes }) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const [urlInput, setUrlInput] = React.useState('');
   const [mode, setMode] = React.useState<'url' | 'file'>('url');
@@ -38,8 +40,8 @@ const ImageUploader: React.FC<{
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    // Auto-downscale/recompress to < 1 MB before storing the data URL.
-    compressImageToDataUrlUnder(file)
+    // Auto-downscale/recompress under the cap before storing the data URL.
+    compressImageToDataUrlUnder(file, maxBytes)
       .then(onChange)
       .catch(() => {
         const reader = new FileReader();
@@ -1016,6 +1018,35 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ isMobile, jobs
 
 // Add Inventory Modal
 // ── Receive Stock — quick add into stock with a provenance photo + open-RMA match ──
+// ── Warehouse / location options (shared, locally persisted) ─────────────────────
+// Pictures attached to a receiving entry are capped at 1.2 MB before storage.
+const RECEIPT_PHOTO_MAX_BYTES = Math.round(1.2 * 1024 * 1024);
+const STD_WAREHOUSES = ['985', 'Conexsol Van', 'Office'];
+const CUSTOM_WAREHOUSES_KEY = 'solarops:custom-warehouses';
+
+function loadCustomWarehouses(): string[] {
+  try {
+    const raw = localStorage.getItem(CUSTOM_WAREHOUSES_KEY);
+    const list = raw ? JSON.parse(raw) : [];
+    return Array.isArray(list) ? list.filter((x): x is string => typeof x === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Persist a newly-typed warehouse so it shows up in the dropdown next time. */
+function addCustomWarehouse(name: string) {
+  const n = name.trim();
+  if (!n || STD_WAREHOUSES.includes(n)) return;
+  const list = loadCustomWarehouses();
+  if (list.includes(n)) return;
+  try {
+    localStorage.setItem(CUSTOM_WAREHOUSES_KEY, JSON.stringify([...list, n]));
+  } catch {
+    /* ignore storage quota / private-mode errors */
+  }
+}
+
 // ── Admin edit of a single receiving-history entry ──────────────────────────────
 interface ReceiptEditModalProps {
   receipt: StockReceipt;
@@ -1029,21 +1060,65 @@ const ReceiptEditModal: React.FC<ReceiptEditModalProps> = ({ receipt, editorName
   const [location, setLocation] = useState(receipt.location ?? '');
   const [receivedDate, setReceivedDate] = useState(receipt.receivedAt.slice(0, 10));
   const [note, setNote] = useState(receipt.note ?? '');
+  const [image, setImage] = useState<string | undefined>(receipt.provenanceImage);
+  const [provType, setProvType] = useState<'invoice' | 'rma_label' | 'other'>(receipt.provenanceType ?? 'other');
   const [err, setErr] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
-  const save = () => {
+  // Warehouse dropdown: standard + locally-saved custom + this receipt's own
+  // location (so an unusual one stays selectable). "__add__" reveals an input.
+  const [whTick, setWhTick] = useState(0);
+  const [addingWh, setAddingWh] = useState(false);
+  const [newWh, setNewWh] = useState('');
+  const warehouseOptions = useMemo(() => {
+    const set = new Set<string>([...STD_WAREHOUSES, ...loadCustomWarehouses()]);
+    if (receipt.location) set.add(receipt.location);
+    return Array.from(set);
+  }, [receipt.location, whTick]);
+
+  const confirmNewWarehouse = () => {
+    const n = newWh.trim();
+    if (!n) return;
+    addCustomWarehouse(n);
+    setLocation(n);
+    setNewWh('');
+    setAddingWh(false);
+    setWhTick(t => t + 1);
+  };
+
+  const save = async () => {
     setErr(null);
     const q = parseInt(qty, 10);
     if (!q || q <= 0) { setErr('Quantity must be greater than 0.'); return; }
     const receivedAt = receivedDate === receipt.receivedAt.slice(0, 10)
       ? receipt.receivedAt
       : new Date(receivedDate + 'T12:00:00').toISOString();
+
+    // Upload a freshly-attached photo to Storage and keep only the URL. The
+    // ImageUploader already capped it at 1.2 MB; on upload failure we fall back
+    // to the (already-compressed) data URL so the edit is never lost.
+    let provenanceUrl: string | undefined = image;
+    if (image && image.startsWith('data:')) {
+      setSaving(true);
+      try {
+        const blob = await (await fetch(image)).blob();
+        const { url } = await uploadPhotoToStorage(blob, 'stock-receipt', receipt.id);
+        provenanceUrl = url;
+      } catch {
+        provenanceUrl = image;
+      } finally {
+        setSaving(false);
+      }
+    }
+
     onSave({
       ...receipt,
       quantity: q,
       location: location.trim() || undefined,
       receivedAt,
       note: note.trim() || undefined,
+      provenanceImage: provenanceUrl || undefined,
+      provenanceType: provenanceUrl ? provType : undefined,
       editedAt: new Date().toISOString(),
       editedBy: editorName || 'admin',
     });
@@ -1072,14 +1147,51 @@ const ReceiptEditModal: React.FC<ReceiptEditModalProps> = ({ receipt, editorName
               <input type="date" value={receivedDate} onChange={e => setReceivedDate(e.target.value)} className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
             </label>
           </div>
-          <label className="block">
+          <div className="block">
             <span className="text-sm font-medium text-slate-700">Warehouse / location</span>
-            <input value={location} onChange={e => setLocation(e.target.value)} className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
-          </label>
+            {addingWh ? (
+              <div className="mt-1 flex gap-2">
+                <input
+                  autoFocus
+                  value={newWh}
+                  onChange={e => setNewWh(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); confirmNewWarehouse(); } if (e.key === 'Escape') { setAddingWh(false); setNewWh(''); } }}
+                  placeholder="New warehouse name"
+                  className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm"
+                />
+                <button type="button" onClick={confirmNewWarehouse} className="px-3 py-2 rounded-lg bg-orange-500 text-white text-sm hover:bg-orange-600">Add</button>
+                <button type="button" onClick={() => { setAddingWh(false); setNewWh(''); }} className="px-3 py-2 rounded-lg text-sm text-slate-500 hover:bg-slate-100">Cancel</button>
+              </div>
+            ) : (
+              <select
+                value={location}
+                onChange={e => { if (e.target.value === '__add__') { setAddingWh(true); } else { setLocation(e.target.value); } }}
+                className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
+              >
+                <option value="">Select…</option>
+                {warehouseOptions.map(w => <option key={w} value={w}>{w}</option>)}
+                <option value="__add__">+ Add new warehouse…</option>
+              </select>
+            )}
+          </div>
           <label className="block">
             <span className="text-sm font-medium text-slate-700">Note</span>
             <input value={note} onChange={e => setNote(e.target.value)} className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
           </label>
+          {/* Provenance photo (auto-compressed to a 1.2 MB max) */}
+          <div className="space-y-2">
+            <ImageUploader value={image} onChange={setImage} maxBytes={RECEIPT_PHOTO_MAX_BYTES} label="Photo (invoice / RMA label)" />
+            {image && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs text-slate-500">Type:</span>
+                {(['invoice', 'rma_label', 'other'] as const).map(t => (
+                  <button key={t} type="button" onClick={() => setProvType(t)} className={`px-2 py-1 rounded-full text-xs ${provType === t ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                    {t === 'rma_label' ? 'RMA label' : t.charAt(0).toUpperCase() + t.slice(1)}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <p className="text-xs text-slate-400">
             Created {new Date(receipt.receivedAt).toLocaleString()}{receipt.receivedBy ? ` by ${receipt.receivedBy}` : ''}.
             {receipt.editedAt && ` Last edited ${new Date(receipt.editedAt).toLocaleString()}${receipt.editedBy ? ` by ${receipt.editedBy}` : ''}.`}
@@ -1087,7 +1199,7 @@ const ReceiptEditModal: React.FC<ReceiptEditModalProps> = ({ receipt, editorName
         </div>
         <div className="p-4 border-t border-slate-100 flex justify-end gap-2">
           <button onClick={onClose} className="px-3 py-2 rounded-lg text-sm text-slate-600 hover:bg-slate-100">Cancel</button>
-          <button onClick={save} className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700">Save</button>
+          <button onClick={save} disabled={saving} className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-60">{saving ? 'Saving…' : 'Save'}</button>
         </div>
       </div>
     </div>

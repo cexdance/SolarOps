@@ -460,6 +460,9 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
   const [quoteResult, setQuoteResult] = useState<{ ok: boolean; msg: string } | null>(null);
   const [technicianId, setTechnicianId] = useState(job?.technicianId ?? '');
   const [isPowercare, setIsPowercare] = useState(job?.isPowercare ?? false);
+  // PowerCare = plan covers the work, so the quote flow is skipped. True when the
+  // WO is flagged PowerCare or the customer is on the PowerCare plan.
+  const skipQuoteForPowerCare = isPowercare || !!customer?.isPowerCare;
   const [laborHours, setLaborHours] = useState<number>(job?.laborHours ?? 1);
   const [partsCostDirect, setPartsCostDirect] = useState<number>(job?.partsCost ?? 0);
 
@@ -837,12 +840,18 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
       if (woStatus === 'quote_sent' && !isAdmin) return;
     } else {
       if (woStatus === 'draft') {
-        if (customer?.email) {
+        // PowerCare work orders skip the quote flow entirely — the plan covers
+        // the work, so no quote is emailed. Advance straight past the preview.
+        if (skipQuoteForPowerCare) {
+          updateClientStatus(siteId, 'quote_approval');
+          onUpdateSiteStatus?.(siteId, 'quote_approval');
+        } else if (customer?.email) {
           setShowQuotePreview(true);
           return;
+        } else {
+          updateClientStatus(siteId, 'quote_approval');
+          onUpdateSiteStatus?.(siteId, 'quote_approval');
         }
-        updateClientStatus(siteId, 'quote_approval');
-        onUpdateSiteStatus?.(siteId, 'quote_approval');
       }
       if (woStatus === 'quote_sent') {
         updateClientStatus(siteId, 'wo_pending');
@@ -1292,7 +1301,11 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
 
   // Computed
   const stageIdx = STAGE_INDEX[woStatus];
-  const action = isSiteTransfer ? SITE_TRANSFER_ACTIONS[woStatus] : isServiceAccountExpense ? SERVICE_ACCOUNT_ACTIONS[woStatus] : ACTION_CONFIG[woStatus];
+  const baseAction = isSiteTransfer ? SITE_TRANSFER_ACTIONS[woStatus] : isServiceAccountExpense ? SERVICE_ACCOUNT_ACTIONS[woStatus] : ACTION_CONFIG[woStatus];
+  // PowerCare draft WOs skip the quote — relabel the button so it's not "Send Quote".
+  const action = baseAction && skipQuoteForPowerCare && woStatus === 'draft' && !isSiteTransfer && !isServiceAccountExpense
+    ? { ...baseAction, label: 'Advance (No Quote)' }
+    : baseAction;
   const actionAdminOnly = isServiceAccountExpense && SERVICE_ACCOUNT_ACTIONS[woStatus]?.adminOnly;
   const { labor, parts, total } = sumLineItems(lineItems);
   const photosByCategory = PHOTO_CATEGORIES.reduce((acc, cat) => {
@@ -1423,7 +1436,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
               ) : actionAdminOnly && !isAdmin ? (
                 <span className="text-violet-600 font-medium">Awaiting admin approval</span>
               ) : woStatus === 'draft' && !serviceCode ? (
-                <span className="text-amber-600 font-medium">Select a service to send quote</span>
+                <span className="text-amber-600 font-medium">{skipQuoteForPowerCare ? 'Select a service first' : 'Select a service to send quote'}</span>
               ) : (
                 <span>Next: <strong className="text-slate-700">{action.label}</strong></span>
               )}
@@ -1434,10 +1447,13 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                   {quoteResult.msg}
                 </span>
               )}
-              {!isSiteTransfer && woStatus === 'draft' && customer?.email && !quoteResult && (
+              {!isSiteTransfer && skipQuoteForPowerCare && woStatus === 'draft' && !quoteResult && (
+                <span className="text-xs text-emerald-600">PowerCare plan · No quote sent</span>
+              )}
+              {!isSiteTransfer && !skipQuoteForPowerCare && woStatus === 'draft' && customer?.email && !quoteResult && (
                 <span className="text-xs text-slate-400">Will email quote to {customer.email}</span>
               )}
-              {!isSiteTransfer && woStatus === 'draft' && !customer?.email && (
+              {!isSiteTransfer && !skipQuoteForPowerCare && woStatus === 'draft' && !customer?.email && (
                 <span className="text-xs text-amber-500">No customer email — add one to send quote</span>
               )}
               {isSiteTransfer && woStatus === 'draft' && (
