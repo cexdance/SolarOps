@@ -223,7 +223,7 @@ export const SolarEdgeImportModal: React.FC<Props> = ({
       // Search raw site name (preserves US-15586), transformed name, address, site ID
       const rawName  = (d.site?.name || d.customer?.name || '').toLowerCase();
       const xfName   = siteToName(d.site?.name || '').toLowerCase();
-      const addr     = fmtAddress(d.site ?? { location: {} as any } as LiveSite).toLowerCase();
+      const addr     = fmtAddress(d.site ?? { location: {} as LiveSite['location'] } as LiveSite).toLowerCase();
       const siteId   = String(d.site?.id || d.customer?.solarEdgeSiteId || '');
       return rawName.includes(q) || xfName.includes(q) || addr.includes(q) || siteId.includes(q);
     });

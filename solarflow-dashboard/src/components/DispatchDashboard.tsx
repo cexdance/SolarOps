@@ -11,7 +11,7 @@ import {
 import * as _recharts from 'recharts';
 const { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } = _recharts as any;
 import { FL_SITES, SolarEdgeSite } from '../lib/solarEdgeSites';
-import { Job, Customer, LeadSource } from '../types';
+import { Job, Customer, LeadSource, LeadStatus } from '../types';
 import { loadCRMData, saveCRMData, addLead, CRMData } from '../lib/crmStore';
 import { loadTodos, saveTodos, TodoItem } from '../lib/todoStore';
 import { MentionsWidget } from './MentionsWidget';
@@ -140,7 +140,7 @@ const WIDGET_CATALOG: WidgetCatalogEntry[] = [
     icon: User,
     colorClass: 'text-teal-600',
     bgClass: 'bg-teal-50',
-    requires: 'lead' as any,
+    requires: 'lead',
   },
   {
     type: 'todo-list',
@@ -1017,7 +1017,7 @@ const LeadPipelineWidget: React.FC = () => {
   const [showQuickAdd, setShowQuickAdd] = useState(false);
   const [form, setForm] = useState({ firstName: '', phone: '', leadType: 'sales' as 'service' | 'sales', source: 'other' as LeadSource });
 
-  const activeLeads = useMemo(() => crmData.leads.filter(l => ACTIVE_STAGES.includes(l.status as any)), [crmData.leads]);
+  const activeLeads = useMemo(() => crmData.leads.filter(l => (ACTIVE_STAGES as readonly LeadStatus[]).includes(l.status)), [crmData.leads]);
 
   const stageCounts = useMemo(() =>
     ACTIVE_STAGES.reduce((acc, s) => ({ ...acc, [s]: activeLeads.filter(l => l.status === s).length }), {} as Record<string, number>),

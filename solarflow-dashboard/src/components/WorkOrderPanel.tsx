@@ -19,7 +19,7 @@ import { AddressAutocomplete, GMAPS_KEY_STORAGE, loadGoogleMaps } from './Addres
 import { AddressLink } from './AddressLink';
 import { MentionTextarea, MentionUser, renderWithMentions, parseMentions, parseMentionEmails, fireMentionNotifications } from './ui/MentionTextarea';
 import { SowDistributionModal, SOW_DISTRIBUTION_NAMES } from './SowDistributionModal';
-import { ActivityFeed } from './ui/ActivityFeed';
+import { ActivityFeed, type FeedUser } from './ui/ActivityFeed';
 import { compressImageToDataUrl, compressImageToBlob } from '../lib/photoCompress';
 import { uploadPhotoToStorage, deletePhotoFromStorage } from '../lib/photoStorage';
 import { logUpload, fetchLogForEntity, ChangeEntry } from '../lib/changeLog';
@@ -570,12 +570,12 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
     if (!needsHydration) return;
     void (async () => {
       const { hydrateWoPhotos } = await import('../lib/photoStore');
-      const hydrated = await hydrateWoPhotos(job!.woPhotos as any);
+      const hydrated = await hydrateWoPhotos(job!.woPhotos ?? []);
       if (revoked) return;
       hydrated.forEach((p, i) => {
         if (p.dataUrl && !job!.woPhotos![i].dataUrl) created.push(p.dataUrl);
       });
-      setWoPhotos(hydrated as any);
+      setWoPhotos(hydrated);
     })();
     return () => {
       revoked = true;
@@ -1005,7 +1005,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
       timestamp: new Date().toISOString(),
       userId: (currentUserName && users.find(u => u.name === currentUserName)?.id) || undefined,
       userName: currentUserName ?? 'Unknown',
-      mentions: parseMentions(text, users as any),
+      mentions: parseMentions(text, users as MentionUser[]),
     };
     setWoActivities(prev => [entry, ...prev]);
     setNewComment('');
@@ -2997,17 +2997,17 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                 </p>
                 <ActivityFeed
                   activities={woActivities}
-                  users={(users ?? []) as any}
-                  currentUser={(users ?? []).find(u => u.name === currentUserName) as any ?? null}
+                  users={users ?? []}
+                  currentUser={(users ?? []).find(u => u.name === currentUserName) ?? null}
                   onEdit={editComment}
                   onDelete={deleteComment}
                   onReact={reactComment}
                   onMentionClick={(userId) => {
-                    const u = (users ?? []).find((x: any) => x.id === userId);
+                    const u = (users ?? []).find((x) => x.id === userId) as FeedUser | undefined;
                     if (u) {
                       // Could navigate to user profile in future — for now show info
-                      const username = (u as any).username;
-                      const role = (u as any).role;
+                      const username = u.username;
+                      const role = u.role;
                       alert(`${u.name}${username ? ' (@' + username + ')' : ''}${role ? '\nRole: ' + role : ''}`);
                     }
                   }}

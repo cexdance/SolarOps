@@ -36,8 +36,9 @@ function fullTime(iso: string): string {
 function payloadSummary(entry: ChangeEntry): string {
   const p = entry.payload as Record<string, unknown> | null;
   if (!p) return '';
-  if ((p as any).changed && typeof (p as any).changed === 'object') {
-    const fields = Object.keys((p as any).changed);
+  const changed = p['changed'];
+  if (changed && typeof changed === 'object') {
+    const fields = Object.keys(changed);
     return fields.length ? `changed: ${fields.join(', ')}` : '';
   }
   const keys = Object.keys(p).filter(k => !k.startsWith('_'));

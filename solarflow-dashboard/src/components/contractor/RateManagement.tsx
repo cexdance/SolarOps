@@ -28,7 +28,7 @@ export const RateManagement: React.FC<RateManagementProps> = ({ rates, onSaveRat
   const [addForm, setAddForm] = useState({
     serviceCode: '',
     serviceName: '',
-    unit: 'hour' as const,
+    unit: 'hour' as ServiceRate['unit'],
     rate: 0,
     description: '',
     estimatedHours: 1,
@@ -231,7 +231,7 @@ export const RateManagement: React.FC<RateManagementProps> = ({ rates, onSaveRat
                         <td className="px-2 py-2">
                           <select
                             value={editForm.unit || 'hour'}
-                            onChange={(e) => setEditForm({ ...editForm, unit: e.target.value as any })}
+                            onChange={(e) => setEditForm({ ...editForm, unit: e.target.value as ServiceRate['unit'] })}
                             className="px-1 py-1 text-xs border border-slate-200 rounded w-full"
                           >
                             <option value="hour">Hour</option>
@@ -518,7 +518,7 @@ export const RateManagement: React.FC<RateManagementProps> = ({ rates, onSaveRat
                   <label className="block text-xs font-medium text-slate-700 mb-1">Unit</label>
                   <select
                     value={addForm.unit}
-                    onChange={(e) => setAddForm({ ...addForm, unit: e.target.value as any })}
+                    onChange={(e) => setAddForm({ ...addForm, unit: e.target.value as ServiceRate['unit'] })}
                     className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
                   >
                     <option value="hour">Hour</option>

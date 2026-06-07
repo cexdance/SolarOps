@@ -358,7 +358,7 @@ export const Jobs: React.FC<JobsProps> = ({
     // Period filter — uses scheduledDate or createdAt
     let matchesPeriod = true;
     if (periodRange) {
-      const dateStr = job.scheduledDate || (job as any).createdAt;
+      const dateStr = job.scheduledDate || job.createdAt;
       if (dateStr) {
         const d = new Date(dateStr.split('T')[0]);
         matchesPeriod = d >= periodRange.start && d <= periodRange.end;

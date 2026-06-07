@@ -42,7 +42,7 @@ import { fetchMyNotifications, markNotificationReadRemote, markAllNotificationsR
 import { processBillingTimers } from './lib/billingService';
 import { loadContractors, saveContractors, loadServiceRates, saveServiceRates, loadContractorJobs, saveContractorJobs, initializeContractorData, findInviteByToken } from './lib/contractorStore';
 import { ContractorInvite as ContractorInviteType } from './types/contractor';
-import { AppState, Job, Customer, User, AppNotification, CRMCustomer, InteractionOutcome, SolarEdgeExtraSite, RMAEntry } from './types';
+import { AppState, Job, Customer, User, AppNotification, CRMCustomer, InteractionOutcome, SolarEdgeExtraSite, RMAEntry, WOStatus, JobStatus } from './types';
 import { FL_SITES } from './lib/solarEdgeSites';
 import { isFloridaSite, isAllowedCustomer } from './lib/solarEdgeSiteFilter';
 import { getDeletedCustomerIds, markJobDeleted } from './lib/dataStore';
@@ -1061,7 +1061,7 @@ function App() {
     // This closes the dual-store gap where photos, service reports, parts,
     // and service status written by the contractor never reached the admin record.
     if (updatedJob.sourceJobId) {
-      const woStatusMap: Record<string, string> = {
+      const woStatusMap: Record<string, WOStatus & JobStatus> = {
         en_route: 'in_progress',
         in_progress: 'in_progress',
         completed: 'completed',
@@ -1125,8 +1125,8 @@ function App() {
         // Build the updated admin job with all mirrored fields
         const statusFields = ['en_route', 'in_progress', 'completed'].includes(updatedJob.status)
           ? {
-              woStatus: woStatusMap[updatedJob.status] as any,
-              status: woStatusMap[updatedJob.status] as any,
+              woStatus: woStatusMap[updatedJob.status],
+              status: woStatusMap[updatedJob.status],
               completedAt: updatedJob.status === 'completed'
                 ? (adminJob.completedAt || new Date().toISOString())
                 : adminJob.completedAt,
@@ -1197,17 +1197,17 @@ function App() {
           const adminJob = data.jobs.find(j => j.id === sourceJobId);
           const woPhotos = adminJob?.woPhotos ?? [];
           if (woPhotos.length === 0) return;
-          const migrated = await migrateWoPhotos(sourceJobId!, woPhotos as any);
+          const migrated = await migrateWoPhotos(sourceJobId!, woPhotos);
           // If any new photoStoreId rewrites happened, persist them.
-          const hadRewrites = migrated.some((p: any, i: number) =>
-            p.photoStoreId && !(woPhotos[i] as any).photoStoreId
+          const hadRewrites = migrated.some((p, i) =>
+            p.photoStoreId && !woPhotos[i].photoStoreId
           );
           if (hadRewrites) {
             setData(prev => {
               const next = {
                 ...prev,
                 jobs: prev.jobs.map(j =>
-                  j.id === sourceJobId ? { ...j, woPhotos: migrated as any } : j
+                  j.id === sourceJobId ? { ...j, woPhotos: migrated } : j
                 ),
               };
               saveData(next);
@@ -1421,12 +1421,12 @@ function App() {
     if (updatedJob.woPhotos && updatedJob.woPhotos.length > 0) {
       void (async () => {
         try {
-          const migrated = await migrateWoPhotos(updatedJob.id, updatedJob.woPhotos as any);
+          const migrated = await migrateWoPhotos(updatedJob.id, updatedJob.woPhotos);
           if (migrated.some((p, i) => p.photoStoreId && !updatedJob.woPhotos![i].photoStoreId)) {
             setData(prev => {
               const next = {
                 ...prev,
-                jobs: prev.jobs.map((j) => (j.id === updatedJob.id ? { ...j, woPhotos: migrated as any } : j)),
+                jobs: prev.jobs.map((j) => (j.id === updatedJob.id ? { ...j, woPhotos: migrated } : j)),
               };
               saveData(next);
               return next;
@@ -1949,8 +1949,8 @@ function App() {
               type: 'residential' as const,
               notes: `Imported from SolarEdge on ${new Date().toLocaleDateString()}`,
               solarEdgeSiteId: siteId,
-              systemType: 'SolarEdge' as any,
-              clientStatus: s.status === 'Active' ? 'O&M' as any : 'Standby' as any,
+              systemType: 'SolarEdge',
+              clientStatus: s.status === 'Active' ? 'O&M' : 'Standby',
               createdAt: s.installationDate ? new Date(s.installationDate).toISOString() : new Date().toISOString(),
             };
             customers.push(newC);

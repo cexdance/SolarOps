@@ -343,7 +343,7 @@ export const ContractorApprovals: React.FC<ContractorApprovalsProps> = ({
                       <label className="block text-xs font-medium text-slate-500 mb-1">{f.label}</label>
                       {f.type === 'select' ? (
                         <select
-                          value={(editForm as any)[f.key] ?? ''}
+                          value={(editForm as Record<string, string | undefined>)[f.key] ?? ''}
                           onChange={e => setEditForm(p => ({ ...p, [f.key]: e.target.value }))}
                           className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 cursor-pointer"
                         >
@@ -354,7 +354,7 @@ export const ContractorApprovals: React.FC<ContractorApprovalsProps> = ({
                       ) : (
                         <input
                           type={f.type ?? 'text'}
-                          value={(editForm as any)[f.key] ?? ''}
+                          value={(editForm as Record<string, string | undefined>)[f.key] ?? ''}
                           onChange={e => setEditForm(p => ({ ...p, [f.key]: e.target.value }))}
                           className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
                         />
@@ -397,7 +397,7 @@ export const ContractorApprovals: React.FC<ContractorApprovalsProps> = ({
                   </div>
                   <select
                     value={earningsPeriod}
-                    onChange={e => setEarningsPeriod(e.target.value as any)}
+                    onChange={e => setEarningsPeriod(e.target.value as 'week' | 'curr_month' | 'prev_month' | 'ytd')}
                     className="px-3 py-2 bg-slate-800 border border-slate-700 text-white rounded-lg text-sm cursor-pointer focus:outline-none"
                   >
                     <option value="week">This Week</option>

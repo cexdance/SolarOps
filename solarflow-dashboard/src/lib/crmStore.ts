@@ -328,7 +328,7 @@ export const updateLeadStatus = (data: CRMData, leadId: string, newStatus: LeadS
   const updatedStats = addXP(currentStats, xpGain > 0 ?
     (newStatus === 'connected' ? 'call_made' :
      newStatus === 'appointment' ? 'appointment_set' :
-     newStatus === 'proposal' ? 'proposal_sent' : 'deal_closed') as any : 'call_made');
+     newStatus === 'proposal' ? 'proposal_sent' : 'deal_closed') as keyof typeof XP_ACTIONS : 'call_made');
 
   return {
     ...data,
@@ -360,7 +360,7 @@ export const logActivity = (data: CRMData, leadId: string, userId: string, userN
   // Update user stats
   const currentStats = data.userStats[userId] || generateMockStats(userId, userName);
   const updatedStats = addXP(currentStats, xpGain > 0 ?
-    (type === 'call' ? 'call_made' : type === 'email' ? 'email_sent' : 'note_added') as any : 'call_made');
+    (type === 'call' ? 'call_made' : type === 'email' ? 'email_sent' : 'note_added') as keyof typeof XP_ACTIONS : 'call_made');
 
   // Update lead last contact
   const updatedLeads = data.leads.map(l =>

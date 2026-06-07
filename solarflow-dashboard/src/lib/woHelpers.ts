@@ -49,25 +49,25 @@ export function toContractorJobView(job: Job, existingCj?: ContractorJob): Contr
   };
 
   // Convert admin WOPhoto[] → contractor photo shape (object of arrays)
-  const photos = { ...emptyPhotos };
+  const photos: Record<PhotoCategory, string[]> = { ...emptyPhotos };
   if (job.woPhotos) {
     for (const p of job.woPhotos) {
       const cat = p.category as PhotoCategory;
       const url = p.storageUrl || p.dataUrl;
       if (cat in photos && url) {
-        (photos as any)[cat] = [...((photos as any)[cat] ?? []), url];
+        photos[cat] = [...(photos[cat] ?? []), url];
       }
     }
   }
   // Merge with existing contractor photos if provided
   if (existingCj?.photos) {
-    for (const [cat, urls] of Object.entries(existingCj.photos)) {
-      const existing = (photos as any)[cat] ?? [];
+    for (const [cat, urls] of Object.entries(existingCj.photos) as [PhotoCategory, string[]][]) {
+      const existing = photos[cat] ?? [];
       const existingSet = new Set(existing);
       for (const u of (urls ?? [])) {
         if (u && !existingSet.has(u)) existing.push(u);
       }
-      (photos as any)[cat] = existing;
+      photos[cat] = existing;
     }
   }
 

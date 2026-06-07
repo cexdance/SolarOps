@@ -748,7 +748,7 @@ const JobDetailModal: React.FC<{ job: ContractorJob; onClose: () => void }> = ({
                   <span>Contractor Pay</span>
                   <span className="text-orange-600">${job.contractorTotalPay.toFixed(2)}</span>
                 </div>
-                {(job as any).partsReimbursementRequested && (
+                {job.partsReimbursementRequested && (
                   <div className="flex items-start gap-2 mt-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg">
                     <span className="w-2 h-2 rounded-full bg-blue-500 mt-1.5 shrink-0" />
                     <div className="flex-1 text-sm">

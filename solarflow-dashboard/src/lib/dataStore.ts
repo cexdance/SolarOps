@@ -6,7 +6,7 @@
 //   • New seed records from a version bump are ADDED
 //   • Edited seed records preserve the user's edits
 // ─────────────────────────────────────────────────────────────────────────────
-import { AppState, Customer, Job, User, ClientStatus, CustomerCategory } from '../types';
+import { AppState, Customer, Job, User, ClientStatus, CustomerCategory, SystemType } from '../types';
 import { mergedCustomerData } from './mergedCustomers';
 import { dbSet } from './db';
 import { authedFetch } from './supabase';
@@ -21,8 +21,31 @@ const DATA_VERSION = '2026-04-15-fault-tolerant-v1';
 
 // ── Seed data builder ─────────────────────────────────────────────────────────
 
+// Shape of a merged seed-customer record. The PowerCare enrichment fields are
+// optional because only PowerCare entries carry them; modeling them here lets us
+// read them without per-field casts.
+interface SeedCustomer {
+  clientId?: string;
+  name: string;
+  email: string;
+  phone: string;
+  address: string;
+  city: string;
+  state: string;
+  zip: string;
+  type: string;
+  clientStatus: string;
+  solarEdgeSiteId?: string;
+  systemType?: string;
+  notes: string;
+  installDate?: string;
+  isPowerCare: boolean;
+  powerCareCaseNumber?: string;
+  powerCareTrackingNumber?: string;
+}
+
 const buildSeedCustomers = (): Customer[] =>
-  mergedCustomerData.map((c, index) => ({
+  (mergedCustomerData as SeedCustomer[]).map((c, index) => ({
     id: `cust-${index + 1}`,
     clientId: c.clientId,
     name: c.name,
@@ -33,17 +56,17 @@ const buildSeedCustomers = (): Customer[] =>
     state: c.state || 'FL',
     zip: c.zip,
     type: c.type as 'residential' | 'commercial',
-    category: ((c as any).solarEdgeSiteId ? 'O&M' : undefined) as CustomerCategory | undefined,
+    category: (c.solarEdgeSiteId ? 'O&M' : undefined) as CustomerCategory | undefined,
     clientStatus: c.clientStatus as ClientStatus,
     createdAt: c.installDate ? new Date(c.installDate).toISOString() : new Date().toISOString(),
     notes: c.notes,
     referralSource: '',
     howFound: '',
     isPowerCare: c.isPowerCare,
-    powerCareCaseNumber:   (c as any).powerCareCaseNumber   || undefined,
-    powerCareTrackingNumber: (c as any).powerCareTrackingNumber || undefined,
-    solarEdgeSiteId: (c as any).solarEdgeSiteId || undefined,
-    systemType: c.systemType as any || undefined,
+    powerCareCaseNumber:   c.powerCareCaseNumber   || undefined,
+    powerCareTrackingNumber: c.powerCareTrackingNumber || undefined,
+    solarEdgeSiteId: c.solarEdgeSiteId || undefined,
+    systemType: (c.systemType as SystemType) || undefined,
     trelloBackupUrl: undefined,
   }));
 // ── Default state factory ──────────────────────────────────────────────────────
@@ -340,7 +363,7 @@ export const saveData = (state: AppState): void => {
         size: f.size,
         source: f.source,
         createdAt: f.createdAt,
-      })) as any,
+      })),
     })),
     jobs: state.jobs.map(j => ({
       ...j,
@@ -359,7 +382,7 @@ export const saveData = (state: AppState): void => {
               ? { ...p, dataUrl: '' } // durable elsewhere — safe to strip base64
               : p                      // in-flight — keep dataUrl so it survives reload
           )
-        : undefined as any,
+        : undefined,
     })),
   };
 
@@ -373,7 +396,7 @@ export const saveData = (state: AppState): void => {
     try {
       const moreTrimmed: AppState = {
         ...slimState,
-        customers: slimState.customers.map(c => ({ ...c, activityHistory: undefined as any })),
+        customers: slimState.customers.map(c => ({ ...c, activityHistory: undefined })),
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(moreTrimmed));
       saved = true;

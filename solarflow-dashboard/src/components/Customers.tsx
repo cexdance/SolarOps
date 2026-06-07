@@ -57,7 +57,7 @@ import {
 } from 'lucide-react';
 import * as _recharts from 'recharts';
 const { ComposedChart, Bar, Line, XAxis, YAxis, Tooltip: RechartsTooltip, ResponsiveContainer, CartesianGrid, Legend } = _recharts as any;
-import { Customer, CustomerFile, Job, ClientStatus, Activity, User, CustomerCategory, SolarEdgeAlert } from '../types';
+import { Customer, CustomerFile, Job, ClientStatus, Activity, User, CustomerCategory, SystemType, SolarEdgeAlert } from '../types';
 import { ServiceRate } from '../types/contractor';
 import { loadServiceRates } from '../lib/contractorStore';
 import { loadAlerts } from '../lib/operationsStore';
@@ -3665,8 +3665,8 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
     };
 
     for (const [key, label] of Object.entries(fieldLabel)) {
-      const oldVal = (customer as any)[key] ?? '';
-      const newVal = (editForm as any)[key] ?? '';
+      const oldVal = customer[key as keyof Customer] ?? '';
+      const newVal = editForm[key as keyof Customer] ?? '';
       if (String(oldVal) !== String(newVal)) {
         changes.push(`${label}: "${oldVal || '—'}" → "${newVal || '—'}"`);
       }
@@ -4760,7 +4760,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                 <label className="block text-sm font-medium text-slate-700 mb-1">System Type</label>
                 <select
                   value={editForm.systemType || ''}
-                  onChange={(e) => setEditForm({ ...editForm, systemType: e.target.value as any || undefined })}
+                  onChange={(e) => setEditForm({ ...editForm, systemType: e.target.value as SystemType || undefined })}
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg"
                 >
                   <option value="">Select system...</option>
@@ -5176,9 +5176,9 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                     conflicts.forEach(f => {
                       const choice = conflictChoices[f.key as string];
                       if (choice === 'primary') {
-                        (resolvedFields as any)[f.key] = primaryCustomer![f.key];
+                        (resolvedFields as Record<keyof Customer, Customer[keyof Customer]>)[f.key] = primaryCustomer![f.key];
                       } else if (choice === 'secondary') {
-                        (resolvedFields as any)[f.key] = otherCustomer![f.key];
+                        (resolvedFields as Record<keyof Customer, Customer[keyof Customer]>)[f.key] = otherCustomer![f.key];
                       }
                     });
                     onMergeCustomers(primaryId, secondaryCustomer.id, resolvedFields);
@@ -5677,7 +5677,7 @@ const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({ onClose, onCr
               <label className="block text-sm font-medium text-slate-700 mb-1">Category</label>
               <select
                 value={formData.category}
-                onChange={(e) => setFormData({ ...formData, category: e.target.value as any })}
+                onChange={(e) => setFormData({ ...formData, category: e.target.value as '' | CustomerCategory })}
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg"
               >
                 <option value="">Select...</option>
@@ -5693,7 +5693,7 @@ const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({ onClose, onCr
               <label className="block text-sm font-medium text-slate-700 mb-1">System Type</label>
               <select
                 value={formData.systemType}
-                onChange={(e) => setFormData({ ...formData, systemType: e.target.value as any })}
+                onChange={(e) => setFormData({ ...formData, systemType: e.target.value as '' | SystemType })}
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg"
               >
                 <option value="">Select...</option>
@@ -5707,7 +5707,7 @@ const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({ onClose, onCr
               <label className="block text-sm font-medium text-slate-700 mb-1">Client Status</label>
               <select
                 value={formData.clientStatus}
-                onChange={(e) => setFormData({ ...formData, clientStatus: e.target.value as any })}
+                onChange={(e) => setFormData({ ...formData, clientStatus: e.target.value as '' | ClientStatus })}
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg"
               >
                 <option value="">Select...</option>

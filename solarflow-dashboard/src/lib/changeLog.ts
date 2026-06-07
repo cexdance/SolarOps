@@ -199,8 +199,8 @@ export function logJobChange(
   if (changed && Object.keys(changed).length === 0) return null; // no-op edit
   return logChange(opType, 'job', jobId, {
     changed: changed ?? '(new record)',
-    woNumber: (after as any).woNumber,
-    status: (after as any).woStatus ?? (after as any).status,
+    woNumber: after['woNumber'],
+    status: after['woStatus'] ?? after['status'],
   }, actor);
 }
 

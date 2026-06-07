@@ -26,7 +26,7 @@ export const RmaCreateModal: React.FC<RmaCreateModalProps> = ({
   const [err, setErr] = useState<string | null>(null);
 
   const jobLabel = (j: Job) =>
-    `${(j as any).woNumber ?? (j as any).jobNumber ?? j.id}${(j as any).title ? ' · ' + (j as any).title : ''}`;
+    `${j.woNumber ?? (j as Job & { jobNumber?: string }).jobNumber ?? j.id}${j.title ? ' · ' + j.title : ''}`;
 
   const submit = () => {
     setErr(null);
