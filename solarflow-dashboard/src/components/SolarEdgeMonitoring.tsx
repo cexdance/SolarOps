@@ -1,4 +1,4 @@
-// SolarEdge Monitoring — Florida Sites Table
+// SolarEdge Monitoring: Florida Sites Table
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { authedFetch } from '../lib/supabase';
 import { resilientJson } from '../lib/resilientFetch';
@@ -230,7 +230,7 @@ export const SolarEdgeMonitoring: React.FC<Props> = ({
     }
   }, [ALL_SITES, solarEdgeApiKey]);
 
-  // Fetch on mount (uses cached CDN response — free)
+  // Fetch on mount (uses cached CDN response, free)
   useEffect(() => { void fetchAlertCounts(); }, [fetchAlertCounts]);
 
   /** Toggle acknowledge state for a site */
@@ -338,7 +338,7 @@ export const SolarEdgeMonitoring: React.FC<Props> = ({
       setUpdateMsg(
         newCount > 0
           ? `✓ Added ${newCount} new site${newCount !== 1 ? 's' : ''} (${total} total in group)`
-          : `✓ Up to date — ${total} site${total !== 1 ? 's' : ''} in group, no new additions`
+          : `✓ Up to date: ${total} site${total !== 1 ? 's' : ''} in group, no new additions`
       );
     } catch (err: any) {
       setUpdateMsg(`✗ ${err?.message || 'Update failed'}`);
@@ -475,7 +475,7 @@ export const SolarEdgeMonitoring: React.FC<Props> = ({
           </div>
           <div>
             <h1 className="text-xl font-bold text-slate-900">SolarEdge Monitoring</h1>
-            <p className="text-sm text-slate-500">Florida — Account #64793</p>
+            <p className="text-sm text-slate-500">Florida, Account #64793</p>
           </div>
         </div>
         <div className="flex flex-col items-end gap-1">
@@ -736,7 +736,7 @@ export const SolarEdgeMonitoring: React.FC<Props> = ({
                             <div className="flex items-center gap-2 mb-2">
                               <ClipboardList className="w-4 h-4 text-slate-500" />
                               <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
-                                Work Orders — {site.clientId || site.siteName}
+                                Work Orders: {site.clientId || site.siteName}
                               </span>
                             </div>
                             <div className="grid gap-2">
