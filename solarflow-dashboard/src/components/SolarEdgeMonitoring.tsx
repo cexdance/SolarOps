@@ -696,9 +696,8 @@ export const SolarEdgeMonitoring: React.FC<Props> = ({
                   const siteJobs   = wosBySite.get(site.siteId) ?? [];
                   const isExpanded = expandedSite === site.siteId;
 
-                  return (
-                    <React.Fragment key={site.siteId}>
-                      <tr className={`hover:bg-slate-50 transition-colors duration-150 ${(effectiveAlerts.count.get(site.siteId) ?? 0) > 0 && !ackedSites.has(site.siteId) ? 'border-l-2 border-l-orange-400' : ''}`}>
+                  return [
+                    <tr key={site.siteId} className={`hover:bg-slate-50 transition-colors duration-150 ${(effectiveAlerts.count.get(site.siteId) ?? 0) > 0 && !ackedSites.has(site.siteId) ? 'border-l-2 border-l-orange-400' : ''}`}>
                         {visibleColumns.map(col => {
                           const ctx: CellCtx = {
                             site,
@@ -728,11 +727,11 @@ export const SolarEdgeMonitoring: React.FC<Props> = ({
                             </td>
                           );
                         })}
-                      </tr>
+                      </tr>,
 
-                      {/* Expandable Work Orders panel */}
-                      {isExpanded && siteJobs.length > 0 && (
-                        <tr className="bg-slate-50">
+                      /* Expandable Work Orders panel */
+                      isExpanded && siteJobs.length > 0 && (
+                        <tr key={`${site.siteId}-wo`} className="bg-slate-50">
                           <td colSpan={COLS} className="px-4 py-3">
                             <div className="flex items-center gap-2 mb-2">
                               <ClipboardList className="w-4 h-4 text-slate-500" />
@@ -779,10 +778,9 @@ export const SolarEdgeMonitoring: React.FC<Props> = ({
                             </button>
                           </td>
                         </tr>
-                      )}
-                    </React.Fragment>
-                  );
-                })
+                      )
+                    ];
+                  })
               )}
             </tbody>
           </table>
