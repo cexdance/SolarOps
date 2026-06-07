@@ -79,7 +79,7 @@ function addToTombstone(ids: string[]): void {
     const existing: string[] = JSON.parse(localStorage.getItem(key) || '[]');
     const merged = Array.from(new Set([...existing, ...ids]));
     localStorage.setItem(key, JSON.stringify(merged));
-  } catch {}
+  } catch (e) { console.error('[dataStore] markCustomersDeleted tombstone write failed', e); }
 }
 
 // ── Tombstone list — jobs explicitly deleted by the user ──────────────────────
@@ -98,7 +98,7 @@ export function markJobDeleted(jobId: string): void {
     if (existing.includes(jobId)) return;
     existing.push(jobId);
     localStorage.setItem(DELETED_JOBS_KEY, JSON.stringify(existing));
-  } catch {}
+  } catch (e) { console.error('[dataStore] markJobDeleted tombstone write failed', e); }
 }
 
 // ── Always-on exclusion filter ────────────────────────────────────────────────
@@ -382,20 +382,20 @@ export const saveData = (state: AppState): void => {
         window.dispatchEvent(new CustomEvent('solarops:storage-warning', {
           detail: { kind: 'trimmed', reason: 'quota-exceeded' },
         }));
-      } catch {}
+      } catch (e) { console.error('[dataStore] storage-warning dispatch (trimmed) failed', e); }
     } catch (e2) {
       console.error('[DataStore] FAILED TO SAVE — storage quota exceeded, work is at risk:', e2);
       try {
         window.dispatchEvent(new CustomEvent('solarops:storage-warning', {
           detail: { kind: 'failed', reason: 'quota-exceeded' },
         }));
-      } catch {}
+      } catch (e) { console.error('[dataStore] storage-warning dispatch (failed) failed', e); }
     }
   }
 
   // Cloud backup: async Supabase write with FULL state (including photos)
   // Supabase has its own storage limits but handles large data better than localStorage
-  dbSet(STORAGE_KEY, state).catch(() => {});
+  dbSet(STORAGE_KEY, state).catch((e) => console.error('[dataStore] dbSet cloud backup failed', e));
   void saved;
 };
 

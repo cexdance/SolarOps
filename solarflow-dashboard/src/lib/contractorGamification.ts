@@ -225,12 +225,12 @@ export const loadXpData = (contractorId: string): ContractorXpData => {
   try {
     const raw = localStorage.getItem(XP_KEY(contractorId));
     if (raw) return { ...defaultXpData(), ...JSON.parse(raw) };
-  } catch {}
+  } catch (e) { console.error('[contractorGamification] loadXpData failed', e); }
   return defaultXpData();
 };
 
 const saveXpData = (contractorId: string, data: ContractorXpData): void => {
-  try { localStorage.setItem(XP_KEY(contractorId), JSON.stringify(data)); } catch {}
+  try { localStorage.setItem(XP_KEY(contractorId), JSON.stringify(data)); } catch (e) { console.error('[contractorGamification] saveXpData failed', e); }
 };
 
 // ── Badge checker ─────────────────────────────────────────────────────────────

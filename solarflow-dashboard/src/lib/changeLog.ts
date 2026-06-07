@@ -111,7 +111,7 @@ export function logChange(
   writeLog(log);
 
   // Async Supabase push — does NOT block the UI
-  pushEntry(entry).catch(() => {});
+  pushEntry(entry).catch((e) => console.error('[changeLog] pushEntry to Supabase failed', e));
 
   return entry;
 }

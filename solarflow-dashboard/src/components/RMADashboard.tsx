@@ -340,7 +340,7 @@ export function RMADashboard({
                       const d = JSON.parse(e.dataTransfer.getData('text/plain'));
                       const row = rmaRows.find(r => r.entry.id === d.entryId && r.job.id === d.jobId);
                       if (row && resolveStatus(row.entry) !== col.id) moveCard(row, col.id);
-                    } catch {}
+                    } catch (e) { console.error('[RMADashboard] drag-drop dataTransfer parse failed', e); }
                   }}
                 >
                   {/* Column header */}

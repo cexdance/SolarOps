@@ -47,7 +47,7 @@ const saveAll = (all: Record<string, TodoItem[]>): void => {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(all));
     dbSet(STORAGE_KEY, all);
-  } catch {}
+  } catch (e) { console.error('[todoStore] saveAll failed', e); }
 };
 
 const loadAll = (): Record<string, TodoItem[]> => {
@@ -55,7 +55,7 @@ const loadAll = (): Record<string, TodoItem[]> => {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) all = JSON.parse(raw) as Record<string, TodoItem[]>;
-  } catch {}
+  } catch (e) { console.error('[todoStore] loadAll parse failed', e); }
 
   // One-time merge-migration of legacy per-user keys into the canonical record:
   //   solarops_todos_v1_<uid>  (Home dashboard widget — `text` field, no due date)
@@ -82,7 +82,7 @@ const loadAll = (): Record<string, TodoItem[]> => {
         migratedAny = true;
       }
     } catch { /* skip unparseable legacy key */ }
-    try { localStorage.removeItem(k); } catch {}
+    try { localStorage.removeItem(k); } catch (e) { console.error('[todoStore] legacy key removeItem failed', k, e); }
   }
   if (migratedAny) saveAll(all);
   return all;

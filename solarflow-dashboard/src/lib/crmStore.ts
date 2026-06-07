@@ -168,7 +168,7 @@ export const loadCRMData = (): CRMData => {
       });
       if (repaired) {
         const next = { ...parsed, leads };
-        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch {}
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch (e) { console.error('[crmStore] localStorage repair-write failed', e); }
         return next;
       }
       return parsed;

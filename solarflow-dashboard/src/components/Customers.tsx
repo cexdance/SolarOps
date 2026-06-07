@@ -339,7 +339,7 @@ export const Customers: React.FC<CustomersProps> = ({
       const raw = localStorage.getItem(STORAGE_KEY);
       const saved = raw ? JSON.parse(raw) : {};
       localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...saved, ...patch }));
-    } catch {}
+    } catch (e) { console.error('[Customers] saveView failed', e); }
   };
 
   const [filterType, setFilterType] = useState<'all' | 'residential' | 'commercial'>(
@@ -1324,7 +1324,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
         const extras: SolarEdgeSite[] = state.solarEdgeExtraSites || [];
         return extras.find(s => s.siteId === siteId) || null;
       }
-    } catch {}
+    } catch (e) { console.error('[Customers] getSiteInfo localStorage parse failed', e); }
     return null;
   }, [siteId]);
 
@@ -1382,7 +1382,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
           todayKwh:    (ov?.lastDayData?.energy     || 0) / 1000,
         });
       })
-      .catch(() => {});
+      .catch((e) => console.error('[Customers] SolarEdge overview fetch failed', e));
 
     // Details: peak power (kW)
     authedFetch(`/api/solaredge?path=/site/${siteId}/details&api_key=${encodeURIComponent(apiKey)}`)
@@ -1395,7 +1395,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
           lng: json.details?.location?.lng,
         });
       })
-      .catch(() => {});
+      .catch((e) => console.error('[Customers] SolarEdge details fetch failed', e));
   }, [siteId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Fetch Peak Sun Hours from Open-Meteo (free, no API key) ────────────────
@@ -3649,7 +3649,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
         contextId: customer.id,
         contextType: 'customer',
         message: noteText,
-      }).catch(() => {});
+      }).catch((e) => console.error('[Customers] createMention failed', e));
     }
   };
 

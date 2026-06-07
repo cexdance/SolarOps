@@ -349,7 +349,7 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({ onClose, onCreated })
       // After creation the user exists; send them a set-password email.
       await supabase.auth.resetPasswordForEmail(email.trim(), {
         redirectTo: `${window.location.origin}/reset-password`,
-      }).catch(() => {});
+      }).catch((e) => console.error('[UserPermissionsPanel] resetPasswordForEmail failed', e));
       onCreated(j as User);
     } catch (e: any) {
       setErr(e.message ?? 'Failed to create user');

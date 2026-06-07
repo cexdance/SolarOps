@@ -86,7 +86,7 @@ const LoginScreen: React.FC<{
           setPasskeyAvailable(available);
           setPasskeyStored(available && !!localStorage.getItem(PASSKEY_STORE_KEY));
         })
-        .catch(() => {});
+        .catch((e) => console.error('[App] passkey availability check failed', e));
     }
   }, []);
 
@@ -836,7 +836,7 @@ function App() {
           }));
         });
         // Flush any change log entries that were queued while offline
-        flushChangeLog().catch(() => {});
+        flushChangeLog().catch((e) => console.error('[App] flushChangeLog failed', e));
         // Load Supabase notifications, start polling + Realtime sub for instant delivery
         setupNotifications(user.id);
         // Restore dual-role contractor link on session resume
@@ -965,7 +965,7 @@ function App() {
       ...prev,
       notifications: prev.notifications.map(n => n.id === id ? { ...n, read: true } : n),
     }));
-    markNotificationReadRemote(id).catch(() => {});
+    markNotificationReadRemote(id).catch((e) => console.error('[App] markNotificationReadRemote failed', e));
   };
 
   const handleMarkAllNotificationsRead = () => {
@@ -973,7 +973,7 @@ function App() {
       ...prev,
       notifications: prev.notifications.map(n => ({ ...n, read: true })),
     }));
-    markAllNotificationsReadRemote().catch(() => {});
+    markAllNotificationsReadRemote().catch((e) => console.error('[App] markAllNotificationsReadRemote failed', e));
   };
 
   // Merge Supabase notifications into local state (dedup by id)
@@ -1516,7 +1516,7 @@ function App() {
         deleted.push(customerId);
         localStorage.setItem(key, JSON.stringify(deleted));
       }
-    } catch {}
+    } catch (e) { console.error('[App] failed to write deleted-customer tombstone', e); }
 
     setData(prev => {
       const next = {

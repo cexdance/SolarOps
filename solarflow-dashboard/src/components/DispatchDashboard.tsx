@@ -190,12 +190,12 @@ const loadLayout = (): (WidgetConfig | null)[] => {
       }
       return parsed;
     }
-  } catch {}
+  } catch (e) { console.error('[DispatchDashboard] loadLayout failed', e); }
   return defaultLayout();
 };
 
 const saveLayout = (layout: (WidgetConfig | null)[]) => {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(layout)); } catch {}
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(layout)); } catch (e) { console.error('[DispatchDashboard] saveLayout failed', e); }
 };
 
 // ── Shared style constants ─────────────────────────────────────────────────────

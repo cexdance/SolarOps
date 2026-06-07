@@ -18,11 +18,11 @@ import type { AppState } from '../types';
  */
 export async function dbSet(key: string, data: unknown): Promise<void> {
   if (key === 'solarflow_data' && data && typeof data === 'object') {
-    await pushToSupabase(data as AppState).catch(() => {});
+    await pushToSupabase(data as AppState).catch((e) => console.error('[db] pushToSupabase failed', e));
     return;
   }
   if (isKVSyncKey(key)) {
-    await pushKeyValue(key, data).catch(() => {});
+    await pushKeyValue(key, data).catch((e) => console.error('[db] pushKeyValue failed', key, e));
   }
 }
 

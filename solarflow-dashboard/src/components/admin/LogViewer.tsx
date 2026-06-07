@@ -81,7 +81,7 @@ export const LogViewer: React.FC = () => {
     navigator.clipboard.writeText(json).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    }).catch(() => {});
+    }).catch((e) => console.error('[LogViewer] clipboard write failed', e));
   }, [entries]);
 
   const filtered = entries.filter(e => {

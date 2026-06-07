@@ -36,11 +36,11 @@ const loadConfig = (uid: string): DashConfig => {
   try {
     const r = localStorage.getItem(CONFIG_KEY(uid));
     if (r) return { ...DEFAULT_CONFIG, ...JSON.parse(r) };
-  } catch {}
+  } catch (e) { console.error('[Dashboard] loadConfig failed', e); }
   return DEFAULT_CONFIG;
 };
 const saveConfig = (uid: string, cfg: DashConfig) => {
-  try { localStorage.setItem(CONFIG_KEY(uid), JSON.stringify(cfg)); } catch {}
+  try { localStorage.setItem(CONFIG_KEY(uid), JSON.stringify(cfg)); } catch (e) { console.error('[Dashboard] saveConfig failed', e); }
 };
 
 
@@ -839,7 +839,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                           const d = JSON.parse(e.dataTransfer.getData('text/plain'));
                           const row = rmaRows.find(r => r.entry.id === d.entryId && r.job.id === d.jobId);
                           if (row && resolveStatus(row.entry) !== col.id) moveCard(row, col.id);
-                        } catch {}
+                        } catch (e) { console.error('[Dashboard] drag-drop dataTransfer parse failed', e); }
                       }}
                     >
                       {/* Column header */}

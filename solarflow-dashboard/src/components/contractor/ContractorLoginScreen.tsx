@@ -47,7 +47,7 @@ export const ContractorLoginScreen: React.FC<ContractorLoginScreenProps> = ({
           setPasskeyAvailable(ok);
           setPasskeyStored(ok && !!localStorage.getItem(PASSKEY_STORE_KEY_CONTRACTOR));
         })
-        .catch(() => {});
+        .catch((e) => console.error('[ContractorLogin] passkey availability check failed', e));
     }
     // Remember mode for after password reset
     localStorage.setItem('solarops_reset_mode', 'contractor');
