@@ -1757,7 +1757,6 @@ const AddToolModal: React.FC<AddToolModalProps> = ({ onClose }) => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('Add tool:', formData);
     onClose();
   };
 
@@ -1900,7 +1899,6 @@ const AddProviderModal: React.FC<AddProviderModalProps> = ({ onClose }) => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('Add provider:', formData);
     onClose();
   };
 

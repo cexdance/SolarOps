@@ -109,12 +109,6 @@ export async function listPhotosForJob(jobId: string): Promise<PhotoRow[]> {
   return reqToPromise(idx.getAll(jobId));
 }
 
-export async function deletePhoto(id: string): Promise<void> {
-  const store = await tx('readwrite');
-  await reqToPromise(store.delete(id));
-}
-
-/** Re-attempt mirror for every row whose uploadStatus is not 'uploaded'. */
 export async function flushPendingMirrors(): Promise<{ ok: number; failed: number }> {
   const store = await tx('readonly');
   const idx = store.index('uploadStatus');
