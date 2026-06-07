@@ -69,7 +69,7 @@ export const ContractorLoginScreen: React.FC<ContractorLoginScreenProps> = ({
 
     const meta = data.user.user_metadata ?? {};
     // Allow pure contractors OR dual-role users (isContractor=true)
-    if (meta.role !== 'contractor' && !meta.isContractor) {
+    if (meta['role'] !== 'contractor' && !meta['isContractor']) {
       await supabase.auth.signOut();
       setError('This portal is for contractors only. Staff should use the staff login.');
       return;

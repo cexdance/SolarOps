@@ -1,4 +1,4 @@
-import { useEffect, useRef, type MutableRefObject } from 'react';
+import { useEffect, type MutableRefObject } from 'react';
 import { drainOutbox, resetOutboxAttempts } from '../lib/outbox';
 import { pullAndMerge, subscribeToChanges } from '../lib/syncEngine';
 import { loadContractors, loadServiceRates, loadContractorJobs } from '../lib/contractorStore';

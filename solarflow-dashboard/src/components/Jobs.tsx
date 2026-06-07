@@ -1,7 +1,7 @@
 // SolarFlow MVP - Jobs Component
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
-  Plus, Search, Calendar, MapPin, User, Clock, X, Wrench, Zap, LayoutGrid, List as ListIcon, Filter,
+  Plus, Search, Calendar, MapPin, User, Clock, X, Wrench, Zap, LayoutGrid, List as ListIcon,
   Power, Cpu, ClipboardCheck,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -113,8 +113,8 @@ interface JobCardProps {
   onClick: (jobId: string) => void;
 }
 
-const JobCard: React.FC<JobCardProps> = ({ job, customer, technician, contractorName, isDragging, onDragStart, onDragEnd, onClick }) => {
-  const handleCardClick = (e: React.MouseEvent) => {
+const JobCard: React.FC<JobCardProps> = ({ job, customer, contractorName, isDragging, onDragStart, onDragEnd, onClick }) => {
+  const handleCardClick = (_e: React.MouseEvent) => {
     // Only trigger click if not dragging and no drag is in progress
     if (!isDragging) {
       onClick(job.id);

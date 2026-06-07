@@ -8,10 +8,7 @@ import {
   Play,
   CheckCircle,
   Camera,
-  FileText,
   Clock,
-  User,
-  ChevronRight,
   Clock3,
 } from 'lucide-react';
 import { Job, Customer, User as UserType } from '../types';
@@ -30,8 +27,6 @@ export const TechnicianView: React.FC<TechnicianViewProps> = ({
   customers,
   currentUser,
   onUpdateJob,
-  onViewChange,
-  isMobile,
 }) => {
   const [selectedJob, setSelectedJob] = useState<string | null>(null);
   const [showCompleteModal, setShowCompleteModal] = useState(false);

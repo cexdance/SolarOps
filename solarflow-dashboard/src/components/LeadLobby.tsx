@@ -4,7 +4,7 @@ import React, { useState, useMemo, useRef } from 'react';
 import { authedFetch } from '../lib/supabase';
 import * as XLSX from 'xlsx';
 import {
-  Inbox, Phone, Mail, Plus, Search, ArrowRight, Tag, X, User,
+  Inbox, Phone, Mail, Plus, Search, ArrowRight, Tag, X,
   Zap, CheckCircle, LayoutGrid, List, ChevronDown, ChevronUp, Upload, Trash2, Link2,
   Camera, Image as ImageIcon, Sparkles, AlertTriangle, RefreshCw,
 } from 'lucide-react';
@@ -44,7 +44,7 @@ export const PREDEFINED_SOURCES: { value: LeadSource; label: string; color: stri
   { value: 'other',               label: 'Other',               color: 'text-slate-600',  bg: 'bg-slate-100'  },
 ];
 
-const getSourceBadge = (lead: Lead, customSources: string[]) => {
+const getSourceBadge = (lead: Lead, _customSources: string[]) => {
   if (lead.source === 'other' && lead.customSource) {
     return { label: lead.customSource, color: 'text-slate-600', bg: 'bg-slate-100' };
   }
@@ -206,7 +206,7 @@ function parseSolarEdgeEmail(text: string): Partial<AddFormData> & { addressNote
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserId, currentUserRole, customers = [], onAddCustomer }) => {
+export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserRole, customers = [], onAddCustomer }) => {
   const [crmData, setCrmData] = useState<CRMData>(() => loadCRMData());
   const [syncState, setSyncState] = useState<'idle' | 'syncing' | 'ok' | 'error'>('idle');
   const [viewMode, setViewMode] = useState<'list' | 'kanban'>('kanban');
@@ -530,21 +530,21 @@ export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserId, currentUser
       try { data = JSON.parse(text); }
       catch { setSsError(`API error: ${text.slice(0, 80)}`); return; }
 
-      if (!resp.ok || data.error) { setSsError(data.error ?? 'Failed to parse. Try again.'); return; }
+      if (!resp.ok || data['error']) { setSsError(data['error'] ?? 'Failed to parse. Try again.'); return; }
 
       const noteLines = [
-        data.notes,
-        data.hsId        ? `HS_ID: ${data.hsId}` : '',
-        data.contractName ? `Contract: ${data.contractName}` : '',
-        data.address ? `${data.address}, ${data.city}, ${data.state} ${data.zip}`.trim().replace(/^,\s*/, '') : '',
+        data['notes'],
+        data['hsId']        ? `HS_ID: ${data['hsId']}` : '',
+        data['contractName'] ? `Contract: ${data['contractName']}` : '',
+        data['address'] ? `${data['address']}, ${data['city']}, ${data['state']} ${data['zip']}`.trim().replace(/^,\s*/, '') : '',
       ].filter(Boolean).join('\n');
 
       setAddFormData(prev => ({
         ...prev,
-        firstName: data.firstName || prev.firstName,
-        lastName:  data.lastName  || prev.lastName,
-        email:     data.email     || prev.email,
-        phone:     data.phone     || prev.phone,
+        firstName: data['firstName'] || prev.firstName,
+        lastName:  data['lastName']  || prev.lastName,
+        email:     data['email']     || prev.email,
+        phone:     data['phone']     || prev.phone,
         source:    'solaredge',
         leadType:  'service',
         note:      noteLines || prev.note,

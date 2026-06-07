@@ -1,25 +1,16 @@
 // SolarFlow - Admin Billing Module
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   DollarSign,
   FileText,
   Send,
   CheckCircle,
   Clock,
-  AlertTriangle,
   Search,
-  Filter,
-  Download,
   Eye,
   CreditCard,
-  User,
   MapPin,
   Calendar,
-  ChevronDown,
-  ChevronUp,
-  Image,
-  Printer,
-  Mail,
   X,
   Target,
   Undo2,
@@ -227,7 +218,7 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ jobs, onUpdateJob 
 
   // Handle revert actions
   const handleRevertInvoice = (job: ContractorJob) => {
-    const updated = {
+    const updated: ContractorJob = {
       ...job,
       invoiceStatus: 'pending' as InvoiceStatus,
       invoiceSentAt: undefined,
@@ -237,7 +228,7 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ jobs, onUpdateJob 
   };
 
   const handleRevertPayment = (job: ContractorJob) => {
-    const updated = {
+    const updated: ContractorJob = {
       ...job,
       paymentStatus: 'pending' as PaymentStatus,
       paymentApprovedAt: undefined,

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { AlertCircle, Clock, CheckCircle, XCircle, AlertTriangle, Activity, Zap, Thermometer, Gauge, Battery } from 'lucide-react';
+import { AlertCircle, Clock, CheckCircle, AlertTriangle, Activity, Zap, Thermometer, Gauge, Battery } from 'lucide-react';
 import { AlertSeverity, AlertType, UserRole } from '../types';
 
 interface Alert {

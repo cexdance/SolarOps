@@ -22,8 +22,8 @@
 
 import React, { useEffect, useState } from 'react';
 import {
-  X, FileText, MapPin, Calendar, Clock,
-  Sun, Cloud, CloudRain, CloudSnow, CloudLightning, Wind,
+  X, FileText, MapPin,
+  Sun, Cloud, CloudRain, CloudSnow, CloudLightning,
   AlertTriangle, CheckCircle, Briefcase, FileCheck, ChevronRight,
 } from 'lucide-react';
 import { Job, WOPhoto } from '../types';
@@ -256,7 +256,6 @@ export const SowDistributionModal: React.FC<Props> = ({
   siteAddress,
   customer,
   contractors = [],
-  technicians = [],
   onClose,
 }) => {
   const [weather, setWeather] = useState<WeatherResult | null | 'loading'>('loading');

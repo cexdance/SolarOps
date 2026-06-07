@@ -5,9 +5,9 @@ import React, { useState, useRef, useCallback, useMemo, useEffect } from 'react'
 import {
   X, ChevronRight, Plus, Trash2, Upload, FileText, Check,
   CheckCircle, Clock, AlertTriangle, DollarSign, Wrench,
-  Camera, ClipboardList, Package, ZapOff, Zap, UserCheck,
-  ShieldCheck, ReceiptText, Banknote, TrendingUp, TrendingDown, Users,
-  RotateCcw, History, Navigation, Loader2, RefreshCw, FolderOpen,
+  Camera, ClipboardList, Package, ZapOff, Zap,
+  ShieldCheck, Banknote, TrendingUp, TrendingDown, Users,
+  RotateCcw, History, Loader2, FolderOpen,
 } from 'lucide-react';
 import { Job, WOStatus, WOLineItem, WOPhoto, WOServiceStatus, WO_TO_JOB_STATUS, RMAEntry, AuditEntry } from '../types';
 import { updateClientStatus } from '../lib/siteProfileStore';
@@ -15,8 +15,6 @@ import { QuotePreviewModal } from './QuotePreviewModal';
 import { Contractor, ContractorJob, JobPriority, ServiceRate } from '../types/contractor';
 import { loadServiceRates } from '../lib/contractorStore';
 import { searchParts, CatalogPart } from '../lib/partsCatalog';
-import { AddressAutocomplete, GMAPS_KEY_STORAGE, loadGoogleMaps } from './AddressAutocomplete';
-import { AddressLink } from './AddressLink';
 import { MentionTextarea, MentionUser, renderWithMentions, parseMentions, parseMentionEmails, fireMentionNotifications } from './ui/MentionTextarea';
 import { SowDistributionModal, SOW_DISTRIBUTION_NAMES } from './SowDistributionModal';
 import { ActivityFeed, type FeedUser } from './ui/ActivityFeed';
@@ -66,7 +64,6 @@ const SERVICE_ACCOUNT_ACTIONS: Record<WOStatus, { label: string; color: string; 
   paid:           null,
 };
 
-const SE_COMP_SERVICE_TYPES = new Set(['repair', 'maintenance']); // expand as needed
 
 // Site-transfer WOs skip quote + contractor dispatch; draft → completed → invoiced
 const SITE_TRANSFER_ACTIONS: Record<WOStatus, { label: string; color: string } | null> = {
@@ -174,69 +171,7 @@ const SERVICE_STATUS_OPTIONS: { key: WOServiceStatus; label: string; icon: React
   { key: 'could_not_complete',   label: 'Could Not Complete',     icon: <AlertTriangle className="w-4 h-4 text-red-600" /> },
 ];
 
-// ─── constants ────────────────────────────────────────────────────────────────
-
-const OFFICE_ADDRESS = '814 Ponce de Leon Blvd, Coral Gables, FL 33134'; // HQ — update in Settings
-
 // ─── helpers ──────────────────────────────────────────────────────────────────
-
-/** Returns driving distance in miles via Google Maps DistanceMatrixService.
- *  Falls back to Nominatim + OSRM if no Google Maps API key is configured. */
-async function calcDrivingMiles(origin: string, destination: string): Promise<number> {
-  const apiKey = sessionStorage.getItem(GMAPS_KEY_STORAGE)
-    || (import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string)
-    || '';
-
-  // ── Google Maps path ───────────────────────────────────────────────────────
-  if (apiKey) {
-    try {
-      await loadGoogleMaps(apiKey);
-      const google = (window as any).google;
-      if (google?.maps?.DistanceMatrixService) {
-        return new Promise<number>((resolve, reject) => {
-          const svc = new google.maps.DistanceMatrixService();
-          svc.getDistanceMatrix(
-            {
-              origins: [origin],
-              destinations: [destination],
-              travelMode: google.maps.TravelMode.DRIVING,
-              unitSystem: google.maps.UnitSystem.IMPERIAL,
-            },
-            (response: any, status: string) => {
-              if (status !== 'OK') { reject(new Error(`DistanceMatrix: ${status}`)); return; }
-              const el = response?.rows?.[0]?.elements?.[0];
-              if (el?.status !== 'OK') { reject(new Error(`Element status: ${el?.status}`)); return; }
-              // distance.value is in metres
-              resolve(Math.round(el.distance.value / 1609.34));
-            }
-          );
-        });
-      }
-    } catch (e) {
-      console.warn('[calcDrivingMiles] Google Maps failed, falling back to OSRM:', e);
-    }
-  }
-
-  // ── Fallback: Nominatim geocode + OSRM routing ─────────────────────────────
-  const geocode = async (addr: string) => {
-    const r = await fetch(
-      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(addr)}&format=json&limit=1`,
-      { headers: { 'Accept-Language': 'en', 'User-Agent': 'SolarOps/1.0' } }
-    );
-    if (!r.ok) throw new Error(`Nominatim failed: ${r.status}`);
-    const d = await r.json();
-    if (!d[0]) throw new Error(`Address not found: ${addr}`);
-    return { lat: parseFloat(d[0].lat), lon: parseFloat(d[0].lon) };
-  };
-  const [o, t] = await Promise.all([geocode(origin), geocode(destination)]);
-  const route = await fetch(
-    `https://router.project-osrm.org/route/v1/driving/${o.lon},${o.lat};${t.lon},${t.lat}?overview=false`
-  );
-  if (!route.ok) throw new Error(`OSRM failed: ${route.status}`);
-  const rd = await route.json();
-  if (rd.code !== 'Ok') throw new Error(`OSRM error: ${rd.code}`);
-  return Math.round(rd.routes[0].distance / 1609.34);
-}
 
 const generateWONumber = (): string => {
   const now = new Date();
@@ -392,7 +327,6 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
   currentUserName = 'Staff',
   currentUserRole = 'technician',
   customer,
-  onQuoteSent,
   onViewCustomer,
   onViewChange,
   users = [],
@@ -443,22 +377,18 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
   const manufacturerSuggestions = ['SolarEdge', 'Enphase', 'SMA', 'Fronius', 'Sungrow', 'Generac', 'Tesla', 'LG', 'Panasonic', 'Canadian Solar', 'First Solar', 'Trina'];
   const partDescriptionSuggestions = ['Inverter', 'Optimizer', 'Battery', 'Combiner Box', 'DC Disconnect', 'AC Disconnect', 'Breaker', 'Module', 'Rail', 'Conduit', 'Cable', 'Junction Box', 'Monitoring Device'];
   // Travel miles
-  const [travelMiles, setTravelMiles] = useState<number>(job?.travelMiles ?? 0);
-  const [travelCalcStatus, setTravelCalcStatus] = useState<'idle' | 'loading' | 'done' | 'error'>(
-    job?.travelMiles ? 'done' : 'idle'
-  );
-  const [travelFromAddress, setTravelFromAddress] = useState(OFFICE_ADDRESS);
+  const [travelMiles] = useState<number>(job?.travelMiles ?? 0);
   // Audit trail
-  const [auditLog, setAuditLog] = useState<AuditEntry[]>(job?.auditLog ?? []);
+  const [auditLog] = useState<AuditEntry[]>(job?.auditLog ?? []);
   // Delete confirmation (0=idle, 1=first confirm, 2=confirmed)
   const [deleteStep, setDeleteStep] = useState(0);
   // SOW Distribution Report state
   const [showSowDistribution, setShowSowDistribution] = useState(false);
   // Quote modal state
   const [showQuotePreview, setShowQuotePreview] = useState(false);
-  const [quoteSending, setQuoteSending] = useState(false);
+  const [quoteSending] = useState(false);
   const [quoteResult, setQuoteResult] = useState<{ ok: boolean; msg: string } | null>(null);
-  const [technicianId, setTechnicianId] = useState(job?.technicianId ?? '');
+  const [technicianId] = useState(job?.technicianId ?? '');
   const [isPowercare, setIsPowercare] = useState(job?.isPowercare ?? false);
   // PowerCare = plan covers the work, so the quote flow is skipped. True when the
   // WO is flagged PowerCare or the customer is on the PowerCare plan.
@@ -500,7 +430,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
   }, [optCalc]);
 
   const applyOptimizerCalc = useCallback(() => {
-    const { labour, critter, surcharge, base } = optimizerTotal;
+    const { critter, surcharge, base } = optimizerTotal;
     const { optimizerCount, steepRoof, buildingHeight3Plus, specialtyRoof,
             emergencyDispatch, critterGuard, critterPanels, detachedArray } = optCalc;
     const surchargePct = Math.round((surcharge - 1) * 100);
@@ -567,7 +497,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
     let revoked = false;
     const created: string[] = [];
     const needsHydration = (job?.woPhotos ?? []).some(p => !p.dataUrl && p.photoStoreId);
-    if (!needsHydration) return;
+    if (!needsHydration) return undefined;
     void (async () => {
       const { hydrateWoPhotos } = await import('../lib/photoStore');
       const hydrated = await hydrateWoPhotos(job!.woPhotos ?? []);
@@ -746,7 +676,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
   const [historyEntries, setHistoryEntries] = useState<ChangeEntry[] | null>(null);
   const [historyLoading, setHistoryLoading] = useState(false);
   useEffect(() => {
-    if (activeTab !== 'history' || !job?.id) return;
+    if (activeTab !== 'history' || !job?.id) return undefined;
     let cancelled = false;
     setHistoryLoading(true);
     fetchLogForEntity('job', job.id, 100)
@@ -1145,6 +1075,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
       }, 300);
       return () => clearTimeout(timeoutId);
     }
+    return undefined;
   }, [rmaEntries]);
 
   // Delete
@@ -1154,9 +1085,9 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
   };
 
   // Save — optionally override woStatus (used when auto-saving after stage advance)
-  const handleSave = (statusOverride?: WOStatus, keepOpen?: boolean) => {
+  const handleSave = (statusOverride?: WOStatus, _keepOpen?: boolean) => {
     const effectiveWoStatus = statusOverride ?? woStatus;
-    const { labor, parts, total } = sumLineItems(lineItems);
+    const { parts, total } = sumLineItems(lineItems);
     const fallbackTotal = laborHours * contractorPayRate + partsCostDirect;
     const baseQuote = quoteAmount > 0 ? quoteAmount : (total > 0 ? total : fallbackTotal);
     const effectiveQuote = applyRecurringDiscount ? baseQuote * 0.9 : baseQuote;
@@ -1392,7 +1323,6 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
             {WO_STAGES.map((stage, idx) => {
               const done    = idx < stageIdx;
               const current = idx === stageIdx;
-              const future  = idx > stageIdx;
               return (
                 <React.Fragment key={stage.key}>
                   <div className="flex flex-col items-center gap-1 flex-1 min-w-0">

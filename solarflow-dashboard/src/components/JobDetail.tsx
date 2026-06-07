@@ -8,16 +8,11 @@ import {
   Calendar,
   Clock,
   User,
-  Wrench,
   Camera,
   CheckCircle,
   DollarSign,
   Edit,
-  Trash2,
   Navigation,
-  Send,
-  FileText,
-  ExternalLink,
 } from 'lucide-react';
 import { Job, Customer, User as UserType } from '../types';
 import { notifyAdminForInvoice } from '../lib/quoteService';
@@ -48,8 +43,6 @@ export const JobDetail: React.FC<JobDetailProps> = ({
   technician,
   onBack,
   onUpdateJob,
-  onCreateInvoice,
-  isMobile,
 }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [showCompleteModal, setShowCompleteModal] = useState(false);
@@ -156,7 +149,6 @@ export const JobDetail: React.FC<JobDetailProps> = ({
         <div className="mt-4 flex items-center gap-1">
           {['new', 'assigned', 'in_progress', 'completed', 'invoiced', 'paid'].map((status, index) => {
             const isActive = ['new', 'assigned', 'in_progress', 'completed', 'invoiced', 'paid'].indexOf(job.status) >= index;
-            const isCurrent = job.status === status;
             return (
               <div key={status} className="flex-1 flex items-center">
                 <div
@@ -283,7 +275,7 @@ export const JobDetail: React.FC<JobDetailProps> = ({
         <div className="bg-white rounded-xl border border-slate-200 p-4 mb-4">
           <h3 className="font-semibold text-slate-900 mb-3">Photos ({job.photos.length})</h3>
           <div className="flex gap-2 overflow-x-auto pb-2">
-            {job.photos.map((photo, index) => (
+            {job.photos.map((_photo, index) => (
               <div
                 key={index}
                 className="w-20 h-20 bg-slate-100 rounded-lg flex-shrink-0 flex items-center justify-center"

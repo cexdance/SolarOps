@@ -19,8 +19,6 @@ const WORK_ORDERS_KEY = 'solarops_work_orders';
 const ALERTS_KEY = 'solarops_alerts';
 
 // Mock Data Generators
-const firstNames = ['James', 'Mary', 'John', 'Patricia', 'Robert', 'Jennifer', 'Michael', 'Linda', 'William', 'Elizabeth', 'David', 'Barbara', 'Richard', 'Susan', 'Joseph', 'Jessica', 'Thomas', 'Sarah', 'Charles', 'Karen'];
-const lastNames = ['Smith', 'Johnson', 'Williams', 'Brown', 'Jones', 'Garcia', 'Miller', 'Davis', 'Rodriguez', 'Martinez', 'Hernandez', 'Lopez', 'Gonzalez', 'Wilson', 'Anderson', 'Thomas', 'Taylor', 'Moore', 'Jackson', 'Martin'];
 const streets = ['Oak', 'Maple', 'Cedar', 'Palm', 'Pine', 'Sunset', 'Ocean', 'Main', 'First', 'Second'];
 const types: WorkOrderType[] = ['maintenance', 'repair', 'inspection', 'emergency', 'warranty'];
 const statuses: WorkOrderStatus[] = ['draft', 'triage', 'scheduled', 'in_progress', 'on_site', 'pending_parts', 'review', 'completed', 'billed'];

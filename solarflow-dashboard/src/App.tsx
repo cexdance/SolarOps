@@ -42,7 +42,7 @@ import { fetchMyNotifications, markNotificationReadRemote, markAllNotificationsR
 import { processBillingTimers } from './lib/billingService';
 import { loadContractors, saveContractors, loadServiceRates, saveServiceRates, loadContractorJobs, saveContractorJobs, initializeContractorData, findInviteByToken } from './lib/contractorStore';
 import { ContractorInvite as ContractorInviteType } from './types/contractor';
-import { AppState, Job, Customer, User, AppNotification, CRMCustomer, InteractionOutcome, SolarEdgeExtraSite, RMAEntry, WOStatus, JobStatus } from './types';
+import { AppState, Job, Customer, User, AppNotification, SolarEdgeExtraSite, RMAEntry, WOStatus, JobStatus } from './types';
 import { FL_SITES } from './lib/solarEdgeSites';
 import { isFloridaSite, isAllowedCustomer } from './lib/solarEdgeSiteFilter';
 import { getDeletedCustomerIds, markJobDeleted } from './lib/dataStore';
@@ -53,7 +53,6 @@ import { validateAddress } from './lib/addressValidator';
 // ── Passkey / WebAuthn helpers (imported from shared lib) ─────────────────────
 import {
   PASSKEY_STORE_KEY,
-  PASSKEY_STORE_KEY_CONTRACTOR,
   isPlatformAuthAvailable,
   registerPasskey,
   authenticateWithPasskey,
@@ -114,19 +113,19 @@ const LoginScreen: React.FC<{
     const meta = supaUser.user_metadata ?? {};
     const user: User = {
       id: supaUser.id,
-      name: meta.name ?? supaUser.email ?? 'Staff',
+      name: meta['name'] ?? supaUser.email ?? 'Staff',
       email: supaUser.email ?? email,
-      phone: meta.phone ?? '',
-      role: meta.role ?? 'admin',
+      phone: meta['phone'] ?? '',
+      role: meta['role'] ?? 'admin',
       active: true,
-      username: meta.username ?? '',
-      avatar: (meta.avatar_url as string | undefined) ?? undefined,
+      username: meta['username'] ?? '',
+      avatar: (meta['avatar_url'] as string | undefined) ?? undefined,
     };
     if (offerPasskey && passkeyAvailable && !localStorage.getItem(PASSKEY_STORE_KEY)) {
       await registerPasskey(supaUser.id, supaUser.email ?? '');
       setPasskeyStored(true);
     }
-    onLogin(user, !!meta.mustChangePassword);
+    onLogin(user, !!meta['mustChangePassword']);
   };
 
   const AUTH_TIMEOUT_MS = 12_000; // 12s — Supabase auth must respond within this window
@@ -179,7 +178,7 @@ const LoginScreen: React.FC<{
       }
       const meta = data.user.user_metadata ?? {};
       // Block pure contractors (no staff access); dual-role users (isStaff=true) are allowed
-      if (meta.role === 'contractor' && !meta.isStaff) {
+      if (meta['role'] === 'contractor' && !meta['isStaff']) {
         await supabase.auth.signOut();
         setError('This is the staff portal. Please use the Contractor Portal below.');
         return;
@@ -480,7 +479,7 @@ const ResetPasswordScreen: React.FC<{ onDone: () => void }> = ({ onDone }) => {
   const [sessionReady, setSessionReady] = useState(hasRecoveryHash);
 
   useEffect(() => {
-    if (hasRecoveryHash) return; // already showing the form
+    if (hasRecoveryHash) return undefined; // already showing the form
     // Fallback: wait for session via getSession or auth event
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) setSessionReady(true);
@@ -812,14 +811,14 @@ function App() {
         const meta = session.user.user_metadata ?? {};
         const user: User = {
           id: session.user.id,
-          name: meta.name ?? session.user.email ?? 'Staff',
+          name: meta['name'] ?? session.user.email ?? 'Staff',
           email: session.user.email ?? '',
-          phone: meta.phone ?? '',
-          role: meta.role ?? 'admin',
+          phone: meta['phone'] ?? '',
+          role: meta['role'] ?? 'admin',
           active: true,
-          username: meta.username ?? '',
+          username: meta['username'] ?? '',
           // Restore avatar from user_metadata so it shows on page load/refresh
-          avatar: (meta.avatar_url as string | undefined) ?? undefined,
+          avatar: (meta['avatar_url'] as string | undefined) ?? undefined,
         };
         setData(prev => ({ ...prev, currentUser: user }));
         setIsAuthenticated(true);
@@ -887,18 +886,6 @@ function App() {
     () => data.jobs.filter(j => j.status === 'completed').length,
     [data.jobs],
   );
-  const activeJobs = useMemo(
-    () => data.jobs.filter(j => (j.status as string) !== 'cancelled'),
-    [data.jobs],
-  );
-  const paidJobs = useMemo(
-    () => data.jobs.filter(j => j.status === 'paid' || j.status === 'invoiced'),
-    [data.jobs],
-  );
-  const nonSeedCustomers = useMemo(
-    () => data.customers.filter(c => !c.id.startsWith('cust-se-')),
-    [data.customers],
-  );
 
   // Get selected job details
   const selectedJob = selectedJobId
@@ -906,9 +893,6 @@ function App() {
     : null;
   const selectedCustomer = selectedJob
     ? data.customers.find((c) => c.id === selectedJob.customerId)
-    : null;
-  const selectedTechnician = selectedJob
-    ? data.users.find((u) => u.id === selectedJob.technicianId)
     : null;
 
   // Auth handlers
@@ -1011,7 +995,7 @@ function App() {
     setIsContractorMode(true);
   };
 
-  const handleContractorStatusUpdate = (contractorId: string, status: ContractorStatus, reason?: string) => {
+  const handleContractorStatusUpdate = (contractorId: string, status: ContractorStatus, _reason?: string) => {
     const updated = contractors.map(c => c.id === contractorId ? { ...c, status } : c);
     setContractors(updated);
     saveContractors(updated);
@@ -1664,7 +1648,6 @@ function App() {
         seStartIndex += SE_PAGE;
       }
       // ── Filter: Florida portfolio only — drop GT-, USP-, GA-, DELETE, non-FL ──
-      const sitesBeforeFilter = sites.length;
       sites = sites.filter(isFloridaSite);
 
       // Match sites with customers and update
@@ -1786,7 +1769,7 @@ function App() {
   const isFLSite = (_s: any): boolean => true;
 
   // ── Paginate SolarEdge API ────────────────────────────────────────────────
-  const fetchAllSESites = async (apiKey: string): Promise<any[]> => {
+  const fetchAllSESites = async (_apiKey: string): Promise<any[]> => {
     const PAGE = 100;
     let startIndex = 0;
     let all: any[] = [];
@@ -2032,147 +2015,6 @@ function App() {
       saveData(next);
       return next;
     });
-  };
-
-  // ── Clean Import ──────────────────────────────────────────────────────────
-  // Wipes all auto-imported customers + extraSites + removed-sites cache,
-  // then runs a fresh filtered import from the SolarEdge API.
-  const handleCleanImport = async (): Promise<{ newCount: number; total: number; importedSites: Array<{ name: string; clientId: string; state: string; siteId: string }> }> => {
-    const apiKey = data.solarEdgeConfig.apiKey;
-    if (!apiKey) throw new Error('No SolarEdge API key — add one in Settings');
-
-    // 1. Fetch all sites from API (paginated)
-    const allSites = await fetchAllSESites(apiKey);
-
-    // 2. Filter to Florida state OR US-15 name prefix
-    const sites = allSites.filter(isFLSite);
-
-    // 3. Strip all previously auto-imported customers (id starts with cust-se-)
-    //    and keep only manually created customers
-    const manualCustomers = data.customers.filter(c => !c.id.startsWith('cust-se-'));
-
-    // 4. Build fresh customer records for all matching sites
-    const freshCustomers: Customer[] = [];
-    for (const s of sites) {
-      const loc = s.location || {};
-      
-      // Validate and normalize address
-      let validatedAddress = {
-        address: loc.address || '',
-        city: loc.city || '',
-        state: loc.state || 'FL',
-        zip: loc.zip || '',
-      };
-
-      if (loc.address || loc.city || loc.state || loc.zip) {
-        const validation = await validateAddress({
-          address: loc.address,
-          city: loc.city,
-          state: loc.state,
-          zip: loc.zip,
-        });
-
-        if (validation.isValid && validation.normalized) {
-          validatedAddress = {
-            address: validation.normalized.address || loc.address || '',
-            city: validation.normalized.city || loc.city || '',
-            state: validation.normalized.state || loc.state || 'FL',
-            zip: validation.normalized.zip || loc.zip || '',
-          };
-        }
-      }
-
-      freshCustomers.push({
-        id: `cust-se-${s.id}`,
-        name: s.name || `SolarEdge Site ${s.id}`,
-        firstName: '', lastName: '', email: '', phone: '',
-        address: validatedAddress.address,
-        city:    validatedAddress.city,
-        state:   validatedAddress.state,
-        zip:     validatedAddress.zip,
-        type: 'commercial' as const,
-        notes: `Clean import from SolarEdge Florida group on ${new Date().toLocaleDateString()}`,
-        solarEdgeSiteId: String(s.id),
-        createdAt: new Date().toISOString(),
-      });
-    }
-
-    // 5. Build fresh extraSites for sites not already in FL_SITES static list
-    const flSiteIds = new Set(FL_SITES.map(s => s.siteId));
-    const freshExtraSites: SolarEdgeExtraSite[] = [];
-    
-    for (const s of sites) {
-      if (flSiteIds.has(String(s.id))) continue;
-      
-      const loc = s.location || {};
-      
-      // Validate address for extraSites too
-      let validatedExtraAddress = {
-        address: loc.address || '',
-        city: loc.city || '',
-        state: loc.state || 'FL',
-        zip: loc.zip || '',
-      };
-
-      if (loc.address || loc.city || loc.state || loc.zip) {
-        const validation = await validateAddress({
-          address: loc.address,
-          city: loc.city,
-          state: loc.state,
-          zip: loc.zip,
-        });
-
-        if (validation.isValid && validation.normalized) {
-          validatedExtraAddress = {
-            address: validation.normalized.address || loc.address || '',
-            city: validation.normalized.city || loc.city || '',
-            state: validation.normalized.state || loc.state || 'FL',
-            zip: validation.normalized.zip || loc.zip || '',
-          };
-        }
-      }
-
-      freshExtraSites.push({
-        siteId:      String(s.id),
-        clientId:    s.name?.startsWith('US-') ? s.name.split(' ')[0] : (s.accountId || ''),
-        siteName:    s.name || '',
-        address:     [validatedExtraAddress.address, validatedExtraAddress.city, validatedExtraAddress.state, validatedExtraAddress.zip].filter(Boolean).join(', '),
-        status:      s.status || 'Active',
-        peakPower:   s.peakPower || 0,
-        installDate: s.installationDate || '',
-        ptoDate:     s.ptoDate || '',
-        alerts: 0, highestImpact: '0', systemType: '', module: '',
-        todayKwh:    s.lastDayData?.energy   || 0,
-        monthKwh:    s.lastMonthData?.energy  || 0,
-        yearKwh:     s.lastYearData?.energy   || 0,
-        lifetimeKwh: s.lifeTimeData?.energy   || 0,
-        lastUpdate:  s.lastUpdateTime || new Date().toISOString(),
-      });
-    }
-
-    // 6. Clear removed-sites cache so no sites are hidden
-    localStorage.removeItem('solarops_removed_sites');
-
-    // 7. Commit to state + persist to localStorage and Supabase
-    setData((prev) => {
-      const next = {
-        ...prev,
-        customers: [...manualCustomers, ...freshCustomers],
-        solarEdgeExtraSites: freshExtraSites,
-      };
-      saveData(next);
-      return next;
-    });
-
-    // 8. Build report of all imported sites
-    const importedSites = sites.map((s: any) => ({
-      name: s.name || `SolarEdge Site ${s.id}`,
-      clientId: s.name?.startsWith('US-') ? s.name.split(' ')[0] : (s.accountId || ''),
-      state: s.location?.state || '',
-      siteId: String(s.id),
-    }));
-
-    return { newCount: freshExtraSites.length, total: sites.length, importedSites };
   };
 
   // Loading gate — wait for Neon sync before rendering
@@ -2494,7 +2336,7 @@ function App() {
                 saveContractorJobs(updated);
                 logChange('contractor_job.dispatch', 'contractor_job', contractorJob.id, contractorJob, resolveActor());
               }}
-              onQuoteSent={(quoteId, quoteNumber) => {
+              onQuoteSent={(_quoteId, quoteNumber) => {
                 const crmCustomers = loadCustomers();
                 const crmMatch = crmCustomers.find(
                   c => c.email?.toLowerCase() === selectedCustomer?.email?.toLowerCase()
@@ -2558,7 +2400,7 @@ function App() {
               setContractorJobs(updated);
               saveContractorJobs(updated);
             }}
-            onViewCustomer={(customerId) => {
+            onViewCustomer={(_customerId) => {
             }}
             onSolarEdgeSites={() => setCurrentView('solaredge')}
             solarEdgeSites={[...FL_SITES, ...(data.solarEdgeExtraSites ?? [])]}
@@ -2749,24 +2591,6 @@ function App() {
         );
     }
   };
-
-  // Add navigation items for admin
-  const navItems = [
-    { id: 'crm', label: 'Sales CRM' },
-    { id: 'customers2', label: 'Customers' },
-    { id: 'projects', label: 'New Install' },
-    { id: 'operations', label: 'Operations' },
-    { id: 'dashboard', label: 'Dashboard' },
-    { id: 'jobs', label: 'Work Orders' },
-    { id: 'customers', label: 'Legacy' },
-    { id: 'billing', label: 'Billing' },
-    { id: 'technician', label: 'Manage WORK ORDERS' },
-    { id: 'contractors', label: 'Contractors' },
-    { id: 'inventory', label: 'Inventory' },
-    { id: 'rates', label: 'Rates' },
-    { id: 'settings', label: 'Settings' },
-  ];
-
 
   return (
     <Suspense fallback={<div className="min-h-screen bg-slate-50 flex items-center justify-center"><div className="w-8 h-8 border-4 border-orange-400 border-t-transparent rounded-full animate-spin" /></div>}>

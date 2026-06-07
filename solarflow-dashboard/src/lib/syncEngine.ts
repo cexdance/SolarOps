@@ -22,7 +22,7 @@
  */
 
 import { supabase } from './supabase';
-import { markPushPending, clearPendingPush, hasPendingPush, drainOutbox, isRowPoisoned, incRowFailure, clearRowPoison } from './outbox';
+import { markPushPending, clearPendingPush, isRowPoisoned, incRowFailure, clearRowPoison } from './outbox';
 import { isAllowedCustomer } from './solarEdgeSiteFilter';
 import type { AppState, Customer, Job } from '../types';
 import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
@@ -139,9 +139,9 @@ export async function pushJob(job: Job): Promise<void> {
 function sanitizeContractorJobsPayload(jobs: unknown): unknown {
   if (!Array.isArray(jobs)) return jobs;
   return jobs.map((job: Record<string, unknown>) => {
-    if (!job?.photos || typeof job.photos !== 'object') return job;
+    if (!job?.['photos'] || typeof job['photos'] !== 'object') return job;
     const cleanPhotos: Record<string, string[]> = {};
-    for (const [cat, urls] of Object.entries(job.photos as Record<string, string[]>)) {
+    for (const [cat, urls] of Object.entries(job['photos'] as Record<string, string[]>)) {
       cleanPhotos[cat] = (urls ?? []).map((u: string) =>
         typeof u === 'string' && u.startsWith('data:') ? '' : u
       ).filter(Boolean);

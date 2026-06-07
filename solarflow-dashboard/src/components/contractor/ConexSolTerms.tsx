@@ -433,7 +433,7 @@ export default function ConexsolTerms({ onAccept, onDecline }: ConexsolTermsProp
     if (onAccept) onAccept();
   }
 
-  const styles: Record<string, React.CSSProperties> = {
+  const styles = {
     wrapper: {
       maxWidth: 660,
       margin: "0 auto",
@@ -573,7 +573,7 @@ export default function ConexsolTerms({ onAccept, onDecline }: ConexsolTermsProp
       transition: "background 0.2s",
     },
     version: { textAlign: "center", fontSize: 10, color: "#bbb", marginTop: 6 },
-  };
+  } satisfies Record<string, React.CSSProperties>;
 
   return (
     <div style={styles.wrapper}>

@@ -6,9 +6,9 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { authedFetch } from '../lib/supabase';
 import {
   X, RefreshCw, CheckSquare, Square, AlertTriangle,
-  Plus, Edit2, Trash2, Check, ChevronDown, ChevronUp, Loader2, Search,
+  Plus, Edit2, Check, ChevronDown, ChevronUp, Loader2, Search,
 } from 'lucide-react';
-import { Customer, CustomerCategory } from '../types';
+import { Customer } from '../types';
 import { isFloridaSite } from '../lib/solarEdgeSiteFilter';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -110,7 +110,6 @@ function buildDiff(sites: LiveSite[], customers: Customer[]): DiffItem[] {
     const sid = String(site.id);
     const existing = byId.get(sid);
     const liveName = siteToName(site.name);
-    const liveAddr = fmtAddress(site);
     const liveCity  = site.location.city || '';
 
     if (!existing) {
@@ -230,7 +229,6 @@ export const SolarEdgeImportModal: React.FC<Props> = ({
     if (!items.length) return null;
     const cfg = typeConfig[type];
     const allOn  = items.every(d => d.accepted);
-    const someOn = items.some(d => d.accepted);
 
     return (
       <div key={type} className={`rounded-xl border ${cfg.border} overflow-hidden`}>

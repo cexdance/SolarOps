@@ -17,7 +17,7 @@ export const PhoneLink: React.FC<PhoneLinkProps> = ({ phone, className = '', siz
   const ref = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) return undefined;
     const handler = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     };

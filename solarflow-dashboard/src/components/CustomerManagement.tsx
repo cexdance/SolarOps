@@ -10,26 +10,13 @@ import {
   FileText,
   Search,
   Plus,
-  Filter,
-  MoreVertical,
   Clock,
   User,
   MapPin,
-  DollarSign,
-  Home,
-  Sun,
   X,
-  Send,
   Save,
-  ChevronRight,
   Star,
   Edit,
-  Trash2,
-  Tag,
-  Bell,
-  CheckCircle,
-  XCircle,
-  AlertCircle,
   LayoutGrid,
   List,
   Paperclip,
@@ -816,7 +803,7 @@ export const CustomerManagement: React.FC<CustomerManagementProps> = ({ currentU
 
                   {/* Interactions */}
                   <div className="space-y-6">
-                    {customerInteractions.map((interaction, index) => (
+                    {customerInteractions.map((interaction) => (
                       <div key={interaction.id} className="relative pl-10">
                         {/* Icon */}
                         <div className={`absolute left-0 w-8 h-8 rounded-full flex items-center justify-center ${interactionConfig[interaction.type].bg}`}>

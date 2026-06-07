@@ -1,10 +1,10 @@
 // SolarFlow - Contractor Registration / Onboarding Wizard
 // Supports invite-token flow (email pre-filled & locked) and open registration
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   ArrowLeft, ArrowRight, Check, Upload, FileText,
   AlertCircle, Eye, EyeOff, Building, User, Phone,
-  Shield, ShieldCheck, CheckCircle, X, ExternalLink,
+  Shield, ShieldCheck, CheckCircle, ExternalLink,
   HardHat, Thermometer, Wind, Footprints, AlertTriangle,
 } from 'lucide-react';
 import { RegistrationState, RegistrationStep, BusinessType } from '../../types/contractor';

@@ -25,16 +25,16 @@
     "moduleDetection": "force",
     "noEmit": true,
     "jsx": "react-jsx",
-    /* Linting */
+    /* Linting - incremental strict mode enablement */
     "strict": false,
-    "noImplicitAny": false,
-    "noUnusedLocals": false,
-    "noUnusedParameters": false,
+    "noImplicitAny": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
-    "noUncheckedIndexedAccess": false,
-    "noImplicitReturns": false,
-    "noImplicitThis": false,
-    "noPropertyAccessFromIndexSignature": false,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitReturns": true,
+    "noImplicitThis": true,
+    "noPropertyAccessFromIndexSignature": true,
     "noUncheckedSideEffectImports": false
   },
   "include": [

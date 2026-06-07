@@ -69,9 +69,6 @@ function exactTime(iso: string): string {
   });
 }
 
-// URL detection regex — matches http(s)://, www., and bare domain.tld URLs
-const URL_REGEX = /(https?:\/\/[^\s<>"']+|www\.[^\s<>"']+|\b[a-zA-Z0-9.\-]+\.(com|net|org|io|co|us|app|dev|gov|edu|info|biz)(\/[^\s<>"']*)?)/g;
-
 // Combined regex for splitting: matches either @mentions, URLs, or email addresses
 const TOKEN_REGEX = /(@[\w.]+|https?:\/\/[^\s<>"']+|www\.[^\s<>"']+|\b[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}\b)/g;
 

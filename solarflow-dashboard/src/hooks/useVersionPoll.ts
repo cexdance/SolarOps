@@ -52,7 +52,7 @@ export function useVersionPoll(): VersionPollResult {
 
   useEffect(() => {
     mountedRef.current = true;
-    if (BUILD_ID === 'dev') return;
+    if (BUILD_ID === 'dev') return undefined;
 
     if (!initialCheckDone.current) {
       initialCheckDone.current = true;

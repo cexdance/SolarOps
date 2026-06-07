@@ -52,7 +52,7 @@ export const MentionTextarea: React.FC<Props> = ({
 
   // Close on outside click
   useEffect(() => {
-    if (!open) return;
+    if (!open) return undefined;
     const handler = () => setOpen(false);
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);

@@ -147,7 +147,7 @@ export const AddressAutocomplete: React.FC<Props> = ({
 
   useEffect(() => {
     const apiKey = sessionStorage.getItem(GMAPS_KEY_STORAGE)
-      || (import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string)
+      || (import.meta.env['VITE_GOOGLE_MAPS_API_KEY'] as string)
       || '';
     if (!apiKey) return; // no key — plain input mode
 
@@ -168,7 +168,7 @@ export const AddressAutocomplete: React.FC<Props> = ({
     onChange(e.target.value);
   };
 
-  const hasKey = !!(sessionStorage.getItem(GMAPS_KEY_STORAGE) || (import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string));
+  const hasKey = !!(sessionStorage.getItem(GMAPS_KEY_STORAGE) || (import.meta.env['VITE_GOOGLE_MAPS_API_KEY'] as string));
 
   return (
     <div className="relative">

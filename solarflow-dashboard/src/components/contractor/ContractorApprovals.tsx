@@ -6,7 +6,7 @@ import {
   Plus, Trash2, Pencil, Save, Wrench, ReceiptText,
   LayoutGrid, List as ListIcon, Calendar,
 } from 'lucide-react';
-import { Contractor, ContractorStatus, ContractorJob, ContractorExpense } from '../../types/contractor';
+import { Contractor, ContractorStatus, ContractorJob } from '../../types/contractor';
 import { ContractorInvite } from './ContractorInvite';
 import { loadXpData, getLevelInfo } from '../../lib/contractorGamification';
 
@@ -52,7 +52,7 @@ export const ContractorApprovals: React.FC<ContractorApprovalsProps> = ({
   const [rejectReason, setRejectReason]     = useState('');
   const [earningsPeriod, setEarningsPeriod] = useState<'week' | 'curr_month' | 'prev_month' | 'ytd'>('curr_month');
   const [selectedWO, setSelectedWO]         = useState<ContractorJob | null>(null);
-  const [showExpenseModal, setShowExpenseModal] = useState(false);
+  const [, setShowExpenseModal] = useState(false);
   const [woViewMode, setWoViewMode] = useState<'list' | 'kanban' | 'calendar'>('list');
 
   const contractorWOs = contractorJobs.filter(j => j.contractorId === selected?.id);

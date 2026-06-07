@@ -23,7 +23,7 @@ export const MonitoringColumnPicker: React.FC<Props> = ({
 
   // Close on outside click
   useEffect(() => {
-    if (!open) return;
+    if (!open) return undefined;
     const handler = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     };

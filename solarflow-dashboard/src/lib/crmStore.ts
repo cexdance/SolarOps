@@ -1,7 +1,7 @@
 // SolarFlow CRM v2 - Data Store
 // Gamified Sales CRM for Solar Outreach Team
 
-import { Lead, LeadActivity, UserStats, Badge, XP_ACTIONS, LEVEL_THRESHOLDS, LeadSource, LeadStatus, LeadPriority } from '../types';
+import { Lead, LeadActivity, UserStats, Badge, XP_ACTIONS, LEVEL_THRESHOLDS, LeadSource, LeadStatus } from '../types';
 import { dbSet } from './db';
 
 const STORAGE_KEY = 'solarflow_crm_data';
@@ -72,16 +72,7 @@ export const generateRandomLead = (index: number): Lead => {
   };
 };
 
-const generateMockLeads = (count: number): Lead[] => {
-  const leads: Lead[] = [];
-  for (let i = 1; i <= count; i++) {
-    leads.push(generateRandomLead(i));
-  }
-  // Sort by score descending
-  return leads.sort((a, b) => b.score - a.score);
-};
-
-const generateMockStats = (userId: string, userName: string): UserStats => {
+const generateMockStats = (userId: string, _userName: string): UserStats => {
   const baseXP = Math.floor(Math.random() * 5000);
   const level = LEVEL_THRESHOLDS.findIndex(t => t.xp > baseXP) || 1;
 

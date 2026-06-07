@@ -117,10 +117,6 @@ export const RateManagement: React.FC<RateManagementProps> = ({ rates, onSaveRat
     onSaveRates(updated);
   };
 
-  const formatCurrency = (value: number | undefined) => {
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value || 0);
-  };
-
   return (
     <div className="p-4 md:p-6 pb-24 md:pb-6">
       {/* Header */}

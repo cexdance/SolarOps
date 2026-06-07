@@ -1,6 +1,6 @@
 // SolarFlow - Contractor Dashboard
 // Single list view with a status filter. Tap a work order to open its detail.
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Wrench, MapPin, Clock, LogOut, X, ChevronRight, Filter,
 } from 'lucide-react';

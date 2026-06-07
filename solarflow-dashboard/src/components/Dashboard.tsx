@@ -2,9 +2,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   Wrench, Users, AlertTriangle, CheckCircle, Clock, TrendingUp, TrendingDown,
-  Calendar, AtSign, FileText, Receipt, CreditCard, Pencil, Plus, Trash2,
-  X, ChevronRight, ExternalLink, Bell, Wifi, WifiOff, RotateCcw, DollarSign,
-  Package,
+  FileText, Receipt, CreditCard, Pencil, Plus, Trash2,
+  X, ChevronRight, ExternalLink, Wifi, WifiOff, RotateCcw,
 } from 'lucide-react';
 import { Job, Customer, User, AppNotification, RMAEntry, RMAStatus } from '../types';
 import { canSeeFinancials } from '../lib/access';
@@ -138,7 +137,7 @@ interface DashboardProps {
 
 export const Dashboard: React.FC<DashboardProps> = ({
   jobs, customers, users, currentUser, onViewChange, onViewCustomer, onJobClick, onUpdateJob, isMobile,
-  notifications = [], onMarkNotificationRead, isConnected = true,
+  notifications = [], isConnected = true,
 }) => {
   const uid = currentUser?.id ?? 'default';
 
@@ -173,7 +172,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
   // Close metric picker on outside click
   useEffect(() => {
-    if (editingCard === null) return;
+    if (editingCard === null) return undefined;
     const handler = (e: MouseEvent) => {
       if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) setEditingCard(null);
     };
@@ -238,11 +237,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
   };
 
   // Static data
-  const today      = new Date().toISOString().split('T')[0];
-  const todayJobs  = jobs.filter(j => j.scheduledDate === today);
   const pendingPaymentJobs = jobs.filter(j => j.status === 'completed' || j.status === 'invoiced');
   const unbilledJobs = jobs.filter(j => j.status === 'completed');
-  const technicians  = users.filter(u => u.role === 'technician');
 
   const jobsByStatus = {
     new:         jobs.filter(j => j.status === 'new').length,
@@ -255,18 +251,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
   const getCustomer    = (id: string) => customers.find(c => c.id === id);
   const getTechnician  = (id: string) => users.find(u => u.id === id);
-
-  const myMentions = currentUser
-    ? customers.flatMap(c =>
-        (c.activityHistory || [])
-          .filter(a =>
-            a.type === 'note_added' &&
-            (a.mentions?.includes(currentUser.id) ||
-             a.description.toLowerCase().includes(`@${currentUser.name.toLowerCase()}`))
-          )
-          .map(a => ({ activity: a, customer: c }))
-      ).sort((a, b) => new Date(b.activity.timestamp).getTime() - new Date(a.activity.timestamp).getTime())
-    : [];
 
   const metrics = computeMetrics(jobs, config.period);
 

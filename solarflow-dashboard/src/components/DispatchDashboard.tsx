@@ -679,7 +679,7 @@ const LEAD_PRIORITY_DOT: Record<string, string> = {
 };
 
 const SingleLeadWidget: React.FC<{ leadId: string }> = ({ leadId }) => {
-  const [crmData, setCrmData] = useState<CRMData>(() => loadCRMData());
+  const [crmData] = useState<CRMData>(() => loadCRMData());
   const lead: Lead | undefined = crmData.leads.find(l => l.id === leadId);
 
   if (!lead) return (
@@ -1475,7 +1475,7 @@ const WidgetSlot: React.FC<{
   onDrop: (index: number) => void;
   onViewCustomer: (id: string) => void;
   onViewChange: (view: string, id?: string) => void;
-}> = ({ config, index, customers, jobs, contractors, users, onOpenAdd, onRemove, editMode, currentUserId, isDragOver, onDragStart, onDragOver, onDragLeave, onDrop, onViewCustomer, onViewChange }) => {
+}> = ({ config, index, customers, jobs, contractors, users, onOpenAdd, onRemove, currentUserId, isDragOver, onDragStart, onDragOver, onDragLeave, onDrop, onViewCustomer, onViewChange }) => {
   if (!config) {
     return (
       <div

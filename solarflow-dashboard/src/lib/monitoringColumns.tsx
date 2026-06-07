@@ -95,7 +95,7 @@ const AlertCell: React.FC<{
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) return undefined;
     const handler = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     };
@@ -150,15 +150,6 @@ const AlertCell: React.FC<{
       )}
     </div>
   );
-};
-
-const jobProfit = (job: Job): number => {
-  const revenue = job.totalAmount || 0;
-  const laborRate = job.contractorPayRate ?? job.laborRate;
-  const laborCost = job.laborHours * laborRate;
-  const partsCost = job.partsCost || 0;
-  const seComp = job.seCompensationClaimed ? (job.seCompensationAmount || 0) : 0;
-  return revenue - laborCost - partsCost + seComp;
 };
 
 // ── The registry ─────────────────────────────────────────────────────────────
@@ -365,7 +356,7 @@ export const COLUMN_REGISTRY: MonitoringColumnDef[] = [
     sortKey: null,
     defaultVisible: true,
     defaultOrder: 11,
-    render: ({ site, siteJobs, isExpanded, onToggleExpand, onViewChange }) => {
+    render: ({ siteJobs, onToggleExpand, onViewChange }) => {
       if (siteJobs.length === 0) {
         return (
           <button onClick={() => onViewChange('jobs')} className="inline-flex items-center gap-1 text-xs text-slate-400 hover:text-orange-500 transition-colors cursor-pointer" title="Create work order">

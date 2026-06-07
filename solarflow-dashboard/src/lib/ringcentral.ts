@@ -8,7 +8,7 @@ export const RC_ENV_KEY       = 'solarops_rc_env';
 export type RCEnv = 'production' | 'sandbox';
 
 export function getRCClientId(): string {
-  return (import.meta.env.VITE_RC_CLIENT_ID as string) || 'enabled';
+  return (import.meta.env['VITE_RC_CLIENT_ID'] as string) || 'enabled';
 }
 
 /** Dial a number via the RC desktop/mobile app.

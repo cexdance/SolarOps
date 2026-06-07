@@ -2,7 +2,7 @@
 import React, { useState, useMemo } from 'react';
 import {
   ChevronLeft, ChevronRight, Plus, CheckCircle2, Circle,
-  Calendar, FileText, User, Clock, Wrench, Truck,
+  Calendar, FileText, User, Wrench, Truck,
   ClipboardList, Users, X, Zap, TrendingUp, HardHat,
 } from 'lucide-react';
 import { ContractorJob } from '../types/contractor';
@@ -509,7 +509,7 @@ const ReportList: React.FC<{
   linkedJobIds: string[];
   onUnlinkJob: (id: string) => void;
   onViewReport: (job: ContractorJob) => void;
-}> = ({ entries, jobs, linkedJobIds, onUnlinkJob, onViewReport }) => {
+}> = ({ entries, jobs, onUnlinkJob, onViewReport }) => {
   const allItems = [
     ...entries.map(e => ({ key: e.id, date: e.date, title: e.title, type: 'entry' as const, entry: e })),
     ...jobs.map(j => ({ key: j.id, date: j.scheduledDate?.slice(0, 10) ?? '', title: j.serviceType, type: 'job' as const, job: j })),

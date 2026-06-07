@@ -5,7 +5,7 @@ import {
   Send, Clock, User, ChevronDown, ChevronUp, Save, Zap,
   AlertTriangle, Sun, Calendar, ExternalLink, Wrench,
   TrendingUp, TrendingDown, ClipboardList, MapPin,
-  CheckCircle, ChevronRight, Plus,
+  CheckCircle, Plus,
 } from 'lucide-react';
 import {
   SiteProfile, SiteNote, SiteAttachment, SiteClientStatus,
@@ -13,7 +13,7 @@ import {
   deleteNote, updateClientStatus, fileToAttachment, formatBytes,
 } from '../lib/siteProfileStore';
 import { SolarEdgeSite } from '../lib/solarEdgeSites';
-import { Job, Customer, WOStatus } from '../types';
+import { Job, Customer } from '../types';
 import { WorkOrderPanel } from './WorkOrderPanel';
 import { Contractor, ContractorJob } from '../types/contractor';
 
@@ -377,7 +377,6 @@ export const SiteProfilePanel: React.FC<Props> = ({
   };
 
   const isSystemDown = site.alerts > 0 && parseInt(site.highestImpact) >= 4;
-  const cfg = profile.clientStatus ? CLIENT_STATUS_CONFIG[profile.clientStatus] : null;
 
   const TABS: { id: Tab; label: string; icon: React.ElementType; badge?: number }[] = [
     { id: 'overview',    label: 'Overview',     icon: Sun },
@@ -774,7 +773,7 @@ export const SiteProfilePanel: React.FC<Props> = ({
           clientPaidJobCount={closedJobs.length}
           onClose={() => setWoOpen(false)}
           onSave={handleWOSave}
-          onUpdateSiteStatus={(id, status) => handleStatusChange(status)}
+          onUpdateSiteStatus={(_id, status) => handleStatusChange(status)}
           onDispatch={onDispatchContractorJob}
           contractors={contractors}
           currentUserName={currentUserName}

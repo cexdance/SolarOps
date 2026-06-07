@@ -2,9 +2,7 @@
 import React, { useState, useRef } from 'react';
 import {
   Settings as SettingsIcon,
-  User,
   Bell,
-  Link,
   Palette,
   HelpCircle,
   LogOut,
@@ -52,7 +50,6 @@ export const Settings: React.FC<SettingsProps> = ({
   onLogout,
   onUpdateAvatar,
   onNavigateToEntity,
-  isMobile,
 }) => {
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const [avatarUploading, setAvatarUploading] = useState(false);
@@ -122,7 +119,7 @@ export const Settings: React.FC<SettingsProps> = ({
     return { callsToday, cooldownLabel, dailyLimitHit, blocked };
   };
 
-  const envGmapsKey = (import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string) || '';
+  const envGmapsKey = (import.meta.env['VITE_GOOGLE_MAPS_API_KEY'] as string) || '';
   const [gmapsKeyInput, setGmapsKeyInput] = useState(sessionStorage.getItem(GMAPS_KEY_STORAGE) || '');
   const [showGmapsKeyInput, setShowGmapsKeyInput] = useState(!sessionStorage.getItem(GMAPS_KEY_STORAGE) && !envGmapsKey);
 

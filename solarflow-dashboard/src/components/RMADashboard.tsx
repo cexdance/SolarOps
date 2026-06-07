@@ -1,5 +1,5 @@
 // SolarOps — RMA Compensation Tracker (standalone page)
-import React, { useState, useMemo } from 'react';
+import { useState } from 'react';
 import {
   RotateCcw, Users, CheckCircle, Plus, Package, LayoutGrid, List, Calendar, ChevronLeft, ChevronRight,
   AlertTriangle, Link2,

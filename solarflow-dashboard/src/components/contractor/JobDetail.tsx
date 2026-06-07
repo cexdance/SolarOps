@@ -2,14 +2,14 @@
 // Flow: Pre-Start → [Before Photo Modal] → Active Call → [After Photo Modal] → Completed
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import {
-  ArrowLeft, MapPin, Phone, Clock, AlertTriangle, AlertCircle,
-  Play, Pause, Camera, CheckCircle, Package, FileText, Send, X, Plus,
-  Trash2, Wrench, Zap, Thermometer, User, Mail, DollarSign,
-  Star, MessageSquare, Navigation, ShieldAlert, Image as ImageIcon, Check,
+  ArrowLeft, MapPin, Phone, AlertTriangle,
+  Play, Pause, Camera, CheckCircle, FileText, X, Plus,
+  Trash2, Wrench, Zap, DollarSign,
+  Star, Navigation, ShieldAlert, Image as ImageIcon, Check,
   Cloud, CloudRain, Sun, Wind, Sparkles, ChevronDown, ChevronUp,
   HardHat,
 } from 'lucide-react';
-import { ContractorJob, JobStatusContractor, ServiceStatus, PhotoCategory, JobPart } from '../../types/contractor';
+import { ContractorJob, ServiceStatus, PhotoCategory, JobPart } from '../../types/contractor';
 import {
   addJobXp, calcJobXpBreakdown, getLevelInfo, getNextLevel,
   getLevelProgress, loadXpData, AddXpResult, addBonusXp,
@@ -74,7 +74,7 @@ const SERVICE_STATUS_OPTIONS: { id: ServiceStatus; label: string; color: string 
 const useElapsedTime = (startedAt?: string, pausedMs = 0, isPaused = false, pauseStartTime?: number) => {
   const [elapsed, setElapsed] = useState('0:00');
   useEffect(() => {
-    if (!startedAt) return;
+    if (!startedAt) return undefined;
     const tick = () => {
       const extra = isPaused && pauseStartTime ? Date.now() - pauseStartTime : 0;
       const secs = Math.max(0, Math.floor((Date.now() - new Date(startedAt).getTime() - pausedMs - extra) / 1000));
@@ -84,7 +84,7 @@ const useElapsedTime = (startedAt?: string, pausedMs = 0, isPaused = false, paus
       setElapsed(h > 0 ? `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}` : `${m}:${String(s).padStart(2,'0')}`);
     };
     tick();
-    if (isPaused) return;
+    if (isPaused) return undefined;
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
   }, [startedAt, pausedMs, isPaused, pauseStartTime]);
@@ -193,7 +193,6 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
   const [phase, setPhase] = useState<CallPhase>(
     isCompleted ? 'completed' : (job.status === 'in_progress' || job.status === 'documentation') ? 'active' : 'pre_start'
   );
-  const [showBeforeModal, setShowBeforeModal] = useState(false);
   const [showAfterModal, setShowAfterModal] = useState(false);
 
   // Photos — initial shape always exposes every PhotoCategory key so callers can safely
@@ -260,9 +259,6 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
 
   // Active tab
   const [activeTab, setActiveTab] = useState<ActiveTab>('photos');
-
-  // Invoice sent state (simulated)
-  const [invoiceSent, setInvoiceSent] = useState(job.invoiceStatus === 'sent');
 
   // Contractor invoice number
   const [contractorInvoiceNumber, setContractorInvoiceNumber] = useState(job.contractorInvoiceNumber ?? '');
@@ -497,12 +493,6 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
     const updated: ContractorJob = { ...job, status: 'in_progress', startedAt: now, photos };
     onUpdateJob(updated);
     setPhase('active');
-  };
-
-  const handleBeforePhotoCaptured = async (dataUrl: string) => {
-    setShowBeforeModal(false);
-    // Route through addPhoto so it gets uploaded to Storage
-    await addPhoto('before', dataUrl);
   };
 
   // ── Complete Call: finish immediately, after photo optional ────────────────

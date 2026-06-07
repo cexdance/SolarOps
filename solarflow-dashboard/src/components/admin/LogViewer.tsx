@@ -41,12 +41,12 @@ function payloadSummary(entry: ChangeEntry): string {
   if (!p) return '—';
 
   // Photo events
-  if (entry.opType === 'photo.upload_start')   return `${p.name ?? '?'} · ${p.type ?? '?'} · ${Math.round((p.size as number ?? 0) / 1024)}KB`;
-  if (entry.opType === 'photo.upload_success') return `✓ ${String(p.storageUrl ?? '').split('/').pop()?.split('?')[0] ?? 'uploaded'}`;
-  if (entry.opType === 'photo.upload_fail')    return `✗ ${p.error ?? 'unknown error'}`;
-  if (entry.opType === 'avatar.upload_start')  return `${p.name ?? '?'} · ${Math.round((p.size as number ?? 0) / 1024)}KB`;
+  if (entry.opType === 'photo.upload_start')   return `${p['name'] ?? '?'} · ${p['type'] ?? '?'} · ${Math.round((p['size'] as number ?? 0) / 1024)}KB`;
+  if (entry.opType === 'photo.upload_success') return `✓ ${String(p['storageUrl'] ?? '').split('/').pop()?.split('?')[0] ?? 'uploaded'}`;
+  if (entry.opType === 'photo.upload_fail')    return `✗ ${p['error'] ?? 'unknown error'}`;
+  if (entry.opType === 'avatar.upload_start')  return `${p['name'] ?? '?'} · ${Math.round((p['size'] as number ?? 0) / 1024)}KB`;
   if (entry.opType === 'avatar.upload_success') return `✓ avatar updated`;
-  if (entry.opType === 'avatar.upload_fail')   return `✗ ${p.error ?? 'unknown error'}`;
+  if (entry.opType === 'avatar.upload_fail')   return `✗ ${p['error'] ?? 'unknown error'}`;
 
   // Generic — show first meaningful key
   const keys = Object.keys(p).filter(k => !k.startsWith('_'));

@@ -7,7 +7,6 @@ import {
   Clock,
   Search,
   Send,
-  ChevronRight,
   LayoutGrid,
   List as ListIcon,
   Calendar,
@@ -32,7 +31,6 @@ export const Billing: React.FC<BillingProps> = ({
   customers,
   users,
   onUpdateJob,
-  isMobile,
   currentUserName,
 }) => {
   const [filter, setFilter] = useState<'all' | 'unbilled' | 'invoiced' | 'paid'>('all');

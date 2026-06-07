@@ -2,7 +2,7 @@
 import React, { useState, useMemo } from 'react';
 import {
   Plus, ChevronLeft, ChevronDown, ChevronUp, CheckCircle2, Circle,
-  Clock, XCircle, AlertTriangle, Search, Building2, MapPin,
+  Clock, XCircle, Search, Building2, MapPin,
   Phone, FileText, ClipboardCheck, Zap,
 } from 'lucide-react';
 import { Customer } from '../types';

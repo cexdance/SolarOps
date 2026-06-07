@@ -6,7 +6,6 @@ import {
   Wrench,
   Users,
   Receipt,
-  Phone,
   Settings,
   Menu,
   X,
@@ -33,7 +32,6 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import { User as UserType, AppNotification, Customer, Job } from '../types';
-import { canSeeFinancials } from '../lib/access';
 
 interface LayoutProps {
   children: React.ReactNode;

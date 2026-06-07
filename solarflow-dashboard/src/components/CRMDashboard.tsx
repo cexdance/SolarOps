@@ -5,15 +5,12 @@ import React, { useState, useEffect } from 'react';
 import {
   Phone,
   Mail,
-  User,
-  Clock,
   Star,
   Trophy,
   Flame,
   Zap,
   ArrowRight,
   Plus,
-  Filter,
   Search,
   ChevronRight,
   X,
@@ -21,21 +18,14 @@ import {
   Calendar,
   CheckCircle,
   XCircle,
-  AlertCircle,
-  Building,
-  Home,
   TrendingUp,
-  Users,
   Target,
-  Award,
-  Activity,
 } from 'lucide-react';
 import {
   Lead,
   LeadStatus,
   LeadSource,
-  LeadActivity,
-  UserStats,
+  Badge,
   XP_ACTIONS,
   LEVEL_THRESHOLDS,
   LeadPriority,
@@ -44,7 +34,6 @@ import {
   loadCRMData,
   saveCRMData,
   calculateLeadScore,
-  sortLeadsByPriority,
   getNextLead,
   updateLeadStatus,
   logActivity,
@@ -54,7 +43,7 @@ import {
   CRMData,
   generateRandomLead,
 } from '../lib/crmStore';
-import { rcClickToCall, rcSendSMS, getRCClientId } from '../lib/ringcentral';
+import { rcClickToCall, getRCClientId } from '../lib/ringcentral';
 import * as XLSX from 'xlsx';
 
 // ─── RMA Extractor ────────────────────────────────────────────────────────────
@@ -108,8 +97,8 @@ class RMAExtractor {
     if (!caseData) return '';
     const row = caseData.info;
     const parts = caseData.parts;
-    const partType = this.getPartType(parts[0]?.family);
-    const partsRows = parts.map((p, i) => `| ${i + 1} | ${this.getLastFour(p.oldSN)} | ${this.getLastFour(p.newSN)} |`).join('\n');
+    const partType = this.getPartType(parts[0]?.['family']);
+    const partsRows = parts.map((p, i) => `| ${i + 1} | ${this.getLastFour(p['oldSN'])} | ${this.getLastFour(p['newSN'])} |`).join('\n');
 
     return `Client: ${this.getValue(row, 'Site Main Contact Name')}  POWERCARE: ${caseNum}
 
@@ -292,7 +281,7 @@ interface CRMDashboardProps {
   onSwitchUser?: (userId: string) => void;
 }
 
-export const CRMDashboard: React.FC<CRMDashboardProps> = ({ currentUserId, onSwitchUser }) => {
+export const CRMDashboard: React.FC<CRMDashboardProps> = ({ currentUserId }) => {
   const [data, setData] = useState<CRMData>(loadCRMData);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [view, setView] = useState<'queue' | 'pipeline' | 'leaderboard'>('queue');
@@ -311,7 +300,7 @@ export const CRMDashboard: React.FC<CRMDashboardProps> = ({ currentUserId, onSwi
     appointmentsSet: 0,
     dealsClosed: 0,
     revenueGenerated: 0,
-    badges: [],
+    badges: [] as Badge[],
     weeklyCalls: 0,
     weeklyAppointments: 0,
     weeklyXP: 0,
@@ -1078,14 +1067,14 @@ const AddLeadModal: React.FC<{
     const ts = new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
     setFormData(f => ({
       ...f,
-      firstName: c.leadData.firstName || f.firstName,
-      lastName: c.leadData.lastName || f.lastName,
-      phone: c.leadData.phone || f.phone,
-      email: c.leadData.email || f.email,
-      address: c.leadData.address || f.address,
-      city: c.leadData.city || f.city,
-      state: c.leadData.state || f.state,
-      zip: c.leadData.zip || f.zip,
+      firstName: c.leadData['firstName'] || f.firstName,
+      lastName: c.leadData['lastName'] || f.lastName,
+      phone: c.leadData['phone'] || f.phone,
+      email: c.leadData['email'] || f.email,
+      address: c.leadData['address'] || f.address,
+      city: c.leadData['city'] || f.city,
+      state: c.leadData['state'] || f.state,
+      zip: c.leadData['zip'] || f.zip,
       source: 'solaredge' as LeadSource,
       notes: `[Imported from RMA Excel — ${ts}]\n\n${c.report}`,
     }));
@@ -1301,7 +1290,7 @@ const AddLeadModal: React.FC<{
                       >
                         {excelCases.map((c, i) => (
                           <option key={c.caseNum} value={i}>
-                            Case {c.caseNum} — {c.leadData.firstName} {c.leadData.lastName}
+                            Case {c.caseNum} — {c.leadData['firstName']} {c.leadData['lastName']}
                           </option>
                         ))}
                       </select>
@@ -1315,10 +1304,10 @@ const AddLeadModal: React.FC<{
                       <div className="bg-slate-50 rounded-xl border border-slate-200 p-4 space-y-2 text-sm">
                         <p className="font-semibold text-slate-800">Case {c.caseNum}</p>
                         <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-slate-600">
-                          <span><strong>Name:</strong> {c.leadData.firstName} {c.leadData.lastName}</span>
-                          <span><strong>Phone:</strong> {c.leadData.phone || '—'}</span>
-                          <span><strong>Email:</strong> {c.leadData.email || '—'}</span>
-                          <span><strong>Zip:</strong> {c.leadData.zip || '—'}</span>
+                          <span><strong>Name:</strong> {c.leadData['firstName']} {c.leadData['lastName']}</span>
+                          <span><strong>Phone:</strong> {c.leadData['phone'] || '—'}</span>
+                          <span><strong>Email:</strong> {c.leadData['email'] || '—'}</span>
+                          <span><strong>Zip:</strong> {c.leadData['zip'] || '—'}</span>
                         </div>
                         <div className="mt-3">
                           <p className="text-xs font-medium text-slate-500 mb-1">Customer Story Preview:</p>

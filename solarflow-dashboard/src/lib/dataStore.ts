@@ -6,7 +6,7 @@
 //   • New seed records from a version bump are ADDED
 //   • Edited seed records preserve the user's edits
 // ─────────────────────────────────────────────────────────────────────────────
-import { AppState, Customer, Job, User, ClientStatus, CustomerCategory, SystemType } from '../types';
+import { AppState, Customer, ClientStatus, CustomerCategory, SystemType } from '../types';
 import { mergedCustomerData } from './mergedCustomers';
 import { dbSet } from './db';
 import { authedFetch } from './supabase';
@@ -139,8 +139,8 @@ function applyExclusionFilter(customers: Customer[]): { customers: Customer[]; r
   return { customers: kept, removed };
 }
 
-// Keep old flag constant so the flag value in localStorage is not re-used
-const CLEANUP_FLAG    = 'solarops_ga_delete_cleanup_v1';    // legacy — no longer checked
+// Reserved (do not reuse) legacy localStorage key: 'solarops_ga_delete_cleanup_v1'
+// It is no longer checked; documented here so the key is not repurposed.
 
 // ── One-time enrichment: US-xxxxx → clientId, solarEdgeSiteId → O&M ─────────
 const ENRICH_FLAG = 'solarops_us_id_om_enrich_v1';
@@ -272,7 +272,7 @@ export const loadData = (): AppState => {
 
       const defaults       = generateDefaultState();
       const seConfig       = (state.solarEdgeConfig || {}) as Record<string, any>;
-      const apiKey         = (seConfig.apiKey as string | undefined)?.trim() ?? '';
+      const apiKey         = (seConfig['apiKey'] as string | undefined)?.trim() ?? '';
 
       // Ensure customers list is populated, filter out deleted records
       const deletedIds = getDeletedCustomerIds();
@@ -323,11 +323,11 @@ export const loadData = (): AppState => {
         solarEdgeExtraSites: Array.isArray(state.solarEdgeExtraSites) ? state.solarEdgeExtraSites : [],
         solarEdgeConfig: {
           apiKey,
-          lastSync:        seConfig.lastSync,
-          siteCount:       seConfig.siteCount,
-          nextSyncAllowed: seConfig.nextSyncAllowed,
-          dailyCallCount:  seConfig.dailyCallCount,
-          dailyCallDate:   seConfig.dailyCallDate,
+          lastSync:        seConfig['lastSync'],
+          siteCount:       seConfig['siteCount'],
+          nextSyncAllowed: seConfig['nextSyncAllowed'],
+          dailyCallCount:  seConfig['dailyCallCount'],
+          dailyCallDate:   seConfig['dailyCallDate'],
         },
       };
     }

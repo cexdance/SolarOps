@@ -729,7 +729,7 @@ export const getUnreadCount = (contractorId: string): number => {
 export const createWorkOrderNotification = (
   contractorId: string,
   job: ContractorJob,
-  assignedBy: string = 'Admin'
+  _assignedBy: string = 'Admin'
 ): ContractorNotification => {
   return addNotification({
     contractorId,

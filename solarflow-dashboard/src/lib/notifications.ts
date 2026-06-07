@@ -10,16 +10,16 @@ import type { AppNotification } from '../types';
 
 function rowToNotification(row: Record<string, unknown>): AppNotification {
   return {
-    id: row.id as string,
-    userId: row.user_id as string,
-    type: row.type as AppNotification['type'],
-    title: row.title as string,
-    message: row.message as string,
-    relatedJobId: row.related_job_id as string | undefined,
-    relatedContractorId: row.related_contractor_id as string | undefined,
-    relatedCustomerId: row.related_customer_id as string | undefined,
-    read: row.read as boolean,
-    createdAt: row.created_at as string,
+    id: row['id'] as string,
+    userId: row['user_id'] as string,
+    type: row['type'] as AppNotification['type'],
+    title: row['title'] as string,
+    message: row['message'] as string,
+    relatedJobId: row['related_job_id'] as string | undefined,
+    relatedContractorId: row['related_contractor_id'] as string | undefined,
+    relatedCustomerId: row['related_customer_id'] as string | undefined,
+    read: row['read'] as boolean,
+    createdAt: row['created_at'] as string,
   };
 }
 

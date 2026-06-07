@@ -1,5 +1,5 @@
 // SolarFlow MVP - Customers Component (List View with Split Panel)
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { authedFetch } from '../lib/supabase';
 import {
   Plus,
@@ -25,7 +25,6 @@ import {
   GripVertical,
   ChevronDown,
   ChevronUp,
-  Filter,
   Trash2,
   GitMerge,
   ArrowRight,
@@ -40,7 +39,6 @@ import {
   DollarSign,
   Send,
   ExternalLink,
-  TrendingUp,
   Leaf,
   FileBarChart,
   Eye,
@@ -58,8 +56,6 @@ import {
 import * as _recharts from 'recharts';
 const { ComposedChart, Bar, Line, XAxis, YAxis, Tooltip: RechartsTooltip, ResponsiveContainer, CartesianGrid, Legend } = _recharts as any;
 import { Customer, CustomerFile, Job, ClientStatus, Activity, User, CustomerCategory, SystemType, SolarEdgeAlert } from '../types';
-import { ServiceRate } from '../types/contractor';
-import { loadServiceRates } from '../lib/contractorStore';
 import { loadAlerts } from '../lib/operationsStore';
 import { importTrelloCard, TrelloImportResult, fetchTrelloCard, extractContactInfo } from '../lib/trelloImporter';
 import { FL_SITES, SolarEdgeSite } from '../lib/solarEdgeSites';
@@ -68,7 +64,7 @@ import { AddressLink } from './AddressLink';
 import { WorkOrderPanel } from './WorkOrderPanel';
 import { PhoneLink } from './PhoneLink';
 import { ActivityFeed } from './ui/ActivityFeed';
-import { uploadCustomerFiles, uploadCustomerFilesPartial, StoredCustomerFile, CustomerFileUpload } from '../lib/customerFileStorage';
+import { uploadCustomerFilesPartial, StoredCustomerFile, CustomerFileUpload } from '../lib/customerFileStorage';
 import { fireMentionNotifications, parseMentionEmails } from './ui/MentionTextarea';
 import { toast } from 'sonner';
 
@@ -200,9 +196,6 @@ const ReferralCombobox: React.FC<{
   );
 };
 
-// Load live service rates from store (same data as Service Rates page)
-const liveServiceRates: ServiceRate[] = loadServiceRates().filter(r => r.active);
-
 interface CustomersProps {
   customers: Customer[];
   jobs: Job[];
@@ -244,7 +237,6 @@ export const Customers: React.FC<CustomersProps> = ({
   onSolarEdgeSites,
   solarEdgeSites = [],
   solarEdgeApiKey,
-  isMobile,
   initialCustomerId,
   selectCustomerSeq,
 }) => {
@@ -507,7 +499,7 @@ export const Customers: React.FC<CustomersProps> = ({
     customers.filter(c => !grouped2.has(c.id) && c.address?.trim()).forEach(c => {
       const key = norm(c.address); if (key.length > 5) { const g = byAddr.get(key) || []; g.push(c); byAddr.set(key, g); }
     });
-    byAddr.forEach((recs, addr) => {
+    byAddr.forEach((recs) => {
       if (recs.length > 1) groups.push({ signal: 'address', label: `${recs[0].address}`, records: [...recs].sort((a,b) => scored(b)-scored(a)) });
     });
 
@@ -1521,10 +1513,8 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
   // NLP-crafted greeting generator with timeframe and system state
   const buildGreeting = (kWh: number, savings: number, uptime: number) => {
     const firstName = customer.name?.split(' ')[0] || customer.name;
-    const pLabel = graphPeriod === 'week' ? 'last 7 days' : graphPeriod === 'month' ? 'past 30 days' : graphPeriod === 'quarter' ? 'last 3 months' : 'past year';
     const kwFmt = kWh >= 1000 ? `${(kWh / 1000).toFixed(1)} MWh` : `${Math.round(kWh).toLocaleString('en-US')} kWh`;
     const savFmt = `$${Math.round(savings).toLocaleString('en-US')}`;
-    const systemState = uptime >= 95 ? 'operating at peak efficiency' : uptime >= 85 ? 'performing well' : 'requiring attention';
     return `Dear ${firstName},\n\nWe're delighted to share your solar system performance report for the last 3 months. Your system is running at peak efficiency with ${uptime.toFixed(0)}% uptime, and over this period it generated ${kwFmt} of clean energy, delivering an estimated ${savFmt} in utility savings directly back to you.\n\nAnd whenever a question comes up, whether it is about a number on this report or anything else about your system, our team is genuinely glad to hear from you. Reach out any time.`;
   };
 
@@ -1533,11 +1523,6 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
     setPreviewTrackingId(tid);
 
     // Calculate uptime: percentage of days with production in the period
-    let totalDays = 30;
-    if (graphPeriod === 'week') totalDays = 7;
-    else if (graphPeriod === 'quarter') totalDays = 90;
-    else if (graphPeriod === 'year') totalDays = 365;
-
     const daysWithProduction = energyData.filter(d => d.kWh > 0).length;
     const uptime = energyData.length > 0 ? (daysWithProduction / energyData.length) * 100 : 100;
 
@@ -1600,7 +1585,6 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
     const svgGauge    = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 12L8 8"/><circle cx="12" cy="12" r="2"/></svg>`;
     const svgLeaf     = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10z"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/></svg>`;
     const svgStar     = `<svg width="20" height="20" viewBox="0 0 24 24" fill="#f59e0b" stroke="#f59e0b" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`;
-    const svgCalendar = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`;
     const svgCar      = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 16H9m10 0h3v-3.15a1 1 0 0 0-.84-.99L16 11l-2.7-3.6a1 1 0 0 0-.8-.4H5.24a2 2 0 0 0-1.8 1.1l-.8 1.63A6 6 0 0 0 2 12.42V16h2"/><circle cx="6.5" cy="16.5" r="2.5"/><circle cx="16.5" cy="16.5" r="2.5"/></svg>`;
     const svgGas      = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="22" x2="15" y2="22"/><line x1="4" y1="9" x2="14" y2="9"/><path d="M14 22V4a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v18"/><path d="M14 13h2a2 2 0 0 1 2 2v2a2 2 0 0 0 2 2 2 2 0 0 0 2-2V9.83a2 2 0 0 0-.59-1.42L18 5"/></svg>`;
     const svgTree     = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 14a5 5 0 1 0-10 0c0 4.4 5 8 5 8s5-3.6 5-8z"/><path d="M12 14V2"/></svg>`;
@@ -3355,7 +3339,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
 
   // Form states
   const [editForm, setEditForm] = useState<Customer>(customer);
-  const [workOrderForm, setWorkOrderForm] = useState({
+  const [, setWorkOrderForm] = useState({
     title: '',
     description: '',
     priority: 'medium' as 'low' | 'medium' | 'high' | 'critical',
@@ -3366,8 +3350,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
     additionalAmount: 0,
     total: 0,
   });
-  const [serviceSearch, setServiceSearch] = useState('');
-  const [showServiceDropdown, setShowServiceDropdown] = useState(false);
+  const [, setServiceSearch] = useState('');
   const [messageForm, setMessageForm] = useState({
     subject: '',
     body: '',
@@ -3376,43 +3359,6 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
 
   // Demo story data
   const customerStory = customer.notes || `Customer since ${new Date(customer.createdAt || Date.now()).toLocaleDateString()}. Discovered Conexsol through referral from existing customer.`;
-
-  // Filter service rates based on search
-  const filteredServiceRates = liveServiceRates.filter(rate =>
-    rate.serviceName.toLowerCase().includes(serviceSearch.toLowerCase()) ||
-    rate.serviceCode.toLowerCase().includes(serviceSearch.toLowerCase())
-  );
-
-  // Handle service selection — uses clientRateStandard (Client $) as base rate
-  const handleServiceSelect = (rate: ServiceRate) => {
-    const clientRate = rate.clientRateStandard ?? rate.rate ?? 0;
-    setWorkOrderForm({
-      ...workOrderForm,
-      serviceRateId: rate.id,
-      title: rate.serviceName,
-      baseRate: clientRate,
-      total: clientRate + workOrderForm.additionalAmount,
-    });
-    setServiceSearch(rate.serviceName);
-    setShowServiceDropdown(false);
-  };
-
-  // Handle additional amount change
-  const handleAdditionalAmountChange = (value: number) => {
-    setWorkOrderForm({
-      ...workOrderForm,
-      additionalAmount: value,
-      total: workOrderForm.baseRate + value,
-    });
-  };
-
-  // Handle PowerCare toggle
-  const handlePowerCareToggle = () => {
-    setWorkOrderForm({
-      ...workOrderForm,
-      isPowerCare: !workOrderForm.isPowerCare,
-    });
-  };
 
   // Reset work order form when modal opens
   React.useEffect(() => {
@@ -3707,32 +3653,6 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
       activityHistory: newEntries.length > 0 ? [...newEntries, ...activityHistory] : activityHistory,
     });
     onCloseEdit();
-  };
-
-  const handleCreateWorkOrder = () => {
-    onCreateJob({
-      customerId: customer.id,
-      title: workOrderForm.title,
-      description: workOrderForm.description,
-      priority: workOrderForm.priority,
-      status: 'new',
-      date: workOrderForm.dateDue || new Date().toISOString(),
-      laborRate: workOrderForm.baseRate,
-      partsCost: workOrderForm.additionalAmount,
-    });
-    setShowCreateWorkOrder(false);
-    setWorkOrderForm({
-      title: '',
-      description: '',
-      priority: 'medium',
-      dateDue: '',
-      serviceRateId: '',
-      isPowerCare: customer.isPowerCare || false,
-      baseRate: 0,
-      additionalAmount: 0,
-      total: 0,
-    });
-    setServiceSearch('');
   };
 
   const handleSendMessage = () => {
@@ -5267,7 +5187,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                       name="method"
                       value="email"
                       checked={messageForm.method === 'email'}
-                      onChange={(e) => setMessageForm({ ...messageForm, method: 'email' })}
+                      onChange={() => setMessageForm({ ...messageForm, method: 'email' })}
                     />
                     Email
                   </label>
@@ -5277,7 +5197,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                       name="method"
                       value="sms"
                       checked={messageForm.method === 'sms'}
-                      onChange={(e) => setMessageForm({ ...messageForm, method: 'sms' })}
+                      onChange={() => setMessageForm({ ...messageForm, method: 'sms' })}
                     />
                     SMS
                   </label>

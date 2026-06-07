@@ -7,18 +7,15 @@ import {
   Plus,
   PackagePlus,
   Search,
-  Filter,
   Edit,
   Trash2,
   Upload,
   Link,
   MapPin,
-  Calendar,
   DollarSign,
   AlertTriangle,
   CheckCircle,
   X,
-  FileText,
   ChevronDown,
   ChevronUp,
   Camera,
@@ -383,7 +380,7 @@ const toolStatusLabels: Record<ToolStatus, string> = {
   lost: 'Lost',
 };
 
-export const InventoryModule: React.FC<InventoryModuleProps> = ({ isMobile, jobs = [], onUpdateJob, currentUser, standaloneRmas = [], onCreateStandaloneRma, onUpdateStandaloneRma, contractors = [] }) => {
+export const InventoryModule: React.FC<InventoryModuleProps> = ({ jobs = [], onUpdateJob, currentUser, standaloneRmas = [], onCreateStandaloneRma, onUpdateStandaloneRma, contractors = [] }) => {
   const [activeTab, setActiveTab] = useState<'equipment' | 'tools' | 'providers'>('equipment');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState<string>('all');
