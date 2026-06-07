@@ -48,6 +48,7 @@ import { isFloridaSite, isAllowedCustomer } from './lib/solarEdgeSiteFilter';
 import { getDeletedCustomerIds, markJobDeleted } from './lib/dataStore';
 import { Contractor, ContractorStatus, ContractorJob } from './types/contractor';
 import { addInteraction, loadCustomers, loadInteractions, saveInteractions } from './lib/customerStore';
+import { validateAddress } from './lib/addressValidator';
 
 // ── Passkey / WebAuthn helpers (imported from shared lib) ─────────────────────
 import {
@@ -1598,7 +1599,6 @@ function App() {
 
   const handleSyncSolarEdge = async () => {
     const apiKey = data.solarEdgeConfig.apiKey;
-    console.log('SolarEdge sync starting with API key:', apiKey ? `${apiKey.substring(0, 10)}...` : 'EMPTY');
 
     if (!apiKey) {
       alert('Please enter a SolarEdge API key first');
@@ -1627,7 +1627,6 @@ function App() {
 
     try {
       // ── Paginate: SolarEdge returns max 100 per request ───────────────────────
-      console.log('Fetching SolarEdge sites via proxy (paginated)…');
       const SE_PAGE = 100;
       let seStartIndex = 0;
       let sites: any[] = [];
@@ -1664,12 +1663,9 @@ function App() {
         if (page.length < SE_PAGE || sites.length >= seTotalCount) break;
         seStartIndex += SE_PAGE;
       }
-      console.log(`Fetched ${sites.length} of ${seTotalCount} sites from SolarEdge.`);
-
       // ── Filter: Florida portfolio only — drop GT-, USP-, GA-, DELETE, non-FL ──
       const sitesBeforeFilter = sites.length;
       sites = sites.filter(isFloridaSite);
-      console.log(`Site filter: kept ${sites.length} of ${sitesBeforeFilter} (dropped ${sitesBeforeFilter - sites.length} non-FL/territory sites)`);
 
       // Match sites with customers and update
       let matchedCount = 0;
@@ -1882,7 +1878,40 @@ function App() {
 
   // ── Import Modal Apply ────────────────────────────────────────────────────
   // Called when user clicks "Apply N changes" in SolarEdgeImportModal.
-  const handleImportApply = (accepted: import('./components/SolarEdgeImportModal').DiffItem[]) => {
+  const handleImportApply = async (accepted: import('./components/SolarEdgeImportModal').DiffItem[]) => {
+    // A React state updater must run synchronously, so resolve all address
+    // validation (async) up front and stash the results keyed by item.
+    type ValidatedLoc = { address: string; city: string; state: string; zip: string };
+    const validatedMap = new Map<(typeof accepted)[number], ValidatedLoc>();
+    for (const item of accepted) {
+      const site = (item.type === 'new' || item.type === 'updated') ? item.site : undefined;
+      if (!site) continue;
+      const loc = (site.location ?? {}) as { address?: string; city?: string; zip?: string; state?: string };
+      let validated: ValidatedLoc = {
+        address: loc.address || '',
+        city: loc.city || '',
+        state: loc.state || 'FL',
+        zip: loc.zip || '',
+      };
+      if (loc.address || loc.city || loc.state || loc.zip) {
+        const validation = await validateAddress({
+          address: loc.address,
+          city: loc.city,
+          state: loc.state,
+          zip: loc.zip,
+        });
+        if (validation.isValid && validation.normalized) {
+          validated = {
+            address: validation.normalized.address || loc.address || '',
+            city: validation.normalized.city || loc.city || '',
+            state: validation.normalized.state || loc.state || 'FL',
+            zip: validation.normalized.zip || loc.zip || '',
+          };
+        }
+      }
+      validatedMap.set(item, validated);
+    }
+
     setData(prev => {
       let customers = [...prev.customers];
       const flSiteIds = new Set(FL_SITES.map(s => s.siteId));
@@ -1896,6 +1925,14 @@ function App() {
           const loc = (s.location ?? {}) as { address?: string; city?: string; zip?: string; state?: string };
           const siteId = String(s.id);
 
+          // Address was validated up front (see validatedMap); fall back to raw loc.
+          const validatedAddress = validatedMap.get(item) ?? {
+            address: loc.address || '',
+            city: loc.city || '',
+            state: loc.state || 'FL',
+            zip: loc.zip || '',
+          };
+
           // ── Dedup guard: skip if any customer already owns this siteId ─────
           // (catches edge cases where buildDiff missed a prior import)
           const alreadyLinked = customers.some(c => c.solarEdgeSiteId === siteId);
@@ -1905,10 +1942,10 @@ function App() {
               id: `cust-se-${s.id}`,
               name: s.name,
               email: '', phone: '',
-              address: loc.address || '',
-              city:    loc.city    || '',
-              state:   loc.state   || 'FL',
-              zip:     loc.zip     || '',
+              address: validatedAddress.address,
+              city:    validatedAddress.city,
+              state:   validatedAddress.state,
+              zip:     validatedAddress.zip,
               type: 'residential' as const,
               notes: `Imported from SolarEdge on ${new Date().toLocaleDateString()}`,
               solarEdgeSiteId: siteId,
@@ -1927,7 +1964,7 @@ function App() {
               siteId,
               clientId,
               siteName:    s.name || '',
-              address:     [loc.address, loc.city, loc.state || 'FL', loc.zip].filter(Boolean).join(', '),
+              address:     [validatedAddress.address, validatedAddress.city, validatedAddress.state, validatedAddress.zip].filter(Boolean).join(', '),
               status:      s.status || 'Active',
               peakPower:   s.peakPower || 0,
               installDate: s.installationDate || '',
@@ -1941,15 +1978,24 @@ function App() {
         }
 
         if (item.type === 'updated' && item.site && item.customer && item.changes) {
-          const loc = (item.site.location ?? {}) as { address?: string; city?: string; zip?: string };
+          const loc = (item.site.location ?? {}) as { address?: string; city?: string; zip?: string; state?: string };
+          
+          // Address was validated up front (see validatedMap); fall back to raw loc.
+          const validatedUpdateAddress = validatedMap.get(item) ?? {
+            address: loc.address || '',
+            city: loc.city || '',
+            state: loc.state || 'FL',
+            zip: loc.zip || '',
+          };
+
           customers = customers.map(c => {
             if (c.id !== item.customer!.id) return c;
             const updates: Partial<Customer> = {};
             for (const ch of item.changes!) {
               if (ch.field === 'Name')    updates.name    = ch.to;
-              if (ch.field === 'Address') updates.address = ch.to;
-              if (ch.field === 'City')    updates.city    = ch.to;
-              if (ch.field === 'ZIP')     updates.zip     = ch.to;
+              if (ch.field === 'Address') updates.address = validatedUpdateAddress.address;
+              if (ch.field === 'City')    updates.city    = validatedUpdateAddress.city;
+              if (ch.field === 'ZIP')     updates.zip     = validatedUpdateAddress.zip;
             }
             return { ...c, ...updates };
           });
@@ -2006,29 +2052,91 @@ function App() {
     const manualCustomers = data.customers.filter(c => !c.id.startsWith('cust-se-'));
 
     // 4. Build fresh customer records for all matching sites
-    const freshCustomers: Customer[] = sites.map((s: any) => ({
-      id: `cust-se-${s.id}`,
-      name: s.name || `SolarEdge Site ${s.id}`,
-      firstName: '', lastName: '', email: '', phone: '',
-      address: s.location?.address || '',
-      city:    s.location?.city    || '',
-      state:   s.location?.state   || 'FL',
-      zip:     s.location?.zip     || '',
-      type: 'commercial' as const,
-      notes: `Clean import from SolarEdge Florida group on ${new Date().toLocaleDateString()}`,
-      solarEdgeSiteId: String(s.id),
-      createdAt: new Date().toISOString(),
-    }));
+    const freshCustomers: Customer[] = [];
+    for (const s of sites) {
+      const loc = s.location || {};
+      
+      // Validate and normalize address
+      let validatedAddress = {
+        address: loc.address || '',
+        city: loc.city || '',
+        state: loc.state || 'FL',
+        zip: loc.zip || '',
+      };
+
+      if (loc.address || loc.city || loc.state || loc.zip) {
+        const validation = await validateAddress({
+          address: loc.address,
+          city: loc.city,
+          state: loc.state,
+          zip: loc.zip,
+        });
+
+        if (validation.isValid && validation.normalized) {
+          validatedAddress = {
+            address: validation.normalized.address || loc.address || '',
+            city: validation.normalized.city || loc.city || '',
+            state: validation.normalized.state || loc.state || 'FL',
+            zip: validation.normalized.zip || loc.zip || '',
+          };
+        }
+      }
+
+      freshCustomers.push({
+        id: `cust-se-${s.id}`,
+        name: s.name || `SolarEdge Site ${s.id}`,
+        firstName: '', lastName: '', email: '', phone: '',
+        address: validatedAddress.address,
+        city:    validatedAddress.city,
+        state:   validatedAddress.state,
+        zip:     validatedAddress.zip,
+        type: 'commercial' as const,
+        notes: `Clean import from SolarEdge Florida group on ${new Date().toLocaleDateString()}`,
+        solarEdgeSiteId: String(s.id),
+        createdAt: new Date().toISOString(),
+      });
+    }
 
     // 5. Build fresh extraSites for sites not already in FL_SITES static list
     const flSiteIds = new Set(FL_SITES.map(s => s.siteId));
-    const freshExtraSites: SolarEdgeExtraSite[] = sites
-      .filter((s: any) => !flSiteIds.has(String(s.id)))
-      .map((s: any) => ({
+    const freshExtraSites: SolarEdgeExtraSite[] = [];
+    
+    for (const s of sites) {
+      if (flSiteIds.has(String(s.id))) continue;
+      
+      const loc = s.location || {};
+      
+      // Validate address for extraSites too
+      let validatedExtraAddress = {
+        address: loc.address || '',
+        city: loc.city || '',
+        state: loc.state || 'FL',
+        zip: loc.zip || '',
+      };
+
+      if (loc.address || loc.city || loc.state || loc.zip) {
+        const validation = await validateAddress({
+          address: loc.address,
+          city: loc.city,
+          state: loc.state,
+          zip: loc.zip,
+        });
+
+        if (validation.isValid && validation.normalized) {
+          validatedExtraAddress = {
+            address: validation.normalized.address || loc.address || '',
+            city: validation.normalized.city || loc.city || '',
+            state: validation.normalized.state || loc.state || 'FL',
+            zip: validation.normalized.zip || loc.zip || '',
+          };
+        }
+      }
+
+      freshExtraSites.push({
         siteId:      String(s.id),
         clientId:    s.name?.startsWith('US-') ? s.name.split(' ')[0] : (s.accountId || ''),
         siteName:    s.name || '',
-        address:     [s.location?.address, s.location?.city, s.location?.state, s.location?.zip].filter(Boolean).join(', '),
+        address:     [validatedExtraAddress.address, validatedExtraAddress.city, validatedExtraAddress.state, validatedExtraAddress.zip].filter(Boolean).join(', '),
         status:      s.status || 'Active',
         peakPower:   s.peakPower || 0,
         installDate: s.installationDate || '',
@@ -2039,7 +2147,8 @@ function App() {
         yearKwh:     s.lastYearData?.energy   || 0,
         lifetimeKwh: s.lifeTimeData?.energy   || 0,
         lastUpdate:  s.lastUpdateTime || new Date().toISOString(),
-      }));
+      });
+    }
 
     // 6. Clear removed-sites cache so no sites are hidden
     localStorage.removeItem('solarops_removed_sites');
@@ -2450,7 +2559,6 @@ function App() {
               saveContractorJobs(updated);
             }}
             onViewCustomer={(customerId) => {
-              console.log('View customer:', customerId);
             }}
             onSolarEdgeSites={() => setCurrentView('solaredge')}
             solarEdgeSites={[...FL_SITES, ...(data.solarEdgeExtraSites ?? [])]}

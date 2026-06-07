@@ -54,7 +54,7 @@ const getSourceBadge = (lead: Lead, customSources: string[]) => {
 
 // ── Kanban column definitions ─────────────────────────────────────────────────
 
-type KanbanCol = 'lead_in' | 'service' | 'sales' | 'lost';
+type KanbanCol = 'lead_in' | 'service' | 'sales' | 'lost' | 'converted';
 
 const KANBAN_COLS: {
   id: KanbanCol;
@@ -65,16 +65,17 @@ const KANBAN_COLS: {
   colBorder: string;
   emptyText: string;
 }[] = [
-  { id: 'lead_in', label: 'Lead In',  headerBg: 'bg-slate-800',   headerText: 'text-white',      colBg: 'bg-slate-50',     colBorder: 'border-slate-200',  emptyText: 'No unrouted leads' },
-  { id: 'service', label: 'Service',  headerBg: 'bg-blue-600',    headerText: 'text-white',      colBg: 'bg-blue-50/40',   colBorder: 'border-blue-200',   emptyText: 'No service leads'  },
-  { id: 'sales',   label: 'Sales',    headerBg: 'bg-orange-500',  headerText: 'text-white',      colBg: 'bg-orange-50/40', colBorder: 'border-orange-200', emptyText: 'No sales leads'    },
-  { id: 'lost',    label: 'Lost',     headerBg: 'bg-red-500',     headerText: 'text-white',      colBg: 'bg-red-50/30',    colBorder: 'border-red-200',    emptyText: 'No lost leads'     },
+  { id: 'lead_in',   label: 'Lead In',   headerBg: 'bg-slate-800',   headerText: 'text-white', colBg: 'bg-slate-50',       colBorder: 'border-slate-200',   emptyText: 'No unrouted leads'   },
+  { id: 'service',   label: 'Service',   headerBg: 'bg-blue-600',    headerText: 'text-white', colBg: 'bg-blue-50/40',     colBorder: 'border-blue-200',    emptyText: 'No service leads'    },
+  { id: 'sales',     label: 'Sales',     headerBg: 'bg-orange-500',  headerText: 'text-white', colBg: 'bg-orange-50/40',   colBorder: 'border-orange-200',  emptyText: 'No sales leads'      },
+  { id: 'lost',      label: 'Lost',      headerBg: 'bg-red-500',     headerText: 'text-white', colBg: 'bg-red-50/30',      colBorder: 'border-red-200',     emptyText: 'No lost leads'       },
+  { id: 'converted', label: 'Converted', headerBg: 'bg-emerald-600', headerText: 'text-white', colBg: 'bg-emerald-50/40',  colBorder: 'border-emerald-200', emptyText: 'No converted leads'  },
 ];
 
 // Derive which Kanban column a lead belongs to
-const getLeadCol = (lead: Lead): KanbanCol | null => {
-  // Converted → removed from board
-  if (lead.status === 'closed_won') return null;
+const getLeadCol = (lead: Lead): KanbanCol => {
+  // Converted → archived in the Converted column (kept for growth tracking)
+  if (lead.status === 'closed_won') return 'converted';
   // Lost
   if (lead.status === 'closed_lost' || lead.status === 'not_interested') return 'lost';
   // Routed
@@ -216,6 +217,7 @@ export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserId, currentUser
   const [dragOverCol, setDragOverCol] = useState<KanbanCol | null>(null);
   const draggedId = useRef<string>('');
   const [lostExpanded, setLostExpanded] = useState(false);
+  const [convertedExpanded, setConvertedExpanded] = useState(false);
   // New-source modal
   const [showNewSourceModal, setShowNewSourceModal] = useState(false);
   const [newSourceInput, setNewSourceInput] = useState('');
@@ -333,9 +335,15 @@ export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserId, currentUser
 
   const customSources: string[] = crmData.customSources ?? [];
 
-  // All leads minus closed_won (converted)
+  // All leads minus closed_won (converted) — drives stats, duplicate detection, list view
   const activeLeads = useMemo(() =>
     crmData.leads.filter(l => l.status !== 'closed_won'),
+    [crmData.leads]
+  );
+
+  // Converted leads — archived in the Converted column for growth tracking
+  const convertedLeads = useMemo(() =>
+    crmData.leads.filter(l => l.status === 'closed_won'),
     [crmData.leads]
   );
 
@@ -375,16 +383,28 @@ export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserId, currentUser
     );
   }, [activeLeads, searchQuery]);
 
+  // Converted leads filtered by the same search query (drives the Converted column)
+  const filteredConverted = useMemo(() => {
+    if (!searchQuery) return convertedLeads;
+    const q = searchQuery.toLowerCase();
+    return convertedLeads.filter(l =>
+      `${l.firstName} ${l.lastName}`.toLowerCase().includes(q) ||
+      l.phone.includes(q) ||
+      l.email.toLowerCase().includes(q)
+    );
+  }, [convertedLeads, searchQuery]);
+
   const selectedLead = useMemo(
     () => crmData.leads.find(l => l.id === selectedLeadId) ?? null,
     [crmData.leads, selectedLeadId]
   );
 
   // Stats — active only (exclude converted/closed_won)
-  const totalCount    = activeLeads.length;
-  const newCount      = activeLeads.filter(l => getLeadCol(l) === 'lead_in').length;
-  const serviceCount  = activeLeads.filter(l => l.leadType === 'service').length;
-  const salesCount    = activeLeads.filter(l => l.leadType === 'sales').length;
+  const totalCount     = activeLeads.length;
+  const newCount       = activeLeads.filter(l => getLeadCol(l) === 'lead_in').length;
+  const serviceCount   = activeLeads.filter(l => l.leadType === 'service').length;
+  const salesCount     = activeLeads.filter(l => l.leadType === 'sales').length;
+  const convertedCount = convertedLeads.length;
 
   const save = (updated: CRMData) => {
     setCrmData(updated);
@@ -396,15 +416,19 @@ export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserId, currentUser
   const handleDrop = (leadId: string, col: KanbanCol) => {
     const lead = crmData.leads.find(l => l.id === leadId);
     if (!lead) return;
+    // Dragging a converted lead back out of the Converted column reactivates it
+    const wasConverted = lead.status === 'closed_won';
     let patch: Partial<Lead> = { updatedAt: new Date().toISOString() };
     if (col === 'lead_in') {
-      patch = { ...patch, leadType: undefined };
+      patch = { ...patch, leadType: undefined, ...(wasConverted ? { status: 'new' } : {}) };
     } else if (col === 'service') {
-      patch = { ...patch, leadType: 'service', status: lead.status === 'new' ? 'attempting' : lead.status };
+      patch = { ...patch, leadType: 'service', status: (lead.status === 'new' || wasConverted) ? 'attempting' : lead.status };
     } else if (col === 'sales') {
-      patch = { ...patch, leadType: 'sales', status: lead.status === 'new' ? 'attempting' : lead.status };
+      patch = { ...patch, leadType: 'sales', status: (lead.status === 'new' || wasConverted) ? 'attempting' : lead.status };
     } else if (col === 'lost') {
       patch = { ...patch, status: 'closed_lost' };
+    } else if (col === 'converted') {
+      patch = { ...patch, status: 'closed_won' };
     }
     save({
       ...crmData,
@@ -781,19 +805,26 @@ export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserId, currentUser
   // ── Kanban column data ───────────────────────────────────────────────────
 
   const colLeads = useMemo((): Record<KanbanCol, Lead[]> => {
-    const result: Record<KanbanCol, Lead[]> = { lead_in: [], service: [], sales: [], lost: [] };
+    const result: Record<KanbanCol, Lead[]> = { lead_in: [], service: [], sales: [], lost: [], converted: [] };
+    // Active leads bucket into the four pipeline columns
     for (const lead of filteredLeads) {
       const col = getLeadCol(lead);
-      if (col) result[col].push(lead);
+      if (col !== 'converted') result[col].push(lead);
     }
-    // Sort lost by updatedAt desc
-    result.lost.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+    // Converted leads are tracked separately (closed_won)
+    result.converted = [...filteredConverted];
+    // Sort terminal columns by most-recently-updated first
+    const byRecent = (a: Lead, b: Lead) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+    result.lost.sort(byRecent);
+    result.converted.sort(byRecent);
     return result;
-  }, [filteredLeads]);
+  }, [filteredLeads, filteredConverted]);
 
   const now = Date.now();
-  const lostRecent  = colLeads.lost.filter(l => now - new Date(l.updatedAt).getTime() < TWO_WEEKS_MS);
-  const lostOlder   = colLeads.lost.filter(l => now - new Date(l.updatedAt).getTime() >= TWO_WEEKS_MS);
+  const lostRecent       = colLeads.lost.filter(l => now - new Date(l.updatedAt).getTime() < TWO_WEEKS_MS);
+  const lostOlder        = colLeads.lost.filter(l => now - new Date(l.updatedAt).getTime() >= TWO_WEEKS_MS);
+  const convertedRecent  = colLeads.converted.filter(l => now - new Date(l.updatedAt).getTime() < TWO_WEEKS_MS);
+  const convertedOlder   = colLeads.converted.filter(l => now - new Date(l.updatedAt).getTime() >= TWO_WEEKS_MS);
 
   // ── Source badge component ───────────────────────────────────────────────
 
@@ -809,15 +840,16 @@ export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserId, currentUser
   // ── Lead card (shared between list & kanban) ─────────────────────────────
 
   const colBarColor: Record<KanbanCol, string> = {
-    lead_in: 'bg-slate-400',
-    service: 'bg-blue-500',
-    sales:   'bg-orange-400',
-    lost:    'bg-red-400',
+    lead_in:   'bg-slate-400',
+    service:   'bg-blue-500',
+    sales:     'bg-orange-400',
+    lost:      'bg-red-400',
+    converted: 'bg-emerald-500',
   };
 
   const LeadCard: React.FC<{ lead: Lead; kanban?: boolean }> = ({ lead, kanban }) => {
     const col = getLeadCol(lead);
-    const barColor = col ? colBarColor[col] : 'bg-slate-300';
+    const barColor = colBarColor[col] ?? 'bg-slate-300';
     return (
       <div
         draggable={kanban}
@@ -874,6 +906,8 @@ export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserId, currentUser
       {KANBAN_COLS.map(col => {
         const leads = col.id === 'lost'
           ? (lostExpanded ? colLeads.lost : lostRecent)
+          : col.id === 'converted'
+          ? (convertedExpanded ? colLeads.converted : convertedRecent)
           : colLeads[col.id];
         const isOver = dragOverCol === col.id;
 
@@ -914,6 +948,18 @@ export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserId, currentUser
                   {lostExpanded
                     ? <><ChevronUp className="w-3 h-3" />Hide older ({lostOlder.length})</>
                     : <><ChevronDown className="w-3 h-3" />{lostOlder.length} older ({'>'} 2 weeks)</>}
+                </button>
+              )}
+
+              {/* Converted — older leads toggle */}
+              {col.id === 'converted' && convertedOlder.length > 0 && (
+                <button
+                  onClick={() => setConvertedExpanded(v => !v)}
+                  className="w-full mt-1 flex items-center justify-center gap-1 text-[11px] text-emerald-600 hover:text-emerald-800 py-1.5"
+                >
+                  {convertedExpanded
+                    ? <><ChevronUp className="w-3 h-3" />Hide older ({convertedOlder.length})</>
+                    : <><ChevronDown className="w-3 h-3" />{convertedOlder.length} older ({'>'} 2 weeks)</>}
                 </button>
               )}
 
@@ -1005,6 +1051,11 @@ export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserId, currentUser
             <div className="flex items-center gap-1.5 px-2.5 py-1 bg-orange-50 rounded-lg">
               <span className="text-[10px] text-orange-500 font-semibold uppercase tracking-wide">Sales</span>
               <span className="text-sm font-bold text-orange-600">{salesCount}</span>
+            </div>
+            <div className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 rounded-lg">
+              <span className="text-[10px] text-emerald-500 font-semibold uppercase tracking-wide hidden sm:inline">Converted</span>
+              <span className="text-[10px] text-emerald-500 font-semibold uppercase tracking-wide sm:hidden">Conv</span>
+              <span className="text-sm font-bold text-emerald-600">{convertedCount}</span>
             </div>
           </div>
 
@@ -1721,7 +1772,7 @@ const DetailPanel: React.FC<DetailPanelProps> = ({
         <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 mb-4">
           <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wide mb-1">Convert to Customer</p>
           <p className="text-xs text-slate-500 mb-3">
-            This will create a customer record for <span className="font-medium text-slate-700">{lead.firstName} {lead.lastName}</span> and remove the lead from the board.
+            This will create a customer record for <span className="font-medium text-slate-700">{lead.firstName} {lead.lastName}</span> and move the lead to the Converted column.
           </p>
           <label className="text-xs text-slate-500 mb-1 block">SolarEdge Site ID <span className="text-slate-400">(e.g. us_1xxxxxx)</span></label>
           <input
