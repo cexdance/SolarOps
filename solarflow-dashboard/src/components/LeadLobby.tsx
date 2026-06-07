@@ -287,7 +287,7 @@ export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserId, currentUser
     setTrelloLeadPreview(null);
     try {
       const card = await fetchTrelloCard(trelloLeadUrl.trim());
-      const contact = extractContactInfo(card.desc);
+      const contact = extractContactInfo(card);
       // Parse name from card title — strip leading "US-XXXXX " if present
       const namePart = card.name.replace(/^US-\d+\s*/i, '').trim();
       const parts = namePart.split(/\s+/);

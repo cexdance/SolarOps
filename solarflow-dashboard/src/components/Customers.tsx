@@ -5451,7 +5451,7 @@ const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({ onClose, onCr
     setTrelloOk('');
     try {
       const card    = await fetchTrelloCard(url);
-      const contact = extractContactInfo(card.desc);
+      const contact = extractContactInfo(card);
       // Strip leading "US-XXXXX " from card title to extract human name
       const namePart = card.name.replace(/^US-\d+\s*/i, '').trim();
       const parts    = namePart.split(/\s+/);
