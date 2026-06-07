@@ -9,23 +9,6 @@
 import { pushToSupabase, pushKeyValue, pullFromSupabase, mergeRemote, isKVSyncKey } from './syncEngine';
 import type { AppState } from '../types';
 
-export const ALL_KEYS = [
-  'solarflow_data',
-  'solarflow_crm_data',
-  'solarflow_customers',
-  'solarflow_interactions',
-  'solarflow_contractors',
-  'solarflow_service_rates',
-  'solarflow_contractor_jobs',
-  'solarflow_contractor_invites',
-  'solarops_work_orders',
-  'solarops_alerts',
-  'solarops_site_profiles',
-  'solarops_todos',
-  'solarops_inventory',
-  'solarops_projects',
-];
-
 /**
  * Persist a value and sync to Supabase when applicable.
  *
@@ -60,7 +43,16 @@ export async function syncFromDB(): Promise<void> {
     // Re-read localStorage immediately before merge+write so we don't clobber
     // user mutations that happened during the network round-trip.
     const raw = localStorage.getItem('solarflow_data');
-    if (!raw) return;
+
+    if (!raw) {
+      // First-time device: no local data yet. Initialize localStorage with
+      // the remote data (using defaults as base, then overlaying remote).
+      const { generateDefaultState } = await import('./dataStore');
+      const defaults = generateDefaultState();
+      const initialState = { ...defaults, ...remote };
+      localStorage.setItem('solarflow_data', JSON.stringify(initialState));
+      return;
+    }
 
     const local  = JSON.parse(raw) as AppState;
     const merged = mergeRemote(local, remote);

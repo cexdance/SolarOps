@@ -46,8 +46,8 @@ const buildSeedCustomers = (): Customer[] =>
     systemType: c.systemType as any || undefined,
     trelloBackupUrl: undefined,
   }));
-
-const generateDefaultState = (): AppState => ({
+// ── Default state factory ──────────────────────────────────────────────────────
+export const generateDefaultState = (): AppState => ({
   users: [{
     id: 'user-mia-lopez',
     name: 'Mia Lopez',
