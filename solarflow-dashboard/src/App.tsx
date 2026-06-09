@@ -49,6 +49,7 @@ import { getDeletedCustomerIds, markJobDeleted } from './lib/dataStore';
 import { Contractor, ContractorStatus, ContractorJob } from './types/contractor';
 import { addInteraction, loadCustomers, loadInteractions, saveInteractions } from './lib/customerStore';
 import { validateAddress } from './lib/addressValidator';
+import { useUnreadBadge } from './hooks/useUnreadBadge';
 
 // ── Passkey / WebAuthn helpers (imported from shared lib) ─────────────────────
 import {
@@ -878,6 +879,15 @@ function App() {
 
   // Computed values
   const currentUser = data.currentUser;
+
+  // Unread mention count drives favicon badge + tab title
+  const unreadMentions = useMemo(
+    () => (data.notifications || []).filter(
+      n => n.userId === currentUser?.id && !n.read && n.type === 'mention',
+    ).length,
+    [data.notifications, currentUser?.id],
+  );
+  useUnreadBadge(unreadMentions);
 
   // Memoized heavy filters, recompute only when the source arrays change.
   // With 400+ customers and frequent re-renders, these were running on every
