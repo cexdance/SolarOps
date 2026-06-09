@@ -15,6 +15,7 @@
 import React from 'react';
 import { X, FileText, CheckCircle, Clock, AlertTriangle, DollarSign } from 'lucide-react';
 import { Job, Customer } from '../types';
+import { formatMoney } from '../lib/money';
 
 // ── Print styles ──────────────────────────────────────────────────────────────
 
@@ -32,8 +33,10 @@ const PRINT_STYLE = `
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+// Money hidden in-app while financials live in Xero. Returns a full money string
+// (with its own `$` when shown) or a neutral placeholder. See src/lib/money.ts.
 function fmt(n: number) {
-  return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return formatMoney(n);
 }
 
 function fmtDate(iso?: string) {
@@ -157,7 +160,7 @@ export const BillingReportModal: React.FC<Props> = ({
                     <DollarSign className="w-4 h-4 text-slate-500" />
                     <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Total</p>
                   </div>
-                  <p className="text-xl font-black text-slate-900">${fmt(total)}</p>
+                  <p className="text-xl font-black text-slate-900">{fmt(total)}</p>
                   <p className="text-[10px] text-slate-400 mt-0.5">{jobs.length} jobs</p>
                 </div>
                 {/* Unbilled */}
@@ -166,7 +169,7 @@ export const BillingReportModal: React.FC<Props> = ({
                     <AlertTriangle className="w-4 h-4 text-red-500" />
                     <p className="text-[10px] font-bold uppercase tracking-widest text-red-600">Unbilled</p>
                   </div>
-                  <p className="text-xl font-black text-red-900">${fmt(unbilled)}</p>
+                  <p className="text-xl font-black text-red-900">{fmt(unbilled)}</p>
                   <p className="text-[10px] text-red-400 mt-0.5">{unbilledCount} jobs</p>
                 </div>
                 {/* Invoiced */}
@@ -175,7 +178,7 @@ export const BillingReportModal: React.FC<Props> = ({
                     <Clock className="w-4 h-4 text-purple-500" />
                     <p className="text-[10px] font-bold uppercase tracking-widest text-purple-600">Invoiced</p>
                   </div>
-                  <p className="text-xl font-black text-purple-900">${fmt(invoiced)}</p>
+                  <p className="text-xl font-black text-purple-900">{fmt(invoiced)}</p>
                   <p className="text-[10px] text-purple-400 mt-0.5">{invoicedCount} jobs</p>
                 </div>
                 {/* Paid */}
@@ -184,7 +187,7 @@ export const BillingReportModal: React.FC<Props> = ({
                     <CheckCircle className="w-4 h-4 text-green-500" />
                     <p className="text-[10px] font-bold uppercase tracking-widest text-green-600">Paid</p>
                   </div>
-                  <p className="text-xl font-black text-green-900">${fmt(paid)}</p>
+                  <p className="text-xl font-black text-green-900">{fmt(paid)}</p>
                   <p className="text-[10px] text-green-400 mt-0.5">{paidCount} jobs</p>
                 </div>
               </div>
@@ -233,8 +236,8 @@ export const BillingReportModal: React.FC<Props> = ({
                           {st.label}
                         </span>
                         <p className="text-right text-slate-700">{job.laborHours ? `${job.laborHours}h` : '-'}</p>
-                        <p className="text-right text-slate-700">{job.partsCost > 0 ? `$${fmt(job.partsCost)}` : '-'}</p>
-                        <p className="text-right font-bold text-slate-900">${fmt(job.totalAmount)}</p>
+                        <p className="text-right text-slate-700">{job.partsCost > 0 ? fmt(job.partsCost) : '-'}</p>
+                        <p className="text-right font-bold text-slate-900">{fmt(job.totalAmount)}</p>
                       </div>
                     );
                   })}
@@ -249,9 +252,9 @@ export const BillingReportModal: React.FC<Props> = ({
                       {jobs.reduce((s, j) => s + (j.laborHours || 0), 0)}h
                     </p>
                     <p className="text-right text-[10px] font-semibold">
-                      ${fmt(jobs.reduce((s, j) => s + (j.partsCost || 0), 0))}
+                      {fmt(jobs.reduce((s, j) => s + (j.partsCost || 0), 0))}
                     </p>
-                    <p className="text-right font-black">${fmt(total)}</p>
+                    <p className="text-right font-black">{fmt(total)}</p>
                   </div>
                 </div>
               </div>
@@ -261,8 +264,8 @@ export const BillingReportModal: React.FC<Props> = ({
                 <div className="flex items-center gap-2 text-slate-500">
                   <CheckCircle className="w-4 h-4 text-green-500" />
                   <p className="text-xs font-medium">
-                    <span className="text-green-600 font-bold">${fmt(paid)}</span> collected ·{' '}
-                    <span className="text-red-600 font-bold">${fmt(unbilled)}</span> outstanding
+                    <span className="text-green-600 font-bold">{fmt(paid)}</span> collected ·{' '}
+                    <span className="text-red-600 font-bold">{fmt(unbilled)}</span> outstanding
                   </p>
                 </div>
                 <p className="text-[9px] text-slate-400 uppercase tracking-widest">

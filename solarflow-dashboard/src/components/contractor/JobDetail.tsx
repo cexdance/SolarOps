@@ -1,6 +1,7 @@
 // SolarFlow - Job Detail / Active Call Flow
 // Flow: Pre-Start → [Before Photo Modal] → Active Call → [After Photo Modal] → Completed
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import { formatMoney } from '../../lib/money';
 import {
   ArrowLeft, MapPin, Phone, AlertTriangle,
   Play, Pause, Camera, CheckCircle, FileText, X, Plus,
@@ -818,7 +819,7 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
                 </div>
                 <div>
                   <p className="text-xs text-slate-400">Your Pay</p>
-                  <p className="font-bold text-emerald-700">${job.contractorTotalPay.toFixed(0)}</p>
+                  <p className="font-bold text-emerald-700">{formatMoney(job.contractorTotalPay, { decimals: 0 })}</p>
                 </div>
               </div>
               <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-sm text-amber-800">
@@ -841,7 +842,7 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
                           <p className="font-medium text-slate-800">{p.name}</p>
                           <p className="text-xs text-slate-400">#{p.partNumber} × {p.quantity}</p>
                         </div>
-                        <span className="font-semibold text-slate-700">${p.totalPrice.toFixed(0)}</span>
+                        <span className="font-semibold text-slate-700">{formatMoney(p.totalPrice, { decimals: 0 })}</span>
                       </div>
                     ))}
                   </div>
@@ -1077,7 +1078,7 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
                       <div className="text-xs text-amber-700">
                         {optimizerCount <= 4
                           ? <span>Base rate covers 1-4 units</span>
-                          : <span>Base $180 + {optimizerCount - 4} additional × $60</span>
+                          : <span>Base + {optimizerCount - 4} additional units</span>
                         }
                       </div>
                       <div className="text-lg font-black text-amber-700">${optimizerTotal}</div>
@@ -1167,7 +1168,7 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
                         <p className="text-xs text-slate-400">#{p.partNumber} × {p.quantity}</p>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-semibold text-slate-700">${p.totalPrice.toFixed(0)}</span>
+                        <span className="text-sm font-semibold text-slate-700">{formatMoney(p.totalPrice, { decimals: 0 })}</span>
                         <button onClick={() => setParts(prev => prev.filter((_,j) => j !== i))}
                           className="text-red-400 cursor-pointer"><Trash2 className="w-4 h-4" /></button>
                       </div>
@@ -1185,7 +1186,7 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
                       <div>
                         <p className="text-sm font-semibold text-slate-800">Request parts reimbursement</p>
                         <p className="text-xs text-slate-500 mt-0.5">
-                          ${parts.reduce((s,p) => s + p.totalPrice, 0).toFixed(2)} total, accounting will review and include in your payment
+                          {formatMoney(parts.reduce((s,p) => s + p.totalPrice, 0))} total, accounting will review and include in your payment
                         </p>
                       </div>
                     </label>
@@ -1404,17 +1405,17 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
                 <div>
                   <p className="text-xs text-emerald-700 font-medium uppercase tracking-wide">Work order earnings</p>
                   <p className="text-xs text-emerald-600 mt-0.5">
-                    {job.contractorPayUnit === 'flat' ? 'Flat rate' : `${job.contractorPayRate}/hr`}
+                    {job.contractorPayUnit === 'flat' ? 'Flat rate' : `${formatMoney(job.contractorPayRate, { decimals: 0 })}/hr`}
                   </p>
                 </div>
-                <p className="text-2xl font-bold text-emerald-700">${job.contractorTotalPay.toFixed(2)}</p>
+                <p className="text-2xl font-bold text-emerald-700">{formatMoney(job.contractorTotalPay)}</p>
               </div>
               {job.partsReimbursementRequested && job.parts?.length > 0 && (
                 <div className="flex items-center gap-2 px-3 py-2.5 bg-blue-50 border border-blue-200 rounded-xl">
                   <div className="w-2 h-2 rounded-full bg-blue-500 shrink-0" />
                   <div className="flex-1">
                     <p className="text-sm font-semibold text-blue-800">Parts reimbursement pending</p>
-                    <p className="text-xs text-blue-600">${job.partsAmount?.toFixed(2)}, under review by accounting</p>
+                    <p className="text-xs text-blue-600">{formatMoney(job.partsAmount)}, under review by accounting</p>
                   </div>
                 </div>
               )}

@@ -5,6 +5,7 @@ import {
   AlertTriangle, Link2,
 } from 'lucide-react';
 import { Job, Customer, User, RMAEntry, RMAStatus } from '../types';
+import { formatMoney } from '../lib/money';
 import { RmaCreateModal } from './RmaCreateModal';
 
 interface RMADashboardProps {
@@ -186,7 +187,7 @@ export function RMADashboard({
                 <div className="text-right">
                   <p className="text-[10px] text-slate-400 uppercase tracking-wide">Compensation</p>
                   <p className="text-sm font-bold text-slate-800">
-                    ${collectedComp.toLocaleString()} <span className="text-slate-400 font-normal">/ ${totalComp.toLocaleString()}</span>
+                    {formatMoney(collectedComp, { decimals: 0 })} <span className="text-slate-400 font-normal">/ {formatMoney(totalComp, { decimals: 0 })}</span>
                   </p>
                 </div>
               )}
@@ -375,7 +376,7 @@ export function RMADashboard({
                             </span>
                             {(row.entry.compensationAmount ?? 0) > 0 && (
                               <span className={`text-[10px] font-bold whitespace-nowrap ${isPaid ? 'text-green-500' : 'text-slate-700'}`}>
-                                ${(row.entry.compensationAmount ?? 0).toLocaleString()}
+                                {formatMoney(row.entry.compensationAmount ?? 0, { decimals: 0 })}
                               </span>
                             )}
                           </div>
@@ -505,7 +506,7 @@ export function RMADashboard({
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right text-sm font-semibold text-slate-900">
-                        ${(row.entry.compensationAmount ?? 0).toLocaleString()}
+                        {formatMoney(row.entry.compensationAmount ?? 0, { decimals: 0 })}
                       </td>
                       <td className="px-4 py-3 text-sm text-slate-500">
                         {new Date(row.entry.createdAt).toLocaleDateString()}

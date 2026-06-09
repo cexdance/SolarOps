@@ -16,6 +16,7 @@ import { Contractor, ContractorJob, JobPriority, ServiceRate } from '../types/co
 import { loadServiceRates } from '../lib/contractorStore';
 import { searchParts, CatalogPart } from '../lib/partsCatalog';
 import { MentionTextarea, MentionUser, renderWithMentions, parseMentions, parseMentionEmails, fireMentionNotifications } from './ui/MentionTextarea';
+import { formatMoney } from '../lib/money';
 import { SowDistributionModal, SOW_DISTRIBUTION_NAMES } from './SowDistributionModal';
 import { ActivityFeed, type FeedUser } from './ui/ActivityFeed';
 import { compressImageToDataUrl, compressImageToBlob } from '../lib/photoCompress';
@@ -442,7 +443,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
     // Base labour line
     const baseDesc = optimizerCount <= 4
       ? `Optimizer Replacement, Base Charge (${optimizerCount} optimizer${optimizerCount > 1 ? 's' : ''}, incl. mobilization, diagnostics, commissioning)`
-      : `Optimizer Replacement, Base (4 units) + ${optimizerCount - 4} additional @ $100ea`;
+      : `Optimizer Replacement, Base (4 units) + ${optimizerCount - 4} additional`;
     addItems.push({ id: `opt-base-${Date.now()}`, type: 'labor', description: baseDesc, quantity: 1, unitCost: base, totalCost: base });
 
     // Surcharge line (if any)
@@ -460,7 +461,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
     // Critter guard
     if (critterGuard) {
       const cgDesc = critterPanels > 20
-        ? `Critter Guard Installation, up to 20 panels $750 + ${Math.ceil((critterPanels - 20) / 4)} extra sections`
+        ? `Critter Guard Installation, up to 20 panels + ${Math.ceil((critterPanels - 20) / 4)} extra sections`
         : `Critter Guard Installation, up to 20 panels`;
       addItems.push({ id: `opt-cg-${Date.now()}`, type: 'labor', description: cgDesc, quantity: 1, unitCost: critter, totalCost: critter });
     }
@@ -1113,7 +1114,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
               parts.push(`Photos ${prevPhotos} → ${woPhotos.length}`);
             const prevTotal = job?.totalAmount ?? 0;
             if (Math.abs(effectiveQuote - prevTotal) > 0.01)
-              parts.push(`Total $${prevTotal.toFixed(2)} → $${effectiveQuote.toFixed(2)}`);
+              parts.push('Price updated');
             const prevLiCount = job?.lineItems?.length ?? 0;
             if (lineItems.length !== prevLiCount)
               parts.push(`Line items ${prevLiCount} → ${lineItems.length}`);
@@ -1394,7 +1395,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                 <span className="text-xs text-slate-400">Opens a quote preview · saves it &amp; notifies Daniel Matos</span>
               )}
               {isSiteTransfer && woStatus === 'draft' && (
-                <span className="text-xs text-teal-600">Admin agentic workflow · No quote sent · $120 flat fee</span>
+                <span className="text-xs text-teal-600">Admin agentic workflow · No quote sent · flat fee (Xero)</span>
               )}
               <button
                 onClick={handleWorkflowAction}
@@ -1584,11 +1585,11 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                     if (!rate) return null;
                     return (
                       <p className="text-xs text-slate-400 mt-1">
-                        {rate.estimatedHours ? `~${rate.estimatedHours}h` : 'Variable'} · Labor ${rate.laborCost ? `$${rate.laborCost}` : '-'}
-                        {rate.partsCost ? ` · Parts ~$${rate.partsCost}` : ''}
-                        {rate.clientRateStandard ? ` · Client $${rate.clientRateStandard}` : ''}
+                        {rate.estimatedHours ? `~${rate.estimatedHours}h` : 'Variable'} · Labor {rate.laborCost ? formatMoney(rate.laborCost, { decimals: 0 }) : '-'}
+                        {rate.partsCost ? ` · Parts ${formatMoney(rate.partsCost, { decimals: 0 })}` : ''}
+                        {rate.clientRateStandard ? ` · Client ${formatMoney(rate.clientRateStandard, { decimals: 0 })}` : ''}
                         {rate.isPowercareEligible ? ' · PowerCare eligible' : ''}
-                        {rate.seCompensation ? ` · SE comp $${rate.seCompensation}` : ''}
+                        {rate.seCompensation ? ` · SE comp ${formatMoney(rate.seCompensation, { decimals: 0 })}` : ''}
                       </p>
                     );
                   })()}
@@ -1819,7 +1820,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                 <div className="flex items-center gap-2 px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-700">
                   <CheckCircle className="w-3.5 h-3.5 flex-shrink-0" />
                   <span>
-                    Assigned to <strong>{assignedContractor.contactName}</strong> ({assignedContractor.businessName}) · {contractorPayUnit === 'flat' ? `$${contractorPayRate} flat` : `$${contractorPayRate}/hr`}
+                    Assigned to <strong>{assignedContractor.contactName}</strong> ({assignedContractor.businessName}) · {contractorPayUnit === 'flat' ? `${formatMoney(contractorPayRate, { decimals: 0 })} flat` : `${formatMoney(contractorPayRate, { decimals: 0 })}/hr`}
                   </span>
                 </div>
               )}
@@ -1878,9 +1879,9 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
 
               <div>
                 <label className="block text-xs font-medium text-slate-500 mb-1">
-                  Quote Amount ($){discountType && quoteAmount > 0 && (
+                  Quote Amount{discountType && quoteAmount > 0 && (
                     <span className="ml-2 text-emerald-600 font-semibold">
-                      → ${(quoteAmount * 0.9).toFixed(2)} after 10% discount
+                      → {formatMoney(quoteAmount * 0.9)} after 10% discount
                     </span>
                   )}
                 </label>
@@ -1961,7 +1962,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                     </p>
                     <p className="mt-0.5 text-yellow-800">
                       SolarEdge compensates for warranty parts on systems &lt; 5 years old.
-                      Total compensation on this WO: <strong>${seCompTotal.toFixed(2)}</strong>
+                      Total compensation on this WO: <strong>{formatMoney(seCompTotal)}</strong>
                     </p>
                     <label className="flex items-center gap-2 mt-2 cursor-pointer">
                       <input
@@ -2015,8 +2016,8 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                       />
                       <p className="text-[10px] text-slate-400 mt-0.5">
                         {optCalc.optimizerCount <= 4
-                          ? `$450 flat (covers 1-4)`
-                          : `$450 + ${optCalc.optimizerCount - 4}×$100 extra`}
+                          ? `Base rate (covers 1-4)`
+                          : `Base + ${optCalc.optimizerCount - 4} additional`}
                       </p>
                     </div>
                     <div>
@@ -2068,8 +2069,8 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                       />
                       <span className="text-xs text-slate-500">
                         {optCalc.critterPanels <= 20
-                          ? '$750 flat (≤20 panels)'
-                          : `$750 + ${Math.ceil((optCalc.critterPanels - 20) / 4)}×$80 extra sections`}
+                          ? 'Base rate (≤20 panels)'
+                          : `Base + ${Math.ceil((optCalc.critterPanels - 20) / 4)} extra sections`}
                       </span>
                     </div>
                   )}
@@ -2077,17 +2078,17 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                   {/* Live total */}
                   <div className="flex items-center justify-between bg-white border border-indigo-200 rounded-lg px-4 py-3">
                     <div className="text-xs text-slate-500 space-y-0.5">
-                      <p>Base labor: <span className="font-semibold text-slate-800">${optimizerTotal.base.toLocaleString()}</span></p>
+                      <p>Base labor: <span className="font-semibold text-slate-800">{formatMoney(optimizerTotal.base, { decimals: 0 })}</span></p>
                       {optimizerTotal.surcharge > 1 && (
                         <p>Surcharges: <span className="font-semibold text-slate-800">+{Math.round((optimizerTotal.surcharge - 1) * 100)}%</span></p>
                       )}
                       {optCalc.critterGuard && (
-                        <p>Critter guard: <span className="font-semibold text-slate-800">${optimizerTotal.critter.toLocaleString()}</span></p>
+                        <p>Critter guard: <span className="font-semibold text-slate-800">{formatMoney(optimizerTotal.critter, { decimals: 0 })}</span></p>
                       )}
                     </div>
                     <div className="text-right">
                       <p className="text-xs text-slate-500">Client Total</p>
-                      <p className="text-2xl font-bold text-indigo-700">${optimizerTotal.total.toLocaleString()}</p>
+                      <p className="text-2xl font-bold text-indigo-700">{formatMoney(optimizerTotal.total, { decimals: 0 })}</p>
                     </div>
                   </div>
 
@@ -2187,7 +2188,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                               />
                             </td>
                             <td className="px-3 py-2 text-right font-medium text-slate-800">
-                              ${item.totalCost.toFixed(2)}
+                              {formatMoney(item.totalCost)}
                             </td>
                             <td className="px-2 py-2">
                               <button
@@ -2237,7 +2238,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                                 </div>
                                 {item.manufacturer?.toLowerCase().includes('solaredge') && (item.seCompAmount ?? 0) > 0 && siteAgeYears !== null && siteAgeYears < 5 && (
                                   <p className="text-[10px] text-yellow-700 mt-1.5 font-medium">
-                                    ⚡ SE Compensation of ${item.seCompAmount} is claimable, site is {siteAgeYears.toFixed(1)} yrs old.
+                                    ⚡ SE Compensation of {formatMoney(item.seCompAmount)} is claimable, site is {siteAgeYears.toFixed(1)} yrs old.
                                   </p>
                                 )}
                                 {item.manufacturer?.toLowerCase().includes('solaredge') && siteAgeYears !== null && siteAgeYears >= 5 && (
@@ -2420,23 +2421,23 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                     <div className="flex justify-between text-sm">
                       <span className="text-slate-500">
                         Labor cost
-                        {labor > 0 && <span className="ml-1 text-xs text-slate-400">(base ${baseLabor.toFixed(2)} + extra ${labor.toFixed(2)})</span>}
+                        {labor > 0 && <span className="ml-1 text-xs text-slate-400">(base {formatMoney(baseLabor)} + extra {formatMoney(labor)})</span>}
                       </span>
-                      <span className="font-medium text-slate-700">${totalLabor.toFixed(2)}</span>
+                      <span className="font-medium text-slate-700">{formatMoney(totalLabor)}</span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-slate-500">Parts / consumables</span>
-                      <span className="font-medium text-slate-700">${parts.toFixed(2)}</span>
+                      <span className="font-medium text-slate-700">{formatMoney(parts)}</span>
                     </div>
                     {milesValue > 0 && (
                       <div className="flex justify-between text-sm">
-                        <span className="text-slate-500">Mileage <span className="text-xs text-slate-400">({milesValue} mi × $0.54)</span></span>
-                        <span className="font-medium text-slate-700">${mileageCost.toFixed(2)}</span>
+                        <span className="text-slate-500">Mileage <span className="text-xs text-slate-400">({milesValue} mi)</span></span>
+                        <span className="font-medium text-slate-700">{formatMoney(mileageCost)}</span>
                       </div>
                     )}
                     <div className="flex justify-between text-sm font-semibold text-slate-800 border-t border-slate-200 pt-1.5">
                       <span>Total cost</span>
-                      <span>${totalCost.toFixed(2)}</span>
+                      <span>{formatMoney(totalCost)}</span>
                     </div>
 
                     <div className="border-t border-slate-200 pt-1.5 mt-0.5 space-y-1">
@@ -2445,24 +2446,24 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                           {quoteAmount > 0 ? 'Quote / Revenue' : 'Auto-total (cost)'}
                           {discountType && <span className="ml-1.5 text-xs text-emerald-600 font-normal">(−10% discount)</span>}
                         </span>
-                        <span>${revenue.toFixed(2)}</span>
+                        <span>{formatMoney(revenue)}</span>
                       </div>
                       <div className={`flex justify-between text-sm font-bold ${profit >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
                         <span className="flex items-center gap-1">
                           {profit >= 0 ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
                           Profit (margin {margin.toFixed(0)}%)
                         </span>
-                        <span>${profit.toFixed(2)}</span>
+                        <span>{formatMoney(profit)}</span>
                       </div>
                       {seCompTotal > 0 && (
                         <>
                           <div className="flex justify-between text-xs text-yellow-700 font-medium">
                             <span className="flex items-center gap-1"><Zap className="w-3 h-3" /> + SE Compensation</span>
-                            <span>+${seCompTotal.toFixed(2)}</span>
+                            <span>{formatMoney(seCompTotal)}</span>
                           </div>
                           <div className={`flex justify-between text-sm font-bold border-t border-slate-200 pt-1 ${netProfit >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
                             <span>Net incl. SE Comp</span>
-                            <span>${netProfit.toFixed(2)}</span>
+                            <span>{formatMoney(netProfit)}</span>
                           </div>
                         </>
                       )}
@@ -3285,7 +3286,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                       </div>
                     </div>
                     <p className="mt-3 text-[10px] text-teal-700">
-                      ℹ️ Admin team runs the SolarEdge ownership transfer via agentic workflow. No contractor assigned. Client charge: <strong>$120</strong>.
+                      ℹ️ Admin team runs the SolarEdge ownership transfer via agentic workflow. No contractor assigned. Flat-fee transfer (priced in Xero).
                     </p>
                   </div>
                 )}
@@ -3410,14 +3411,14 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                               <tr key={item.id}>
                                 <td className="px-3 py-2 text-slate-800">{item.description}</td>
                                 <td className="px-3 py-2 text-right text-slate-600">{item.quantity}</td>
-                                <td className="px-3 py-2 text-right font-medium text-slate-800">${item.totalCost.toFixed(2)}</td>
+                                <td className="px-3 py-2 text-right font-medium text-slate-800">{formatMoney(item.totalCost)}</td>
                               </tr>
                             ))
                             : lineItems.map(item => (
                               <tr key={item.id}>
                                 <td className="px-3 py-2 text-slate-800">{item.description}</td>
                                 <td className="px-3 py-2 text-right text-slate-600">{item.quantity}</td>
-                                <td className="px-3 py-2 text-right font-medium text-slate-800">${item.totalCost.toFixed(2)}</td>
+                                <td className="px-3 py-2 text-right font-medium text-slate-800">{formatMoney(item.totalCost)}</td>
                               </tr>
                             ))
                           }
@@ -3497,7 +3498,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
               const ownerEmail = (owner as MentionUser & { email?: string }).email;
               // Build a real @handle the mention parser recognises (username, else name-no-spaces).
               const handle = (owner as MentionUser).username || owner.name.replace(/\s+/g, '');
-              const mentionText = `@${handle} Quote preview saved for ${siteName} (${woLabel}) · Total $${payload.grandTotal.toFixed(2)}. Please create the quote and send it to the accounting software.`;
+              const mentionText = `@${handle} Quote preview saved for ${siteName} (${woLabel}). Please price it in Xero, create the quote, and send it to the accounting software.`;
               // Visible, auditable comment in the Team Conversation tab.
               const cmt: import('../types').Activity = {
                 id: `wo-cmt-${Date.now()}`,

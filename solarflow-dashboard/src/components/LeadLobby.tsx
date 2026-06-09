@@ -1,6 +1,7 @@
 // SolarOps, Lead Lobby
 // Triage view: all incoming leads land here; admins route, sales reps contact/note
 import React, { useState, useMemo, useRef } from 'react';
+import { formatMoney } from '../lib/money';
 import { authedFetch } from '../lib/supabase';
 import * as XLSX from 'xlsx';
 import {
@@ -878,7 +879,7 @@ export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserRole, customers
         </div>
         <p className="text-xs text-slate-400 truncate font-mono">{lead.phone}</p>
         {lead.monthlyBill && (
-          <p className="text-xs text-emerald-600 font-semibold mt-1">${lead.monthlyBill}/mo</p>
+          <p className="text-xs text-emerald-600 font-semibold mt-1">{formatMoney(lead.monthlyBill, { decimals: 0 })}/mo</p>
         )}
         {duplicateIndex[lead.id] && (
           <div className="mt-1.5 flex items-center gap-1.5 px-2 py-1 bg-amber-50 border border-amber-200 rounded-lg">
@@ -1860,7 +1861,7 @@ const DetailPanel: React.FC<DetailPanelProps> = ({
         </div>
         <div className="bg-slate-50 rounded-lg border border-slate-100 p-3">
           <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Monthly Bill</p>
-          <p className="text-sm font-bold text-emerald-600">{lead.monthlyBill ? `$${lead.monthlyBill}/mo` : '-'}</p>
+          <p className="text-sm font-bold text-emerald-600">{lead.monthlyBill ? `${formatMoney(lead.monthlyBill, { decimals: 0 })}/mo` : '-'}</p>
         </div>
         <div className="bg-slate-50 rounded-lg border border-slate-100 p-3">
           <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Roof Type</p>

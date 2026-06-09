@@ -12,6 +12,7 @@ import {
   OperationsStats,
   CRMCustomer,
 } from '../types';
+import { SHOW_MONEY, MONEY_HIDDEN } from './money';
 import { dbSet } from './db';
 
 // Storage Keys
@@ -355,6 +356,8 @@ export const getSeverityColor = (severity: AlertSeverity): string => {
 };
 
 export const formatCurrency = (amount: number): string => {
+  // Money is hidden in-app while financials live in Xero. See src/lib/money.ts.
+  if (!SHOW_MONEY) return MONEY_HIDDEN;
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD',

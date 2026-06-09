@@ -12,6 +12,7 @@ import {
   ChevronUp,
 } from 'lucide-react';
 import { ServiceRate } from '../../types/contractor';
+import { formatMoney } from '../../lib/money';
 
 interface RateManagementProps {
   rates: ServiceRate[];
@@ -154,7 +155,7 @@ export const RateManagement: React.FC<RateManagementProps> = ({ rates, onSaveRat
         <div className="bg-white rounded-xl border border-slate-200 p-4">
           <p className="text-sm text-slate-500">Avg Client Rate</p>
           <p className="text-2xl font-bold text-blue-600">
-            ${Math.round(rates.reduce((sum, r) => sum + (r.clientRateStandard || r.rate || 0), 0) / rates.length || 0)}
+            {formatMoney(Math.round(rates.reduce((sum, r) => sum + (r.clientRateStandard || r.rate || 0), 0) / rates.length || 0), { decimals: 0 })}
           </p>
         </div>
       </div>
@@ -180,13 +181,13 @@ export const RateManagement: React.FC<RateManagementProps> = ({ rates, onSaveRat
                   Est Hrs
                 </th>
                 <th className="text-right px-2 py-3 text-xs font-semibold text-slate-600 uppercase tracking-wider">
-                  Labor $
+                  Labor
                 </th>
                 <th className="text-right px-2 py-3 text-xs font-semibold text-slate-600 uppercase tracking-wider">
-                  Parts $
+                  Parts
                 </th>
                 <th className="text-right px-2 py-3 text-xs font-semibold text-slate-600 uppercase tracking-wider">
-                  Client $
+                  Client
                 </th>
                 <th className="text-center px-2 py-3 text-xs font-semibold text-slate-600 uppercase tracking-wider">
                   Powercare
@@ -337,28 +338,28 @@ export const RateManagement: React.FC<RateManagementProps> = ({ rates, onSaveRat
                         </td>
                         <td className="px-2 py-3 text-right">
                           <span className="text-xs font-medium text-slate-900">
-                            ${(rate.laborCost || 0).toLocaleString()}
+                            {formatMoney(rate.laborCost || 0, { decimals: 0 })}
                           </span>
                         </td>
                         <td className="px-2 py-3 text-right">
                           <span className="text-xs text-slate-600">
-                            ${(rate.partsCost || 0).toLocaleString()}
+                            {formatMoney(rate.partsCost || 0, { decimals: 0 })}
                           </span>
                         </td>
                         <td className="px-2 py-3 text-right">
                           <span className="text-xs font-semibold text-slate-900">
-                            ${(rate.clientRateStandard || 0).toLocaleString()}
+                            {formatMoney(rate.clientRateStandard || 0, { decimals: 0 })}
                           </span>
                           {rate.clientRateRecurring && rate.clientRateRecurring !== rate.clientRateStandard && (
                             <span className="text-xs text-green-600 block">
-                              Rec: ${rate.clientRateRecurring}
+                              Rec: {formatMoney(rate.clientRateRecurring, { decimals: 0 })}
                             </span>
                           )}
                         </td>
                         <td className="px-2 py-3 text-center">
                           {rate.isPowercareEligible ? (
                             <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
-                              ${rate.powercareClientRate || 0}
+                              {formatMoney(rate.powercareClientRate || 0, { decimals: 0 })}
                             </span>
                           ) : (
                             <span className="text-xs text-slate-400">-</span>
@@ -409,15 +410,15 @@ export const RateManagement: React.FC<RateManagementProps> = ({ rates, onSaveRat
                             <div className="space-y-1 text-sm">
                               <div className="flex justify-between">
                                 <span className="text-slate-500">Labor Cost:</span>
-                                <span className="font-medium">${(rate.laborCost || 0).toLocaleString()}</span>
+                                <span className="font-medium">{formatMoney(rate.laborCost || 0, { decimals: 0 })}</span>
                               </div>
                               <div className="flex justify-between">
                                 <span className="text-slate-500">Parts Cost:</span>
-                                <span className="font-medium">${(rate.partsCost || 0).toLocaleString()}</span>
+                                <span className="font-medium">{formatMoney(rate.partsCost || 0, { decimals: 0 })}</span>
                               </div>
                               <div className="flex justify-between border-t pt-1">
                                 <span className="text-slate-500">Total Cost:</span>
-                                <span className="font-semibold">${((rate.laborCost || 0) + (rate.partsCost || 0)).toLocaleString()}</span>
+                                <span className="font-semibold">{formatMoney((rate.laborCost || 0) + (rate.partsCost || 0), { decimals: 0 })}</span>
                               </div>
                             </div>
                           </div>
@@ -426,11 +427,11 @@ export const RateManagement: React.FC<RateManagementProps> = ({ rates, onSaveRat
                             <div className="space-y-1 text-sm">
                               <div className="flex justify-between">
                                 <span className="text-slate-500">Standard:</span>
-                                <span className="font-medium">${(rate.clientRateStandard || 0).toLocaleString()}</span>
+                                <span className="font-medium">{formatMoney(rate.clientRateStandard || 0, { decimals: 0 })}</span>
                               </div>
                               <div className="flex justify-between">
                                 <span className="text-slate-500">Recurring:</span>
-                                <span className="font-medium text-green-600">${(rate.clientRateRecurring || 0).toLocaleString()}</span>
+                                <span className="font-medium text-green-600">{formatMoney(rate.clientRateRecurring || 0, { decimals: 0 })}</span>
                               </div>
                             </div>
                           </div>
@@ -447,18 +448,18 @@ export const RateManagement: React.FC<RateManagementProps> = ({ rates, onSaveRat
                                 <>
                                   <div className="flex justify-between">
                                     <span className="text-slate-500">Labor Cost:</span>
-                                    <span className="font-medium">${(rate.powercareLaborCost || 0).toLocaleString()}</span>
+                                    <span className="font-medium">{formatMoney(rate.powercareLaborCost || 0, { decimals: 0 })}</span>
                                   </div>
                                   <div className="flex justify-between">
                                     <span className="text-slate-500">Client Rate:</span>
-                                    <span className="font-medium">${(rate.powercareClientRate || 0).toLocaleString()}</span>
+                                    <span className="font-medium">{formatMoney(rate.powercareClientRate || 0, { decimals: 0 })}</span>
                                   </div>
                                 </>
                               )}
                               {rate.seCompensation ? (
                                 <div className="flex justify-between border-t pt-1">
                                   <span className="text-slate-500">SE Comp:</span>
-                                  <span className="font-medium text-blue-600">${rate.seCompensation.toLocaleString()}</span>
+                                  <span className="font-medium text-blue-600">{formatMoney(rate.seCompensation, { decimals: 0 })}</span>
                                 </div>
                               ) : null}
                             </div>

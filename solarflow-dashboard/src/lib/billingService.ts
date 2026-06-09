@@ -1,5 +1,6 @@
 // SolarOps - Billing Timer Service
 // Runs on app load to apply late fees, contractor bonuses, and auto-pay triggers.
+import { formatMoney } from './money';
 import { Job, AppNotification } from '../types';
 
 const LATE_FEE_1_DAYS = 14;         // Days after invoiced before first late fee
@@ -74,7 +75,7 @@ export function processBillingTimers(jobs: Job[]): BillingResult {
         j.lateFee1Amount = fee;
         ADMIN_USER_IDS.forEach(uid => newNotifications.push(makeNotif(
           uid, 'late_fee_1', 'Late Fee Applied',
-          `WO ${label}: Client invoice 14 days overdue. Late fee of $${fee.toFixed(2)} applied.`,
+          `WO ${label}: Client invoice 14 days overdue. Late fee of ${formatMoney(fee)} applied.`,
           job.id,
         )));
       }
@@ -88,7 +89,7 @@ export function processBillingTimers(jobs: Job[]): BillingResult {
         ADMIN_USER_IDS.forEach(uid => {
           newNotifications.push(makeNotif(
             uid, 'late_fee_2', 'Second Late Fee Applied',
-            `WO ${label}: Invoice 21 days overdue. Second late fee $${fee.toFixed(2)} applied.`,
+            `WO ${label}: Invoice 21 days overdue. Second late fee ${formatMoney(fee)} applied.`,
             job.id,
           ));
           newNotifications.push(makeNotif(
@@ -110,7 +111,7 @@ export function processBillingTimers(jobs: Job[]): BillingResult {
         j.contractorPayDelayBonusAmount = bonus;
         ADMIN_USER_IDS.forEach(uid => newNotifications.push(makeNotif(
           uid, 'late_fee_1', 'Contractor Delay Bonus Due',
-          `WO ${label}: Payment delayed 14+ days. Contractor delay bonus of $${bonus.toFixed(2)} applied.`,
+          `WO ${label}: Payment delayed 14+ days. Contractor delay bonus of ${formatMoney(bonus)} applied.`,
           job.id, j.contractorId,
         )));
       }

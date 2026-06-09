@@ -1,5 +1,6 @@
 // SolarFlow - Admin Contractor Approvals Component
 import React, { useState } from 'react';
+import { formatMoney } from '../../lib/money';
 import {
   User, Building, Shield, CheckCircle, XCircle, Clock, FileText,
   Mail, Phone, MapPin, AlertCircle, ChevronRight, DollarSign, X,
@@ -393,7 +394,7 @@ export const ContractorApprovals: React.FC<ContractorApprovalsProps> = ({
                 <div className="bg-slate-900 text-white rounded-xl p-4 flex items-center justify-between">
                   <div>
                     <p className="text-xs text-slate-400 uppercase tracking-wide">Contractor Earnings</p>
-                    <p className="text-3xl font-bold mt-0.5">${totalEarnings.toLocaleString()}</p>
+                    <p className="text-3xl font-bold mt-0.5">{formatMoney(totalEarnings, { decimals: 0 })}</p>
                   </div>
                   <select
                     value={earningsPeriod}
@@ -509,7 +510,7 @@ export const ContractorApprovals: React.FC<ContractorApprovalsProps> = ({
                         <div className="grid grid-cols-3 gap-3 text-xs text-slate-500">
                           <div><p className="font-medium text-slate-400 uppercase tracking-wide mb-0.5">Scheduled</p><p>{new Date(job.scheduledDate).toLocaleDateString()}</p></div>
                           <div><p className="font-medium text-slate-400 uppercase tracking-wide mb-0.5">Customer</p><p className="truncate">{job.customerName}</p></div>
-                          <div><p className="font-medium text-slate-400 uppercase tracking-wide mb-0.5">Pay</p><p className="text-emerald-600 font-semibold">${(job.contractorTotalPay || 0).toLocaleString()}</p></div>
+                          <div><p className="font-medium text-slate-400 uppercase tracking-wide mb-0.5">Pay</p><p className="text-emerald-600 font-semibold">{formatMoney(job.contractorTotalPay || 0, { decimals: 0 })}</p></div>
                         </div>
                       </button>
                     ))}
@@ -543,7 +544,7 @@ export const ContractorApprovals: React.FC<ContractorApprovalsProps> = ({
                                 <p className="text-xs text-slate-500 mb-2 capitalize">{job.serviceType}</p>
                                 <div className="flex items-center justify-between text-xs">
                                   <span className="text-slate-400">{new Date(job.scheduledDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
-                                  <span className="text-emerald-600 font-semibold">${(job.contractorTotalPay || 0).toLocaleString()}</span>
+                                  <span className="text-emerald-600 font-semibold">{formatMoney(job.contractorTotalPay || 0, { decimals: 0 })}</span>
                                 </div>
                               </button>
                             ))}
@@ -635,7 +636,7 @@ export const ContractorApprovals: React.FC<ContractorApprovalsProps> = ({
                             }`}>
                               {exp.status.toUpperCase()}
                             </span>
-                            <span className="text-sm font-bold text-slate-900">${exp.amount.toFixed(2)}</span>
+                            <span className="text-sm font-bold text-slate-900">{formatMoney(exp.amount)}</span>
                           </div>
                         </div>
                         <p className="text-xs text-slate-500 capitalize">
@@ -748,10 +749,10 @@ export const ContractorApprovals: React.FC<ContractorApprovalsProps> = ({
               </InfoCard>
               <InfoCard title="Financials" icon={<DollarSign className="w-4 h-4" />}>
                 <div className="grid grid-cols-2 gap-3 text-sm">
-                  <InfoRow label="Total Amount"    value={`$${(selectedWO.totalAmount || 0).toLocaleString()}`} />
-                  <InfoRow label="Contractor Pay"  value={`$${(selectedWO.contractorTotalPay || 0).toLocaleString()}`} valueClass="text-emerald-600 font-bold" />
-                  <InfoRow label="Labor"           value={`$${(selectedWO.laborAmount || 0).toLocaleString()}`} />
-                  <InfoRow label="Parts"           value={`$${(selectedWO.partsAmount || 0).toLocaleString()}`} />
+                  <InfoRow label="Total Amount"    value={formatMoney(selectedWO.totalAmount || 0, { decimals: 0 })} />
+                  <InfoRow label="Contractor Pay"  value={formatMoney(selectedWO.contractorTotalPay || 0, { decimals: 0 })} valueClass="text-emerald-600 font-bold" />
+                  <InfoRow label="Labor"           value={formatMoney(selectedWO.laborAmount || 0, { decimals: 0 })} />
+                  <InfoRow label="Parts"           value={formatMoney(selectedWO.partsAmount || 0, { decimals: 0 })} />
                 </div>
               </InfoCard>
               {selectedWO.notes && (

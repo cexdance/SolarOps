@@ -1,6 +1,7 @@
 // SolarFlow - Contractor Dashboard
 // Single list view with a status filter. Tap a work order to open its detail.
 import React, { useState, useEffect } from 'react';
+import { formatMoney } from '../../lib/money';
 import {
   Wrench, MapPin, Clock, LogOut, X, ChevronRight, Filter,
 } from 'lucide-react';
@@ -167,7 +168,7 @@ export const ContractorDashboard: React.FC<ContractorDashboardProps> = ({
           </div>
         </div>
         <div className="text-right flex-shrink-0">
-          <p className="text-base font-bold text-emerald-700">${(job.contractorTotalPay ?? 0).toFixed(0)}</p>
+          <p className="text-base font-bold text-emerald-700">{formatMoney(job.contractorTotalPay ?? 0, { decimals: 0 })}</p>
           <ChevronRight className="w-4 h-4 text-slate-400 mt-1 ml-auto" />
         </div>
       </div>
@@ -291,7 +292,7 @@ export const ContractorDashboard: React.FC<ContractorDashboardProps> = ({
           </div>
           <div className="ml-auto text-right">
             <p className="text-[10px] text-slate-400 uppercase tracking-wide">Earned</p>
-            <p className="text-lg font-bold text-emerald-400">${totalEarned.toFixed(0)}</p>
+            <p className="text-lg font-bold text-emerald-400">{formatMoney(totalEarned, { decimals: 0 })}</p>
           </div>
         </div>
       </header>

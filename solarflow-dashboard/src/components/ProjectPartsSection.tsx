@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { ProjectPart, PartGroup, PartStatus } from '../types/project';
 import { PARTS_CATALOG, CatalogPart, searchParts } from '../lib/partsCatalog';
+import { formatMoney } from '../lib/money';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -39,7 +40,8 @@ function deriveStatus(part: ProjectPart): PartStatus {
 }
 
 function fmt(n: number) {
-  return n.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 });
+  // Money hidden in-app while financials live in Xero. See src/lib/money.ts.
+  return formatMoney(n);
 }
 
 function uid() {

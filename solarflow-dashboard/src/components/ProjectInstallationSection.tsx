@@ -1,5 +1,6 @@
 // Section 3, Installation: weekly schedule, contractor reports, progress
 import React, { useState, useMemo } from 'react';
+import { formatMoney } from '../lib/money';
 import {
   ChevronLeft, ChevronRight, Plus, CheckCircle2, Circle,
   Calendar, FileText, User, Wrench, Truck,
@@ -313,7 +314,7 @@ const JobReportModal: React.FC<{
                     </div>
                     <div className="text-right">
                       <span className="text-slate-600">×{p.quantity}</span>
-                      <span className="text-slate-400 ml-2">${p.totalPrice.toFixed(2)}</span>
+                      <span className="text-slate-400 ml-2">{formatMoney(p.totalPrice)}</span>
                     </div>
                   </div>
                 ))}

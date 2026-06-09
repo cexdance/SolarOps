@@ -1,6 +1,7 @@
 // SolarFlow CRM v2 - Data Store
 // Gamified Sales CRM for Solar Outreach Team
 
+import { formatMoney } from './money';
 import { Lead, LeadActivity, UserStats, Badge, XP_ACTIONS, LEVEL_THRESHOLDS, LeadSource, LeadStatus } from '../types';
 import { dbSet } from './db';
 
@@ -68,7 +69,7 @@ export const generateRandomLead = (index: number): Lead => {
     createdAt,
     updatedAt: createdAt,
     notes: '',
-    description: `Potential solar customer. Estimated monthly bill: $${monthlyBill}`,
+    description: `Potential solar customer. Estimated monthly bill: ${formatMoney(monthlyBill, { decimals: 0 })}`,
   };
 };
 

@@ -1,5 +1,6 @@
 // SolarFlow - Inventory Module
 import React, { useState, useRef, useMemo } from 'react';
+import { formatMoney } from '../lib/money';
 import {
   Package,
   Wrench,
@@ -603,7 +604,7 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ jobs = [], onU
                 <span className="text-xs text-slate-500">Total Value</span>
               </div>
               <p className="text-lg font-bold text-slate-900">
-                ${totalInventoryValue.toLocaleString()}
+                {formatMoney(totalInventoryValue, { decimals: 0 })}
               </p>
             </div>
             <div className="bg-white rounded-xl p-4 border border-slate-200">
@@ -712,7 +713,7 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ jobs = [], onU
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="font-medium text-slate-700">
-                      Total: ${(item.quantity * item.unitCost).toLocaleString()}
+                      Total: {formatMoney(item.quantity * item.unitCost, { decimals: 0 })}
                     </span>
                     <button
                       onClick={() => toggleItemExpand(item.id)}

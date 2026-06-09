@@ -1,5 +1,6 @@
 // SolarFlow MVP - Job Detail Component
 import React, { useState } from 'react';
+import { formatMoney } from '../lib/money';
 import {
   ArrowLeft,
   MapPin,
@@ -292,18 +293,18 @@ export const JobDetail: React.FC<JobDetailProps> = ({
         <h3 className="font-semibold text-slate-900 mb-3">Billing</h3>
         <div className="space-y-2">
           <div className="flex justify-between text-sm">
-            <span className="text-slate-500">Labor ({job.laborHours} hrs @ ${job.laborRate}/hr)</span>
-            <span>${(job.laborHours * job.laborRate).toFixed(2)}</span>
+            <span className="text-slate-500">Labor ({job.laborHours} hrs @ {formatMoney(job.laborRate, { decimals: 0 })}/hr)</span>
+            <span>{formatMoney(job.laborHours * job.laborRate)}</span>
           </div>
           {job.partsCost > 0 && (
             <div className="flex justify-between text-sm">
               <span className="text-slate-500">Parts</span>
-              <span>${job.partsCost.toFixed(2)}</span>
+              <span>{formatMoney(job.partsCost)}</span>
             </div>
           )}
           <div className="flex justify-between font-semibold text-lg pt-2 border-t border-slate-100">
             <span>Total</span>
-            <span>${job.totalAmount.toFixed(2)}</span>
+            <span>{formatMoney(job.totalAmount)}</span>
           </div>
         </div>
 
@@ -451,7 +452,7 @@ export const JobDetail: React.FC<JobDetailProps> = ({
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium text-slate-700">Total:</span>
                   <span className="text-lg font-bold text-slate-900">
-                    ${((editForm.laborHours * editForm.laborRate) + editForm.partsCost).toFixed(2)}
+                    {formatMoney((editForm.laborHours * editForm.laborRate) + editForm.partsCost)}
                   </span>
                 </div>
               </div>

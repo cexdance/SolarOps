@@ -181,8 +181,6 @@ export const QuotePreviewModal: React.FC<QuotePreviewProps> = ({
                   <tr className="bg-slate-50 text-xs font-semibold text-slate-500 uppercase">
                     <th className="px-3 py-2 text-left">Description</th>
                     <th className="px-3 py-2 text-center w-16">Qty</th>
-                    <th className="px-3 py-2 text-right w-24">Unit $</th>
-                    <th className="px-3 py-2 text-right w-24">Total</th>
                     <th className="px-3 py-2 w-8"></th>
                   </tr>
                 </thead>
@@ -206,17 +204,6 @@ export const QuotePreviewModal: React.FC<QuotePreviewProps> = ({
                           className="w-full text-center bg-transparent text-sm focus:outline-none"
                         />
                       </td>
-                      <td className="px-3 py-2">
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={item.unitPrice}
-                          onChange={e => updateItem(idx, 'unitPrice', Number(e.target.value))}
-                          className="w-full text-right bg-transparent text-sm focus:outline-none"
-                        />
-                      </td>
-                      <td className="px-3 py-2 text-right font-medium text-slate-900">${item.total.toFixed(2)}</td>
                       <td className="px-2 py-2">
                         <button onClick={() => removeItem(idx)} className="text-slate-400 hover:text-red-500 cursor-pointer">
                           <X className="w-3.5 h-3.5" />
@@ -229,22 +216,10 @@ export const QuotePreviewModal: React.FC<QuotePreviewProps> = ({
             </div>
           </div>
 
-          {/* Totals */}
-          <div className="flex justify-end">
-            <div className="w-64 space-y-1 text-sm">
-              <div className="flex justify-between text-slate-500">
-                <span>Labor</span>
-                <span>${computedLabor.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between text-slate-500">
-                <span>Parts & Materials</span>
-                <span>${computedParts.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between text-lg font-bold text-slate-900 pt-2 border-t border-slate-200">
-                <span className="flex items-center gap-1"><DollarSign className="w-4 h-4" /> Total</span>
-                <span>${computedTotal.toFixed(2)}</span>
-              </div>
-            </div>
+          {/* Pricing is handled in Xero by Daniel; this preview captures scope only. */}
+          <div className="flex items-start gap-2 px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-500">
+            <DollarSign className="w-4 h-4 mt-0.5 shrink-0 text-slate-400" />
+            <span>Pricing is set in Xero. This preview captures the scope of work (line items and quantities) for the quote owner to price and send.</span>
           </div>
 
           {/* Notes */}

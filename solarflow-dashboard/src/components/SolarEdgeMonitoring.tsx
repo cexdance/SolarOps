@@ -1,5 +1,6 @@
 // SolarEdge Monitoring: Florida Sites Table
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { formatMoney } from '../lib/money';
 import { authedFetch } from '../lib/supabase';
 import { resilientJson } from '../lib/resilientFetch';
 import {
@@ -548,8 +549,8 @@ export const SolarEdgeMonitoring: React.FC<Props> = ({
           { label: 'Month Production',  value: `${(stats.totalMonthKwh / 1000).toFixed(1)} MWh`,              icon: Calendar,      color: 'text-blue-600 bg-blue-50' },
           { label: 'Total Work Orders', value: stats.totalWOs,                                                 icon: ClipboardList, color: 'text-violet-600 bg-violet-50' },
           { label: 'Open Work Orders',  value: stats.openWOs,                                                  icon: Wrench,        color: 'text-orange-600 bg-orange-50' },
-          { label: 'Total Revenue',     value: `$${stats.totalRevenue.toLocaleString(undefined,{maximumFractionDigits:0})}`, icon: TrendingUp, color: 'text-blue-600 bg-blue-50' },
-          { label: 'Total Profit',      value: `$${stats.totalProfit.toLocaleString(undefined,{maximumFractionDigits:0})}`, icon: stats.totalProfit >= 0 ? TrendingUp : TrendingDown, color: stats.totalProfit >= 0 ? 'text-emerald-600 bg-emerald-50' : 'text-red-600 bg-red-50' },
+          { label: 'Total Revenue',     value: formatMoney(stats.totalRevenue, { decimals: 0 }), icon: TrendingUp, color: 'text-blue-600 bg-blue-50' },
+          { label: 'Total Profit',      value: formatMoney(stats.totalProfit, { decimals: 0 }), icon: stats.totalProfit >= 0 ? TrendingUp : TrendingDown, color: stats.totalProfit >= 0 ? 'text-emerald-600 bg-emerald-50' : 'text-red-600 bg-red-50' },
         ].map(({ label, value, icon: Icon, color }) => (
           <div key={label} className="bg-white rounded-xl border border-slate-200 p-3 flex items-center gap-3">
             <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${color}`}>
@@ -764,7 +765,7 @@ export const SolarEdgeMonitoring: React.FC<Props> = ({
                                   )}
                                   {job.totalAmount > 0 && (
                                     <span className="ml-auto font-medium text-slate-700">
-                                      ${job.totalAmount.toLocaleString()}
+                                      {formatMoney(job.totalAmount, { decimals: 0 })}
                                     </span>
                                   )}
                                 </div>

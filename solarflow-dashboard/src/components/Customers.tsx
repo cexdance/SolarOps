@@ -57,6 +57,7 @@ import * as _recharts from 'recharts';
 const { ComposedChart, Bar, Line, XAxis, YAxis, Tooltip: RechartsTooltip, ResponsiveContainer, CartesianGrid, Legend } = _recharts as any;
 import { Customer, CustomerFile, Job, ClientStatus, Activity, User, CustomerCategory, SystemType, SolarEdgeAlert } from '../types';
 import { loadAlerts } from '../lib/operationsStore';
+import { formatMoney } from '../lib/money';
 import { importTrelloCard, TrelloImportResult, fetchTrelloCard, extractContactInfo } from '../lib/trelloImporter';
 import { FL_SITES, SolarEdgeSite } from '../lib/solarEdgeSites';
 import { AddressAutocomplete } from './AddressAutocomplete';
@@ -1511,11 +1512,10 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
 
   // Build the HTML report and open the preview modal
   // NLP-crafted greeting generator with timeframe and system state
-  const buildGreeting = (kWh: number, savings: number, uptime: number) => {
+  const buildGreeting = (kWh: number, uptime: number) => {
     const firstName = customer.name?.split(' ')[0] || customer.name;
     const kwFmt = kWh >= 1000 ? `${(kWh / 1000).toFixed(1)} MWh` : `${Math.round(kWh).toLocaleString('en-US')} kWh`;
-    const savFmt = `$${Math.round(savings).toLocaleString('en-US')}`;
-    return `Dear ${firstName},\n\nWe're delighted to share your solar system performance report for the last 3 months. Your system is running at peak efficiency with ${uptime.toFixed(0)}% uptime, and over this period it generated ${kwFmt} of clean energy, delivering an estimated ${savFmt} in utility savings directly back to you.\n\nAnd whenever a question comes up, whether it is about a number on this report or anything else about your system, our team is genuinely glad to hear from you. Reach out any time.`;
+    return `Dear ${firstName},\n\nWe're delighted to share your solar system performance report for the last 3 months. Your system is running at peak efficiency with ${uptime.toFixed(0)}% uptime, and over this period it generated ${kwFmt} of clean energy, helping reduce your utility costs.\n\nAnd whenever a question comes up, whether it is about a number on this report or anything else about your system, our team is genuinely glad to hear from you. Reach out any time.`;
   };
 
   const handleOpenPreview = () => {
@@ -1527,7 +1527,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
     const uptime = energyData.length > 0 ? (daysWithProduction / energyData.length) * 100 : 100;
 
     setPreviewUptime(uptime);
-    setPreviewGreeting(buildGreeting(displayKwh, dollarsSaved, uptime));
+    setPreviewGreeting(buildGreeting(displayKwh, uptime));
     setPreviewAccountUpdates(reportNotes);
     setPreviewDowntimeDays(0);
     setPreviewServiceCalls(0);
@@ -2039,9 +2039,8 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
         <div class="metric green">
           <div class="m-head">
             <span class="m-icon">${svgDollar}</span>
-            ${dollarsSaved > 0 ? '<span class="m-trend">@ $' + COST_PER_KWH + '/kWh</span>' : ''}
           </div>
-          <div class="m-value">${dollarsSaved > 0 ? '$' + dollarsSaved.toLocaleString('en-US', { maximumFractionDigits: 0 }) : '-'}</div>
+          <div class="m-value">${formatMoney(dollarsSaved, { decimals: 0 })}</div>
           <div class="m-label">Estimated Savings</div>
           <div class="m-sub">Versus grid electricity costs</div>
         </div>
@@ -2310,15 +2309,15 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
 
         <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-4 border border-green-200">
           <div className="flex items-center gap-1.5 mb-1">
-            <span className="text-xs font-semibold text-green-700 uppercase tracking-wide">$ Saved to Date</span>
-            <InfoTooltip text={`Estimated savings based on $${COST_PER_KWH}/kWh average utility rate × lifetime production.`} />
+            <span className="text-xs font-semibold text-green-700 uppercase tracking-wide">Saved to Date</span>
+            <InfoTooltip text={`Estimated savings based on average utility rate × lifetime production.`} />
           </div>
           <p className="text-2xl font-bold text-green-700">
             {dollarsSaved > 0
-              ? `$${dollarsSaved.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+              ? formatMoney(dollarsSaved, { decimals: 0 })
               : <span className="text-slate-400 text-lg">Loading…</span>}
           </p>
-          <p className="text-xs text-green-600 mt-1">@ ${COST_PER_KWH}/kWh</p>
+          <p className="text-xs text-green-600 mt-1">Estimated utility savings</p>
         </div>
 
         <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-200">
@@ -2426,7 +2425,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
                     label={({ x, y, width: w, value: v }: { x: number; y: number; width: number; value: number }) =>
                       v > 0 ? (
                         <text x={x + w / 2} y={y - 4} textAnchor="middle" fontSize={8} fontWeight={600} fill="#16a34a">
-                          ${(v * COST_PER_KWH).toFixed(0)}
+                          {formatMoney(v * COST_PER_KWH, { decimals: 0 })}
                         </text>
                       ) : null
                     }
@@ -2662,7 +2661,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
               <div className="px-5 pt-3 pb-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
                 {[
                   { icon: <Zap className="w-4 h-4 text-orange-500" />, value: displayKwh >= 1000 ? `${(displayKwh/1000).toFixed(1)} MWh` : `${Math.round(displayKwh).toLocaleString()} kWh`, label: 'Energy Generated', color: 'orange' },
-                  { icon: <DollarSign className="w-4 h-4 text-green-600" />, value: `$${Math.round(dollarsSaved).toLocaleString()}`, label: 'Est. Savings', color: 'green' },
+                  { icon: <DollarSign className="w-4 h-4 text-green-600" />, value: formatMoney(dollarsSaved, { decimals: 0 }), label: 'Est. Savings', color: 'green' },
                   { icon: <BarChart3 className="w-4 h-4 text-blue-500" />, value: specificYield > 0 ? `${specificYield.toFixed(2)}` : '-', label: 'Specific Yield', color: 'blue' },
                   { icon: <Leaf className="w-4 h-4 text-emerald-600" />, value: `${co2Tons.toFixed(2)} t`, label: 'CO₂ Offset', color: 'emerald' },
                 ].map(({ icon, value, label, color }) => (
@@ -2709,7 +2708,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
                           label={({ x, y, width: w, value: v }: { x: number; y: number; width: number; value: number }) =>
                             v > 0 ? (
                               <text x={x + w / 2} y={y - 3} textAnchor="middle" fontSize={7} fontWeight={600} fill="#16a34a">
-                                ${(v * COST_PER_KWH).toFixed(0)}
+                                {formatMoney(v * COST_PER_KWH, { decimals: 0 })}
                               </text>
                             ) : null
                           }
@@ -3026,7 +3025,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
       <div class="metric-label">Energy Generated</div>
     </div>
     <div class="metric-card">
-      <div class="metric-value green">$${Math.round(dollarsSaved).toLocaleString()}</div>
+      <div class="metric-value green">${formatMoney(dollarsSaved, { decimals: 0 })}</div>
       <div class="metric-label">Est. Savings</div>
     </div>
     <div class="metric-card">
@@ -4061,7 +4060,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                           {amount > 0 && (
                             <span className="flex items-center gap-1 font-semibold text-emerald-700">
                               <DollarSign className="w-3 h-3" />
-                              ${amount.toLocaleString('en-US', { maximumFractionDigits: 0 })}
+                              {formatMoney(amount, { decimals: 0 })}
                             </span>
                           )}
                           {job.laborHours > 0 && (

@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { Job, Customer, User as UserType } from '../types';
 import { notifyAdminForInvoice } from '../lib/quoteService';
+import { formatMoney } from '../lib/money';
 import { WorkOrderCalendar } from './WorkOrderCalendar';
 import { BillingReportModal } from './BillingReportModal';
 
@@ -146,7 +147,7 @@ export const Billing: React.FC<BillingProps> = ({
             <DollarSign className="w-5 h-5 text-slate-600" />
             <span className="text-sm font-medium text-slate-800">Total</span>
           </div>
-          <p className="text-2xl font-bold text-slate-900">${jobs.reduce((sum, j) => sum + j.totalAmount, 0).toLocaleString()}</p>
+          <p className="text-2xl font-bold text-slate-900">{formatMoney(jobs.reduce((sum, j) => sum + j.totalAmount, 0), { decimals: 0 })}</p>
           <p className="text-xs text-slate-600">{jobs.length} jobs</p>
         </div>
 
@@ -155,7 +156,7 @@ export const Billing: React.FC<BillingProps> = ({
             <AlertTriangle className="w-5 h-5 text-red-600" />
             <span className="text-sm font-medium text-red-800">Unbilled</span>
           </div>
-          <p className="text-2xl font-bold text-red-900">${unbilledTotal.toLocaleString()}</p>
+          <p className="text-2xl font-bold text-red-900">{formatMoney(unbilledTotal, { decimals: 0 })}</p>
           <p className="text-xs text-red-600">{unbilledJobs.length} jobs</p>
         </div>
 
@@ -164,7 +165,7 @@ export const Billing: React.FC<BillingProps> = ({
             <Clock className="w-5 h-5 text-purple-600" />
             <span className="text-sm font-medium text-purple-800">Invoiced</span>
           </div>
-          <p className="text-2xl font-bold text-purple-900">${invoicedTotal.toLocaleString()}</p>
+          <p className="text-2xl font-bold text-purple-900">{formatMoney(invoicedTotal, { decimals: 0 })}</p>
           <p className="text-xs text-purple-600">{invoicedJobs.length} jobs</p>
         </div>
 
@@ -173,7 +174,7 @@ export const Billing: React.FC<BillingProps> = ({
             <CheckCircle className="w-5 h-5 text-green-600" />
             <span className="text-sm font-medium text-green-800">Paid</span>
           </div>
-          <p className="text-2xl font-bold text-green-900">${paidTotal.toLocaleString()}</p>
+          <p className="text-2xl font-bold text-green-900">{formatMoney(paidTotal, { decimals: 0 })}</p>
           <p className="text-xs text-green-600">{paidJobs.length} jobs</p>
         </div>
       </div>
@@ -190,7 +191,7 @@ export const Billing: React.FC<BillingProps> = ({
                 ACTION REQUIRED: {unbilledJobs.length} unbilled job{unbilledJobs.length > 1 ? 's' : ''}
               </p>
               <p className="text-sm text-red-700">
-                ${unbilledTotal.toLocaleString()} in unbilled revenue needs immediate attention
+                {formatMoney(unbilledTotal, { decimals: 0 })} in unbilled revenue needs immediate attention
               </p>
             </div>
           </div>
@@ -260,7 +261,7 @@ export const Billing: React.FC<BillingProps> = ({
               <div key={col.key} className="flex-1 min-w-[280px]">
                 <div className={`flex items-center justify-between px-3 py-2 rounded-lg border mb-3 ${col.headerCls}`}>
                   <span className="font-semibold text-sm">{col.label}</span>
-                  <span className="text-xs font-medium">{col.count} · ${col.total.toLocaleString()}</span>
+                  <span className="text-xs font-medium">{col.count} · {formatMoney(col.total, { decimals: 0 })}</span>
                 </div>
                 <div className="space-y-3">
                   {colJobs.length === 0 ? (
@@ -279,7 +280,7 @@ export const Billing: React.FC<BillingProps> = ({
                             )}
                             <p className="font-semibold text-slate-900 text-sm leading-tight truncate">{customer?.name}</p>
                           </div>
-                          <p className="font-bold text-slate-900 text-sm ml-2 shrink-0">${job.totalAmount.toFixed(0)}</p>
+                          <p className="font-bold text-slate-900 text-sm ml-2 shrink-0">{formatMoney(job.totalAmount, { decimals: 0 })}</p>
                         </div>
                         <p className="text-xs text-slate-500 mb-3">{job.serviceType}</p>
                         <div className="flex gap-2">
@@ -395,10 +396,10 @@ export const Billing: React.FC<BillingProps> = ({
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="text-lg font-bold text-slate-900">${job.totalAmount.toFixed(2)}</p>
+                    <p className="text-lg font-bold text-slate-900">{formatMoney(job.totalAmount)}</p>
                     <p className="text-xs text-slate-500">
-                      {job.laborHours} hrs @ ${job.laborRate}/hr
-                      {job.partsCost > 0 && ` + $${job.partsCost} parts`}
+                      {job.laborHours} hrs @ {formatMoney(job.laborRate, { decimals: 0 })}/hr
+                      {job.partsCost > 0 && ` + ${formatMoney(job.partsCost, { decimals: 0 })} parts`}
                     </p>
                   </div>
                 </div>

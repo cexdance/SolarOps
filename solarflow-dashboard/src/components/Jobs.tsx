@@ -1,5 +1,6 @@
 // SolarFlow MVP - Jobs Component
 import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { formatMoney } from '../lib/money';
 import {
   Plus, Search, Calendar, MapPin, User, Clock, X, Wrench, Zap, LayoutGrid, List as ListIcon,
   Power, Cpu, ClipboardCheck,
@@ -176,7 +177,7 @@ const JobCard: React.FC<JobCardProps> = ({ job, customer, contractorName, isDrag
         <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{job.scheduledDate?.split('T')[0] ?? job.scheduledDate}</span>
         <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{job.scheduledTime}</span>
       </div>
-      <span className="font-semibold text-slate-900">${job.totalAmount.toFixed(0)}</span>
+      <span className="font-semibold text-slate-900">{formatMoney(job.totalAmount, { decimals: 0 })}</span>
     </div>
   </div>
   );

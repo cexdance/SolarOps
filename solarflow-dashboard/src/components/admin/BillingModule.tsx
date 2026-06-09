@@ -16,6 +16,7 @@ import {
   Undo2,
 } from 'lucide-react';
 import { ContractorJob, InvoiceStatus, PaymentStatus } from '../../types/contractor';
+import { formatMoney } from '../../lib/money';
 
 interface BillingModuleProps {
   jobs: ContractorJob[];
@@ -268,7 +269,7 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ jobs, onUpdateJob 
             <FileText className="w-4 h-4 text-blue-500" />
             <span className="text-sm text-slate-500">Total Invoiced</span>
           </div>
-          <p className="text-2xl font-bold text-slate-900">${totals.totalInvoiced.toFixed(2)}</p>
+          <p className="text-2xl font-bold text-slate-900">{formatMoney(totals.totalInvoiced)}</p>
         </div>
 
         <div className="bg-white rounded-xl border border-slate-200 p-4">
@@ -276,7 +277,7 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ jobs, onUpdateJob 
             <CheckCircle className="w-4 h-4 text-green-500" />
             <span className="text-sm text-slate-500">Paid</span>
           </div>
-          <p className="text-2xl font-bold text-green-600">${totals.totalPaid.toFixed(2)}</p>
+          <p className="text-2xl font-bold text-green-600">{formatMoney(totals.totalPaid)}</p>
         </div>
 
         <div className="bg-white rounded-xl border border-slate-200 p-4">
@@ -284,7 +285,7 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ jobs, onUpdateJob 
             <Clock className="w-4 h-4 text-yellow-500" />
             <span className="text-sm text-slate-500">Open Invoices</span>
           </div>
-          <p className="text-2xl font-bold text-yellow-600">${totals.totalPending.toFixed(2)}</p>
+          <p className="text-2xl font-bold text-yellow-600">{formatMoney(totals.totalPending)}</p>
         </div>
 
         <div className="bg-white rounded-xl border border-slate-200 p-4">
@@ -292,7 +293,7 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ jobs, onUpdateJob 
             <CreditCard className="w-4 h-4 text-orange-500" />
             <span className="text-sm text-slate-500">Contractor Pay</span>
           </div>
-          <p className="text-2xl font-bold text-orange-600">${totals.contractorPayPending.toFixed(2)}</p>
+          <p className="text-2xl font-bold text-orange-600">{formatMoney(totals.contractorPayPending)}</p>
           <p className="text-xs text-slate-500">pending approval</p>
         </div>
 
@@ -302,7 +303,7 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ jobs, onUpdateJob 
             <span className="text-sm text-slate-500">Profitability</span>
           </div>
           <p className={`text-2xl font-bold ${totals.totalProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-            ${totals.totalProfit.toFixed(2)}
+            {formatMoney(totals.totalProfit)}
           </p>
           <p className="text-xs text-slate-500">
             {profitPercentage.toFixed(1)}% margin
@@ -333,7 +334,7 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ jobs, onUpdateJob 
               />
             </div>
             <p className="text-xs text-slate-500 mt-1">
-              {goalProgress >= 100 ? 'Goal reached!' : `$${amountToGoal.toFixed(0)} to goal`}
+              {goalProgress >= 100 ? 'Goal reached!' : `${formatMoney(amountToGoal)} to goal`}
             </p>
           </div>
         </div>
@@ -451,7 +452,7 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ jobs, onUpdateJob 
                   <p className="text-sm text-slate-500">WO #{job.id}</p>
                 </div>
                 <div className="text-right">
-                  <p className="font-bold text-slate-900">${job.totalAmount.toFixed(2)}</p>
+                  <p className="font-bold text-slate-900">{formatMoney(job.totalAmount)}</p>
                   <p className="text-xs text-slate-500">{job.serviceType}</p>
                 </div>
               </div>
@@ -475,21 +476,21 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ jobs, onUpdateJob 
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-sm font-medium text-indigo-900">Profitability</span>
                   <span className={`text-sm font-bold ${(job.totalAmount - job.partsAmount - job.contractorTotalPay) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    ${(job.totalAmount - job.partsAmount - job.contractorTotalPay).toFixed(2)}
+                    {formatMoney((job.totalAmount - job.partsAmount - job.contractorTotalPay))}
                   </span>
                 </div>
                 <div className="grid grid-cols-3 gap-2 text-xs">
                   <div className="text-center">
                     <p className="text-slate-500">Revenue</p>
-                    <p className="font-semibold text-green-600">${job.totalAmount.toFixed(2)}</p>
+                    <p className="font-semibold text-green-600">{formatMoney(job.totalAmount)}</p>
                   </div>
                   <div className="text-center">
                     <p className="text-slate-500">Materials</p>
-                    <p className="font-semibold text-red-500">-${job.partsAmount.toFixed(2)}</p>
+                    <p className="font-semibold text-red-500">-{formatMoney(job.partsAmount)}</p>
                   </div>
                   <div className="text-center">
                     <p className="text-slate-500">Labor</p>
-                    <p className="font-semibold text-red-500">-${job.contractorTotalPay.toFixed(2)}</p>
+                    <p className="font-semibold text-red-500">-{formatMoney(job.contractorTotalPay)}</p>
                   </div>
                 </div>
               </div>
@@ -553,7 +554,7 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ jobs, onUpdateJob 
                   <span className={`text-xs px-2 py-0.5 rounded-full ${paymentColors[job.paymentStatus || 'pending']}`}>
                     {(job.paymentStatus || 'pending').replace('_', ' ').toUpperCase()}
                   </span>
-                  <span className="font-semibold text-orange-600">${job.contractorTotalPay.toFixed(2)}</span>
+                  <span className="font-semibold text-orange-600">{formatMoney(job.contractorTotalPay)}</span>
                 </div>
 
                 <div className="flex gap-1">
@@ -719,32 +720,32 @@ const JobDetailModal: React.FC<{ job: ContractorJob; onClose: () => void }> = ({
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
                   <span className="text-slate-500">Labor</span>
-                  <span className="font-medium">${job.laborAmount.toFixed(2)}</span>
+                  <span className="font-medium">{formatMoney(job.laborAmount)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-500">Parts</span>
-                  <span className="font-medium">${job.partsAmount.toFixed(2)}</span>
+                  <span className="font-medium">{formatMoney(job.partsAmount)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-500">Markup ({job.markupPercent}%)</span>
                   <span className="font-medium">
-                    ${((job.laborAmount + job.partsAmount) * job.markupPercent / 100).toFixed(2)}
+                    {formatMoney(((job.laborAmount + job.partsAmount) * job.markupPercent / 100))}
                   </span>
                 </div>
                 <div className="flex justify-between font-bold text-lg pt-2 border-t">
                   <span>Total Invoice</span>
-                  <span className="text-green-600">${job.totalAmount.toFixed(2)}</span>
+                  <span className="text-green-600">{formatMoney(job.totalAmount)}</span>
                 </div>
                 <div className="flex justify-between font-bold pt-2 border-t">
                   <span>Contractor Pay</span>
-                  <span className="text-orange-600">${job.contractorTotalPay.toFixed(2)}</span>
+                  <span className="text-orange-600">{formatMoney(job.contractorTotalPay)}</span>
                 </div>
                 {job.partsReimbursementRequested && (
                   <div className="flex items-start gap-2 mt-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg">
                     <span className="w-2 h-2 rounded-full bg-blue-500 mt-1.5 shrink-0" />
                     <div className="flex-1 text-sm">
                       <span className="font-semibold text-blue-900">Parts reimbursement requested</span>
-                      <span className="text-blue-700">, ${job.partsAmount.toFixed(2)}</span>
+                      <span className="text-blue-700">, {formatMoney(job.partsAmount)}</span>
                     </div>
                   </div>
                 )}
@@ -831,7 +832,7 @@ const JobDetailModal: React.FC<{ job: ContractorJob; onClose: () => void }> = ({
                   {job.parts.map((part) => (
                     <div key={part.id} className="flex justify-between text-sm">
                       <span>{part.name} (x{part.quantity})</span>
-                      <span className="font-medium">${part.totalPrice}</span>
+                      <span className="font-medium">{formatMoney(part.totalPrice)}</span>
                     </div>
                   ))}
                 </div>

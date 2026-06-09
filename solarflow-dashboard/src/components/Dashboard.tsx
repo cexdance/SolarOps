@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { Job, Customer, User, AppNotification, RMAEntry, RMAStatus } from '../types';
 import { canSeeFinancials } from '../lib/access';
+import { formatMoney, formatMoneyCompact } from '../lib/money';
 // Shared, cloud-synced todo store, same source of truth as the Ops Center widget.
 import { loadTodos, saveTodos, TodoItem } from '../lib/todoStore';
 
@@ -81,11 +82,8 @@ const inRange = (d: string | undefined, start: Date, end: Date) => {
     : new Date(d).getTime();
   return t >= start.getTime() && t <= end.getTime();
 };
-const fmtMoney = (n: number) => {
-  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`;
-  if (n >= 1_000) return `$${(n / 1_000).toFixed(1)}k`;
-  return `$${Math.round(n).toLocaleString()}`;
-};
+// Money is hidden in-app while financials live in Xero. See src/lib/money.ts.
+const fmtMoney = (n: number) => formatMoneyCompact(n);
 
 // ── Metric computation ────────────────────────────────────────────────────────
 
@@ -335,7 +333,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
             <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
             <p className="text-sm text-red-900 flex-1 min-w-0">
               <span className="font-semibold">{unbilledJobs.length} unbilled</span>
-              {' '}· ${unbilledJobs.reduce((s, j) => s + j.totalAmount, 0).toLocaleString()} ready to invoice
+              {' '}· {formatMoney(unbilledJobs.reduce((s, j) => s + j.totalAmount, 0), { decimals: 0 })} ready to invoice
             </p>
             <button
               onClick={() => onViewChange('billing')}
@@ -445,7 +443,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                             {tech && <span className="text-xs text-slate-400 truncate">· {tech.name}</span>}
                           </div>
                         </div>
-                        <span className="text-sm font-semibold text-slate-700 shrink-0">${job.totalAmount.toFixed(0)}</span>
+                        <span className="text-sm font-semibold text-slate-700 shrink-0">{formatMoney(job.totalAmount, { decimals: 0 })}</span>
                       </div>
                     </div>
                   );
@@ -860,7 +858,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                                 </span>
                                 {(row.entry.compensationAmount ?? 0) > 0 && (
                                   <span className={`text-[10px] font-bold whitespace-nowrap ${isPaid ? 'text-green-500' : 'text-slate-700'}`}>
-                                    ${(row.entry.compensationAmount ?? 0).toLocaleString()}
+                                    {formatMoney(row.entry.compensationAmount ?? 0, { decimals: 0 })}
                                   </span>
                                 )}
                               </div>

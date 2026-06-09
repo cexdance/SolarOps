@@ -1,5 +1,6 @@
 // Site Profile Panel, full customer window with Overview, Story, Work Orders, Notes
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { formatMoney } from '../lib/money';
 import {
   X, FileText, MessageSquare, Trash2, Upload, Image, File,
   Send, Clock, User, ChevronDown, ChevronUp, Save, Zap,
@@ -549,8 +550,8 @@ export const SiteProfilePanel: React.FC<Props> = ({
                   <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Financials</p>
                   <div className="grid grid-cols-3 gap-3">
                     {[
-                      { label: 'Revenue',    value: `$${totalRevenue.toLocaleString()}`, color: 'text-slate-800' },
-                      { label: 'Profit',     value: `$${totalProfit.toLocaleString()}`,  color: totalProfit >= 0 ? 'text-emerald-600' : 'text-red-500' },
+                      { label: 'Revenue',    value: formatMoney(totalRevenue, { decimals: 0 }), color: 'text-slate-800' },
+                      { label: 'Profit',     value: formatMoney(totalProfit, { decimals: 0 }),  color: totalProfit >= 0 ? 'text-emerald-600' : 'text-red-500' },
                       { label: 'Margin',     value: `${margin.toFixed(0)}%`,             color: margin >= 20 ? 'text-emerald-600' : margin >= 0 ? 'text-amber-600' : 'text-red-500' },
                     ].map(({ label, value, color }) => (
                       <div key={label} className="bg-slate-50 rounded-lg p-3">
@@ -680,11 +681,11 @@ export const SiteProfilePanel: React.FC<Props> = ({
                               {job.laborHours > 0 && <span>{job.laborHours}h labor</span>}
                             </div>
                             <div className="flex items-center gap-3">
-                              {job.totalAmount > 0 && <span className="font-medium text-slate-700">${job.totalAmount.toLocaleString()}</span>}
+                              {job.totalAmount > 0 && <span className="font-medium text-slate-700">{formatMoney(job.totalAmount, { decimals: 0 })}</span>}
                               {job.totalAmount > 0 && (
                                 <span className={`flex items-center gap-0.5 font-semibold ${profit >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
                                   {profit >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                                  ${Math.abs(profit).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                  {formatMoney(Math.abs(profit), { decimals: 0 })}
                                 </span>
                               )}
                             </div>

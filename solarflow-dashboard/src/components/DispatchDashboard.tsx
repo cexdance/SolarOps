@@ -1,6 +1,7 @@
 // SolarOps, OPS CENTER Dashboard
 // 2 columns × 2 rows = 4 configurable widget slots
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import { formatMoney } from '../lib/money';
 import {
   Crosshair, AlertTriangle, Zap, Wrench, Plus, X, Sun,
   Clock, MapPin, LayoutGrid, Search, ChevronRight, ChevronUp, ChevronDown,
@@ -1060,7 +1061,7 @@ const LeadPipelineWidget: React.FC = () => {
       {/* Close potential */}
       <div className="bg-emerald-50 rounded-lg px-3 py-2 mb-2 flex-shrink-0">
         <p className="text-[10px] text-emerald-600 font-medium">Close Potential</p>
-        <p className="text-base font-bold text-emerald-700">${closePotential.toLocaleString()}</p>
+        <p className="text-base font-bold text-emerald-700">{formatMoney(closePotential, { decimals: 0 })}</p>
       </div>
 
       {/* Funnel bars */}
