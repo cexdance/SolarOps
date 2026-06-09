@@ -51,6 +51,42 @@ import { addInteraction, loadCustomers, loadInteractions, saveInteractions } fro
 import { validateAddress } from './lib/addressValidator';
 import { useUnreadBadge } from './hooks/useUnreadBadge';
 
+// ── Web Push helpers ──────────────────────────────────────────────────────────
+
+const VAPID_PUBLIC_KEY = 'BAZ1FTjkOgcZmNiDU8ZLbeVFpuXv3XHNMXdAIi0DNWP3OyEGnHjdpDnHeWsAoF7FzGg-mMpo7YC2KPgMhSRGvB8';
+
+function urlBase64ToUint8Array(b64: string): Uint8Array {
+  const padding = '='.repeat((4 - (b64.length % 4)) % 4);
+  const base64 = (b64 + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = window.atob(base64);
+  return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+}
+
+async function subscribeToPush(): Promise<void> {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) {
+      const perm = await Notification.requestPermission();
+      if (perm !== 'granted') return;
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+      });
+    }
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) return;
+    await fetch('/api/push-subscribe', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      body:    JSON.stringify({ subscription: sub.toJSON() }),
+    });
+  } catch (err) {
+    console.warn('[push] subscription failed:', err);
+  }
+}
+
 // ── Passkey / WebAuthn helpers (imported from shared lib) ─────────────────────
 import {
   PASSKEY_STORE_KEY,
@@ -877,6 +913,13 @@ function App() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  // Register service worker for Web Push (Tier 3). Safe no-op in dev/unsupported browsers.
+  useEffect(() => {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {});
+    }
+  }, []);
+
   // Computed values
   const currentUser = data.currentUser;
 
@@ -923,6 +966,8 @@ function App() {
     });
     // Wire up the bell on fresh login (resume path does this separately).
     setupNotifications(user.id);
+    // Subscribe to Web Push (Tier 3 badge) - asks for Notifications permission once.
+    subscribeToPush();
     if (user.role === 'sales') {
       setCurrentView('crm');
     }

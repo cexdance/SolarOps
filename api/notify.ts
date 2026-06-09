@@ -6,16 +6,22 @@
  *
  * 1. Validates caller JWT
  * 2. Writes AppNotification rows to Supabase (one per mentioned user)
- * 3. Sends email to each mentioned user via Resend (if RESEND_API_KEY is set)
- *
- * Uses native fetch only, no SDK dependencies (avoids Vercel bundling issues).
+ * 3. Sends Web Push to each user's registered push subscriptions (if VAPID keys set)
+ * 4. Sends email to each mentioned user via Resend (if RESEND_API_KEY is set)
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import webPush from 'web-push';
 
 const SUPABASE_URL     = 'https://cjmhfagkkayelcsprbai.supabase.co';
 // .trim() strips trailing \n that Vercel env-pull embeds in quoted values
 const SERVICE_ROLE_KEY = (process.env.SUPABASE_SERVICE_ROLE_KEY ?? '').trim();
 const RESEND_API_KEY   = (process.env.RESEND_API_KEY ?? '').trim() || undefined;
+const VAPID_PUBLIC_KEY = (process.env.VAPID_PUBLIC_KEY ?? '').trim();
+const VAPID_PRIVATE_KEY = (process.env.VAPID_PRIVATE_KEY ?? '').trim();
+
+if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
+  webPush.setVapidDetails('mailto:admin@conexsol.us', VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+}
 
 const supabaseHeaders = {
   Authorization:  `Bearer ${SERVICE_ROLE_KEY}`,
@@ -93,6 +99,47 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const detail = await insertRes.text().catch(() => '');
     console.error('[notify] insert error:', detail);
     return res.status(500).json({ error: 'Failed to save notifications' });
+  }
+
+  // ── Send Web Push to each mentioned user's registered devices ────────────
+  if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
+    await Promise.all(
+      mentioned.map(async (u) => {
+        const subRes = await fetch(
+          `${SUPABASE_URL}/rest/v1/push_subscriptions?user_id=eq.${u.id}`,
+          { headers: supabaseHeaders },
+        ).catch(() => null);
+        if (!subRes?.ok) return;
+        const subs = await subRes.json() as Array<{ endpoint: string; subscription: Record<string, unknown> }>;
+
+        await Promise.all(
+          subs.map(async (row) => {
+            const payload = JSON.stringify({
+              title: `${notifierName || 'A teammate'} mentioned you`,
+              body:  message
+                ? `In ${customerName || 'a service order'}: "${String(message).slice(0, 120)}${String(message).length > 120 ? '…' : ''}"`
+                : `You were mentioned in ${customerName || 'a service order'}`,
+              url: '/',
+            });
+            try {
+              await webPush.sendNotification(
+                row.subscription as Parameters<typeof webPush.sendNotification>[0],
+                payload,
+                { TTL: 86400 },
+              );
+            } catch (err: unknown) {
+              // 410 Gone = subscription expired; delete it
+              if ((err as { statusCode?: number }).statusCode === 410) {
+                await fetch(
+                  `${SUPABASE_URL}/rest/v1/push_subscriptions?user_id=eq.${u.id}&endpoint=eq.${encodeURIComponent(row.endpoint)}`,
+                  { method: 'DELETE', headers: supabaseHeaders },
+                ).catch(() => {});
+              }
+            }
+          }),
+        );
+      }),
+    );
   }
 
   // ── Send email to each mentioned user (fire-and-forget) ───────────────────

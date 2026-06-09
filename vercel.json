@@ -1,5 +1,5 @@
 {
-  "installCommand": "cd solarflow-dashboard && npx --yes pnpm@9.15.4 install --no-frozen-lockfile",
+  "installCommand": "npm install && cd solarflow-dashboard && npx --yes pnpm@9.15.4 install --no-frozen-lockfile",
   "buildCommand": "cd solarflow-dashboard && npx --yes pnpm@9.15.4 run build",
   "outputDirectory": "solarflow-dashboard/dist",
   "framework": "vite",

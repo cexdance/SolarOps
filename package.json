@@ -1,0 +1,9 @@
+{
+  "dependencies": {
+    "docx": "^9.7.1",
+    "web-push": "^3.6.7"
+  },
+  "devDependencies": {
+    "@types/web-push": "^3.6.4"
+  }
+}
