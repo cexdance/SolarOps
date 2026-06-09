@@ -378,14 +378,17 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
   const partDescriptionSuggestions = ['Inverter', 'Optimizer', 'Battery', 'Combiner Box', 'DC Disconnect', 'AC Disconnect', 'Breaker', 'Module', 'Rail', 'Conduit', 'Cable', 'Junction Box', 'Monitoring Device'];
   // Travel miles
   const [travelMiles] = useState<number>(job?.travelMiles ?? 0);
-  // Audit trail
-  const [auditLog] = useState<AuditEntry[]>(job?.auditLog ?? []);
+  // Audit trail (stateful so the bottom Activity Timeline updates live as the
+  // user saves, uploads photos, edits prices, or advances the workflow stage).
+  const [auditLog, setAuditLog] = useState<AuditEntry[]>(job?.auditLog ?? []);
   // Delete confirmation (0=idle, 1=first confirm, 2=confirmed)
   const [deleteStep, setDeleteStep] = useState(0);
   // SOW Distribution Report state
   const [showSowDistribution, setShowSowDistribution] = useState(false);
   // Quote modal state
   const [showQuotePreview, setShowQuotePreview] = useState(false);
+  // SOW / report preview modal (separate from the quote-send modal above)
+  const [showSowReport, setShowSowReport] = useState(false);
   const [quoteSending] = useState(false);
   const [quoteResult, setQuoteResult] = useState<{ ok: boolean; msg: string } | null>(null);
   const [technicianId] = useState(job?.technicianId ?? '');
@@ -779,12 +782,12 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
         if (skipQuoteForPowerCare) {
           updateClientStatus(siteId, 'quote_approval');
           onUpdateSiteStatus?.(siteId, 'quote_approval');
-        } else if (customer?.email) {
+        } else {
+          // Open the quote preview. Saving it stores the line items, notifies
+          // Daniel Matos to create + send the quote, and advances to Quote Sent.
+          // No customer email is required to proceed.
           setShowQuotePreview(true);
           return;
-        } else {
-          updateClientStatus(siteId, 'quote_approval');
-          onUpdateSiteStatus?.(siteId, 'quote_approval');
         }
       }
       if (woStatus === 'quote_sent') {
@@ -1091,6 +1094,37 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
     const fallbackTotal = laborHours * contractorPayRate + partsCostDirect;
     const baseQuote = quoteAmount > 0 ? quoteAmount : (total > 0 ? total : fallbackTotal);
     const effectiveQuote = applyRecurringDiscount ? baseQuote * 0.9 : baseQuote;
+    // Build the audit entry for this save (created / completed / field diff) and
+    // append it to the live trail so the bottom Activity Timeline updates at once.
+    const stageNowCompleted = effectiveWoStatus === 'completed' && job?.woStatus !== 'completed';
+    const auditEntry: AuditEntry = {
+      id: `audit-${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      userName: currentUserName,
+      action: isNew ? 'created' : stageNowCompleted ? 'completed' : 'updated',
+      details: isNew
+        ? `Work order created by ${currentUserName}`
+        : (() => {
+            const parts: string[] = [];
+            if (job?.woStatus !== effectiveWoStatus)
+              parts.push(`Stage ${job?.woStatus ?? 'draft'} → ${effectiveWoStatus}`);
+            const prevPhotos = job?.woPhotos?.length ?? 0;
+            if (woPhotos.length !== prevPhotos)
+              parts.push(`Photos ${prevPhotos} → ${woPhotos.length}`);
+            const prevTotal = job?.totalAmount ?? 0;
+            if (Math.abs(effectiveQuote - prevTotal) > 0.01)
+              parts.push(`Total $${prevTotal.toFixed(2)} → $${effectiveQuote.toFixed(2)}`);
+            const prevLiCount = job?.lineItems?.length ?? 0;
+            if (lineItems.length !== prevLiCount)
+              parts.push(`Line items ${prevLiCount} → ${lineItems.length}`);
+            if (job?.serviceType !== serviceType)
+              parts.push(`Type → ${serviceType}`);
+            if (job?.notes !== notes) parts.push('Notes updated');
+            return parts.length > 0 ? parts.join(' · ') : 'Fields updated';
+          })(),
+    };
+    const nextAuditLog = [...auditLog, auditEntry];
+    setAuditLog(nextAuditLog);
     const partialJob: Partial<Job> = {
       ...(job ?? {}),
       title: title || `WO, ${siteName}`,
@@ -1147,35 +1181,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
       snSyncScheduledAt: (isSerialJob && sowNewSN && effectiveWoStatus === 'completed')
         ? (job?.snSyncCompletedAt ? job.snSyncScheduledAt : new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString())
         : job?.snSyncScheduledAt,
-      auditLog: [
-        ...auditLog,
-        {
-          id: `audit-${Date.now()}`,
-          timestamp: new Date().toISOString(),
-          userName: currentUserName,
-          action: isNew ? 'created' : 'updated',
-          details: isNew
-            ? `Work order created by ${currentUserName}`
-            : (() => {
-                const parts: string[] = [];
-                if (job?.woStatus !== effectiveWoStatus)
-                  parts.push(`Stage ${job?.woStatus ?? 'draft'} → ${effectiveWoStatus}`);
-                const prevPhotos = job?.woPhotos?.length ?? 0;
-                if (woPhotos.length !== prevPhotos)
-                  parts.push(`Photos ${prevPhotos} → ${woPhotos.length}`);
-                const prevTotal = job?.totalAmount ?? 0;
-                if (Math.abs(effectiveQuote - prevTotal) > 0.01)
-                  parts.push(`Total $${prevTotal.toFixed(2)} → $${effectiveQuote.toFixed(2)}`);
-                const prevLiCount = job?.lineItems?.length ?? 0;
-                if (lineItems.length !== prevLiCount)
-                  parts.push(`Line items ${prevLiCount} → ${lineItems.length}`);
-                if (job?.serviceType !== serviceType)
-                  parts.push(`Type → ${serviceType}`);
-                if (job?.notes !== notes) parts.push('Notes updated');
-                return parts.length > 0 ? parts.join(' · ') : 'Fields updated';
-              })(),
-        },
-      ],
+      auditLog: nextAuditLog,
     };
     onSave(partialJob);
 
@@ -1384,11 +1390,8 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
               {!isSiteTransfer && skipQuoteForPowerCare && woStatus === 'draft' && !quoteResult && (
                 <span className="text-xs text-emerald-600">PowerCare plan · No quote sent</span>
               )}
-              {!isSiteTransfer && !skipQuoteForPowerCare && woStatus === 'draft' && customer?.email && !quoteResult && (
-                <span className="text-xs text-slate-400">Will email quote to {customer.email}</span>
-              )}
-              {!isSiteTransfer && !skipQuoteForPowerCare && woStatus === 'draft' && !customer?.email && (
-                <span className="text-xs text-amber-500">No customer email, add one to send quote</span>
+              {!isSiteTransfer && !skipQuoteForPowerCare && woStatus === 'draft' && !quoteResult && (
+                <span className="text-xs text-slate-400">Opens a quote preview · saves it &amp; notifies Daniel Matos</span>
               )}
               {isSiteTransfer && woStatus === 'draft' && (
                 <span className="text-xs text-teal-600">Admin agentic workflow · No quote sent · $120 flat fee</span>
@@ -2986,6 +2989,74 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
               )}
             </div>
           )}
+
+          {/* ── Activity Timeline (always visible, audit trail) ──────────── */}
+          <div className="border-t border-slate-200 bg-slate-50/60 px-6 py-4">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                <History className="w-3.5 h-3.5" />
+                Activity Timeline
+              </p>
+              {auditLog.length > 0 && (
+                <span className="text-[11px] text-slate-400">{auditLog.length} {auditLog.length === 1 ? 'event' : 'events'}</span>
+              )}
+            </div>
+
+            {/* Created / Last modified / Completed summary */}
+            {(() => {
+              const created = auditLog.find(e => e.action === 'created');
+              const completed = [...auditLog].reverse().find(e => e.action === 'completed' || /→ completed/.test(e.details));
+              const last = auditLog[auditLog.length - 1];
+              const fmt = (e?: AuditEntry) => e ? `${e.userName} · ${new Date(e.timestamp).toLocaleString()}` : '—';
+              return (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3">
+                  <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Created</p>
+                    <p className="text-xs text-slate-700 mt-0.5 truncate">{fmt(created)}</p>
+                  </div>
+                  <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Last modified</p>
+                    <p className="text-xs text-slate-700 mt-0.5 truncate">{fmt(last)}</p>
+                  </div>
+                  <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Completed</p>
+                    <p className="text-xs text-slate-700 mt-0.5 truncate">{completed ? fmt(completed) : 'Not yet'}</p>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Full chronological trail, newest first */}
+            {auditLog.length === 0 ? (
+              <p className="text-xs text-slate-400 italic">No changes recorded yet. Activity appears here as the work order is created, edited, saved, or advanced, from photo uploads to price changes.</p>
+            ) : (
+              <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                {[...auditLog].reverse().map(entry => {
+                  const d = entry.details;
+                  const Icon = entry.action === 'created' ? Plus
+                    : entry.action === 'completed' ? CheckCircle
+                    : /Photos/.test(d) ? Camera
+                    : /Total \$|Line items/.test(d) ? DollarSign
+                    : /Stage/.test(d) ? ChevronRight
+                    : Clock;
+                  const tone = entry.action === 'created' || entry.action === 'completed' ? 'text-emerald-500'
+                    : /Photos/.test(d) ? 'text-blue-500'
+                    : /Total \$|Line items/.test(d) ? 'text-amber-500'
+                    : /Stage/.test(d) ? 'text-orange-500'
+                    : 'text-slate-400';
+                  return (
+                    <div key={entry.id} className="flex items-start gap-2.5 text-xs">
+                      <Icon className={`w-3.5 h-3.5 mt-0.5 shrink-0 ${tone}`} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-slate-700">{d}</p>
+                        <p className="text-slate-400 mt-0.5">{entry.userName} · {new Date(entry.timestamp).toLocaleString()}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* ── Footer ─────────────────────────────────────────────────── */}
@@ -2999,7 +3070,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
             </button>
             {job?.status === 'in_progress' && (
               <button
-                onClick={() => setShowQuotePreview(true)}
+                onClick={() => setShowSowReport(true)}
                 className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer"
               >
                 <FileText className="w-4 h-4" />
@@ -3065,7 +3136,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
       </div>
 
       {/* ── SOW Report Modal ────────────────────────────────────────────── */}
-      {showQuotePreview && (() => {
+      {showSowReport && (() => {
         const today = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
         const partOnlyItems = lineItems.filter(i => i.type === 'part');
         return (
@@ -3086,7 +3157,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                     <FileText className="w-4 h-4" />
                     Print / Save PDF
                   </button>
-                  <button onClick={() => setShowQuotePreview(false)} className="p-1.5 hover:bg-slate-100 rounded-lg">
+                  <button onClick={() => setShowSowReport(false)} className="p-1.5 hover:bg-slate-100 rounded-lg">
                     <X className="w-5 h-5 text-slate-500" />
                   </button>
                 </div>
@@ -3389,10 +3460,10 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
         );
       })()}
       {/* ── Quote Preview Modal ─────────────────────────────────── */}
-      {showQuotePreview && customer && (
+      {showQuotePreview && (
         <QuotePreviewModal
-          customerName={customer.name}
-          customerEmail={customer.email}
+          customerName={customer?.name ?? siteName}
+          customerEmail={customer?.email ?? ''}
           address={siteAddress}
           woNumber={job?.woNumber ?? generateWONumber()}
           jobId={job?.id ?? `wo-${Date.now()}`}
@@ -3406,8 +3477,65 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
           partsTotal={lineItems.filter(i => i.type !== 'labor').reduce((s, i) => s + i.totalCost, 0)}
           grandTotal={lineItems.reduce((s, i) => s + i.totalCost, 0)}
           notes={notes}
+          notifyName="Daniel Matos"
           onClose={() => setShowQuotePreview(false)}
+          onSavePreview={(payload) => {
+            // 1. Persist any edits made in the preview back onto the WO line items.
+            setLineItems(prev => payload.lineItems.map((li, i) => {
+              const existing = prev[i];
+              return existing
+                ? { ...existing, description: li.description, quantity: li.qty, unitCost: li.unitPrice, totalCost: li.total }
+                : { ...newLineItem(), description: li.description, quantity: li.qty, unitCost: li.unitPrice, totalCost: li.total };
+            }));
+            setShowQuotePreview(false);
+
+            // 2. @mention Daniel Matos so he creates + sends the quote to accounting.
+            //    Post a visible comment in the WO conversation AND fire the notification.
+            const owner = users.find(u => /matos/i.test(u.name) || /daniel/i.test(u.name));
+            const woLabel = job?.woNumber ?? generateWONumber();
+            if (owner) {
+              const ownerEmail = (owner as MentionUser & { email?: string }).email;
+              // Build a real @handle the mention parser recognises (username, else name-no-spaces).
+              const handle = (owner as MentionUser).username || owner.name.replace(/\s+/g, '');
+              const mentionText = `@${handle} Quote preview saved for ${siteName} (${woLabel}) · Total $${payload.grandTotal.toFixed(2)}. Please create the quote and send it to the accounting software.`;
+              // Visible, auditable comment in the Team Conversation tab.
+              const cmt: import('../types').Activity = {
+                id: `wo-cmt-${Date.now()}`,
+                type: 'note_added',
+                description: mentionText,
+                timestamp: new Date().toISOString(),
+                userId: (currentUserName && users.find(u => u.name === currentUserName)?.id) || undefined,
+                userName: currentUserName ?? 'Staff',
+                mentions: [owner.id],
+              };
+              setWoActivities(prev => [cmt, ...prev]);
+              fireMentionNotifications({
+                mentionedUserIds: [owner.id],
+                mentionedUserEmails: ownerEmail ? [ownerEmail] : [],
+                notifierName: currentUserName || 'Staff',
+                context: `${siteName}, ${woLabel}`,
+                contextId: siteId,
+                contextType: 'workOrder',
+                message: mentionText,
+              });
+            }
+            setQuoteResult({
+              ok: true,
+              msg: owner ? `Quote saved · @${(owner as MentionUser).username || owner.name.replace(/\s+/g, '')} notified` : 'Quote saved · add Daniel Matos to staff to auto-notify',
+            });
+
+            // 3. Advance the WO to Quote Sent and persist (uses the fresh ref so
+            //    the edited line items committed above are included in the save).
+            updateClientStatus(siteId, 'quote_approval');
+            onUpdateSiteStatus?.(siteId, 'quote_approval');
+            const next = NEXT_STATUS[woStatus];
+            if (next) {
+              setWoStatus(next);
+              setTimeout(() => handleSaveRef.current(next, true), 0);
+            }
+          }}
           onSent={() => {
+            // Fallback path: customer email was sent directly from the modal.
             setShowQuotePreview(false);
             setQuoteResult({ ok: true, msg: 'Quote emailed to customer' });
             updateClientStatus(siteId, 'quote_approval');
@@ -3415,7 +3543,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
             const next = NEXT_STATUS[woStatus];
             if (next) {
               setWoStatus(next);
-              handleSave(next, true);
+              setTimeout(() => handleSaveRef.current(next, true), 0);
             }
           }}
         />

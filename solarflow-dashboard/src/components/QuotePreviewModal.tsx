@@ -22,6 +22,18 @@ interface QuotePreviewProps {
   notes?: string;
   onClose: () => void;
   onSent: () => void;
+  /** When provided, the primary action SAVES the quote preview and @mentions a
+   *  teammate (e.g. Daniel Matos) to create the quote in the accounting software,
+   *  instead of emailing the customer directly. Customer email becomes optional. */
+  onSavePreview?: (payload: {
+    lineItems: LineItem[];
+    notes: string;
+    laborTotal: number;
+    partsTotal: number;
+    grandTotal: number;
+  }) => void;
+  /** Teammate notified when the preview is saved (shown on the primary button). */
+  notifyName?: string;
 }
 
 export const QuotePreviewModal: React.FC<QuotePreviewProps> = ({
@@ -34,6 +46,8 @@ export const QuotePreviewModal: React.FC<QuotePreviewProps> = ({
   notes: initialNotes,
   onClose,
   onSent,
+  onSavePreview,
+  notifyName,
 }) => {
   const [customerName, setCustomerName] = useState(initialName);
   const [customerEmail, setCustomerEmail] = useState(initialEmail);
@@ -55,6 +69,16 @@ export const QuotePreviewModal: React.FC<QuotePreviewProps> = ({
       }
       return updated;
     }));
+  };
+
+  const handleSaveAndNotify = () => {
+    onSavePreview?.({
+      lineItems,
+      notes: notes.trim(),
+      laborTotal: computedLabor,
+      partsTotal: computedParts,
+      grandTotal: computedTotal,
+    });
   };
 
   const removeItem = (idx: number) => setLineItems(prev => prev.filter((_, i) => i !== idx));
@@ -133,6 +157,17 @@ export const QuotePreviewModal: React.FC<QuotePreviewProps> = ({
             <span className="font-medium text-slate-700">WO:</span> {woNumber} &nbsp;·&nbsp;
             <span className="font-medium text-slate-700">Address:</span> {address}
           </div>
+
+          {onSavePreview && (
+            <div className="flex items-start gap-2 px-4 py-3 bg-orange-50 border border-orange-200 rounded-lg text-sm text-orange-800">
+              <Send className="w-4 h-4 mt-0.5 shrink-0 text-orange-500" />
+              <span>
+                Saving this preview hands the quote to <strong>{notifyName ?? 'the quote owner'}</strong> to create and
+                send it to the accounting software. The work order advances to <strong>Quote Sent</strong>; any teammate
+                can mark it approved afterward.
+              </span>
+            </div>
+          )}
 
           {/* Line Items */}
           <div>
@@ -238,17 +273,39 @@ export const QuotePreviewModal: React.FC<QuotePreviewProps> = ({
           <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 cursor-pointer">
             Cancel
           </button>
-          <button
-            onClick={handleSend}
-            disabled={sending || !customerEmail.trim()}
-            className="flex items-center gap-2 px-5 py-2 bg-orange-500 text-white text-sm font-semibold rounded-lg hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
-          >
-            {sending ? (
-              <><Loader2 className="w-4 h-4 animate-spin" /> Sending...</>
-            ) : (
-              <><Send className="w-4 h-4" /> Send Quote Email</>
-            )}
-          </button>
+          {onSavePreview ? (
+            <>
+              {/* Optional: email the customer directly (only when an email exists) */}
+              <button
+                onClick={handleSend}
+                disabled={sending || !customerEmail.trim()}
+                title={customerEmail.trim() ? 'Email this quote to the customer' : 'Add a customer email to enable'}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+              >
+                {sending ? <><Loader2 className="w-4 h-4 animate-spin" /> Sending...</> : <><Mail className="w-4 h-4" /> Email Customer</>}
+              </button>
+              {/* Primary: save the preview and hand off to the quote owner */}
+              <button
+                onClick={handleSaveAndNotify}
+                disabled={sending}
+                className="flex items-center gap-2 px-5 py-2 bg-orange-500 text-white text-sm font-semibold rounded-lg hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
+              >
+                <Send className="w-4 h-4" /> Save Quote &amp; Notify {notifyName ?? 'Quote Owner'}
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={handleSend}
+              disabled={sending || !customerEmail.trim()}
+              className="flex items-center gap-2 px-5 py-2 bg-orange-500 text-white text-sm font-semibold rounded-lg hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
+            >
+              {sending ? (
+                <><Loader2 className="w-4 h-4 animate-spin" /> Sending...</>
+              ) : (
+                <><Send className="w-4 h-4" /> Send Quote Email</>
+              )}
+            </button>
+          )}
         </div>
       </div>
     </div>
