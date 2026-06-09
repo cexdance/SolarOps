@@ -923,21 +923,36 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
     }
   };
 
+  // ── Comment image attachments ────────────────────────────────────────────
+  // Pasting an image into the comment box uploads it to Storage and attaches it
+  // to the comment (URL only). We never keep the base64 in synced state, that
+  // previously bloated the save payload and could crash the panel.
+  type CommentAttachment = { id: string; name: string; url: string; mimeType: string };
+  const [commentAttachments, setCommentAttachments] = useState<CommentAttachment[]>([]);
+  const [commentUploading, setCommentUploading] = useState(false);
+  const [commentError, setCommentError] = useState<string | null>(null);
+
   // ── Comments / Activity handlers ─────────────────────────────────────────
   const addComment = useCallback(() => {
     const text = newComment.trim();
-    if (!text) return;
+    // Allow a comment that is image-only (text OR at least one attachment).
+    if (!text && commentAttachments.length === 0) return;
     const entry: import('../types').Activity = {
       id: `wo-cmt-${Date.now()}`,
       type: 'note_added',
-      description: text,
+      description: text || (commentAttachments.length ? '(image)' : ''),
       timestamp: new Date().toISOString(),
       userId: (currentUserName && users.find(u => u.name === currentUserName)?.id) || undefined,
       userName: currentUserName ?? 'Unknown',
       mentions: parseMentions(text, users as MentionUser[]),
+      attachments: commentAttachments.length ? commentAttachments.map(a => ({ ...a })) : undefined,
     };
     setWoActivities(prev => [entry, ...prev]);
     setNewComment('');
+    setCommentAttachments([]);
+    // Persist the comment (and its attachments) right away, deferred so the
+    // woActivities state update is committed before handleSave reads it.
+    setTimeout(() => handleSaveRef.current(undefined, true), 0);
     // Fire mention notifications (non-blocking)
     if (entry.mentions && entry.mentions.length > 0 && job?.woNumber) {
       fireMentionNotifications({
@@ -950,7 +965,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
         message:             text,
       });
     }
-  }, [newComment, currentUserName, users, job, siteId]);
+  }, [newComment, commentAttachments, currentUserName, users, job, siteId]);
 
   const editComment = useCallback((id: string, text: string) => {
     setWoActivities(prev => prev.map(a => a.id === id ? { ...a, description: text } : a));
@@ -977,6 +992,59 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
   // Paste images from clipboard into notes, they become attached photos under "process"
   const [pasteToast, setPasteToast] = useState<string | null>(null);
   const [pasteError, setPasteError] = useState<string | null>(null);
+
+  const handleCommentPaste = useCallback((e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    let fileItems: DataTransferItem[] = [];
+    try {
+      fileItems = Array.from(e.clipboardData?.items ?? []).filter(i => i.kind === 'file');
+    } catch {
+      return; // some clipboards throw on access, let the default paste happen
+    }
+    const images = fileItems
+      .map(i => i.getAsFile())
+      .filter((f): f is File => !!f && f.type.startsWith('image/'));
+    if (images.length === 0) return; // plain text paste, leave default behaviour
+    e.preventDefault();
+
+    images.forEach(async (file) => {
+      if (file.size > 20 * 1024 * 1024) {
+        setCommentError(`Image too large (${Math.round(file.size / 1024 / 1024)}MB), max 20MB`);
+        setTimeout(() => setCommentError(null), 5000);
+        return;
+      }
+      const attId = `att-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      setCommentUploading(true);
+      try {
+        // Upload-first: only a Storage URL ever enters state (never base64).
+        const blob = await compressImageToBlob(file);
+        const result = await uploadPhotoToStorage(blob, `${stableWoIdRef.current}/comments`, attId);
+        if (result.url) {
+          setCommentAttachments(prev => [...prev, {
+            id: attId,
+            name: file.name || `pasted-${Date.now()}.jpg`,
+            url: result.url!,
+            mimeType: file.type || 'image/jpeg',
+          }]);
+        } else {
+          const msg = result.error === 'session_expired'
+            ? 'Session expired, please re-login to attach the image'
+            : `Image upload failed: ${result.error || 'unknown error'}`;
+          setCommentError(msg);
+          setTimeout(() => setCommentError(null), 6000);
+        }
+      } catch (err) {
+        console.error('[ServiceOrderPanel] comment paste upload failed', err);
+        setCommentError('Could not attach the pasted image. Please try again.');
+        setTimeout(() => setCommentError(null), 6000);
+      } finally {
+        setCommentUploading(false);
+      }
+    });
+  }, []);
+
+  const removeCommentAttachment = useCallback((id: string) => {
+    setCommentAttachments(prev => prev.filter(a => a.id !== id));
+  }, []);
   const handleNotesPaste = useCallback((e: React.ClipboardEvent<HTMLTextAreaElement>) => {
     const fileItems = Array.from(e.clipboardData.items).filter(i => i.kind === 'file');
     if (fileItems.length === 0) return;
@@ -1017,7 +1085,10 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
             p.id === photoId ? { ...p, storageUrl: result.url!, dataUrl: '' } : p
           ));
         } else {
-          // Surface upload failure to user (was silent console.error)
+          // Upload failed: drop the optimistic photo so its multi-MB base64
+          // never reaches the save/sync payload (that could bloat storage and
+          // hang the panel). Surface the failure to the user instead.
+          setWoPhotos(prev => prev.filter(p => p.id !== photoId));
           const errMsg = result.error === 'session_expired'
             ? 'Session expired, please re-login to save photo'
             : `Photo upload failed: ${result.error || 'Unknown error'}`;
@@ -1872,30 +1943,6 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-medium text-slate-500 mb-1">
-                  Quote Amount{discountType && quoteAmount > 0 && (
-                    <span className="ml-2 text-emerald-600 font-semibold">
-                      → {formatMoney(quoteAmount * 0.9)} after 10% discount
-                    </span>
-                  )}
-                </label>
-                <div className="relative">
-                  <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <input
-                    type="number"
-                    min={0}
-                    step={0.01}
-                    value={quoteAmount || ''}
-                    onChange={e => setQuoteAmount(parseFloat(e.target.value) || 0)}
-                    placeholder="0.00"
-                    className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
-                  />
-                </div>
-                <p className="text-xs text-slate-400 mt-1">
-                  {discountType ? 'Discount applied to this quote' : 'Leave 0 to auto-calculate from line items'}
-                </p>
-              </div>
 
               {/* Service account banner */}
               <div className="flex items-center gap-2">
@@ -2903,15 +2950,40 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                   onChange={setNewComment}
                   users={users ?? []}
                   rows={3}
-                  onPaste={handleNotesPaste}
+                  onPaste={handleCommentPaste}
                   placeholder="Type your update… use @ to mention a teammate · Ctrl/Cmd+V to paste a screenshot"
                   className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 resize-none"
                 />
+                {/* Pasted image attachments, staged until the comment is posted */}
+                {(commentAttachments.length > 0 || commentUploading) && (
+                  <div className="flex flex-wrap items-center gap-2 mt-2">
+                    {commentAttachments.map(att => (
+                      <div key={att.id} className="relative group">
+                        <img src={att.url} alt={att.name} className="w-16 h-16 object-cover rounded-lg border border-slate-200" />
+                        <button
+                          onClick={() => removeCommentAttachment(att.id)}
+                          className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-slate-900 text-white flex items-center justify-center shadow hover:bg-red-600 transition-colors"
+                          title="Remove image"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                    {commentUploading && (
+                      <div className="w-16 h-16 rounded-lg border border-dashed border-slate-300 flex items-center justify-center">
+                        <Loader2 className="w-4 h-4 text-slate-400 animate-spin" />
+                      </div>
+                    )}
+                  </div>
+                )}
+                {commentError && (
+                  <p className="mt-1 text-xs text-red-600 font-medium">⚠️ {commentError}</p>
+                )}
                 <div className="flex items-center justify-between mt-2">
                   <p className="text-[11px] text-slate-400">Comments are shared with the entire team and stored with this service order.</p>
                   <button
                     onClick={addComment}
-                    disabled={!newComment.trim()}
+                    disabled={(!newComment.trim() && commentAttachments.length === 0) || commentUploading}
                     className="px-4 py-1.5 bg-orange-500 text-white text-sm font-medium rounded-lg hover:bg-orange-600 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed transition-colors"
                   >
                     Post
