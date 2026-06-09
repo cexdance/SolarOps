@@ -2,7 +2,7 @@
  * SOW Distribution Report, v2 (Professional A4 redesign)
  *
  * Clean, print-ready Scope-of-Work completion report.
- * Auto-triggered when a Work Order is marked "completed".
+ * Auto-triggered when a Service Order is marked "completed".
  * Distributed to the SOW list (Anthony Lopez, Daniel Matos, Cesar Jurado)
  * via @mention notifications.
  *
@@ -11,7 +11,7 @@
  *   2. Job Details, client, address, service type, dates
  *   3. Manpower, contractor, hours, travel
  *   4. Weather, real weather from Open-Meteo for service date
- *   5. Work Order Notes, job.notes before photos
+ *   5. Service Order Notes, job.notes before photos
  *   6. Photos, by category (empty categories skipped)
  *   7. Field Notes, contractor completionNotes
  *   8. Service Report, admin serviceReport
@@ -21,6 +21,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
+import { serviceOrderNo } from '../lib/woHelpers';
 import {
   X, FileText, MapPin,
   Sun, Cloud, CloudRain, CloudSnow, CloudLightning,
@@ -349,7 +350,7 @@ export const SowDistributionModal: React.FC<Props> = ({
 
                 {/* Right: WO# + date */}
                 <div className="text-right shrink-0">
-                  <p className="text-base font-black text-slate-900 font-mono">{job.woNumber ?? '-'}</p>
+                  <p className="text-base font-black text-slate-900 font-mono">{job.woNumber ? serviceOrderNo(job.woNumber) : '-'}</p>
                   <p className="text-[10px] text-slate-400 mt-0.5">Completed {completedLabel}</p>
                 </div>
               </div>
@@ -358,7 +359,7 @@ export const SowDistributionModal: React.FC<Props> = ({
               <Section label="Job Details" icon={<Briefcase className="w-3.5 h-3.5" />}>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-10 gap-y-2">
                   <Row label="Client"    value={<strong>{siteName || customer?.name || '-'}</strong>} wide />
-                  <Row label="WO #"      value={job.woNumber} mono wide />
+                  <Row label="SO #"      value={serviceOrderNo(job.woNumber)} mono wide />
                   <Row label="Address"   value={siteAddress || job.siteAddress} wide />
                   <Row label="Service"   value={job.serviceType} wide />
                   <Row label="Scheduled" value={scheduledLabel} wide />
@@ -431,9 +432,9 @@ export const SowDistributionModal: React.FC<Props> = ({
                 )}
               </Section>
 
-              {/* ── Work Order Notes ─────────────────────────────────── */}
+              {/* ── Service Order Notes ─────────────────────────────────── */}
               {woNotes && (
-                <Section label="Work Order Notes" icon={<FileText className="w-3.5 h-3.5" />}>
+                <Section label="Service Order Notes" icon={<FileText className="w-3.5 h-3.5" />}>
                   <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3">
                     <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{woNotes}</p>
                   </div>
@@ -512,7 +513,7 @@ export const SowDistributionModal: React.FC<Props> = ({
               <div className="pt-5 border-t-2 border-slate-900 flex items-center justify-between gap-4">
                 <div className="flex items-center gap-2 text-emerald-600">
                   <CheckCircle className="w-4 h-4" />
-                  <p className="text-xs font-bold">Work Order Completed</p>
+                  <p className="text-xs font-bold">Service Order Completed</p>
                 </div>
                 <div className="text-right">
                   <p className="text-[9px] text-slate-400 uppercase tracking-widest">

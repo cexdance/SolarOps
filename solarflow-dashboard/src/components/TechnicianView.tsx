@@ -201,25 +201,25 @@ export const TechnicianView: React.FC<TechnicianViewProps> = ({
     <div className="p-4 md:p-6 pb-24 md:pb-6">
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-900">My Work Orders</h1>
+        <h1 className="text-2xl font-bold text-slate-900">My Service Orders</h1>
         <p className="text-slate-500 mt-1">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
       </div>
 
       {/* Active Job Hero */}
       {activeJob && (
         <div className="mb-6">
-          <p className="text-sm font-medium text-slate-600 mb-2">Current Work Order</p>
+          <p className="text-sm font-medium text-slate-600 mb-2">Current Service Order</p>
           <JobCard job={activeJob} isActive />
         </div>
       )}
 
-      {/* Upcoming Work Orders */}
+      {/* Upcoming Service Orders */}
       <div>
         <div className="flex items-center justify-between mb-3">
           <p className="text-sm font-medium text-slate-600">
-            {activeJob ? 'Up Next' : "Today's Work Orders"}
+            {activeJob ? 'Up Next' : "Today's Service Orders"}
           </p>
-          <span className="text-sm text-slate-500">{upcomingJobs.length} work orders</span>
+          <span className="text-sm text-slate-500">{upcomingJobs.length} service orders</span>
         </div>
 
         <div className="space-y-3">
@@ -231,7 +231,7 @@ export const TechnicianView: React.FC<TechnicianViewProps> = ({
         {upcomingJobs.length === 0 && !activeJob && (
           <div className="text-center py-12">
             <Wrench className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-            <p className="text-slate-500">No work orders scheduled for today</p>
+            <p className="text-slate-500">No service orders scheduled for today</p>
           </div>
         )}
       </div>

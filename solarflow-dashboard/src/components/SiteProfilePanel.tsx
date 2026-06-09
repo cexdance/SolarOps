@@ -1,5 +1,6 @@
-// Site Profile Panel, full customer window with Overview, Story, Work Orders, Notes
+// Site Profile Panel, full customer window with Overview, Story, Service Orders, Notes
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { serviceOrderNo } from '../lib/woHelpers';
 import { formatMoney } from '../lib/money';
 import {
   X, FileText, MessageSquare, Trash2, Upload, Image, File,
@@ -15,7 +16,7 @@ import {
 } from '../lib/siteProfileStore';
 import { SolarEdgeSite } from '../lib/solarEdgeSites';
 import { Job, Customer } from '../types';
-import { WorkOrderPanel } from './WorkOrderPanel';
+import { ServiceOrderPanel } from './ServiceOrderPanel';
 import { Contractor, ContractorJob } from '../types/contractor';
 
 // WO status display helpers (WOStatus-aware, falls back to JobStatus)
@@ -303,7 +304,7 @@ export const SiteProfilePanel: React.FC<Props> = ({
   const [submitting, setSubmitting] = useState(false);
   const [approvingQuote, setApprovingQuote] = useState(false);
 
-  // WorkOrderPanel state
+  // ServiceOrderPanel state
   const [woOpen, setWoOpen]       = useState(false);
   const [woTarget, setWoTarget]   = useState<Job | undefined>(undefined);
 
@@ -367,11 +368,11 @@ export const SiteProfilePanel: React.FC<Props> = ({
     setApprovingQuote(true);
     // Change status to WO Pending and log a note
     handleStatusChange('wo_pending');
-    addNote(site.siteId, 'Quote approved, Work Order sent to contractor queue.', currentUserName, []);
+    addNote(site.siteId, 'Quote approved, Service Order sent to contractor queue.', currentUserName, []);
     setProfile(prev => ({
       ...prev,
       clientStatus: 'wo_pending',
-      notes: [{ id: `note-${Date.now()}`, content: 'Quote approved, Work Order sent to contractor queue.', author: currentUserName, createdAt: new Date().toISOString(), attachments: [] }, ...prev.notes],
+      notes: [{ id: `note-${Date.now()}`, content: 'Quote approved, Service Order sent to contractor queue.', author: currentUserName, createdAt: new Date().toISOString(), attachments: [] }, ...prev.notes],
     }));
     setApprovingQuote(false);
     onNavigateToJobs();
@@ -382,7 +383,7 @@ export const SiteProfilePanel: React.FC<Props> = ({
   const TABS: { id: Tab; label: string; icon: React.ElementType; badge?: number }[] = [
     { id: 'overview',    label: 'Overview',     icon: Sun },
     { id: 'story',       label: 'Story',        icon: FileText },
-    { id: 'workorders',  label: 'Work Orders',  icon: ClipboardList, badge: siteJobs.length },
+    { id: 'workorders',  label: 'Service Orders',  icon: ClipboardList, badge: siteJobs.length },
     { id: 'notes',       label: 'Notes',        icon: MessageSquare, badge: profile.notes.length },
   ];
 
@@ -428,7 +429,7 @@ export const SiteProfilePanel: React.FC<Props> = ({
           {profile.clientStatus === 'quote_approval' && (
             <div className="mt-3 flex items-center gap-3 bg-violet-50 border border-violet-200 rounded-lg px-3 py-2">
               <div className="flex-1 text-xs text-violet-700">
-                <span className="font-semibold">Quote pending approval.</span> Once approved, a Work Order will be sent to the contractor queue.
+                <span className="font-semibold">Quote pending approval.</span> Once approved, a Service Order will be sent to the contractor queue.
               </div>
               <button
                 onClick={handleApproveQuote}
@@ -607,7 +608,7 @@ export const SiteProfilePanel: React.FC<Props> = ({
             </div>
           )}
 
-          {/* ── Work Orders ──────────────────────────────────────────────── */}
+          {/* ── Service Orders ──────────────────────────────────────────────── */}
           {tab === 'workorders' && (
             <div className="p-5 space-y-4">
               {/* Create WO button */}
@@ -617,14 +618,14 @@ export const SiteProfilePanel: React.FC<Props> = ({
                   className="flex items-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium rounded-lg transition-colors cursor-pointer w-full justify-center"
                 >
                   <Plus className="w-4 h-4" />
-                  New Work Order
+                  New Service Order
                 </button>
               )}
 
               {siteJobs.length === 0 ? (
                 <div className="text-center py-10 text-slate-400">
                   <Wrench className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                  <p className="text-sm">No work orders yet.</p>
+                  <p className="text-sm">No service orders yet.</p>
                 </div>
               ) : (
                 <>
@@ -656,7 +657,7 @@ export const SiteProfilePanel: React.FC<Props> = ({
                           <div className="flex items-start justify-between gap-2">
                             <div className="min-w-0">
                               <p className="text-sm font-semibold text-slate-800 truncate">{job.title || job.serviceType}</p>
-                              <p className="text-xs text-slate-400 font-mono">{job.woNumber || job.id.slice(0, 12)}</p>
+                              <p className="text-xs text-slate-400 font-mono">{job.woNumber ? serviceOrderNo(job.woNumber) : job.id.slice(0, 12)}</p>
                             </div>
                             <div className="flex items-center gap-2 flex-shrink-0">
                               <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${WO_STATUS_COLOR_FULL[displayStatus] || 'bg-slate-100 text-slate-600'}`}>
@@ -697,7 +698,7 @@ export const SiteProfilePanel: React.FC<Props> = ({
 
                   <button onClick={onNavigateToJobs}
                     className="text-sm text-orange-500 hover:text-orange-700 transition-colors cursor-pointer">
-                    View all in Work Orders →
+                    View all in Service Orders →
                   </button>
                 </>
               )}
@@ -762,9 +763,9 @@ export const SiteProfilePanel: React.FC<Props> = ({
         </div>
       </div>
 
-      {/* WorkOrderPanel, stacked over site panel */}
+      {/* ServiceOrderPanel, stacked over site panel */}
       {woOpen && (
-        <WorkOrderPanel
+        <ServiceOrderPanel
           job={woTarget}
           siteId={site.siteId}
           siteName={site.siteName}

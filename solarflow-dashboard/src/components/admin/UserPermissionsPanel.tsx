@@ -26,7 +26,7 @@ const ROLES: UserRole[] = ['admin', 'coo', 'support', 'sales', 'technician'];
 
 const PERMIT_LABELS: Record<Permission, string> = {
   'financials.view':  'See financials',
-  'workorders.edit':  'Edit work orders',
+  'workorders.edit':  'Edit service orders',
   'customers.delete': 'Delete customers',
   'inventory.manage': 'Manage inventory',
   'users.manage':     'Manage users',

@@ -1,4 +1,4 @@
-// WorkOrderPanel, full WO create/edit slide-over
+// ServiceOrderPanel, full WO create/edit slide-over
 // Opened from SiteProfilePanel or SolarEdgeMonitoring
 
 import React, { useState, useRef, useCallback, useMemo, useEffect } from 'react';
@@ -17,6 +17,7 @@ import { loadServiceRates } from '../lib/contractorStore';
 import { searchParts, CatalogPart } from '../lib/partsCatalog';
 import { MentionTextarea, MentionUser, renderWithMentions, parseMentions, parseMentionEmails, fireMentionNotifications } from './ui/MentionTextarea';
 import { formatMoney } from '../lib/money';
+import { serviceOrderNo, workOrderNo, generateServiceOrderNumber } from '../lib/woHelpers';
 import { SowDistributionModal, SOW_DISTRIBUTION_NAMES } from './SowDistributionModal';
 import { ActivityFeed, type FeedUser } from './ui/ActivityFeed';
 import { compressImageToDataUrl, compressImageToBlob } from '../lib/photoCompress';
@@ -31,7 +32,7 @@ const WO_STAGES: { key: WOStatus; label: string; short: string }[] = [
   { key: 'quote_approved', label: 'Quote Approved',  short: 'Approved' },
   { key: 'scheduled',      label: 'Scheduled',       short: 'Sched.' },
   { key: 'in_progress',    label: 'In Progress',     short: 'Active' },
-  { key: 'completed',      label: 'Completed',       short: 'Done' },
+  { key: 'completed',      label: 'Service Order Closed', short: 'WO Closed' },
   { key: 'invoiced',       label: 'Invoiced',        short: 'Invoiced' },
   { key: 'paid',           label: 'Paid',            short: 'Paid' },
 ];
@@ -174,12 +175,6 @@ const SERVICE_STATUS_OPTIONS: { key: WOServiceStatus; label: string; icon: React
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
-const generateWONumber = (): string => {
-  const now = new Date();
-  const yymm = `${String(now.getFullYear()).slice(2)}${String(now.getMonth() + 1).padStart(2, '0')}`;
-  const seq = String(Date.now()).slice(-5);
-  return `WO-${yymm}-${seq}`;
-};
 
 const newLineItem = (): WOLineItem => ({
   id: `li-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -279,7 +274,7 @@ const PartDescriptionInput: React.FC<{
 
 // ─── types ────────────────────────────────────────────────────────────────────
 
-export interface WorkOrderPanelProps {
+export interface ServiceOrderPanelProps {
   job?: Job;                // existing WO (edit) or undefined (create)
   siteId: string;
   siteName: string;
@@ -310,7 +305,7 @@ export interface WorkOrderPanelProps {
 
 // ─── component ────────────────────────────────────────────────────────────────
 
-export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
+export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
   job,
   siteId,
   siteName,
@@ -720,7 +715,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
       city: customer?.city ?? '', state: customer?.state ?? 'FL', zip: customer?.zip ?? '',
       latitude: 0, longitude: 0,
       serviceType: serviceType,
-      description: notes || title || `Work Order ${woNumber}`,
+      description: notes || title || `Service Order ${woNumber}`,
       priority: urgencyToJobPriority(urgency),
       status: 'assigned',
       isRecurringClient: applyRecurringDiscount,
@@ -778,7 +773,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
       if (woStatus === 'quote_sent' && !isAdmin) return;
     } else {
       if (woStatus === 'draft') {
-        // PowerCare work orders skip the quote flow entirely, the plan covers
+        // PowerCare service orders skip the quote flow entirely, the plan covers
         // the work, so no quote is emailed. Advance straight past the preview.
         if (skipQuoteForPowerCare) {
           updateClientStatus(siteId, 'quote_approval');
@@ -798,8 +793,8 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
     }
 
     if (woStatus === 'quote_approved' && onDispatch) {
-      const woNum = job?.woNumber ?? generateWONumber();
-      onDispatch(buildContractorJob(woNum));
+      const woNum = job?.woNumber ?? generateServiceOrderNumber();
+      onDispatch(buildContractorJob(workOrderNo(woNum)));
       if (!isServiceAccountExpense) {
         updateClientStatus(siteId, 'wo_pending');
         onUpdateSiteStatus?.(siteId, 'wo_pending');
@@ -884,7 +879,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
           } else {
             setUploadError(`Photo upload failed: ${result.error ?? 'unknown error'}`);
           }
-          console.error('[WorkOrderPanel] photo upload failed', result.error);
+          console.error('[ServiceOrderPanel] photo upload failed', result.error);
         }
         // Auto-save once ALL in-flight uploads settle (prevents simultaneous-upload stomp).
         // With 3 concurrent photos, each decrements pendingUploads independently; only the
@@ -900,7 +895,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
         logUpload('photo.upload_fail', photoId, {
           error: String(err), name: file.name, jobId: stableWoIdRef.current,
         }, undefined, Date.now() - uploadStart);
-        console.error('[WorkOrderPanel] photo upload error', err);
+        console.error('[ServiceOrderPanel] photo upload error', err);
         setUploadError('Photo upload failed. Check your connection.');
         // Still save, other concurrent uploads may have succeeded.
         if (pendingUploads.current.size === 0) {
@@ -923,7 +918,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
       try {
         await deletePhotoFromStorage(photo.storageUrl);
       } catch (err) {
-        console.error('[WorkOrderPanel] Storage delete failed, object may be orphaned', err);
+        console.error('[ServiceOrderPanel] Storage delete failed, object may be orphaned', err);
       }
     }
   };
@@ -1028,7 +1023,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
             : `Photo upload failed: ${result.error || 'Unknown error'}`;
           setPasteError(errMsg);
           setTimeout(() => setPasteError(null), 6000);
-          console.error('[WorkOrderPanel] paste upload failed', result.error);
+          console.error('[ServiceOrderPanel] paste upload failed', result.error);
         }
         if (pendingUploads.current.size === 0) {
           setTimeout(() => handleSaveRef.current(undefined, true), 0);
@@ -1039,7 +1034,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
         const errMsg = err instanceof Error ? err.message : 'Failed to process pasted image';
         setPasteError(`Paste failed: ${errMsg}`);
         setTimeout(() => setPasteError(null), 6000);
-        console.error('[WorkOrderPanel] paste image compression failed', err);
+        console.error('[ServiceOrderPanel] paste image compression failed', err);
         if (pendingUploads.current.size === 0) {
           setTimeout(() => handleSaveRef.current(undefined, true), 0);
         }
@@ -1132,7 +1127,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
       serviceType: serviceType as Job['serviceType'],
       status: WO_TO_JOB_STATUS[effectiveWoStatus],
       woStatus: effectiveWoStatus,
-      woNumber: job?.woNumber ?? generateWONumber(),
+      woNumber: job?.woNumber ?? generateServiceOrderNumber(),
       scheduledDate,
       scheduledTime,
       notes,
@@ -1191,7 +1186,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
       const allText = [notes, serviceReport, nextSteps].join('\n');
       const mentionedIds = parseMentions(allText, users);
       if (mentionedIds.length > 0) {
-        const woLabel = partialJob.woNumber ?? job?.woNumber ?? 'Work Order';
+        const woLabel = serviceOrderNo(partialJob.woNumber ?? job?.woNumber) || 'Service Order';
         fireMentionNotifications({
           mentionedUserIds: mentionedIds,
           mentionedUserEmails: parseMentionEmails(allText, users as (MentionUser & { email?: string })[]),
@@ -1217,7 +1212,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
       const distEmails = distUsers
         .map(u => (u as MentionUser & { email?: string }).email)
         .filter((e): e is string => !!e);
-      const woLabel = partialJob.woNumber ?? job?.woNumber ?? 'Work Order';
+      const woLabel = serviceOrderNo(partialJob.woNumber ?? job?.woNumber) || 'Service Order';
       if (distIds.length > 0) {
         fireMentionNotifications({
           mentionedUserIds: distIds,
@@ -1226,7 +1221,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
           context: `${siteName}, ${woLabel}`,
           contextId: siteId,
           contextType: 'workOrder',
-          message: `✅ Work Order ${woLabel} has been marked COMPLETED for ${siteName}. SOW Distribution Report is ready for review.`,
+          message: `✅ Service Order ${woLabel} has been marked COMPLETED for ${siteName}. SOW Distribution Report is ready for review.`,
         });
       }
       // Auto-open the SOW distribution report
@@ -1278,7 +1273,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap mb-1">
               <span className="text-xs font-mono text-slate-400 uppercase tracking-widest">
-                {job?.woNumber ?? 'New Work Order'}
+                {job?.woNumber ? serviceOrderNo(job.woNumber) : 'New Service Order'}
               </span>
               {clientId && (
                 <span className="px-2 py-0.5 bg-orange-500/20 text-orange-300 text-xs font-mono rounded">
@@ -1630,7 +1625,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                   {stMissingBoth && (
                     <div className="flex items-start gap-2 rounded-lg bg-red-50 border border-red-200 p-3">
                       <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
-                      <p className="text-xs text-red-700 font-medium">Provide at least one identifier (Inverter Serial or Site ID) to progress this work order.</p>
+                      <p className="text-xs text-red-700 font-medium">Provide at least one identifier (Inverter Serial or Site ID) to progress this service order.</p>
                     </div>
                   )}
                   {stMissingOne && (
@@ -1717,7 +1712,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                       </div>
                     </div>
                   </div>
-                  <p className="text-[10px] text-teal-700">ℹ️ These values are saved with the work order and used by the admin agentic workflow to execute the SolarEdge ownership transfer.</p>
+                  <p className="text-[10px] text-teal-700">ℹ️ These values are saved with the service order and used by the admin agentic workflow to execute the SolarEdge ownership transfer.</p>
                 </div>
               )}
               <div className={isSiteTransfer ? 'hidden' : ''}>
@@ -1962,7 +1957,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                     </p>
                     <p className="mt-0.5 text-yellow-800">
                       SolarEdge compensates for warranty parts on systems &lt; 5 years old.
-                      Total compensation on this WO: <strong>{formatMoney(seCompTotal)}</strong>
+                      Total compensation on this Service Order: <strong>{formatMoney(seCompTotal)}</strong>
                     </p>
                     <label className="flex items-center gap-2 mt-2 cursor-pointer">
                       <input
@@ -2550,7 +2545,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                           p.id === photoId ? { ...p, storageUrl: result.url!, dataUrl: '' } : p
                         ));
                       } else {
-                        console.error('[WorkOrderPanel] drop-zone paste upload failed', result.error);
+                        console.error('[ServiceOrderPanel] drop-zone paste upload failed', result.error);
                       }
                       if (pendingUploads.current.size === 0) {
                         setTimeout(() => handleSaveRef.current(undefined, true), 0);
@@ -2558,7 +2553,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                     } catch (err) {
                       pendingUploads.current.delete(photoId);
                       setUploading(pendingUploads.current.size > 0);
-                      console.error('[WorkOrderPanel] paste photo upload failed', err);
+                      console.error('[ServiceOrderPanel] paste photo upload failed', err);
                       if (pendingUploads.current.size === 0) {
                         setTimeout(() => handleSaveRef.current(undefined, true), 0);
                       }
@@ -2913,7 +2908,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                   className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 resize-none"
                 />
                 <div className="flex items-center justify-between mt-2">
-                  <p className="text-[11px] text-slate-400">Comments are shared with the entire team and stored with this work order.</p>
+                  <p className="text-[11px] text-slate-400">Comments are shared with the entire team and stored with this service order.</p>
                   <button
                     onClick={addComment}
                     disabled={!newComment.trim()}
@@ -2955,13 +2950,13 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
             <div className="p-6 space-y-3">
               <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
                 <History className="w-3.5 h-3.5" />
-                Change History, who created, modified, or updated this work order
+                Change History, who created, modified, or updated this service order
               </p>
               {historyLoading && !historyEntries && (
                 <p className="text-sm text-slate-400 py-6 text-center">Loading history…</p>
               )}
               {historyEntries && historyEntries.length === 0 && (
-                <p className="text-sm text-slate-400 py-6 text-center">No recorded changes yet for this work order.</p>
+                <p className="text-sm text-slate-400 py-6 text-center">No recorded changes yet for this service order.</p>
               )}
               {historyEntries && historyEntries.length > 0 && (
                 <ul className="space-y-2">
@@ -3029,7 +3024,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
 
             {/* Full chronological trail, newest first */}
             {auditLog.length === 0 ? (
-              <p className="text-xs text-slate-400 italic">No changes recorded yet. Activity appears here as the work order is created, edited, saved, or advanced, from photo uploads to price changes.</p>
+              <p className="text-xs text-slate-400 italic">No changes recorded yet. Activity appears here as the service order is created, edited, saved, or advanced, from photo uploads to price changes.</p>
             ) : (
               <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
                 {[...auditLog].reverse().map(entry => {
@@ -3122,15 +3117,15 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
           </div>
           <div className="flex items-center gap-3">
             {isNew ? (
-              <span className="text-xs text-slate-400">Creating new work order for <strong>{siteName}</strong></span>
+              <span className="text-xs text-slate-400">Creating new service order for <strong>{siteName}</strong></span>
             ) : (
-              <span className="text-xs text-slate-400">WO {job?.woNumber}</span>
+              <span className="text-xs text-slate-400">{serviceOrderNo(job?.woNumber)}</span>
             )}
             <button
               onClick={() => handleSave()}
               className="px-6 py-2 bg-orange-500 text-white text-sm font-semibold rounded-lg hover:bg-orange-600 transition-colors cursor-pointer"
             >
-              {isNew ? 'Create Work Order' : 'Save Changes'}
+              {isNew ? 'Create Service Order' : 'Save Changes'}
             </button>
           </div>
         </div>
@@ -3188,8 +3183,8 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                       {customer?.phone && <p className="text-xs text-slate-400 mt-1">{customer.phone}</p>}
                     </div>
                     <div className="text-right shrink-0">
-                      <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-1">Work Order</p>
-                      <p className="text-xl font-bold text-orange-400">{job?.woNumber || 'N/A'}</p>
+                      <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-1">Service Order</p>
+                      <p className="text-xl font-bold text-orange-400">{job?.woNumber ? serviceOrderNo(job.woNumber) : 'N/A'}</p>
                       <p className="text-xs text-slate-300 mt-0.5">{today}</p>
                     </div>
                   </div>
@@ -3466,7 +3461,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
           customerName={customer?.name ?? siteName}
           customerEmail={customer?.email ?? ''}
           address={siteAddress}
-          woNumber={job?.woNumber ?? generateWONumber()}
+          woNumber={serviceOrderNo(job?.woNumber ?? generateServiceOrderNumber())}
           jobId={job?.id ?? `wo-${Date.now()}`}
           lineItems={lineItems.map(li => ({
             description: li.description,
@@ -3493,7 +3488,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
             // 2. @mention Daniel Matos so he creates + sends the quote to accounting.
             //    Post a visible comment in the WO conversation AND fire the notification.
             const owner = users.find(u => /matos/i.test(u.name) || /daniel/i.test(u.name));
-            const woLabel = job?.woNumber ?? generateWONumber();
+            const woLabel = serviceOrderNo(job?.woNumber ?? generateServiceOrderNumber());
             if (owner) {
               const ownerEmail = (owner as MentionUser & { email?: string }).email;
               // Build a real @handle the mention parser recognises (username, else name-no-spaces).

@@ -121,7 +121,7 @@ export const PhotoCleanupCard: React.FC = () => {
         <div className="flex-1 min-w-0">
           <h3 className="font-semibold text-slate-900">Photo storage cleanup</h3>
           <p className="text-sm text-slate-500 mt-0.5">
-            Recompresses any Work Order photos still stored at full phone resolution
+            Recompresses any Service Order photos still stored at full phone resolution
             (~3-8 MB each) so they fit in a single Supabase row and sync to other devices.
           </p>
 

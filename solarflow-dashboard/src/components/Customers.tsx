@@ -1,5 +1,6 @@
 // SolarFlow MVP - Customers Component (List View with Split Panel)
 import React, { useState, useRef, useEffect } from 'react';
+import { serviceOrderNo } from '../lib/woHelpers';
 import { authedFetch } from '../lib/supabase';
 import {
   Plus,
@@ -62,7 +63,7 @@ import { importTrelloCard, TrelloImportResult, fetchTrelloCard, extractContactIn
 import { FL_SITES, SolarEdgeSite } from '../lib/solarEdgeSites';
 import { AddressAutocomplete } from './AddressAutocomplete';
 import { AddressLink } from './AddressLink';
-import { WorkOrderPanel } from './WorkOrderPanel';
+import { ServiceOrderPanel } from './ServiceOrderPanel';
 import { PhoneLink } from './PhoneLink';
 import { ActivityFeed } from './ui/ActivityFeed';
 import { uploadCustomerFilesPartial, StoredCustomerFile, CustomerFileUpload } from '../lib/customerFileStorage';
@@ -313,7 +314,7 @@ export const Customers: React.FC<CustomersProps> = ({
     { id: 'location',   label: 'Location'    },
     { id: 'phone',      label: 'Phone'       },
     { id: 'email',      label: 'Email'       },
-    { id: 'workOrders', label: 'Work Orders' },
+    { id: 'workOrders', label: 'Service Orders' },
     { id: 'powerCare',  label: 'PowerCare'   },
   ];
 
@@ -3359,7 +3360,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
   // Demo story data
   const customerStory = customer.notes || `Customer since ${new Date(customer.createdAt || Date.now()).toLocaleDateString()}. Discovered Conexsol through referral from existing customer.`;
 
-  // Reset work order form when modal opens
+  // Reset service order form when modal opens
   React.useEffect(() => {
     if (showCreateWorkOrder) {
       setWorkOrderForm({
@@ -3740,7 +3741,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                 : 'border-transparent text-slate-500 hover:text-slate-700'
             }`}
           >
-            Work Orders ({jobs.length})
+            Service Orders ({jobs.length})
           </button>
           <button
             onClick={() => setActiveTab('files')}
@@ -3954,7 +3955,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                     <div key={job.id} className="flex gap-3">
                       <div className="w-2 h-2 rounded-full bg-green-500 mt-1.5 flex-shrink-0" />
                       <div>
-                        <p className="text-sm font-medium text-slate-900">{job.serviceType} Work Order</p>
+                        <p className="text-sm font-medium text-slate-900">{job.serviceType} Service Order</p>
                         <p className="text-xs text-slate-500">{formatStatus(job.status)} · {job.scheduledDate?.split('T')[0] ?? job.scheduledDate}</p>
                       </div>
                     </div>
@@ -3990,7 +3991,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
               {jobs.length === 0 ? (
                 <div className="text-center py-8">
                   <Wrench className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                  <p className="text-slate-500">No work orders yet</p>
+                  <p className="text-slate-500">No service orders yet</p>
                 </div>
               ) : (
                 (() => {
@@ -4034,7 +4035,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 flex-wrap mb-1">
                               {job.woNumber && (
-                                <span className="text-[10px] font-bold text-slate-400 tracking-widest uppercase">{job.woNumber}</span>
+                                <span className="text-[10px] font-bold text-slate-400 tracking-widest uppercase">{serviceOrderNo(job.woNumber)}</span>
                               )}
                               <span className={`px-2 py-0.5 text-[10px] rounded-full font-semibold ${woStatusColor(ws)}`}>{wsLabel}</span>
                             </div>
@@ -4049,7 +4050,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                           <button
                             onClick={() => setEditingJob(job)}
                             className="ml-3 p-1.5 text-slate-400 hover:text-orange-500 hover:bg-orange-50 rounded-lg transition-colors flex-shrink-0"
-                            title="Open work order"
+                            title="Open service order"
                           >
                             <Pencil className="w-3.5 h-3.5" />
                           </button>
@@ -4524,7 +4525,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
           <h4 className="font-semibold text-slate-900 mb-3">Quick Stats</h4>
           <div className="space-y-2">
             <div className="flex justify-between text-sm">
-              <span className="text-slate-500">Total Work Orders</span>
+              <span className="text-slate-500">Total Service Orders</span>
               <span className="font-medium">{jobs.length}</span>
             </div>
             <div className="flex justify-between text-sm">
@@ -4548,7 +4549,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
             onClick={() => setShowCreateWorkOrder(true)}
             className="w-full py-2.5 bg-orange-500 text-white rounded-lg font-medium hover:bg-orange-600 cursor-pointer transition-colors"
           >
-            Create Work Order
+            Create Service Order
           </button>
           <button
             onClick={() => setShowSendMessage(true)}
@@ -4949,7 +4950,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
             </div>
             <div className="mt-3 pt-2 border-t border-slate-200 flex items-center gap-1 text-xs text-slate-400">
               <Briefcase className="w-3 h-3" />
-              <span>{woCount(c.id)} work order{woCount(c.id) !== 1 ? 's' : ''}</span>
+              <span>{woCount(c.id)} service order{woCount(c.id) !== 1 ? 's' : ''}</span>
             </div>
           </div>
         );
@@ -5031,7 +5032,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                       />
                     </div>
                     <p className="mt-3 text-xs text-slate-400 text-center">
-                      <strong className="text-slate-600">{otherCustomer.name}</strong>'s {woCount(otherCustomer.id)} work order{woCount(otherCustomer.id) !== 1 ? 's' : ''} will move to <strong className="text-slate-600">{primaryCustomer.name}</strong>.
+                      <strong className="text-slate-600">{otherCustomer.name}</strong>'s {woCount(otherCustomer.id)} service order{woCount(otherCustomer.id) !== 1 ? 's' : ''} will move to <strong className="text-slate-600">{primaryCustomer.name}</strong>.
                     </p>
                   </div>
                 )}
@@ -5122,9 +5123,9 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
         );
       })()}
 
-      {/* Create Work Order, full WorkOrderPanel */}
+      {/* Create Service Order, full ServiceOrderPanel */}
       {showCreateWorkOrder && (
-        <WorkOrderPanel
+        <ServiceOrderPanel
           siteId={customer.id}
           siteName={customer.name}
           siteAddress={`${customer.address}, ${customer.city}, ${customer.state} ${customer.zip}`}
@@ -5142,9 +5143,9 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
         />
       )}
 
-      {/* Edit Work Order, full WorkOrderPanel */}
+      {/* Edit Service Order, full ServiceOrderPanel */}
       {editingJob && (
-        <WorkOrderPanel
+        <ServiceOrderPanel
           siteId={customer.id}
           siteName={customer.name}
           siteAddress={`${customer.address}, ${customer.city}, ${customer.state} ${customer.zip}`}

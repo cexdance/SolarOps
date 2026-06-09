@@ -101,7 +101,7 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ jobs, onUpdateJob 
 
   const dateRange = getDateRange();
 
-  // Filter jobs - show all work orders (assigned, in_progress, completed)
+  // Filter jobs - show all service orders (assigned, in_progress, completed)
   const allJobs = jobs.filter(j => {
     // Include all statuses: assigned, en_route, in_progress, documentation, completed, on_hold
     const validStatuses = ['assigned', 'en_route', 'in_progress', 'documentation', 'completed', 'on_hold', 'cancelled'];
@@ -258,7 +258,7 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ jobs, onUpdateJob 
             <DollarSign className="w-6 h-6 text-green-600" />
             Contractor Pay
           </h1>
-          <p className="text-sm text-slate-500">Track work orders and contractor payments</p>
+          <p className="text-sm text-slate-500">Track service orders and contractor payments</p>
         </div>
       </header>
 
@@ -399,7 +399,7 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ jobs, onUpdateJob 
               filterStatus === 'all' ? 'bg-slate-800 text-white' : 'bg-white text-slate-600 border'
             }`}
           >
-            All Work Orders
+            All Service Orders
           </button>
           <button
             onClick={() => setFilterStatus('invoice')}
@@ -424,7 +424,7 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ jobs, onUpdateJob 
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <input
             type="text"
-            placeholder="Search work orders..."
+            placeholder="Search service orders..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm"
@@ -432,12 +432,12 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ jobs, onUpdateJob 
         </div>
       </div>
 
-      {/* Work Orders List */}
+      {/* Service Orders List */}
       <div className="px-4 pb-24 space-y-3">
         {filteredJobs.length === 0 ? (
           <div className="text-center py-12">
             <FileText className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-            <p className="text-slate-500">No completed work orders yet</p>
+            <p className="text-slate-500">No completed service orders yet</p>
           </div>
         ) : (
           filteredJobs.map((job) => (
@@ -449,7 +449,7 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ jobs, onUpdateJob 
               <div className="flex items-start justify-between mb-3">
                 <div>
                   <h3 className="font-semibold text-slate-900">{job.customerName}</h3>
-                  <p className="text-sm text-slate-500">WO #{job.id}</p>
+                  <p className="text-sm text-slate-500">SO #{job.id}</p>
                 </div>
                 <div className="text-right">
                   <p className="font-bold text-slate-900">{formatMoney(job.totalAmount)}</p>
@@ -644,7 +644,7 @@ const JobDetailModal: React.FC<{ job: ContractorJob; onClose: () => void }> = ({
       <header className="bg-white border-b border-slate-200 sticky top-0 z-10">
         <div className="flex items-center justify-between p-4">
           <div>
-            <h1 className="text-lg font-bold text-slate-900">Work Order #{job.id}</h1>
+            <h1 className="text-lg font-bold text-slate-900">Service Order #{job.id}</h1>
             <p className="text-sm text-slate-500">{job.customerName}</p>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-lg">

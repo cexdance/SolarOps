@@ -13,6 +13,7 @@
  */
 
 import React from 'react';
+import { serviceOrderNo } from '../lib/woHelpers';
 import { X, FileText, CheckCircle, Clock, AlertTriangle, DollarSign } from 'lucide-react';
 import { Job, Customer } from '../types';
 import { formatMoney } from '../lib/money';
@@ -148,7 +149,7 @@ export const BillingReportModal: React.FC<Props> = ({
                 <div className="text-right shrink-0">
                   <p className="text-sm font-bold text-slate-900">{title}</p>
                   <p className="text-[11px] text-slate-400 mt-0.5">Generated {generatedDate}</p>
-                  <p className="text-[11px] text-slate-400">{jobs.length} work order{jobs.length !== 1 ? 's' : ''}</p>
+                  <p className="text-[11px] text-slate-400">{jobs.length} service order{jobs.length !== 1 ? 's' : ''}</p>
                 </div>
               </div>
 
@@ -197,7 +198,7 @@ export const BillingReportModal: React.FC<Props> = ({
                 {/* Table header */}
                 <div className="grid gap-2 px-3 py-2 bg-slate-900 rounded-t-xl text-white"
                   style={{ gridTemplateColumns: '7rem 1fr 1fr 6rem 5.5rem 5rem 5.5rem 5.5rem' }}>
-                  <p className="text-[9px] font-bold uppercase tracking-widest">WO #</p>
+                  <p className="text-[9px] font-bold uppercase tracking-widest">SO #</p>
                   <p className="text-[9px] font-bold uppercase tracking-widest">Client</p>
                   <p className="text-[9px] font-bold uppercase tracking-widest">Service</p>
                   <p className="text-[9px] font-bold uppercase tracking-widest">Date</p>
@@ -225,7 +226,7 @@ export const BillingReportModal: React.FC<Props> = ({
                         `}
                         style={{ gridTemplateColumns: '7rem 1fr 1fr 6rem 5.5rem 5rem 5.5rem 5.5rem' }}
                       >
-                        <p className="font-mono text-[10px] text-slate-500 truncate">{job.woNumber ?? '-'}</p>
+                        <p className="font-mono text-[10px] text-slate-500 truncate">{job.woNumber ? serviceOrderNo(job.woNumber) : '-'}</p>
                         <div className="min-w-0">
                           <p className="font-semibold text-slate-900 truncate">{customer?.name ?? '-'}</p>
                           {customer?.city && <p className="text-[10px] text-slate-400 truncate">{customer.city}</p>}

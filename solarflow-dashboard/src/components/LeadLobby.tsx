@@ -1,6 +1,7 @@
 // SolarOps, Lead Lobby
 // Triage view: all incoming leads land here; admins route, sales reps contact/note
 import React, { useState, useMemo, useRef } from 'react';
+import { serviceOrderNo } from '../lib/woHelpers';
 import { formatMoney } from '../lib/money';
 import { authedFetch } from '../lib/supabase';
 import * as XLSX from 'xlsx';
@@ -1748,7 +1749,7 @@ const DetailPanel: React.FC<DetailPanelProps> = ({
         </button>
         {siteTxSuccess?.leadId === lead.id ? (
           <span className="flex items-center gap-1.5 px-3 py-2 bg-emerald-50 text-emerald-700 rounded-lg text-sm font-medium">
-            <CheckCircle className="w-4 h-4" /> {siteTxSuccess.woNumber} created
+            <CheckCircle className="w-4 h-4" /> {serviceOrderNo(siteTxSuccess.woNumber)} created
           </span>
         ) : (
           <button
@@ -1805,7 +1806,7 @@ const DetailPanel: React.FC<DetailPanelProps> = ({
       {/* Site Transfer form */}
       {showSiteTxForm && siteTxSuccess?.leadId !== lead.id && (
         <div className="bg-violet-50 border border-violet-200 rounded-xl p-4 mb-5">
-          <p className="text-xs font-semibold text-violet-700 uppercase tracking-wide mb-3">New Site Transfer Work Order</p>
+          <p className="text-xs font-semibold text-violet-700 uppercase tracking-wide mb-3">New Site Transfer Service Order</p>
           <div className="flex gap-2">
             <div className="flex-1">
               <label className="text-xs text-slate-500 mb-1 block">Site ID</label>

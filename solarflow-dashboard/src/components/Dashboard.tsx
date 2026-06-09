@@ -1,5 +1,6 @@
 // SolarFlow, Ops Center Dashboard (single-column revamp)
 import React, { useState, useRef, useEffect } from 'react';
+import { serviceOrderNo } from '../lib/woHelpers';
 import {
   Wrench, Users, AlertTriangle, CheckCircle, Clock, TrendingUp, TrendingDown,
   FileText, Receipt, CreditCard, Pencil, Plus, Trash2,
@@ -399,13 +400,13 @@ export const Dashboard: React.FC<DashboardProps> = ({
         </div>
         )}
 
-        {/* ── Widget 2: Work Orders Pending Payment (financial, admin only) ── */}
+        {/* ── Widget 2: Service Orders Pending Payment (financial, admin only) ── */}
         {canSeeFinancials(currentUser) && (
         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 flex flex-col">
           <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <CreditCard className="w-4 h-4 text-slate-400" />
-              <h2 className="font-semibold text-slate-900 text-sm">Work Orders Pending Payment</h2>
+              <h2 className="font-semibold text-slate-900 text-sm">Service Orders Pending Payment</h2>
             </div>
             <button
               onClick={() => onViewChange('jobs')}
@@ -416,7 +417,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
           </div>
           <div className="flex-1 overflow-hidden">
             {pendingPaymentJobs.length === 0 ? (
-              <div className="p-8 text-center text-slate-400 text-sm">No work orders pending payment</div>
+              <div className="p-8 text-center text-slate-400 text-sm">No service orders pending payment</div>
             ) : (
               <div className="divide-y divide-slate-50">
                 {pendingPaymentJobs.slice(0, 5).map(job => {
@@ -595,7 +596,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         {/* ── Widget 4: Pipeline + Quick Actions ────────────────────────── */}
         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 flex flex-col">
           <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
-            <h2 className="font-semibold text-slate-900 text-sm">Work Orders</h2>
+            <h2 className="font-semibold text-slate-900 text-sm">Service Orders</h2>
             <button
               onClick={() => onViewChange('jobs')}
               className="text-xs text-orange-600 hover:text-orange-700 font-medium flex items-center gap-0.5"
@@ -887,7 +888,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                                     onClick={() => onJobClick?.(row.job.id)}
                                     className="text-[10px] text-slate-400 hover:text-slate-600 font-mono"
                                   >
-                                    {row.job.woNumber}
+                                    {serviceOrderNo(row.job.woNumber)}
                                   </button>
                                 ) : <span />}
                                 <span className="text-[9px] text-slate-300">

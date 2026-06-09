@@ -1,5 +1,6 @@
 // SolarOps, RMA Compensation Tracker (standalone page)
 import { useState } from 'react';
+import { serviceOrderNo } from '../lib/woHelpers';
 import {
   RotateCcw, Users, CheckCircle, Plus, Package, LayoutGrid, List, Calendar, ChevronLeft, ChevronRight,
   AlertTriangle, Link2,
@@ -222,7 +223,7 @@ export function RMADashboard({
               <button
                 onClick={() => setShowCreateRma(true)}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg transition-colors whitespace-nowrap"
-                title="Create an RMA (with or without a work order)"
+                title="Create an RMA (with or without a service order)"
               >
                 <Plus className="w-3.5 h-3.5" />
                 New RMA
@@ -234,7 +235,7 @@ export function RMADashboard({
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white text-xs font-semibold rounded-lg transition-colors whitespace-nowrap"
               >
                 <Plus className="w-3.5 h-3.5" />
-                Add via Work Order
+                Add via Service Order
               </button>
             )}
           </div>
@@ -248,7 +249,7 @@ export function RMADashboard({
             <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-2">
               <AlertTriangle className="w-4 h-4 text-red-500" />
               <h3 className="font-semibold text-slate-900 text-sm">Standalone RMAs</h3>
-              <span className="text-xs text-slate-400">created outside a work order</span>
+              <span className="text-xs text-slate-400">created outside a service order</span>
             </div>
             <div className="divide-y divide-slate-100">
               {standaloneRmas.map(e => {
@@ -260,7 +261,7 @@ export function RMADashboard({
                         <span className="font-medium text-slate-900 text-sm">{e.rmaNumber || '(no RMA #)'}</span>
                         {!e.linkedJobId ? (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-50 text-red-600 text-xs font-medium border border-red-200">
-                            <AlertTriangle className="w-3 h-3" /> No work order
+                            <AlertTriangle className="w-3 h-3" /> No service order
                           </span>
                         ) : (
                           <button
@@ -285,10 +286,10 @@ export function RMADashboard({
                         value=""
                         onChange={ev => ev.target.value && onUpdateStandaloneRma?.({ ...e, linkedJobId: ev.target.value })}
                         className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white"
-                        title="Link this RMA to a work order"
+                        title="Link this RMA to a service order"
                       >
                         <option value="">Link to WO…</option>
-                        {jobs.map(j => <option key={j.id} value={j.id}>{j.woNumber ?? j.id}</option>)}
+                        {jobs.map(j => <option key={j.id} value={j.id}>{j.woNumber ? serviceOrderNo(j.woNumber) : j.id}</option>)}
                       </select>
                     )}
                   </div>
@@ -308,7 +309,7 @@ export function RMADashboard({
           <div className="text-center">
             <p className="font-semibold text-slate-700">No RMA entries yet</p>
             <p className="text-sm text-slate-400 mt-1">
-              Open a work order, go to RMA Tracking, and add an entry.
+              Open a service order, go to RMA Tracking, and add an entry.
             </p>
           </div>
           {onViewChange && (
@@ -316,7 +317,7 @@ export function RMADashboard({
               onClick={() => onViewChange('jobs')}
               className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold rounded-lg transition-colors"
             >
-              Go to Work Orders
+              Go to Service Orders
             </button>
           )}
         </div>
@@ -405,7 +406,7 @@ export function RMADashboard({
                                 onClick={() => onJobClick?.(row.job.id)}
                                 className="text-[10px] text-blue-500 hover:text-blue-700 font-mono font-semibold underline underline-offset-2"
                               >
-                                {row.job.woNumber}
+                                {serviceOrderNo(row.job.woNumber)}
                               </button>
                             ) : <span />}
                             <span className="text-[9px] text-slate-300">
@@ -463,7 +464,7 @@ export function RMADashboard({
                   <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600">Part</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600">Manufacturer</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600">Customer</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600">Work Order</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600">Service Order</th>
                   <th className="px-4 py-3 text-center text-xs font-semibold text-slate-600">Status</th>
                   <th className="px-4 py-3 text-right text-xs font-semibold text-slate-600">Amount</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600">Created</th>
@@ -496,7 +497,7 @@ export function RMADashboard({
                             onClick={() => onJobClick?.(row.job.id)}
                             className="text-sm text-blue-600 hover:text-blue-700 font-mono font-semibold"
                           >
-                            {row.job.woNumber}
+                            {serviceOrderNo(row.job.woNumber)}
                           </button>
                         )}
                       </td>

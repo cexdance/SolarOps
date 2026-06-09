@@ -1,5 +1,5 @@
 // SolarOps Operations Data Store
-// Work Orders, SolarEdge Alerts, and Client Profitability
+// Service Orders, SolarEdge Alerts, and Client Profitability
 
 import {
   WorkOrder,
@@ -286,7 +286,7 @@ export const loadWorkOrders = (): WorkOrder[] => {
     const stored = localStorage.getItem(WORK_ORDERS_KEY);
     if (stored) return JSON.parse(stored);
   } catch (e) {
-    console.error('Failed to load work orders:', e);
+    console.error('Failed to load service orders:', e);
   }
   return [];
 };
@@ -296,7 +296,7 @@ export const saveWorkOrders = (workOrders: WorkOrder[]): void => {
     localStorage.setItem(WORK_ORDERS_KEY, JSON.stringify(workOrders));
     dbSet(WORK_ORDERS_KEY, workOrders);
   } catch (e) {
-    console.error('Failed to save work orders:', e);
+    console.error('Failed to save service orders:', e);
   }
 };
 

@@ -11,7 +11,7 @@ import { StorageWarningBanner } from './components/StorageWarningBanner';
 const Layout             = lazy(() => import('./components/Layout').then(m => ({ default: m.Layout })));
 const Dashboard          = lazy(() => import('./components/Dashboard').then(m => ({ default: m.Dashboard })));
 const Jobs               = lazy(() => import('./components/Jobs').then(m => ({ default: m.Jobs })));
-const WorkOrderPanel     = lazy(() => import('./components/WorkOrderPanel').then(m => ({ default: m.WorkOrderPanel })));
+const ServiceOrderPanel     = lazy(() => import('./components/ServiceOrderPanel').then(m => ({ default: m.ServiceOrderPanel })));
 const Customers          = lazy(() => import('./components/Customers').then(m => ({ default: m.Customers })));
 const Billing            = lazy(() => import('./components/Billing').then(m => ({ default: m.Billing })));
 const TechnicianView     = lazy(() => import('./components/TechnicianView').then(m => ({ default: m.TechnicianView })));
@@ -1331,7 +1331,7 @@ function App() {
     // Auto-mirror to contractor side: if a contractor is assigned and no
     // ContractorJob exists yet for this admin Job, create one. Previously the
     // ContractorJob was only built when the user advanced status to
-    // 'quote_approved' (WorkOrderPanel.tsx:651), so simply assigning a
+    // 'quote_approved' (ServiceOrderPanel.tsx:651), so simply assigning a
     // contractor + saving left the contractor side empty.
     if (updatedJob.contractorId) {
       const alreadyMirrored = contractorJobs.some(cj => cj.sourceJobId === updatedJob.id);
@@ -2307,7 +2307,7 @@ function App() {
             j => j.customerId === selectedCustomer.id && (j.status === 'paid' || j.status === 'invoiced')
           ).length;
           return (
-            <WorkOrderPanel
+            <ServiceOrderPanel
               job={selectedJob}
               siteId={selectedCustomer.id}
               siteName={selectedCustomer.name}

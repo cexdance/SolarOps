@@ -16,7 +16,7 @@ export const CLIENT_STATUS_CONFIG: Record<SiteClientStatus, { label: string; col
   om:                  { label: 'O&M',                    color: 'text-emerald-700', bg: 'bg-emerald-100', border: 'border-emerald-300' },
   outstanding_balance: { label: 'Outstanding Balance',    color: 'text-red-700',     bg: 'bg-red-100',     border: 'border-red-400',     critical: true },
   system_down:         { label: 'System Down',            color: 'text-red-700',     bg: 'bg-red-100',     border: 'border-red-400',     critical: true },
-  wo_pending:          { label: 'Work Order Pending',     color: 'text-amber-700',   bg: 'bg-amber-100',   border: 'border-amber-300' },
+  wo_pending:          { label: 'Service Order Pending',     color: 'text-amber-700',   bg: 'bg-amber-100',   border: 'border-amber-300' },
   quote_approval:      { label: 'Quote Sent for Approval',color: 'text-violet-700',  bg: 'bg-violet-100',  border: 'border-violet-300' },
 };
 

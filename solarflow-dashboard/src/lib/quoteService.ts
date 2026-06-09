@@ -1,4 +1,5 @@
 import { formatMoney } from './money';
+import { serviceOrderNo } from './woHelpers';
 import { supabase } from './supabase';
 import { fireMentionNotifications } from '../components/ui/MentionTextarea';
 
@@ -53,9 +54,9 @@ export async function notifyAdminForInvoice(
   await fireMentionNotifications({
     mentionedUserIds: [daniel.id],
     notifierName: senderName,
-    context: `${woNumber} ${customerName}`,
+    context: `${serviceOrderNo(woNumber)} ${customerName}`,
     contextId: jobId,
     contextType: 'workOrder',
-    message: `${woNumber} is ready for invoicing. Customer: ${customerName}. Total: ${formatMoney(totalAmount)}. Please send the invoice and mark as paid when received.`,
+    message: `${serviceOrderNo(woNumber)} is ready for invoicing. Customer: ${customerName}. Total: ${formatMoney(totalAmount)}. Please send the invoice and mark as paid when received.`,
   }).catch(err => console.error('[quoteService] notify failed:', err));
 }

@@ -1247,7 +1247,7 @@ const ReceiveStockModal: React.FC<ReceiveStockModalProps> = ({ items, jobs, curr
   const [note, setNote] = useState('');
   const [err, setErr] = useState<string | null>(null);
 
-  // Open RMAs across all work orders, awaiting a replacement-part delivery.
+  // Open RMAs across all service orders, awaiting a replacement-part delivery.
   const openRmas = useMemo(() => {
     const out: { key: string; kind: 'job' | 'standalone'; jobId?: string; entry: RMAEntry; label: string }[] = [];
     for (const j of jobs) {

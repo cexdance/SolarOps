@@ -386,7 +386,7 @@ export const JobDetail: React.FC<JobDetailProps> = ({
       {showEditModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-end md:items-center justify-center">
           <div className="bg-white rounded-t-2xl md:rounded-2xl w-full md:max-w-lg p-4 md:p-6 max-h-[90vh] overflow-y-auto">
-            <h3 className="text-lg font-semibold mb-4">Edit Work Order</h3>
+            <h3 className="text-lg font-semibold mb-4">Edit Service Order</h3>
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>

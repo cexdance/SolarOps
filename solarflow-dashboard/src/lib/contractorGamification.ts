@@ -71,7 +71,7 @@ export interface Badge {
 export const BADGES: Record<BadgeId, Badge> = {
   first_call: {
     id: 'first_call', name: 'First Call', emoji: '🔧',
-    description: 'Complete your first work order',
+    description: 'Complete your first service order',
     rarity: 'common', xpBonus: 50,
     rarityColor: 'text-slate-600', rarityBg: 'bg-slate-100',
   },

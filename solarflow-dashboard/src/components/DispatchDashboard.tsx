@@ -1,6 +1,7 @@
 // SolarOps, OPS CENTER Dashboard
 // 2 columns × 2 rows = 4 configurable widget slots
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import { serviceOrderNo } from '../lib/woHelpers';
 import { formatMoney } from '../lib/money';
 import {
   Crosshair, AlertTriangle, Zap, Wrench, Plus, X, Sun,
@@ -68,8 +69,8 @@ interface WidgetCatalogEntry {
 const WIDGET_CATALOG: WidgetCatalogEntry[] = [
   {
     type: 'single-wo',
-    label: 'Single Work Order',
-    description: 'Track one specific work order',
+    label: 'Single Service Order',
+    description: 'Track one specific service order',
     icon: ClipboardList,
     colorClass: 'text-blue-600',
     bgClass: 'bg-blue-50',
@@ -95,7 +96,7 @@ const WIDGET_CATALOG: WidgetCatalogEntry[] = [
   },
   {
     type: 'contractor-wo',
-    label: 'Contractor Work Orders',
+    label: 'Contractor Service Orders',
     description: "One contractor's open WOs",
     icon: UserCog,
     colorClass: 'text-purple-600',
@@ -104,8 +105,8 @@ const WIDGET_CATALOG: WidgetCatalogEntry[] = [
   },
   {
     type: 'work-order',
-    label: 'Work Orders',
-    description: 'All open work orders',
+    label: 'Service Orders',
+    description: 'All open service orders',
     icon: Wrench,
     colorClass: 'text-slate-600',
     bgClass: 'bg-slate-100',
@@ -376,12 +377,12 @@ const AllWorkOrdersWidget: React.FC<{ jobs: Job[]; customers: Customer[]; onView
   return (
     <div className="h-full flex flex-col min-h-0">
       <div className="flex items-center justify-between mb-2 flex-shrink-0">
-        <div className="flex items-center gap-1.5"><Wrench className="w-4 h-4 text-slate-600" /><span className="text-sm font-semibold text-slate-900">Work Orders</span></div>
+        <div className="flex items-center gap-1.5"><Wrench className="w-4 h-4 text-slate-600" /><span className="text-sm font-semibold text-slate-900">Service Orders</span></div>
         <span className="text-[11px] text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full font-medium">{jobs.filter(j => j.status !== 'paid' && j.status !== 'completed').length} open</span>
       </div>
       <div className="flex-1 overflow-y-auto space-y-1 min-h-0">
         {active.length === 0
-          ? <p className="text-xs text-slate-400 text-center pt-6">No work orders</p>
+          ? <p className="text-xs text-slate-400 text-center pt-6">No service orders</p>
           : active.map(job => {
               const cust = custById.get(job.customerId);
               return (
@@ -432,7 +433,7 @@ const SingleWOWidget: React.FC<{ jobId: string; jobs: Job[]; customers: Customer
       <div className="flex items-center justify-between mb-2 flex-shrink-0">
         <div className="flex items-center gap-1.5">
           <ClipboardList className="w-4 h-4 text-blue-500" />
-          <span className="text-xs font-mono font-bold text-slate-500">{job.woNumber || job.id.slice(-6).toUpperCase()}</span>
+          <span className="text-xs font-mono font-bold text-slate-500">{job.woNumber ? serviceOrderNo(job.woNumber) : job.id.slice(-6).toUpperCase()}</span>
         </div>
         <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${JOB_STATUS_COLORS[job.status] || 'bg-slate-100 text-slate-500'}`}>{JOB_STATUS_LABEL[job.status] || job.status}</span>
       </div>
@@ -559,7 +560,7 @@ const ContractorWOWidget: React.FC<{ contractorId: string; contractors: Contract
       </div>
       <div className="flex-1 overflow-y-auto space-y-1 min-h-0">
         {openJobs.length === 0
-          ? <p className="text-xs text-slate-400 text-center pt-6">No open work orders</p>
+          ? <p className="text-xs text-slate-400 text-center pt-6">No open service orders</p>
           : openJobs.slice(0, 8).map(job => {
               const cust = custById.get(job.customerId);
               return (
@@ -895,7 +896,7 @@ const AddWidgetModal: React.FC<{
               <div>
                 {catalog.requires === 'customer'    && <p className="text-sm font-semibold text-slate-700 mb-3">Select Customer</p>}
                 {catalog.requires === 'contractor'  && <p className="text-sm font-semibold text-slate-700 mb-3">Select Contractor</p>}
-                {catalog.requires === 'job'         && <p className="text-sm font-semibold text-slate-700 mb-3">Select Work Order</p>}
+                {catalog.requires === 'job'         && <p className="text-sm font-semibold text-slate-700 mb-3">Select Service Order</p>}
                 {catalog.requires === 'lead'        && <p className="text-sm font-semibold text-slate-700 mb-3">Select Lead</p>}
                 {/* Search */}
                 <div className="relative mb-3">
@@ -941,7 +942,7 @@ const AddWidgetModal: React.FC<{
                   )}
                   {catalog.requires === 'job' && (
                     filteredJobs.length === 0
-                      ? <p className="text-xs text-slate-400 text-center py-4">No work orders found</p>
+                      ? <p className="text-xs text-slate-400 text-center py-4">No service orders found</p>
                       : filteredJobs.map(job => {
                           const cust = custMap.get(job.customerId);
                           return (
@@ -949,7 +950,7 @@ const AddWidgetModal: React.FC<{
                               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all cursor-pointer ${selection === job.id ? 'bg-orange-500 text-white' : 'hover:bg-slate-50 border border-transparent hover:border-slate-200'}`}>
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-1.5 flex-wrap">
-                                  {job.woNumber && <span className={`text-[10px] font-mono ${selection === job.id ? 'text-orange-100' : 'text-slate-400'}`}>{job.woNumber}</span>}
+                                  {job.woNumber && <span className={`text-[10px] font-mono ${selection === job.id ? 'text-orange-100' : 'text-slate-400'}`}>{serviceOrderNo(job.woNumber)}</span>}
                                   {cust?.clientId && <span className={`text-[10px] font-mono ${selection === job.id ? 'text-orange-100' : 'text-orange-600'}`}>{cust.clientId}</span>}
                                 </div>
                                 <p className={`text-sm font-medium truncate ${selection === job.id ? 'text-white' : 'text-slate-800'}`}>{cust?.name || job.clientName || 'Unknown'}</p>

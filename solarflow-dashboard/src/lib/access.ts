@@ -36,7 +36,7 @@ export function defaultPermitsForRole(role: UserRole | null | undefined): Permis
     return ['financials.view', 'workorders.edit', 'customers.delete', 'inventory.manage', 'users.manage'];
   }
   if (role === 'coo' || role === 'support') {
-    // Operations staff: edit work orders and inventory, no money, no user admin.
+    // Operations staff: edit service orders and inventory, no money, no user admin.
     return ['workorders.edit', 'inventory.manage'];
   }
   if (role === 'technician') {

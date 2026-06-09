@@ -1,5 +1,5 @@
 /**
- * Work Order Helpers, Phase 2 Foundation
+ * Service Order Helpers, Phase 2 Foundation
  *
  * These selectors derive contractor-visible views from the single `Job[]`
  * source of truth. Today they are used as read-side helpers; in Phase 2
@@ -7,6 +7,40 @@
  */
 import type { Job } from '../types';
 import type { ContractorJob, JobStatusContractor, PhotoCategory } from '../types/contractor';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Order numbering: one shared number, two prefixes.
+// The end-to-end order is a SERVICE ORDER (SO-). When it is dispatched to a
+// contractor, the contractor receives a WORK ORDER (WO-) with the SAME number.
+// The persisted `Job.woNumber` keeps storing the raw value; these helpers just
+// re-prefix it for display so old `WO-…` records render as `SO-…` in-app.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Strip any leading SO-/WO- prefix, returning the bare `YYMM-NNNNN` core. */
+export function bareOrderNo(n?: string): string {
+  if (!n) return '';
+  return n.replace(/^(?:SO|WO)-/i, '');
+}
+
+/** Display an order number as a Service Order (SO-…). */
+export function serviceOrderNo(n?: string): string {
+  const bare = bareOrderNo(n);
+  return bare ? `SO-${bare}` : '';
+}
+
+/** Display an order number as a contractor Service Order (WO-…), same number. */
+export function workOrderNo(n?: string): string {
+  const bare = bareOrderNo(n);
+  return bare ? `WO-${bare}` : '';
+}
+
+/** Generate a fresh Service Order number (SO-YYMM-NNNNN). */
+export function generateServiceOrderNumber(): string {
+  const now = new Date();
+  const yymm = `${String(now.getFullYear()).slice(2)}${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const seq = String(Date.now()).slice(-5);
+  return `SO-${yymm}-${seq}`;
+}
 
 // Statuses that mean the contractor should see this job
 const CONTRACTOR_VISIBLE_STATUSES: Set<string> = new Set([

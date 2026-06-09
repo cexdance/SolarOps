@@ -162,7 +162,7 @@ ${partsRows}
 
 ## Meeting/Service Details
 
-**Work Order Project Name:** ${this.getValue(row, 'Project Name')}
+**Service Order Project Name:** ${this.getValue(row, 'Project Name')}
 
 **Work Description:** ${this.getValue(row, 'Work Description (Internal comments)')}
 

@@ -43,7 +43,7 @@ function fmtMonthYear(date: Date): string {
 }
 
 const ENTRY_TYPE_CONFIG: Record<ScheduleEntryType, { label: string; color: string; icon: React.ReactNode }> = {
-  work_order: { label: 'Work Order',  color: 'bg-orange-500', icon: <Wrench className="w-3 h-3" /> },
+  work_order: { label: 'Service Order',  color: 'bg-orange-500', icon: <Wrench className="w-3 h-3" /> },
   inspection: { label: 'Inspection',  color: 'bg-blue-500',   icon: <ClipboardList className="w-3 h-3" /> },
   delivery:   { label: 'Delivery',    color: 'bg-green-500',  icon: <Truck className="w-3 h-3" /> },
   meeting:    { label: 'Meeting',     color: 'bg-purple-500', icon: <Users className="w-3 h-3" /> },

@@ -12,11 +12,11 @@ import {
 import { WorkOrderCalendar } from './WorkOrderCalendar';
 import { Job, Customer, User as UserType, JobStatus, UrgencyLevel, ServiceType, WO_TO_JOB_STATUS, WOStatus } from '../types';
 
-// The board groups by `status`, but RMA/imported work orders often carry a stale
+// The board groups by `status`, but RMA/imported service orders often carry a stale
 // or undefined `status` while their real pipeline state lives in `woStatus`.
 // Respect `status` when it's a valid column (so drag-drop, which writes only
 // `status`, keeps working), otherwise derive the column from `woStatus`, and
-// finally fall back to "new" so NO work order is ever invisible on the board.
+// finally fall back to "new" so NO service order is ever invisible on the board.
 const BOARD_COLUMN_STATUSES: JobStatus[] = ['new', 'assigned', 'in_progress', 'completed', 'invoiced', 'paid'];
 function boardStatus(job: Job): JobStatus {
   if (job.status === 'archived') return 'archived' as JobStatus;
@@ -50,7 +50,7 @@ function badgeLabel(job: Job): string {
   if (job.woStatus && WO_STATUS_LABEL[job.woStatus]) return WO_STATUS_LABEL[job.woStatus];
   return boardStatus(job).replace('_', ' ');
 }
-import { WorkOrderPanel } from './WorkOrderPanel';
+import { ServiceOrderPanel } from './ServiceOrderPanel';
 
 // ─── Standalone sub-components (defined outside Jobs to prevent remount on parent re-render) ───
 
@@ -387,8 +387,8 @@ export const Jobs: React.FC<JobsProps> = ({
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Work Orders</h1>
-          <p className="text-slate-500 mt-1">{filteredJobs.length} total work orders</p>
+          <h1 className="text-2xl font-bold text-slate-900">Service Orders</h1>
+          <p className="text-slate-500 mt-1">{filteredJobs.length} total service orders</p>
         </div>
         {currentUser?.role !== 'support' && (
           <button
@@ -501,7 +501,7 @@ export const Jobs: React.FC<JobsProps> = ({
               status={status}
               title={status.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
               // Group by the EFFECTIVE board status (derives from woStatus when the
-              // raw status is stale/undefined) so RMA/imported work orders land in
+              // raw status is stale/undefined) so RMA/imported service orders land in
               // the right column WITHOUT needing a manual save, and none vanish.
               columnJobs={filteredJobs.filter(j => boardStatus(j) === status)}
               allJobs={jobs}
@@ -566,7 +566,7 @@ export const Jobs: React.FC<JobsProps> = ({
 
       {/* Step 2: New WO creation */}
       {createCustomer && !editingCreatedJob && (
-        <WorkOrderPanel
+        <ServiceOrderPanel
           siteId={createCustomer.id}
           siteName={createCustomer.name}
           clientId={createCustomer.clientId}
@@ -587,7 +587,7 @@ export const Jobs: React.FC<JobsProps> = ({
 
       {/* Step 3: Edit mode after WO creation, panel stays open */}
       {editingCreatedJob && (
-        <WorkOrderPanel
+        <ServiceOrderPanel
           job={editingCreatedJob}
           siteId={editingCreatedJob.solarEdgeSiteId ?? editingCreatedJob.customerId}
           siteName={editingCreatedJob.clientName ?? editingCreatedJob.customerId}
@@ -636,7 +636,7 @@ const CustomerPickerModal: React.FC<CustomerPickerModalProps> = ({ customers, on
       <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl">
         <div className="p-4 border-b border-slate-200 flex items-center justify-between">
           <div>
-            <h2 className="text-lg font-semibold text-slate-900">New Work Order</h2>
+            <h2 className="text-lg font-semibold text-slate-900">New Service Order</h2>
             <p className="text-xs text-slate-500 mt-0.5">Select a customer to continue</p>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-lg cursor-pointer">

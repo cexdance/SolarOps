@@ -4,7 +4,7 @@
  * Opened from the User Permissions panel "View log" quick link. Pulls that
  * user's cross-device history from Supabase change_log (merged with the local
  * log) so an admin can trace who changed what, and when. Each entry that maps
- * to a customer or work order deep-links straight to that card.
+ * to a customer or service order deep-links straight to that card.
  */
 import React, { useEffect, useState, useCallback } from 'react';
 import {

@@ -734,7 +734,7 @@ export const createWorkOrderNotification = (
   return addNotification({
     contractorId,
     type: 'wo_assigned',
-    title: 'New Work Order Assigned',
+    title: 'New Service Order Assigned',
     message: `You have been assigned to: ${job.description || job.serviceType}. Location: ${job.address || 'See details'}. Scheduled: ${job.scheduledDate || 'TBD'}`,
     workOrderId: job.sourceJobId,
     jobId: job.id,

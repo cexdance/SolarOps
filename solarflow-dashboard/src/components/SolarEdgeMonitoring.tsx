@@ -547,8 +547,8 @@ export const SolarEdgeMonitoring: React.FC<Props> = ({
           { label: 'Active',            value: stats.active,                                                   icon: Zap,           color: 'text-emerald-600 bg-emerald-50' },
           { label: 'With Alerts',       value: stats.withAlerts,                                               icon: AlertTriangle, color: 'text-red-600 bg-red-50' },
           { label: 'Month Production',  value: `${(stats.totalMonthKwh / 1000).toFixed(1)} MWh`,              icon: Calendar,      color: 'text-blue-600 bg-blue-50' },
-          { label: 'Total Work Orders', value: stats.totalWOs,                                                 icon: ClipboardList, color: 'text-violet-600 bg-violet-50' },
-          { label: 'Open Work Orders',  value: stats.openWOs,                                                  icon: Wrench,        color: 'text-orange-600 bg-orange-50' },
+          { label: 'Total Service Orders', value: stats.totalWOs,                                                 icon: ClipboardList, color: 'text-violet-600 bg-violet-50' },
+          { label: 'Open Service Orders',  value: stats.openWOs,                                                  icon: Wrench,        color: 'text-orange-600 bg-orange-50' },
           { label: 'Total Revenue',     value: formatMoney(stats.totalRevenue, { decimals: 0 }), icon: TrendingUp, color: 'text-blue-600 bg-blue-50' },
           { label: 'Total Profit',      value: formatMoney(stats.totalProfit, { decimals: 0 }), icon: stats.totalProfit >= 0 ? TrendingUp : TrendingDown, color: stats.totalProfit >= 0 ? 'text-emerald-600 bg-emerald-50' : 'text-red-600 bg-red-50' },
         ].map(({ label, value, icon: Icon, color }) => (
@@ -607,9 +607,9 @@ export const SolarEdgeMonitoring: React.FC<Props> = ({
           <select value={woFilter} onChange={e => setWoFilter(e.target.value)}
             className="text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-400 cursor-pointer">
             <option value="all">All WO Status</option>
-            <option value="has_wo">Has Work Orders</option>
-            <option value="open_wo">Open Work Orders</option>
-            <option value="no_wo">No Work Orders</option>
+            <option value="has_wo">Has Service Orders</option>
+            <option value="open_wo">Open Service Orders</option>
+            <option value="no_wo">No Service Orders</option>
           </select>
 
           <select value={clientStatusFilter} onChange={e => setClientStatusFilter(e.target.value)}
@@ -730,14 +730,14 @@ export const SolarEdgeMonitoring: React.FC<Props> = ({
                         })}
                       </tr>,
 
-                      /* Expandable Work Orders panel */
+                      /* Expandable Service Orders panel */
                       isExpanded && siteJobs.length > 0 && (
                         <tr key={`${site.siteId}-wo`} className="bg-slate-50">
                           <td colSpan={COLS} className="px-4 py-3">
                             <div className="flex items-center gap-2 mb-2">
                               <ClipboardList className="w-4 h-4 text-slate-500" />
                               <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
-                                Work Orders: {site.clientId || site.siteName}
+                                Service Orders: {site.clientId || site.siteName}
                               </span>
                             </div>
                             <div className="grid gap-2">
@@ -775,7 +775,7 @@ export const SolarEdgeMonitoring: React.FC<Props> = ({
                               onClick={() => onViewChange('jobs')}
                               className="mt-2 text-xs text-orange-500 hover:text-orange-700 transition-colors cursor-pointer"
                             >
-                              View all in Work Orders →
+                              View all in Service Orders →
                             </button>
                           </td>
                         </tr>

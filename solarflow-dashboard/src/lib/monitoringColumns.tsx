@@ -353,21 +353,21 @@ export const COLUMN_REGISTRY: MonitoringColumnDef[] = [
   },
   {
     id: 'workOrders',
-    label: 'Work Orders',
+    label: 'Service Orders',
     sortKey: null,
     defaultVisible: true,
     defaultOrder: 11,
     render: ({ siteJobs, onToggleExpand, onViewChange }) => {
       if (siteJobs.length === 0) {
         return (
-          <button onClick={() => onViewChange('jobs')} className="inline-flex items-center gap-1 text-xs text-slate-400 hover:text-orange-500 transition-colors cursor-pointer" title="Create work order">
+          <button onClick={() => onViewChange('jobs')} className="inline-flex items-center gap-1 text-xs text-slate-400 hover:text-orange-500 transition-colors cursor-pointer" title="Create service order">
             + Add WO
           </button>
         );
       }
       const open = siteJobs.filter(j => !['completed', 'invoiced', 'paid'].includes(j.status)).length;
       return (
-        <button onClick={onToggleExpand} className="inline-flex items-center gap-1.5 cursor-pointer group" title={`${siteJobs.length} work orders`}>
+        <button onClick={onToggleExpand} className="inline-flex items-center gap-1.5 cursor-pointer group" title={`${siteJobs.length} service orders`}>
           <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${open > 0 ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
             {siteJobs.length}
           </span>

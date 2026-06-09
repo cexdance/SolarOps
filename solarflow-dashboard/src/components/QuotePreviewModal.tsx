@@ -154,7 +154,7 @@ export const QuotePreviewModal: React.FC<QuotePreviewProps> = ({
           </div>
 
           <div className="text-sm text-slate-500">
-            <span className="font-medium text-slate-700">WO:</span> {woNumber} &nbsp;·&nbsp;
+            <span className="font-medium text-slate-700">SO:</span> {woNumber} &nbsp;·&nbsp;
             <span className="font-medium text-slate-700">Address:</span> {address}
           </div>
 
@@ -163,7 +163,7 @@ export const QuotePreviewModal: React.FC<QuotePreviewProps> = ({
               <Send className="w-4 h-4 mt-0.5 shrink-0 text-orange-500" />
               <span>
                 Saving this preview hands the quote to <strong>{notifyName ?? 'the quote owner'}</strong> to create and
-                send it to the accounting software. The work order advances to <strong>Quote Sent</strong>; any teammate
+                send it to the accounting software. The service order advances to <strong>Quote Sent</strong>; any teammate
                 can mark it approved afterward.
               </span>
             </div>

@@ -1,11 +1,11 @@
 /**
- * Work Order Service, Job archiving and lifecycle management
+ * Service Order Service, Job archiving and lifecycle management
  */
 
 import { Job } from '../types';
 
 /**
- * Auto-archive completed work orders older than 30 days.
+ * Auto-archive completed service orders older than 30 days.
  * Only archives jobs with status 'paid' (fully completed).
  * Returns updated jobs array if any were archived, otherwise original array.
  */
@@ -41,7 +41,7 @@ export function isJobArchived(job: Job): boolean {
 }
 
 /**
- * Manually archive a work order.
+ * Manually archive a service order.
  */
 export function archiveJob(job: Job): Job {
   return {

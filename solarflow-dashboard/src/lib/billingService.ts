@@ -1,6 +1,7 @@
 // SolarOps - Billing Timer Service
 // Runs on app load to apply late fees, contractor bonuses, and auto-pay triggers.
 import { formatMoney } from './money';
+import { serviceOrderNo } from './woHelpers';
 import { Job, AppNotification } from '../types';
 
 const LATE_FEE_1_DAYS = 14;         // Days after invoiced before first late fee
@@ -59,7 +60,7 @@ export function processBillingTimers(jobs: Job[]): BillingResult {
 
   const updatedJobs = jobs.map(job => {
     let j = { ...job };
-    const label = j.woNumber || j.id;
+    const label = serviceOrderNo(j.woNumber) || j.id;
 
     // ── Client billing timers (invoiced, unpaid) ─────────────────────────────
     if (j.status === 'invoiced' && j.invoicedAt && !j.clientPaidAt) {

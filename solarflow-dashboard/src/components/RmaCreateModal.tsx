@@ -1,12 +1,13 @@
 // SolarOps, shared RMA create modal (standalone or work-order-linked)
 import React, { useState } from 'react';
+import { serviceOrderNo } from '../lib/woHelpers';
 import { X, AlertTriangle, FileText } from 'lucide-react';
 import { Job, RMAEntry } from '../types';
 
 interface RmaCreateModalProps {
   jobs?: Job[];
   currentUserName?: string;
-  /** Pre-select a work order to link to (e.g. when opened from a WO context). */
+  /** Pre-select a service order to link to (e.g. when opened from a WO context). */
   defaultJobId?: string;
   onClose: () => void;
   onCreate: (entry: RMAEntry) => void;
@@ -26,7 +27,7 @@ export const RmaCreateModal: React.FC<RmaCreateModalProps> = ({
   const [err, setErr] = useState<string | null>(null);
 
   const jobLabel = (j: Job) =>
-    `${j.woNumber ?? (j as Job & { jobNumber?: string }).jobNumber ?? j.id}${j.title ? ' · ' + j.title : ''}`;
+    `${serviceOrderNo(j.woNumber) || (j as Job & { jobNumber?: string }).jobNumber || j.id}${j.title ? ' · ' + j.title : ''}`;
 
   const submit = () => {
     setErr(null);
@@ -94,9 +95,9 @@ export const RmaCreateModal: React.FC<RmaCreateModalProps> = ({
           </label>
 
           <label className="block">
-            <span className="text-sm font-medium text-slate-700">Link to work order (optional)</span>
+            <span className="text-sm font-medium text-slate-700">Link to service order (optional)</span>
             <select value={linkedJobId} onChange={e => setLinkedJobId(e.target.value)} className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white">
-              <option value="">No work order, standalone RMA</option>
+              <option value="">No service order, standalone RMA</option>
               {jobs.map(j => <option key={j.id} value={j.id}>{jobLabel(j)}</option>)}
             </select>
           </label>
@@ -104,7 +105,7 @@ export const RmaCreateModal: React.FC<RmaCreateModalProps> = ({
           {!linkedJobId && (
             <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-red-700 text-xs">
               <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-              <span>This RMA will <strong>not be linked to a work order</strong>. It will be flagged as unlinked. You can still create it.</span>
+              <span>This RMA will <strong>not be linked to a service order</strong>. It will be flagged as unlinked. You can still create it.</span>
             </div>
           )}
         </div>

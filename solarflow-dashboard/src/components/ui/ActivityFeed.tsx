@@ -1,5 +1,5 @@
 // ActivityFeed, shared timeline component
-// Used everywhere the team talks: customer comments, work order comments,
+// Used everywhere the team talks: customer comments, service order comments,
 // future to-do threads. Twitter/Trello-style: avatar + name + relative time,
 // full-width body (never truncated), inline edit, reactions, @mention chips.
 //

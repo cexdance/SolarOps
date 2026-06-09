@@ -469,7 +469,7 @@ export const WorkOrderCalendar: React.FC<WorkOrderCalendarProps> = ({
       {scheduledJobs.length === 0 && unscheduledJobs.length === 0 && (
         <div className="text-center py-16">
           <CalendarDays className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-          <p className="text-slate-500">No work orders to display</p>
+          <p className="text-slate-500">No service orders to display</p>
         </div>
       )}
     </div>

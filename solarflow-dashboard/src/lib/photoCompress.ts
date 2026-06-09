@@ -2,7 +2,7 @@
  * Resize and re-encode a user-supplied image File to a JPEG dataURL.
  *
  * Phone photos arrive as 3-8 MB JPEGs (or HEIC auto-converted by Safari).
- * Stored verbatim as base64, a single Work Order with 5 photos blows past
+ * Stored verbatim as base64, a single Service Order with 5 photos blows past
  * Supabase's practical row/upsert size, which silently kills every sync push.
  * Compressing to a max edge of 1600px @ 0.75 quality drops each photo to
  * ~150-300 KB while staying visually lossless for documentation use.
