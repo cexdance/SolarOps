@@ -1,4 +1,4 @@
-// PhoneLink — shows a phone number; clicking it reveals Call / SMS buttons
+// PhoneLink, shows a phone number; clicking it reveals Call / SMS buttons
 // that trigger the RingCentral desktop/mobile app via rcmobile:// deep links.
 
 import React, { useState, useRef, useEffect } from 'react';

@@ -116,7 +116,7 @@ export function useSyncEngine({
         });
       },
       onKV: (key, payloadValue) => {
-        // Use the Realtime payload value directly — avoids the stale-localStorage
+        // Use the Realtime payload value directly, avoids the stale-localStorage
         // race where a re-read would get the old value if the write hasn't flushed.
         skipContractorPersist.current = true;
         if (key === 'solarflow_contractor_jobs') {

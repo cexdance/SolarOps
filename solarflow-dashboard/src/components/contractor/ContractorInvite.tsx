@@ -1,4 +1,4 @@
-// ContractorInvite — Admin modal to generate & send a contractor invite link
+// ContractorInvite, Admin modal to generate & send a contractor invite link
 import React, { useState } from 'react';
 import {
   X, Mail, Copy, CheckCircle, Link2, Send, UserPlus,
@@ -63,7 +63,7 @@ export const ContractorInvite: React.FC<ContractorInviteProps> = ({
       `Click the link below to complete your onboarding:\n${inviteLink}\n\n` +
       `This link is tied to your email address (${invite?.email}) and can only be used once.\n\n` +
       `If you have any questions, reply to this email or contact us at ${adminEmail}.\n\n` +
-      `— Conexsol Operations Team`
+      `- Conexsol Operations Team`
     );
     window.open(`mailto:${invite?.email}?subject=${subject}&body=${body}`, '_blank');
   };

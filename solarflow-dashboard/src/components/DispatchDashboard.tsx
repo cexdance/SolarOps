@@ -1,4 +1,4 @@
-// SolarOps — OPS CENTER Dashboard
+// SolarOps, OPS CENTER Dashboard
 // 2 columns × 2 rows = 4 configurable widget slots
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import {
@@ -145,7 +145,7 @@ const WIDGET_CATALOG: WidgetCatalogEntry[] = [
   {
     type: 'todo-list',
     label: 'My To-Do List',
-    description: 'Personal tasks with due dates — private per user',
+    description: 'Personal tasks with due dates, private per user',
     icon: CheckSquare,
     colorClass: 'text-indigo-600',
     bgClass: 'bg-indigo-50',
@@ -153,7 +153,7 @@ const WIDGET_CATALOG: WidgetCatalogEntry[] = [
   {
     type: 'mentions',
     label: 'My Mentions',
-    description: 'Every comment that @mentions you — the team accountability inbox',
+    description: 'Every comment that @mentions you, the team accountability inbox',
     icon: AtSign,
     colorClass: 'text-orange-600',
     bgClass: 'bg-orange-50',
@@ -238,7 +238,7 @@ const fmtKwh = (kwh: number) =>
   : `${kwh.toFixed(0)} kWh`;
 
 const fmtDate = (d: string | undefined) =>
-  d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—';
+  d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '-';
 
 /** Generate simulated 24-hour solar production curve */
 const generateHourlyData = (site: SolarEdgeSite) => {
@@ -400,7 +400,7 @@ const AllWorkOrdersWidget: React.FC<{ jobs: Job[]; customers: Customer[]; onView
                     <span className={`flex-shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${JOB_STATUS_COLORS[job.status] || 'bg-slate-100 text-slate-500'}`}>{JOB_STATUS_LABEL[job.status] || job.status}</span>
                   </div>
                   <div className="flex items-center justify-between gap-1">
-                    <div className="flex items-center gap-1 min-w-0"><MapPin className="w-3 h-3 text-slate-400 flex-shrink-0" /><span className="text-[10px] text-slate-400 truncate">{cust?.city ? `${cust.city}, ${cust.state}` : cust?.address || job.siteAddress || '—'}</span></div>
+                    <div className="flex items-center gap-1 min-w-0"><MapPin className="w-3 h-3 text-slate-400 flex-shrink-0" /><span className="text-[10px] text-slate-400 truncate">{cust?.city ? `${cust.city}, ${cust.state}` : cust?.address || job.siteAddress || '-'}</span></div>
                     <div className="flex items-center gap-1 flex-shrink-0"><Clock className="w-3 h-3 text-slate-300" /><span className="text-[10px] text-slate-400">{fmtDate(job.scheduledDate || job.date)}</span></div>
                   </div>
                 </button>
@@ -435,7 +435,7 @@ const SingleWOWidget: React.FC<{ jobId: string; jobs: Job[]; customers: Customer
         </div>
         <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${JOB_STATUS_COLORS[job.status] || 'bg-slate-100 text-slate-500'}`}>{JOB_STATUS_LABEL[job.status] || job.status}</span>
       </div>
-      {/* Customer — clickable → profile */}
+      {/* Customer, clickable → profile */}
       <button
         onClick={() => cust && onViewCustomer(cust.id)}
         className={`mb-2 flex-shrink-0 text-left w-full rounded-lg px-1 -mx-1 py-0.5 transition-colors ${cust ? 'hover:bg-orange-50 cursor-pointer' : 'cursor-default'}`}
@@ -447,7 +447,7 @@ const SingleWOWidget: React.FC<{ jobId: string; jobs: Job[]; customers: Customer
       <div className="space-y-1.5 flex-1">
         <div className="flex items-start gap-1.5">
           <MapPin className="w-3.5 h-3.5 text-slate-400 mt-0.5 flex-shrink-0" />
-          <span className="text-xs text-slate-600">{cust?.address || job.siteAddress || '—'}{cust?.city ? `, ${cust.city}, ${cust.state}` : ''}</span>
+          <span className="text-xs text-slate-600">{cust?.address || job.siteAddress || '-'}{cust?.city ? `, ${cust.city}, ${cust.state}` : ''}</span>
         </div>
         {(job.title || job.serviceType) && (
           <div className="flex items-start gap-1.5">
@@ -524,7 +524,7 @@ const CustomerProductionWidget: React.FC<{ customerId: string; customers: Custom
           </div>
           <div className="bg-slate-50 rounded-lg p-2 text-center">
             <p className="text-[9px] text-slate-500 uppercase tracking-wide">Peak</p>
-            <p className="text-sm font-bold text-slate-700">{site.peakPower > 0 ? `${site.peakPower} kW` : '—'}</p>
+            <p className="text-sm font-bold text-slate-700">{site.peakPower > 0 ? `${site.peakPower} kW` : '-'}</p>
           </div>
         </div>
         {site.alerts > 0 && (
@@ -573,12 +573,12 @@ const ContractorWOWidget: React.FC<{ contractorId: string; contractors: Contract
                       <span
                         className="text-xs font-semibold text-orange-700 truncate hover:underline"
                         onClick={e => { e.stopPropagation(); cust && onViewCustomer(cust.id); }}
-                      >{cust?.name || job.clientName || '—'}</span>
+                      >{cust?.name || job.clientName || '-'}</span>
                     </div>
                     <span className={`flex-shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${JOB_STATUS_COLORS[job.status] || 'bg-slate-100'}`}>{JOB_STATUS_LABEL[job.status] || job.status}</span>
                   </div>
                   <div className="flex items-center justify-between gap-1">
-                    <div className="flex items-center gap-1 min-w-0"><MapPin className="w-3 h-3 text-slate-400 flex-shrink-0" /><span className="text-[10px] text-slate-400 truncate">{cust?.city ? `${cust.city}, ${cust.state}` : '—'}</span></div>
+                    <div className="flex items-center gap-1 min-w-0"><MapPin className="w-3 h-3 text-slate-400 flex-shrink-0" /><span className="text-[10px] text-slate-400 truncate">{cust?.city ? `${cust.city}, ${cust.state}` : '-'}</span></div>
                     <span className="text-[10px] text-slate-400 flex-shrink-0">{fmtDate(job.scheduledDate || job.date)}</span>
                   </div>
                 </button>
@@ -638,7 +638,7 @@ const DailyProductionGraphWidget: React.FC<{ customerId: string; customers: Cust
               contentStyle={{ background: '#1e293b', border: 'none', borderRadius: 8, fontSize: 11 }}
               labelStyle={{ color: '#94a3b8' }}
               itemStyle={{ color: '#34d399' }}
-              formatter={(v: number | null) => v !== null ? [`${v} kW`, 'Power'] : ['—', 'Power']}
+              formatter={(v: number | null) => v !== null ? [`${v} kW`, 'Power'] : ['-', 'Power']}
             />
             <Area type="monotone" dataKey="kw" stroke="#10b981" strokeWidth={2} fill={`url(#grad-${site.siteId})`} dot={false} connectNulls={false} />
           </AreaChart>
@@ -1382,7 +1382,7 @@ const TodoListWidget: React.FC<{
               )}
             </div>
 
-            {/* Priority arrows — only for open items */}
+            {/* Priority arrows, only for open items */}
             {!todo.done && (
               <div className="flex flex-col gap-0.5 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
                 <button
@@ -1514,12 +1514,12 @@ const WidgetSlot: React.FC<{
           : 'border-slate-200 cursor-grab active:cursor-grabbing'
       }`}
     >
-      {/* Drag handle — always visible at top-left */}
+      {/* Drag handle, always visible at top-left */}
       <div className="absolute top-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing z-10">
         <GripVertical className="w-4 h-4 text-slate-300" />
       </div>
 
-      {/* Delete button — floats in the top-right corner, outside the widget content area */}
+      {/* Delete button, floats in the top-right corner, outside the widget content area */}
       <div className="absolute -top-2 -right-2 z-20 opacity-0 group-hover:opacity-100 transition-opacity">
         <div className="relative group/del">
           <button

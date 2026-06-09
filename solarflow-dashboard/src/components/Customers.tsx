@@ -373,7 +373,7 @@ export const Customers: React.FC<CustomersProps> = ({
       map.get(a.customerId)!.push(a);
     });
 
-    // Source 2: site-level counts — prefer live alertOverrides, fall back to static solarEdgeSites
+    // Source 2: site-level counts, prefer live alertOverrides, fall back to static solarEdgeSites
     const siteMap = new Map<string, typeof solarEdgeSites[0]>();
     solarEdgeSites.forEach(s => siteMap.set(s.siteId, s));
 
@@ -423,7 +423,7 @@ export const Customers: React.FC<CustomersProps> = ({
     initialCustomerId ? (customers.find(c => c.id === initialCustomerId) ?? null) : null
   );
 
-  // React to global search selections — selectCustomerSeq increments each time,
+  // React to global search selections, selectCustomerSeq increments each time,
   // ensuring the effect re-fires even when the same customer is selected twice
   useEffect(() => {
     if (!initialCustomerId) return;
@@ -653,7 +653,7 @@ export const Customers: React.FC<CustomersProps> = ({
           <p className="text-slate-500 mt-1">{sortedCustomers.length} of {customers.length} customers</p>
         </div>
         <div className="flex items-center gap-2">
-          {/* Alert Sync button — only show when any customer has a linked SE site */}
+          {/* Alert Sync button, only show when any customer has a linked SE site */}
           {customers.some(c => c.solarEdgeSiteId) && (
             <div className="flex flex-col items-end gap-0.5">
               <button
@@ -801,7 +801,7 @@ export const Customers: React.FC<CustomersProps> = ({
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              {/* Column headers — draggable */}
+              {/* Column headers, draggable */}
               <tr className="bg-slate-50 border-b border-slate-200">
                 {selectionMode && (
                   <th className="px-3 py-2.5 w-10">
@@ -919,7 +919,7 @@ export const Customers: React.FC<CustomersProps> = ({
                           </div>
                         )}
                         {id === 'clientId' && (
-                          <span className="text-xs font-mono text-slate-600">{customer.clientId || '—'}</span>
+                          <span className="text-xs font-mono text-slate-600">{customer.clientId || '-'}</span>
                         )}
                         {id === 'type' && (
                           <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${
@@ -931,17 +931,17 @@ export const Customers: React.FC<CustomersProps> = ({
                         {id === 'category' && (
                           customer.category
                             ? <CategoryBadge category={customer.category} />
-                            : <span className="text-xs text-slate-300">—</span>
+                            : <span className="text-xs text-slate-300">-</span>
                         )}
                         {id === 'system' && (
                           customer.systemType || customer.solarEdgeSiteId
                             ? <span className="text-xs text-amber-600 font-medium">{customer.systemType || 'SolarEdge'}</span>
-                            : <span className="text-xs text-slate-300">—</span>
+                            : <span className="text-xs text-slate-300">-</span>
                         )}
                         {id === 'status' && (
                           customer.clientStatus
                             ? <StatusBadge status={customer.clientStatus} />
-                            : <span className="text-xs text-slate-300">—</span>
+                            : <span className="text-xs text-slate-300">-</span>
                         )}
                         {id === 'location' && (
                           <span className="text-slate-600 whitespace-nowrap">{customer.city}{customer.city && customer.state ? ', ' : ''}{customer.state}</span>
@@ -950,12 +950,12 @@ export const Customers: React.FC<CustomersProps> = ({
                           <div onClick={e => e.stopPropagation()}>
                             {customer.phone
                               ? <PhoneLink phone={customer.phone} />
-                              : <span className="text-slate-400">—</span>
+                              : <span className="text-slate-400">-</span>
                             }
                           </div>
                         )}
                         {id === 'email' && (
-                          <span className="text-slate-600 text-xs">{customer.email || '—'}</span>
+                          <span className="text-slate-600 text-xs">{customer.email || '-'}</span>
                         )}
                         {id === 'workOrders' && (
                           <div className="flex items-center gap-1.5">
@@ -968,11 +968,11 @@ export const Customers: React.FC<CustomersProps> = ({
                         {id === 'powerCare' && (
                           customer.isPowerCare
                             ? <span className="text-xs px-2 py-0.5 bg-teal-100 text-teal-700 rounded-full font-medium">Active</span>
-                            : <span className="text-xs text-slate-300">—</span>
+                            : <span className="text-xs text-slate-300">-</span>
                         )}
                         {id === 'seAlerts' && (() => {
                           const alerts = alertsByCustomer.get(customer.id) ?? [];
-                          if (alerts.length === 0) return <span className="text-xs text-slate-300">—</span>;
+                          if (alerts.length === 0) return <span className="text-xs text-slate-300">-</span>;
 
                           // Sort: critical → warning → info, unacknowledged first
                           const sevOrder = { critical: 0, warning: 1, info: 2 };
@@ -1040,7 +1040,7 @@ export const Customers: React.FC<CustomersProps> = ({
         {totalPages > 1 && (
           <div className="flex items-center justify-between px-4 py-3 border-t border-slate-100 bg-slate-50">
             <span className="text-xs text-slate-500">
-              {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, sortedCustomers.length)} of {sortedCustomers.length}
+              {(page - 1) * PAGE_SIZE + 1}-{Math.min(page * PAGE_SIZE, sortedCustomers.length)} of {sortedCustomers.length}
             </span>
             <div className="flex items-center gap-1">
               <button
@@ -1176,7 +1176,7 @@ export const Customers: React.FC<CustomersProps> = ({
                         group.signal === 'clientId' ? 'text-amber-700' : 'text-blue-600'
                       }`}>
                         {group.signal === 'solarEdgeSiteId' ? 'Same SolarEdge Site' :
-                         group.signal === 'clientId' ? 'Same Client ID' : 'Same Address'} — {group.label}
+                         group.signal === 'clientId' ? 'Same Client ID' : 'Same Address'}, {group.label}
                       </span>
                       <span className="ml-auto text-xs text-slate-500">{group.records.length} records</span>
                     </div>
@@ -1281,7 +1281,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
   const siteId = customer.solarEdgeSiteId;
   // Single period toggle drives BOTH widgets and graph
   const [graphPeriod, setGraphPeriod] = useState<'week' | 'month' | 'quarter' | 'year'>('month');
-  // Cache energy+UV data per period — toggling tabs never re-fetches
+  // Cache energy+UV data per period, toggling tabs never re-fetches
   const [energyCache, setEnergyCache] = useState<Record<string, EnergyDataPoint[]>>({});
   const [loading, setLoading] = useState(false);
   const [fetchError, setFetchError] = useState('');
@@ -1328,7 +1328,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
     } catch { return ''; }
   };
 
-  // Peak power — from live API or static FL_SITES
+  // Peak power, from live API or static FL_SITES
   const peakPowerKw = siteDetails?.peakPower || siteData?.peakPower || 0;
   const peakPowerWp = peakPowerKw * 1000;
 
@@ -1339,7 +1339,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
     return pts.reduce((s, p) => s + p.kWh, 0);
   }, [energyCache, graphPeriod]);
 
-  // Fallback when graph data isn't loaded yet — use siteOverview bucket values
+  // Fallback when graph data isn't loaded yet, use siteOverview bucket values
   const fallbackKwh = React.useMemo(() => {
     if (graphPeriod === 'year')    return siteOverview?.yearKwh  || 0;
     if (graphPeriod === 'month')   return siteOverview?.monthKwh || 0;
@@ -1427,12 +1427,12 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
           const merged = points.map(p => ({ ...p, psh: pshMap[p.rawDate] ?? p.psh }));
           return { ...prev, [graphPeriod]: merged };
         });
-      } catch { /* PSH is supplemental — silently skip on error */ }
+      } catch { /* PSH is supplemental, silently skip on error */ }
     };
     fetchPsh();
   }, [siteId, graphPeriod, siteDetails?.lat, siteDetails?.lng]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Fetch energy time-series — skip if already cached ────────────────────
+  // ── Fetch energy time-series, skip if already cached ────────────────────
   useEffect(() => {
     if (!siteId) return;
     if (energyCache[graphPeriod]) return;
@@ -1442,7 +1442,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
       try {
         const apiKey = getApiKey();
         if (!apiKey) {
-          setFetchError('No SolarEdge API key — add it in Settings → SolarEdge.');
+          setFetchError('No SolarEdge API key, add it in Settings → SolarEdge.');
           setLoading(false);
           return;
         }
@@ -1502,7 +1502,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
         }
       } catch (err) {
         console.warn('Failed to fetch energy data:', err);
-        setFetchError('Network error — check connection');
+        setFetchError('Network error, check connection');
       }
       setLoading(false);
     };
@@ -1535,7 +1535,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
     setShowReportPreview(true);
   };
 
-  // Live HTML generation — recomputes whenever any editable field changes
+  // Live HTML generation, recomputes whenever any editable field changes
   const previewHtmlComputed = React.useMemo(() => {
     if (!showReportPreview || !previewTrackingId) return '';
     const tid = previewTrackingId;
@@ -1579,7 +1579,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
       </svg>
     ` : '';
 
-    /* SVG icon helpers — inline so no external requests */
+    /* SVG icon helpers, inline so no external requests */
     const svgBolt     = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f97316" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`;
     const svgDollar   = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>`;
     const svgGauge    = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 12L8 8"/><circle cx="12" cy="12" r="2"/></svg>`;
@@ -1594,7 +1594,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Solar Production Report — ${customer.name}</title>
+  <title>Solar Production Report, ${customer.name}</title>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
 
@@ -2001,7 +2001,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
         </div>
         <div class="cover-meta-item">
           <div class="cm-label">System Size</div>
-          <div class="cm-value">${systemSize ? systemSize + ' kW' : '—'}</div>
+          <div class="cm-value">${systemSize ? systemSize + ' kW' : '-'}</div>
         </div>
         <div class="cover-meta-item">
           <div class="cm-label">Location</div>
@@ -2031,7 +2031,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
             <span class="m-icon">${svgBolt}</span>
             ${isFirstReport ? '' : '<span class="m-trend">' + periodLabel + '</span>'}
           </div>
-          <div class="m-value">${displayKwh >= 1000 ? (displayKwh / 1000).toFixed(2) : (displayKwh > 0 ? Math.round(displayKwh) : '—')}<span class="m-unit">${displayKwh > 0 ? (displayKwh >= 1000 ? 'MWh' : 'kWh') : ''}</span></div>
+          <div class="m-value">${displayKwh >= 1000 ? (displayKwh / 1000).toFixed(2) : (displayKwh > 0 ? Math.round(displayKwh) : '-')}<span class="m-unit">${displayKwh > 0 ? (displayKwh >= 1000 ? 'MWh' : 'kWh') : ''}</span></div>
           <div class="m-label">Energy Produced</div>
           <div class="m-sub">Clean solar electricity generated</div>
         </div>
@@ -2041,7 +2041,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
             <span class="m-icon">${svgDollar}</span>
             ${dollarsSaved > 0 ? '<span class="m-trend">@ $' + COST_PER_KWH + '/kWh</span>' : ''}
           </div>
-          <div class="m-value">${dollarsSaved > 0 ? '$' + dollarsSaved.toLocaleString('en-US', { maximumFractionDigits: 0 }) : '—'}</div>
+          <div class="m-value">${dollarsSaved > 0 ? '$' + dollarsSaved.toLocaleString('en-US', { maximumFractionDigits: 0 }) : '-'}</div>
           <div class="m-label">Estimated Savings</div>
           <div class="m-sub">Versus grid electricity costs</div>
         </div>
@@ -2051,7 +2051,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
             <span class="m-icon">${svgGauge}</span>
             ${specificYield > 0 ? '<span class="m-trend">per kWp</span>' : ''}
           </div>
-          <div class="m-value">${specificYield > 0 ? specificYield.toFixed(2) : '—'}<span class="m-unit">${specificYield > 0 ? 'kWh/kWp' : ''}</span></div>
+          <div class="m-value">${specificYield > 0 ? specificYield.toFixed(2) : '-'}<span class="m-unit">${specificYield > 0 ? 'kWh/kWp' : ''}</span></div>
           <div class="m-label">Specific Yield</div>
           <div class="m-sub">System efficiency benchmark</div>
         </div>
@@ -2061,7 +2061,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
             <span class="m-icon">${svgLeaf}</span>
             ${co2Tons > 0 ? '<span class="m-trend">CO₂</span>' : ''}
           </div>
-          <div class="m-value">${co2Tons > 0 ? co2Tons.toFixed(2) : '—'}<span class="m-unit">${co2Tons > 0 ? 'tons' : ''}</span></div>
+          <div class="m-value">${co2Tons > 0 ? co2Tons.toFixed(2) : '-'}<span class="m-unit">${co2Tons > 0 ? 'tons' : ''}</span></div>
           <div class="m-label">CO₂ Offset</div>
           <div class="m-sub">Carbon emissions avoided</div>
         </div>
@@ -2135,7 +2135,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
         <span class="label">System Availability</span>
       </div>
       <h2 class="section-title">Service & uptime</h2>
-      <p class="section-sub">A healthy system runs ${previewUptime >= 95 ? 'consistently — and yours is performing right on track.' : 'predictably. Here\'s how yours performed.'}</p>
+      <p class="section-sub">A healthy system runs ${previewUptime >= 95 ? 'consistently, and yours is performing right on track.' : 'predictably. Here\'s how yours performed.'}</p>
 
       <div class="stats">
         <div class="stat">
@@ -2219,7 +2219,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showReportPreview, previewTrackingId, previewGreeting, previewAccountUpdates, previewDowntimeDays, previewServiceCalls, previewUptime, displayKwh, dollarsSaved, specificYield, co2Tons, lifetimeKwh, graphPeriod, peakPowerKw, siteId, siteData, customer, energyData]);
 
-  // Approve & Send — sends via SMTP API (IONOS) or falls back to mailto
+  // Approve & Send, sends via SMTP API (IONOS) or falls back to mailto
   const [sendError, setSendError] = useState<string | null>(null);
   const handleSendReport = async () => {
     const recipientEmail = previewEmail.trim();
@@ -2232,7 +2232,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
     const smtpHost = localStorage.getItem('solarops_smtp_host') || 'smtp.ionos.com';
     const smtpPort = parseInt(localStorage.getItem('solarops_smtp_port') || '465');
     const fromName = localStorage.getItem('solarops_smtp_from_name') || 'Conexsol Energy';
-    const subject = `Solar Production Report — ${customer.name}`;
+    const subject = `Solar Production Report, ${customer.name}`;
 
     localStorage.setItem(`solarops_report_${previewTrackingId}`, JSON.stringify({
       to: recipientEmail,
@@ -2270,13 +2270,13 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
         setTimeout(() => setReportSent(false), 4000);
       } catch (err) {
         console.error('SMTP send failed:', err);
-        setSendError('Network error — check your connection');
+        setSendError('Network error, check your connection');
       }
     } else {
       const subjectEnc = encodeURIComponent(subject);
       const bcc = encodeURIComponent('cesar.jurado@conexsol.us');
       window.open(
-        `mailto:${recipientEmail}?subject=${subjectEnc}&bcc=${bcc}&body=${encodeURIComponent('Please view the attached HTML report for your solar production summary.\n\n— Conexsol Service Team')}`,
+        `mailto:${recipientEmail}?subject=${subjectEnc}&bcc=${bcc}&body=${encodeURIComponent('Please view the attached HTML report for your solar production summary.\n\n- Conexsol Service Team')}`,
         '_blank'
       );
       setShowReportPreview(false);
@@ -2324,12 +2324,12 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
         <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-200">
           <div className="flex items-center gap-1.5 mb-1">
             <span className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Specific Yield</span>
-            <InfoTooltip text="Energy produced per watt of installed capacity (kWh/Wp). Think of it like MPG on a car — the higher the number, the more efficiently your system is turning sunlight into savings." />
+            <InfoTooltip text="Energy produced per watt of installed capacity (kWh/Wp). Think of it like MPG on a car, the higher the number, the more efficiently your system is turning sunlight into savings." />
           </div>
           <p className="text-2xl font-bold text-slate-900">
-            {specificYield > 0 ? <>{specificYield.toFixed(2)} <span className="text-sm font-normal text-slate-500">kWh/Wp</span></> : <span className="text-slate-400 text-lg">—</span>}
+            {specificYield > 0 ? <>{specificYield.toFixed(2)} <span className="text-sm font-normal text-slate-500">kWh/Wp</span></> : <span className="text-slate-400 text-lg">-</span>}
           </p>
-          <p className="text-xs text-blue-600 mt-1">System: {peakPowerKw > 0 ? `${peakPowerKw.toFixed(1)} kW` : '—'}</p>
+          <p className="text-xs text-blue-600 mt-1">System: {peakPowerKw > 0 ? `${peakPowerKw.toFixed(1)} kW` : '-'}</p>
         </div>
 
         <div className="bg-gradient-to-br from-purple-50 to-fuchsia-50 rounded-xl p-4 border border-purple-200">
@@ -2340,7 +2340,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
           <p className="text-2xl font-bold text-slate-900">
             {co2Tons > 0
               ? <>{co2Tons.toFixed(2)} <span className="text-sm font-normal text-slate-500">tons CO₂</span></>
-              : <span className="text-slate-400 text-lg">—</span>}
+              : <span className="text-slate-400 text-lg">-</span>}
           </p>
           <p className="text-xs text-purple-600 mt-1 flex items-center gap-1"><Leaf className="w-3 h-3" /> Period offset</p>
         </div>
@@ -2352,7 +2352,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
           <h3 className="font-semibold text-slate-900 flex items-center gap-2">
             <BarChart3 className="w-4 h-4 text-orange-500" />
             Production History
-            <InfoTooltip text="Energy production (bars) and Peak Sun Hours (line) by site location. PSH = daily solar radiation ÷ 3.6 — higher PSH means more available solar energy." />
+            <InfoTooltip text="Energy production (bars) and Peak Sun Hours (line) by site location. PSH = daily solar radiation ÷ 3.6, higher PSH means more available solar energy." />
           </h3>
           <div className="flex gap-1">
             {(['week', 'month', 'quarter', 'year'] as const).map(p => (
@@ -2456,7 +2456,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
             </div>
           )}
         </div>
-        {/* Quick stats row — reference values from live API */}
+        {/* Quick stats row, reference values from live API */}
         {(siteOverview || siteData) && (
           <div className="flex gap-4 mt-3 pt-3 border-t border-slate-100 text-xs text-slate-500">
             <span>Today: <strong className="text-slate-700">{(siteOverview?.todayKwh ?? siteData?.todayKwh ?? 0).toFixed(1)} kWh</strong></span>
@@ -2529,7 +2529,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
               <div className="flex items-center gap-2">
                 <FileBarChart className="w-4 h-4 text-orange-400" />
                 <span className="font-semibold text-sm">Production Report</span>
-                <span className="text-xs text-slate-400 hidden sm:inline">— {new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</span>
+                <span className="text-xs text-slate-400 hidden sm:inline">- {new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</span>
               </div>
               <div className="flex items-center gap-2">
                 <button
@@ -2549,7 +2549,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
             {/* ── Collapsible Edit Panel ── */}
             {showEditPanel && (
               <div className="border-b border-orange-200 bg-orange-50 px-4 py-3 space-y-3 flex-shrink-0">
-                <p className="text-[10px] font-bold text-orange-700 uppercase tracking-widest">Edit Fields — live preview updates below</p>
+                <p className="text-[10px] font-bold text-orange-700 uppercase tracking-widest">Edit Fields, live preview updates below</p>
                 <div>
                   <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide block mb-1">Greeting Message</label>
                   <textarea
@@ -2604,7 +2604,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
                 </div>
               </div>
 
-              {/* 1 — Client Info Header */}
+              {/* 1, Client Info Header */}
               <div className="bg-slate-900 px-5 py-5 flex flex-col sm:flex-row sm:items-start gap-4">
                 <div className="flex-1 min-w-0">
                   <p className="text-[10px] font-bold text-orange-400 uppercase tracking-widest mb-1">Solar Production Report</p>
@@ -2658,12 +2658,12 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
                 </span>
               </div>
 
-              {/* 2 — Production Metrics */}
+              {/* 2, Production Metrics */}
               <div className="px-5 pt-3 pb-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
                 {[
                   { icon: <Zap className="w-4 h-4 text-orange-500" />, value: displayKwh >= 1000 ? `${(displayKwh/1000).toFixed(1)} MWh` : `${Math.round(displayKwh).toLocaleString()} kWh`, label: 'Energy Generated', color: 'orange' },
                   { icon: <DollarSign className="w-4 h-4 text-green-600" />, value: `$${Math.round(dollarsSaved).toLocaleString()}`, label: 'Est. Savings', color: 'green' },
-                  { icon: <BarChart3 className="w-4 h-4 text-blue-500" />, value: specificYield > 0 ? `${specificYield.toFixed(2)}` : '—', label: 'Specific Yield', color: 'blue' },
+                  { icon: <BarChart3 className="w-4 h-4 text-blue-500" />, value: specificYield > 0 ? `${specificYield.toFixed(2)}` : '-', label: 'Specific Yield', color: 'blue' },
                   { icon: <Leaf className="w-4 h-4 text-emerald-600" />, value: `${co2Tons.toFixed(2)} t`, label: 'CO₂ Offset', color: 'emerald' },
                 ].map(({ icon, value, label, color }) => (
                   <div key={label} className="bg-white border border-slate-100 rounded-xl p-3 text-center shadow-sm">
@@ -2674,7 +2674,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
                 ))}
               </div>
 
-              {/* 3 — Production Time Graph */}
+              {/* 3, Production Time Graph */}
               {energyData.length > 0 && (
                 <div className="mx-5 mb-4 bg-white rounded-xl border border-slate-100 shadow-sm p-3">
                   <p className="text-xs font-semibold text-slate-700 mb-3 flex items-center gap-1.5">
@@ -2724,7 +2724,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
                 </div>
               )}
 
-              {/* 4 — Service Summary */}
+              {/* 4, Service Summary */}
               <div className="mx-5 mb-4 grid grid-cols-3 gap-3">
                 {[
                   { value: `${Math.round(previewUptime)}%`, label: 'System Uptime', ok: previewUptime >= 95 },
@@ -2738,7 +2738,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
                 ))}
               </div>
 
-              {/* 5 — Greeting */}
+              {/* 5, Greeting */}
               {previewGreeting && (
                 <div className="mx-5 mb-4 bg-white rounded-xl border border-slate-100 shadow-sm">
                   <div className="px-4 pt-3 pb-1 border-b border-slate-100">
@@ -2752,7 +2752,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
                 </div>
               )}
 
-              {/* 6 — Account Updates */}
+              {/* 6, Account Updates */}
               {previewAccountUpdates && (
                 <div className="mx-5 mb-5 bg-orange-50 rounded-xl border border-orange-200 shadow-sm overflow-hidden">
                   <div className="px-4 py-2.5 bg-orange-100 border-b border-orange-200 flex items-center gap-2">
@@ -2797,7 +2797,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
                   <p className="text-[10px] text-slate-400 mt-0.5">
                     {localStorage.getItem('solarops_smtp_user')
                       ? `via ${localStorage.getItem('solarops_smtp_user')}`
-                      : 'via mailto — configure SMTP in Settings'}
+                      : 'via mailto, configure SMTP in Settings'}
                   </p>
                 </div>
                 <div className="flex gap-2 flex-shrink-0">
@@ -2859,7 +2859,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Solar Performance Report — ${customer.name}</title>
+  <title>Solar Performance Report, ${customer.name}</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     @page { size: letter portrait; margin: 18mm 18mm 18mm 18mm; }
@@ -3030,7 +3030,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
       <div class="metric-label">Est. Savings</div>
     </div>
     <div class="metric-card">
-      <div class="metric-value blue">${specificYield > 0 ? specificYield.toFixed(2) : '—'}</div>
+      <div class="metric-value blue">${specificYield > 0 ? specificYield.toFixed(2) : '-'}</div>
       <div class="metric-label">Specific Yield</div>
     </div>
     <div class="metric-card">
@@ -3042,7 +3042,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
   <!-- Bar Chart -->
   ${hasChart ? `
   <div class="section">
-    <div class="section-label">Daily Production — ${periodLabel}</div>
+    <div class="section-label">Daily Production, ${periodLabel}</div>
     <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px 8px 8px 8px;margin-bottom:0">
       ${svgChart}
     </div>
@@ -3163,7 +3163,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
   const [undoStack, setUndoStack] = useState<Array<{ action: 'delete' | 'edit'; entry: Activity; previousText?: string }>>([]);
   const [showEmojiPicker, setShowEmojiPicker] = useState<string | null>(null);
 
-  // Files tab — "+ Upload Files" upload (previously a dead button with no handler)
+  // Files tab, "+ Upload Files" upload (previously a dead button with no handler)
   const filesInputRef = useRef<HTMLInputElement>(null);
   const [uploadingFiles, setUploadingFiles] = useState(false);
   const handleUploadCustomerFiles = async (fileList: FileList | null) => {
@@ -3389,7 +3389,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
   // Resolve @username or @Name mentions → user IDs
   const parseMentions = (text: string): string[] => {
     const mentioned: string[] = [];
-    // Match @word (username) or @First Last style — stop at whitespace-then-non-word or end
+    // Match @word (username) or @First Last style, stop at whitespace-then-non-word or end
     const matches = text.match(/@([\w.]+)/g) || [];
     matches.forEach(m => {
       const handle = m.slice(1).trim().toLowerCase();
@@ -3455,7 +3455,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
       // Pre-validate size to give immediate feedback
       const MAX_SIZE = 20 * 1024 * 1024;
       if (file.size > MAX_SIZE) {
-        toast.error(`"${file.name || 'file'}" is ${Math.round(file.size / 1024 / 1024)}MB — max 20MB`);
+        toast.error(`"${file.name || 'file'}" is ${Math.round(file.size / 1024 / 1024)}MB, max 20MB`);
         failedCount++;
         return;
       }
@@ -3467,7 +3467,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
       reader.onload = (ev) => {
         const raw = ev.target?.result as string;
         if (!raw) {
-          toast.error('Paste failed — could not read clipboard data');
+          toast.error('Paste failed, could not read clipboard data');
           failedCount++;
           return;
         }
@@ -3491,7 +3491,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
               setPastedFiles(prev => [...prev, { id, name, dataUrl, mimeType: 'image/jpeg', size: Math.round(dataUrl.length * 0.75) }]);
               processedCount++;
               if (processedCount === 1) {
-                toast.success('📎 Image pasted — click "Save Note" to upload');
+                toast.success('📎 Image pasted, click "Save Note" to upload');
               }
             } catch (err) {
               toast.error('Failed to process pasted image');
@@ -3502,7 +3502,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
         } else {
           setPastedFiles(prev => [...prev, { id, name, dataUrl: raw, mimeType: file.type || 'application/octet-stream', size: file.size }]);
           processedCount++;
-          toast.success(`📎 File "${name}" attached — click "Save Note" to upload`);
+          toast.success(`📎 File "${name}" attached, click "Save Note" to upload`);
         }
       };
       reader.readAsDataURL(file);
@@ -3516,7 +3516,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
     const newActivity: Activity = {
       id: `activity-${Date.now()}`,
       type: 'note_added',
-      // Keep the body as the typed note only — attached files render as
+      // Keep the body as the typed note only, attached files render as
       // thumbnails (below), not as "📎 filename" text.
       description: noteText,
       timestamp: new Date().toISOString(),
@@ -3614,7 +3614,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
       const oldVal = customer[key as keyof Customer] ?? '';
       const newVal = editForm[key as keyof Customer] ?? '';
       if (String(oldVal) !== String(newVal)) {
-        changes.push(`${label}: "${oldVal || '—'}" → "${newVal || '—'}"`);
+        changes.push(`${label}: "${oldVal || '-'}" → "${newVal || '-'}"`);
       }
     }
 
@@ -3700,7 +3700,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
           </button>
         </div>
 
-        {/* Contact strip — always visible above tabs */}
+        {/* Contact strip, always visible above tabs */}
         <div className="flex items-center gap-4 px-1 py-2.5 border-b border-slate-100 flex-shrink-0 flex-wrap">
           {customer.phone ? (
             <PhoneLink phone={customer.phone} size="sm" />
@@ -3781,7 +3781,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
         <div className="md:flex-1 md:overflow-y-auto p-4">
           {activeTab === 'story' && (
             <div className="space-y-4">
-              {/* Customer Story — with inline edit */}
+              {/* Customer Story, with inline edit */}
               <div className="bg-slate-50 rounded-lg p-4">
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="font-semibold text-slate-900 flex items-center gap-2">
@@ -3973,7 +3973,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                 </div>
               </div>
 
-              {/* How They Found Us — pinned to bottom of story stack */}
+              {/* How They Found Us, pinned to bottom of story stack */}
               <div className="bg-slate-50 rounded-lg p-4">
                 <h3 className="font-semibold text-slate-900 mb-2 flex items-center gap-2">
                   <Users className="w-4 h-4 text-orange-500" />
@@ -4119,7 +4119,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                         {isDone && (
                           <div className="flex items-center gap-2 px-4 py-2.5 bg-green-50 border-t border-green-100">
                             <CheckCircle className="w-3 h-3 text-green-600 flex-shrink-0" />
-                            <span className="text-xs font-semibold text-green-700">Work order complete — paid in full</span>
+                            <span className="text-xs font-semibold text-green-700">Work order complete, paid in full</span>
                           </div>
                         )}
                       </div>
@@ -4233,7 +4233,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                               {new Date(activity.timestamp).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
                             </span>
                           </span>
-                          {/* Action icons — revealed on hover */}
+                          {/* Action icons, revealed on hover */}
                           <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 relative">
                             <button
                               onClick={() => setShowEmojiPicker(showEmojiPicker === activity.id ? null : activity.id)}
@@ -4498,7 +4498,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
             </div>
           )}
 
-          {/* Map — opens Google Maps */}
+          {/* Map, opens Google Maps */}
           {customer.address && (
             <a
               href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${customer.address}, ${customer.city}, ${customer.state} ${customer.zip}`)}`}
@@ -4721,7 +4721,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                   Save Changes
                 </button>
               </div>
-              {/* Danger zone — golden ratio split: merge (61.8%) | delete (38.2%) */}
+              {/* Danger zone, golden ratio split: merge (61.8%) | delete (38.2%) */}
               <div className="pt-3 border-t border-slate-100">
                 <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-2 text-center">Danger Zone</p>
                 <div className="flex gap-2" style={{ '--phi': '1.618' } as React.CSSProperties}>
@@ -4883,7 +4883,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
 
       {/* ── Merge Accounts Modal ────────────────────────────────────────── */}
       {showMergeModal && (() => {
-        // φ = 1.618 — used for flex ratios and spacing rhythm
+        // φ = 1.618, used for flex ratios and spacing rhythm
         const secondary = mergeTarget;
         const otherCustomer = primaryId === customer.id ? secondary : customer;
         const primaryCustomer = primaryId === customer.id ? customer : secondary;
@@ -5009,11 +5009,11 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                   )}
                 </div>
 
-                {/* Side-by-side comparison — φ ratio layout */}
+                {/* Side-by-side comparison, φ ratio layout */}
                 {mergeTarget && primaryCustomer && otherCustomer && (
                   <div>
                     <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Review & Choose Primary</label>
-                    {/* grid: 1.618fr auto 1fr — golden ratio column widths */}
+                    {/* grid: 1.618fr auto 1fr, golden ratio column widths */}
                     <div className="grid gap-3" style={{ gridTemplateColumns: '1.618fr auto 1fr' }}>
                       <MergeCard
                         c={primaryCustomer}
@@ -5123,7 +5123,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
         );
       })()}
 
-      {/* Create Work Order — full WorkOrderPanel */}
+      {/* Create Work Order, full WorkOrderPanel */}
       {showCreateWorkOrder && (
         <WorkOrderPanel
           siteId={customer.id}
@@ -5143,7 +5143,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
         />
       )}
 
-      {/* Edit Work Order — full WorkOrderPanel */}
+      {/* Edit Work Order, full WorkOrderPanel */}
       {editingJob && (
         <WorkOrderPanel
           siteId={customer.id}
@@ -5280,7 +5280,7 @@ const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({ onClose, onCr
   const [trelloOk,      setTrelloOk]      = useState('');
   const [trelloOpen,    setTrelloOpen]    = useState(false);
 
-  // Screenshot import — parse a lead email screenshot with Claude Vision
+  // Screenshot import, parse a lead email screenshot with Claude Vision
   const [screenshotOpen,    setScreenshotOpen]    = useState(false);
   const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null);
   const [screenshotLoading, setScreenshotLoading] = useState(false);
@@ -5492,7 +5492,7 @@ const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({ onClose, onCr
             )}
           </div>
 
-          {/* Import from Trello — pre-fills form from a Trello card */}
+          {/* Import from Trello, pre-fills form from a Trello card */}
           <div className="border border-slate-200 rounded-lg bg-slate-50/60">
             <button
               type="button"

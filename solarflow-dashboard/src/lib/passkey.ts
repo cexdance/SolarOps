@@ -1,4 +1,4 @@
-// SolarOps — Passkey / WebAuthn utilities (shared between staff and contractor login)
+// SolarOps, Passkey / WebAuthn utilities (shared between staff and contractor login)
 
 export const PASSKEY_STORE_KEY             = 'solarops_passkey_cred_id';
 export const PASSKEY_STORE_KEY_CONTRACTOR  = 'solarops_passkey_cred_id_contractor';

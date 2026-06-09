@@ -1,5 +1,5 @@
 /**
- * SolarOps — Push Outbox (Phase 1)
+ * SolarOps, Push Outbox (Phase 1)
  *
  * Problem: pushToSupabase() was fire-and-forget. If it failed (offline, 500,
  * network blip), the change was silently dropped and would be overwritten the
@@ -26,10 +26,10 @@ const POISON_KEY  = 'solarops_poisoned_rows_v1';
 const POISON_THRESHOLD = 3;
 
 interface PendingPush {
-  queuedAt: string;       // ISO — when the first failure was recorded
+  queuedAt: string;       // ISO, when the first failure was recorded
   attempts: number;       // consecutive failure count
   lastError?: string;     // last error message for debugging
-  lastAttemptAt?: string; // ISO — when the most recent failure was recorded
+  lastAttemptAt?: string; // ISO, when the most recent failure was recorded
 }
 
 // Auto-recovery backoff: instead of permanently locking after a burst of
@@ -49,7 +49,7 @@ function backoffDelayMs(attempts: number): number {
 interface PoisonEntry {
   failCount: number;
   lastError: string;
-  since: string; // ISO — first failure timestamp
+  since: string; // ISO, first failure timestamp
 }
 
 // ── Storage helpers ────────────────────────────────────────────────────────────
@@ -199,16 +199,16 @@ export function clearPendingPush(): void {
 export function resetOutboxAttempts(): void {
   try {
     const existing = get();
-    if (!existing) return; // nothing pending — no-op
+    if (!existing) return; // nothing pending, no-op
     save({ ...existing, attempts: 0 });
-    console.info('[Outbox] Attempt counter reset — will retry on next drain');
+    console.info('[Outbox] Attempt counter reset, will retry on next drain');
   } catch (err) {
     console.warn('[Outbox] Error resetting attempts:', err);
   }
 }
 
 /**
- * Drain the outbox — push current localStorage state to Supabase.
+ * Drain the outbox, push current localStorage state to Supabase.
  *
  * Always reads the CURRENT state so it includes every offline mutation,
  * even if many edits happened between failures.
@@ -218,7 +218,7 @@ export function resetOutboxAttempts(): void {
  */
 export async function drainOutbox(): Promise<boolean> {
   const pending = get();
-  if (!pending) return true;       // nothing pending — already in sync
+  if (!pending) return true;       // nothing pending, already in sync
   if (!navigator.onLine) return false;  // wait for 'online' event
 
   // Auto-recovery: after repeated failures, wait out an exponential backoff
@@ -228,7 +228,7 @@ export async function drainOutbox(): Promise<boolean> {
     const waited = Date.now() - new Date(pending.lastAttemptAt).getTime();
     const required = backoffDelayMs(pending.attempts);
     if (waited < required) {
-      return false; // still backing off — the next drain cycle will retry
+      return false; // still backing off, the next drain cycle will retry
     }
   }
 
@@ -247,7 +247,7 @@ export async function drainOutbox(): Promise<boolean> {
     // clearPendingPush() is called inside pushToSupabase on success,
     // but call it here defensively too.
     clearPendingPush();
-    console.info('[Outbox] Drained — state is now in sync with Supabase');
+    console.info('[Outbox] Drained, state is now in sync with Supabase');
     return true;
   } catch (e) {
     markPushPending(String(e));

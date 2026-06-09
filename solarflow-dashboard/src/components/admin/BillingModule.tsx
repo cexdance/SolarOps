@@ -466,7 +466,7 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ jobs, onUpdateJob 
                   <Calendar className="w-3 h-3" />
                   {job.completedAt
                     ? new Date(job.completedAt).toLocaleDateString()
-                    : job.scheduledDate?.split('T')[0] ?? '—'}
+                    : job.scheduledDate?.split('T')[0] ?? '-'}
                 </span>
               </div>
 
@@ -744,7 +744,7 @@ const JobDetailModal: React.FC<{ job: ContractorJob; onClose: () => void }> = ({
                     <span className="w-2 h-2 rounded-full bg-blue-500 mt-1.5 shrink-0" />
                     <div className="flex-1 text-sm">
                       <span className="font-semibold text-blue-900">Parts reimbursement requested</span>
-                      <span className="text-blue-700"> — ${job.partsAmount.toFixed(2)}</span>
+                      <span className="text-blue-700">, ${job.partsAmount.toFixed(2)}</span>
                     </div>
                   </div>
                 )}

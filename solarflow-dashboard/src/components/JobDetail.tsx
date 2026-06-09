@@ -311,7 +311,7 @@ export const JobDetail: React.FC<JobDetailProps> = ({
           <div className="mt-3 pt-3 border-t border-slate-100">
             <div className="flex items-center gap-2 text-purple-600">
               <CheckCircle className="w-4 h-4" />
-              <span className="text-sm font-medium">Invoiced — Awaiting Payment</span>
+              <span className="text-sm font-medium">Invoiced, Awaiting Payment</span>
             </div>
           </div>
         )}

@@ -55,19 +55,19 @@ Compliance with this guide is a mandatory condition of engagement. Non-complianc
     content: `All field personnel must wear the following PPE at all times while on any job site. No exceptions.
 
 MANDATORY FOR ALL JOBS:
-• Hard Hat / Helmet — ANSI Z89.1 Type II, Class E rated. Required at all times when working on or near structures under construction or maintenance.
-• High-Visibility Safety Vest — ANSI/ISEA 107 Class 2 minimum. Required when working near vehicle traffic or at commercial sites.
-• Safety Glasses / Eye Protection — ANSI Z87.1 rated. Required during all drilling, cutting, or electrical work.
-• Cut-Resistant Gloves — ANSI A4 minimum. Required when handling panels, racking, or wire management.
-• Non-Slip Safety Footwear — See Section 5 for detailed footwear requirements.
-• Sunscreen SPF 30+ — Required for all outdoor work. Reapply every 2 hours.
+• Hard Hat / Helmet, ANSI Z89.1 Type II, Class E rated. Required at all times when working on or near structures under construction or maintenance.
+• High-Visibility Safety Vest, ANSI/ISEA 107 Class 2 minimum. Required when working near vehicle traffic or at commercial sites.
+• Safety Glasses / Eye Protection, ANSI Z87.1 rated. Required during all drilling, cutting, or electrical work.
+• Cut-Resistant Gloves, ANSI A4 minimum. Required when handling panels, racking, or wire management.
+• Non-Slip Safety Footwear, See Section 5 for detailed footwear requirements.
+• Sunscreen SPF 30+, Required for all outdoor work. Reapply every 2 hours.
 
-ELECTRICAL WORK — ADDITIONAL REQUIREMENTS:
+ELECTRICAL WORK, ADDITIONAL REQUIREMENTS:
 • Arc flash rated face shield (minimum 8 cal/cm² for DC systems)
 • Insulated rubber gloves (ASTM D120 Class 00 minimum for PV voltages)
-• Voltage-rated tools only — non-insulated tools are prohibited near live circuits
+• Voltage-rated tools only, non-insulated tools are prohibited near live circuits
 
-BATTERY INSTALLATION — ADDITIONAL REQUIREMENTS:
+BATTERY INSTALLATION, ADDITIONAL REQUIREMENTS:
 • Chemical-resistant gloves (nitrile or neoprene, minimum 8 mil)
 • Full face shield (not just safety glasses)
 • Class D fire extinguisher within reach of work area
@@ -80,21 +80,21 @@ BATTERY INSTALLATION — ADDITIONAL REQUIREMENTS:
     bg: 'bg-amber-50',
     border: 'border-amber-200',
     title: '2. Footwear Requirements',
-    content: `Footwear is your primary defense against slips, punctures, and falls — particularly on residential and commercial roofing systems.
+    content: `Footwear is your primary defense against slips, punctures, and falls, particularly on residential and commercial roofing systems.
 
 GENERAL REQUIREMENTS (ALL SITES):
-• ASTM F2413-18 rated footwear — Steel toe or composite toe with electrical hazard (EH) protection
-• Slip-resistant outsoles (ASTM F2913) — No smooth leather soles, dress shoes, or sneakers
-• Ankle support — High-top work boots are strongly recommended
+• ASTM F2413-18 rated footwear, Steel toe or composite toe with electrical hazard (EH) protection
+• Slip-resistant outsoles (ASTM F2913), No smooth leather soles, dress shoes, or sneakers
+• Ankle support, High-top work boots are strongly recommended
 
-METAL ROOF REQUIREMENTS — CRITICAL:
+METAL ROOF REQUIREMENTS, CRITICAL:
 Metal standing-seam, corrugated, and tin roofing surfaces present extreme slip hazards, especially when wet or in morning dew conditions.
 
-• Rubber-soled boots with deep lug pattern are REQUIRED — standard leather soles are prohibited
+• Rubber-soled boots with deep lug pattern are REQUIRED, standard leather soles are prohibited
 • Soft-compound rubber soles (e.g., Vibram, Crepe, or equivalent) provide superior grip on metal surfaces
-• Test grip before committing to a surface — approach metal roof panels cautiously and test traction on a low-pitch section before proceeding
-• In wet conditions, ground-level operations are preferred — roof work on metal surfaces in rain or immediately after rain is prohibited unless emergency conditions require it and a full fall-arrest system is in use
-• Check boot soles before every metal roof job — replace boots if outsole compound has hardened or worn smooth`,
+• Test grip before committing to a surface, approach metal roof panels cautiously and test traction on a low-pitch section before proceeding
+• In wet conditions, ground-level operations are preferred, roof work on metal surfaces in rain or immediately after rain is prohibited unless emergency conditions require it and a full fall-arrest system is in use
+• Check boot soles before every metal roof job, replace boots if outsole compound has hardened or worn smooth`,
   },
   {
     id: 'roofs',
@@ -105,31 +105,31 @@ Metal standing-seam, corrugated, and tin roofing surfaces present extreme slip h
     title: '3. Roof Work & Fall Protection',
     content: `Falls are the #1 cause of fatalities in construction (OSHA 29 CFR 1926.502). All roof work requires a documented fall protection plan before work begins.
 
-FALL PROTECTION — MANDATORY FOR ANY ROOF WORK:
-• Full-body fall arrest harness (ANSI Z359.11) — required on any roof with pitch > 4:12 OR any roof edge within 6 feet
-• Anchor points rated at minimum 5,000 lbs per person — inspect anchor condition before each use
-• Self-retracting lanyard (SRL) or shock-absorbing lanyard — maximum free-fall of 6 feet
-• Do not anchor to PV racking or conduit — these are NOT rated as fall arrest anchor points
+FALL PROTECTION, MANDATORY FOR ANY ROOF WORK:
+• Full-body fall arrest harness (ANSI Z359.11), required on any roof with pitch > 4:12 OR any roof edge within 6 feet
+• Anchor points rated at minimum 5,000 lbs per person, inspect anchor condition before each use
+• Self-retracting lanyard (SRL) or shock-absorbing lanyard, maximum free-fall of 6 feet
+• Do not anchor to PV racking or conduit, these are NOT rated as fall arrest anchor points
 • Roof bracket systems are acceptable only when properly installed and load-tested
 
-METAL ROOF — HEIGHTENED PRECAUTIONS:
+METAL ROOF, HEIGHTENED PRECAUTIONS:
 Metal roofing panels can deflect, shift, or become disconnected from substrate when subjected to body weight in the wrong locations. Thermal expansion also causes surface movement.
-• Step only on structural members (rafters/purlins) or installed panel ridges — never on flat panel faces
+• Step only on structural members (rafters/purlins) or installed panel ridges, never on flat panel faces
 • Identify rafter locations from inside before roof work begins
 • Use a roof walk board or foam-padded plank across panel spans when possible
-• Never work on metal roofs alone — a spotter on the ground is required
+• Never work on metal roofs alone, a spotter on the ground is required
 
 WIND CONDITIONS:
 Florida is subject to high-wind events, afternoon thunderstorms, and seasonal tropical weather. Wind significantly increases fall risk on elevated surfaces.
 
 • WIND SPEED LIMITS:
-  – Above 20 mph (sustained): Increase anchor density; limit work near roof edges
-  – Above 30 mph (sustained): Panel handling (carrying large surfaces) is prohibited — panels become sails
-  – Above 40 mph (sustained): All elevated rooftop work must cease
-  – Gusts exceeding 45 mph at any time: Evacuate roof immediately
+ , Above 20 mph (sustained): Increase anchor density; limit work near roof edges
+ , Above 30 mph (sustained): Panel handling (carrying large surfaces) is prohibited, panels become sails
+ , Above 40 mph (sustained): All elevated rooftop work must cease
+ , Gusts exceeding 45 mph at any time: Evacuate roof immediately
 • Check National Weather Service (weather.gov) or a weather app before every job with rooftop work
-• If lightning is within 10 miles, ground all personnel — metal roofing, racking, and conduit are conductors
-• Never work on roofs during or immediately after rain — surfaces remain hazardous for 30–60 minutes after precipitation`,
+• If lightning is within 10 miles, ground all personnel, metal roofing, racking, and conduit are conductors
+• Never work on roofs during or immediately after rain, surfaces remain hazardous for 30-60 minutes after precipitation`,
   },
   {
     id: 'heat',
@@ -137,39 +137,39 @@ Florida is subject to high-wind events, afternoon thunderstorms, and seasonal tr
     color: 'text-red-600',
     bg: 'bg-red-50',
     border: 'border-red-200',
-    title: '4. Heat Illness Prevention — Florida Critical',
+    title: '4. Heat Illness Prevention, Florida Critical',
     content: `Florida's heat and humidity create life-threatening conditions for outdoor workers. Heat stroke kills. Conexsol enforces mandatory heat illness prevention protocols aligned with OSHA's Heat Illness Prevention standard.
 
 HEAT INDEX RISK LEVELS:
-• 91–103°F (High Risk) — Mandatory 10-minute break every 60 minutes in shade; 8 oz water every 20 minutes
-• 103–115°F (Very High Risk) — Mandatory 15-minute break every 45 minutes; work at reduced pace; buddy system required
-• Above 115°F / Heat Index (Extreme Risk) — Limit strenuous work; reduce crew density on rooftops; consider postponing non-emergency roof work
+• 91-103°F (High Risk), Mandatory 10-minute break every 60 minutes in shade; 8 oz water every 20 minutes
+• 103-115°F (Very High Risk), Mandatory 15-minute break every 45 minutes; work at reduced pace; buddy system required
+• Above 115°F / Heat Index (Extreme Risk), Limit strenuous work; reduce crew density on rooftops; consider postponing non-emergency roof work
 
-SIGNS OF HEAT EXHAUSTION — STOP WORK:
+SIGNS OF HEAT EXHAUSTION, STOP WORK:
 • Heavy sweating, weakness, cold/pale/clammy skin
 • Weak pulse, nausea or fainting
 • Action: Move to shade, cool with water, drink fluids, call supervisor
 
-SIGNS OF HEAT STROKE — CALL 911 IMMEDIATELY:
-• High body temperature (103°F+), hot/red/dry skin — sweating stops
+SIGNS OF HEAT STROKE, CALL 911 IMMEDIATELY:
+• High body temperature (103°F+), hot/red/dry skin, sweating stops
 • Rapid strong pulse, confusion or unconsciousness
-• This is a medical emergency — cool the person down immediately while waiting for EMS
-  – Apply ice packs to neck, armpits, and groin
-  – Do NOT give fluids to an unconscious person
+• This is a medical emergency, cool the person down immediately while waiting for EMS
+ , Apply ice packs to neck, armpits, and groin
+ , Do NOT give fluids to an unconscious person
 
 ROOFTOP-SPECIFIC HEAT HAZARDS:
-• Metal roofing surfaces can reach 170°F+ in direct Florida sun — contact burns occur in seconds
+• Metal roofing surfaces can reach 170°F+ in direct Florida sun, contact burns occur in seconds
 • Dark-colored rooftop surfaces (asphalt shingles, TPO membranes) can reach 160°F+
-• Never set tools, equipment, or bags directly on hot metal surfaces — they will become too hot to handle
-• Wear long sleeves — UV reflected off panel glass can cause sunburn within 30 minutes
-• Start rooftop work early (before 10am) — schedule critical roof tasks in the morning hours
-• Acclimation protocol: New crew members or those returning from time off must not perform full-intensity rooftop work for at least 3 days — reduce workload by 50% on days 1-3
+• Never set tools, equipment, or bags directly on hot metal surfaces, they will become too hot to handle
+• Wear long sleeves, UV reflected off panel glass can cause sunburn within 30 minutes
+• Start rooftop work early (before 10am), schedule critical roof tasks in the morning hours
+• Acclimation protocol: New crew members or those returning from time off must not perform full-intensity rooftop work for at least 3 days, reduce workload by 50% on days 1-3
 
 HYDRATION:
-• Drink 1 cup (8 oz) of water every 20 minutes — do not wait until you're thirsty
+• Drink 1 cup (8 oz) of water every 20 minutes, do not wait until you're thirsty
 • Electrolyte supplements (Gatorade, Pedialyte packets) are encouraged on days above 90°F
 • Avoid alcohol the night before and morning of any outdoor work day
-• Caffeinated beverages increase dehydration — limit coffee/energy drinks on hot days`,
+• Caffeinated beverages increase dehydration, limit coffee/energy drinks on hot days`,
   },
   {
     id: 'electrical',
@@ -178,23 +178,23 @@ HYDRATION:
     bg: 'bg-yellow-50',
     border: 'border-yellow-200',
     title: '5. Electrical Safety & Lock-Out / Tag-Out',
-    content: `PV systems generate live DC voltage whenever panels are exposed to light — there is NO off switch for a solar array. DC voltages can exceed 600V on string systems.
+    content: `PV systems generate live DC voltage whenever panels are exposed to light, there is NO off switch for a solar array. DC voltages can exceed 600V on string systems.
 
-LOCK-OUT / TAG-OUT (LOTO) — OSHA 29 CFR 1910.147:
+LOCK-OUT / TAG-OUT (LOTO), OSHA 29 CFR 1910.147:
 • De-energize ALL circuits before working on electrical components
 • Cover panels with opaque tarps or blankets before disconnecting DC wiring
 • Lock the main AC disconnect in the OFF position and apply your personal lockout tag
 • Verify zero energy with a calibrated meter before touching any conductor
-• NEVER assume a circuit is de-energized — verify with your own meter
+• NEVER assume a circuit is de-energized, verify with your own meter
 
 ADDITIONAL ELECTRICAL RULES:
-• Do not work on inverters or combiners in wet conditions — even drizzle creates electrocution risk
+• Do not work on inverters or combiners in wet conditions, even drizzle creates electrocution risk
 • Do not use uninsulated tools near live terminals
 • If you discover damaged wiring, exposed conductors, or arc damage: stop work, document, and notify the office immediately
 • Two-person rule: All work on live conductors (where LOTO is not feasible) requires a second qualified person on-site
 
 INCIDENT REPORTING:
-Any electrical shock — no matter how minor it feels — must be reported immediately. Delayed cardiac effects from electrical exposure can occur hours after contact. Seek medical evaluation after any electrical contact.`,
+Any electrical shock, no matter how minor it feels, must be reported immediately. Delayed cardiac effects from electrical exposure can occur hours after contact. Seek medical evaluation after any electrical contact.`,
   },
   {
     id: 'general',
@@ -203,21 +203,21 @@ Any electrical shock — no matter how minor it feels — must be reported immed
     bg: 'bg-slate-50',
     border: 'border-slate-200',
     title: '6. General Job Site Rules',
-    content: `SITE ASSESSMENT — BEFORE EVERY JOB:
-• Perform a visual hazard assessment upon arrival — identify trip hazards, overhead lines, unstable surfaces
-• Check weather forecast — plan roof work around heat index and wind
+    content: `SITE ASSESSMENT, BEFORE EVERY JOB:
+• Perform a visual hazard assessment upon arrival, identify trip hazards, overhead lines, unstable surfaces
+• Check weather forecast, plan roof work around heat index and wind
 • Notify office if you identify site conditions not covered by the work order
 
 LADDER SAFETY:
-• Use Type IA ladders (300 lb capacity) minimum — Type II residential ladders are prohibited
+• Use Type IA ladders (300 lb capacity) minimum, Type II residential ladders are prohibited
 • Three-point contact at all times when climbing
-• Never carry materials with both hands while on a ladder — use a tool bag or rope haul
+• Never carry materials with both hands while on a ladder, use a tool bag or rope haul
 • Ladder must extend 3 feet above the roof edge
 
 TOOLS & EQUIPMENT:
-• Inspect all tools before each use — damaged tools must be tagged out and replaced
+• Inspect all tools before each use, damaged tools must be tagged out and replaced
 • Power tools must be double-insulated or have ground fault protection (GFCI) on 120V circuits
-• Store tools secured on roof — never leave tools on sloped surfaces unattended
+• Store tools secured on roof, never leave tools on sloped surfaces unattended
 
 COMMUNICATION:
 • Always have your phone charged and accessible on the job site
@@ -225,7 +225,7 @@ COMMUNICATION:
 • If you're working alone and experience an incident: call 911 first, then call the office
 • Emergency contact for Conexsol field operations: on-call dispatcher number is in your ContractorDashboard
 
-ZERO TOLERANCE ITEMS — IMMEDIATE DISMISSAL:
+ZERO TOLERANCE ITEMS, IMMEDIATE DISMISSAL:
 • Working on a roof without fall protection where required
 • Performing electrical work while impaired or without LOTO
 • Ignoring heat illness symptoms in yourself or a team member
@@ -333,7 +333,7 @@ export const ContractorRegister: React.FC<ContractorRegisterProps> = ({
     }
 
     if (currentStep === 'terms') {
-      // Complete registration — called after T&C acceptance via ConexsolTerms onAccept
+      // Complete registration, called after T&C acceptance via ConexsolTerms onAccept
       const contractor: Contractor = {
         id: `contractor-${Date.now()}`,
         email: formData.email,
@@ -436,7 +436,7 @@ export const ContractorRegister: React.FC<ContractorRegisterProps> = ({
               {inviteEmail ? (
                 <p className="text-sm text-emerald-700 mt-1 flex items-center gap-1.5">
                   <CheckCircle className="w-4 h-4" />
-                  You were invited by <strong>{invitedBy ?? 'Conexsol'}</strong> — email pre-filled below
+                  You were invited by <strong>{invitedBy ?? 'Conexsol'}</strong>, email pre-filled below
                 </p>
               ) : (
                 <p className="text-sm text-slate-500 mt-1">Your login credentials for the contractor portal.</p>
@@ -458,7 +458,7 @@ export const ContractorRegister: React.FC<ContractorRegisterProps> = ({
                 }`}
               />
               {inviteEmail && (
-                <p className="text-xs text-slate-400 mt-1">Email locked to your invite — cannot be changed.</p>
+                <p className="text-xs text-slate-400 mt-1">Email locked to your invite, cannot be changed.</p>
               )}
             </div>
 
@@ -827,7 +827,7 @@ export const ContractorRegister: React.FC<ContractorRegisterProps> = ({
             <div>
               <h2 className="text-xl font-bold text-slate-900">Safety Acknowledgment</h2>
               <p className="text-sm text-slate-500 mt-1">
-                Read the full safety guide below — scroll to the bottom to unlock your signature.
+                Read the full safety guide below, scroll to the bottom to unlock your signature.
               </p>
             </div>
 
@@ -844,7 +844,7 @@ export const ContractorRegister: React.FC<ContractorRegisterProps> = ({
                     <ShieldCheck className="w-6 h-6 text-orange-600" />
                   </div>
                   <h3 className="text-base font-bold text-slate-900">CONTRACTOR SAFETY GUIDE</h3>
-                  <p className="text-xs text-slate-500 mt-1">Conexsol Applications LLC — Field Operations Manual</p>
+                  <p className="text-xs text-slate-500 mt-1">Conexsol Applications LLC, Field Operations Manual</p>
                   <p className="text-xs text-slate-400 mt-0.5">OSHA 29 CFR 1926 / 29 CFR 1910 Compliant · Effective January 2026</p>
                 </div>
 
@@ -940,7 +940,7 @@ export const ContractorRegister: React.FC<ContractorRegisterProps> = ({
 
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Electronic Signature — Type your full legal name <span className="text-red-500">*</span>
+                    Electronic Signature, Type your full legal name <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
@@ -1078,7 +1078,7 @@ export const ContractorRegister: React.FC<ContractorRegisterProps> = ({
         </div>
 
         <p className="text-center text-xs text-slate-500 mt-4">
-          Your application will be reviewed within 1–2 business days.
+          Your application will be reviewed within 1-2 business days.
         </p>
       </div>
     </div>

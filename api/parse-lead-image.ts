@@ -1,5 +1,5 @@
 /**
- * SolarOps — Lead Image Parser
+ * SolarOps, Lead Image Parser
  *
  * Accepts a screenshot of a SolarEdge leads email (base64-encoded) and uses
  * Claude Vision to extract structured lead data.
@@ -120,7 +120,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const parsed = JSON.parse(jsonMatch[0]);
 
-    // Normalize phone — digits only
+    // Normalize phone, digits only
     if (parsed.phone) {
       parsed.phone = parsed.phone.replace(/\D/g, '');
     }

@@ -84,7 +84,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         { headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}`, apikey: SERVICE_ROLE_KEY } },
       );
       if (!listRes.ok) {
-        // Surface the real upstream status instead of a generic 500 — a 401/403
+        // Surface the real upstream status instead of a generic 500, a 401/403
         // here means SUPABASE_SERVICE_ROLE_KEY is not a valid admin key.
         const detail = await listRes.text().catch(() => '');
         console.error(`[api/users] admin list page ${page} failed ${listRes.status}: ${detail.slice(0, 200)}`);
@@ -115,7 +115,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!cleanEmail || !/.+@.+\..+/.test(cleanEmail)) return res.status(400).json({ error: 'Valid email required' });
     if (!STAFF_ROLES.has(cleanRole)) return res.status(400).json({ error: 'Invalid role' });
 
-    // Random temp password — the new user sets their own via the reset email
+    // Random temp password, the new user sets their own via the reset email
     // the client sends after this returns.
     const tempPassword = `Tmp-${Math.random().toString(36).slice(2)}-${Date.now().toString(36)}`;
     const createRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users`, {

@@ -1,4 +1,4 @@
-// Standalone column-config store — persists column order & visibility to localStorage
+// Standalone column-config store, persists column order & visibility to localStorage
 // Pattern follows removedSitesStore.ts (zero external imports)
 
 const KEY = 'solarops_monitoring_columns';

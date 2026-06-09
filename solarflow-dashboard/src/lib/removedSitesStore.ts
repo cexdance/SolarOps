@@ -1,4 +1,4 @@
-// Standalone removed-sites store — NO external imports (avoids bundler TDZ)
+// Standalone removed-sites store, NO external imports (avoids bundler TDZ)
 // Admin can soft-remove sites from the SolarEdge monitoring table.
 // Persisted in localStorage only; survives page reloads and future imports.
 

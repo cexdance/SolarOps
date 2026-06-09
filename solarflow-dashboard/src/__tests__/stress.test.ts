@@ -1,5 +1,5 @@
 /**
- * stress.test.ts — Load, fault, concurrency, and clock-skew tests
+ * stress.test.ts, Load, fault, concurrency, and clock-skew tests
  *
  * Covers the four known fragile areas:
  *   1. Volume: localStorage quota pressure under large datasets
@@ -349,7 +349,7 @@ describe('Fault: QuotaExceededError handling in saveData', () => {
 
     const raw = localStorage.getItem('solarflow_data');
     const loaded = JSON.parse(raw!);
-    // CONFIRMED: activityHistory is gone — this is a known data-loss path
+    // CONFIRMED: activityHistory is gone, this is a known data-loss path
     const anyHasActivity = loaded.customers.some(
       (c: Customer) => c.activityHistory && c.activityHistory.length > 0,
     );
@@ -456,7 +456,7 @@ describe('Concurrency: mergeRemote conflict resolution (uses real implementation
       ],
     });
     const remote: Partial<AppState> = {
-      // Remote only returns c2 (incremental pull — c1 unchanged, not in response)
+      // Remote only returns c2 (incremental pull, c1 unchanged, not in response)
       customers: [makeCustomer({ id: 'c2', name: 'Shared Updated' })],
     };
     const merged = realMerge(local, remote);
@@ -509,7 +509,7 @@ describe('Fault: outbox drain under repeated Supabase failures', () => {
   });
 
   it('ST-4 FIXED: drainOutbox backs off (returns false) right after a burst of failures', async () => {
-    // Simulate 9 rapid failures — lastAttemptAt is ~now, so the backoff window
+    // Simulate 9 rapid failures, lastAttemptAt is ~now, so the backoff window
     // has not elapsed and drain should hold off instead of hammering the backend.
     for (let i = 0; i < 9; i++) {
       markPushPending(`failure ${i}`);
@@ -548,7 +548,7 @@ describe('Fault: outbox drain under repeated Supabase failures', () => {
     expect(getPendingAttempts()).toBe(0);
   });
 
-  it('ST-4 FIXED: outbox auto-recovers — once backoff elapses, drain retries with no user action', async () => {
+  it('ST-4 FIXED: outbox auto-recovers, once backoff elapses, drain retries with no user action', async () => {
     // Many failures used to hard-lock the outbox forever (attempts > 8) until the
     // user manually intervened. Now it only waits out an exponential backoff.
     for (let i = 0; i < 9; i++) {
@@ -564,7 +564,7 @@ describe('Fault: outbox drain under repeated Supabase failures', () => {
     localStorage.setItem('solarops_outbox_v1', JSON.stringify(raw));
 
     // pushToSupabase is mocked to resolve, so the auto-retry now succeeds and
-    // clears the outbox — no resetOutboxAttempts() call required.
+    // clears the outbox, no resetOutboxAttempts() call required.
     const result = await drainOutbox();
     expect(result).toBe(true);
     expect(hasPendingPush()).toBe(false);
@@ -728,7 +728,7 @@ describe('Fault: oversized/malformed remote payloads into mergeRemote', () => {
 
   it('mergeRemote with empty remote customers array preserves all local records', () => {
     const local = makeState({ customers: generateCustomers(500) });
-    // Empty array means no remote data — should be a no-op
+    // Empty array means no remote data, should be a no-op
     const merged = realMerge(local, { customers: [] });
     // With empty remote, all local records should be preserved
     expect(merged.customers.length).toBe(500);

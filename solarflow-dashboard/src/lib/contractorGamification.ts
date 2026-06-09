@@ -1,4 +1,4 @@
-// SolarOps — Contractor Gamification System
+// SolarOps, Contractor Gamification System
 // XP is earned per job based on documentation quality, photo completeness,
 // report detail, signatures, outcome, timeliness, and speed.
 
@@ -35,7 +35,7 @@ export const getNextLevel = (xp: number): LevelInfo | null => {
   return LEVELS.find(l => l.level === current.level + 1) ?? null;
 };
 
-// 0–1 progress within current level
+// 0-1 progress within current level
 export const getLevelProgress = (xp: number): number => {
   const current = getLevelInfo(xp);
   if (current.level === LEVELS[LEVELS.length - 1].level) return 1;
@@ -148,10 +148,10 @@ export const calcJobXpBreakdown = (job: ContractorJob): JobXpBreakdown => {
   // Base
   add('Job Completed', 100, job.status === 'completed');
 
-  // Photos — before
+  // Photos, before
   add('Before Photos', 25, job.photos.before.length >= 1);
   add('Before Photos (thorough, 3+)', 15, job.photos.before.length >= 3);
-  // Photos — after
+  // Photos, after
   add('After Photos', 25, job.photos.after.length >= 1);
   add('After Photos (thorough, 3+)', 15, job.photos.after.length >= 3);
   // Other photo categories
@@ -325,7 +325,7 @@ export const addJobXp = (contractorId: string, job: ContractorJob): AddXpResult 
 
   const data = loadXpData(contractorId);
 
-  // Idempotency — only count each job once
+  // Idempotency, only count each job once
   if (data.jobHistory.some(h => h.jobId === job.id)) {
     return {
       xpEarned: 0, badgeXpBonus: 0, newBadges: [], leveledUp: false,

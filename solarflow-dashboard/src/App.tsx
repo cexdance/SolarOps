@@ -1,5 +1,5 @@
 // SolarFlow MVP - Main Application with Contractor Module
-// Auth screens live in src/components/auth/ — imported by name here to avoid duplication on next cleanup pass
+// Auth screens live in src/components/auth/, imported by name here to avoid duplication on next cleanup pass
 // View routing lives in src/components/AppRouter.tsx
 // Sync side-effects live in src/hooks/useSyncEngine.ts
 // Version-poll side-effect lives in src/hooks/useVersionPoll.ts
@@ -90,7 +90,7 @@ const LoginScreen: React.FC<{
   }, []);
 
   const finishStaffLogin = async (supaUser: import('@supabase/supabase-js').User, offerPasskey = false) => {
-    // STEP 5: Force-fresh on sign-in — if a new deploy landed, reload before entering the app
+    // STEP 5: Force-fresh on sign-in, if a new deploy landed, reload before entering the app
     if (BUILD_ID !== 'dev') {
       try {
         const res = await fetch(`/version.json?t=${Date.now()}`, {
@@ -128,7 +128,7 @@ const LoginScreen: React.FC<{
     onLogin(user, !!meta['mustChangePassword']);
   };
 
-  const AUTH_TIMEOUT_MS = 12_000; // 12s — Supabase auth must respond within this window
+  const AUTH_TIMEOUT_MS = 12_000; // 12s, Supabase auth must respond within this window
   const authTimeout = <T,>(p: Promise<T>): Promise<T> =>
     Promise.race([p, new Promise<T>((_, reject) =>
       setTimeout(() => reject(new Error('auth-timeout')), AUTH_TIMEOUT_MS))]);
@@ -222,7 +222,7 @@ const LoginScreen: React.FC<{
             <p className="text-sm text-slate-500 mb-4">Enter your email and we'll send you a reset link.</p>
             {forgotSent ? (
               <div className="p-4 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700">
-                Check your inbox — a reset link has been sent to <strong>{forgotEmail}</strong>.
+                Check your inbox, a reset link has been sent to <strong>{forgotEmail}</strong>.
               </div>
             ) : (
               <form onSubmit={handleForgotSubmit} className="space-y-4">
@@ -281,7 +281,7 @@ const LoginScreen: React.FC<{
                 <path d="M12 2C8.686 2 6 4.686 6 8c0 2.09.81 3.98 2.13 5.37L6 22h12l-2.13-8.63A7.96 7.96 0 0 0 18 8c0-3.314-2.686-6-6-6z"/>
                 <circle cx="12" cy="8" r="2"/>
               </svg>
-              {passkeyStored ? 'Sign in with Face ID' : 'Face ID / Touch ID — sign in with password once to enable'}
+              {passkeyStored ? 'Sign in with Face ID' : 'Face ID / Touch ID, sign in with password once to enable'}
             </button>
           )}
 
@@ -489,7 +489,7 @@ const ResetPasswordScreen: React.FC<{ onDone: () => void }> = ({ onDone }) => {
         setSessionReady(true);
       }
     });
-    // Timeout fallback — show form after 3s regardless, updateUser will surface any real error
+    // Timeout fallback, show form after 3s regardless, updateUser will surface any real error
     const t = setTimeout(() => setSessionReady(true), 3000);
     return () => { subscription.unsubscribe(); clearTimeout(t); };
   }, []);
@@ -680,7 +680,7 @@ function App() {
   // syncFromDB() merges remote customers/jobs into localStorage, then we reload
   // Wrapped in Promise.race() so Supabase timeouts never block the loading spinner
   useEffect(() => {
-    const SYNC_TIMEOUT_MS = 8000; // 8s max — fall back to local data if Supabase is slow
+    const SYNC_TIMEOUT_MS = 8000; // 8s max, fall back to local data if Supabase is slow
     const timeout = new Promise<void>((_, reject) =>
       setTimeout(() => reject(new Error('sync-timeout')), SYNC_TIMEOUT_MS)
     );
@@ -716,9 +716,9 @@ function App() {
         });
       })
       .catch((err) => {
-        // Sync failed (offline, not logged in, or timed out) — local data is already loaded
+        // Sync failed (offline, not logged in, or timed out), local data is already loaded
         if (err?.message === 'sync-timeout') {
-          console.warn('[App] Supabase sync timed out after 8s — using local data');
+          console.warn('[App] Supabase sync timed out after 8s, using local data');
         }
       })
       .finally(() => setDbReady(true));
@@ -784,7 +784,7 @@ function App() {
 
   // Restore Supabase staff session on load and listen for auth state changes
   useEffect(() => {
-    // Contractor session takes priority — check it before Supabase
+    // Contractor session takes priority, check it before Supabase
     if (sessionStorage.getItem('solarflow_contractor_mode') === 'true') {
       const contractorId = sessionStorage.getItem('solarflow_contractor_id');
       const allContractors = loadContractors();
@@ -855,7 +855,7 @@ function App() {
         stopNotificationPolling();
         unsubscribeFromNotifications();
       } else if (event === 'TOKEN_REFRESHED' && session) {
-        // Session refreshed silently — no action needed
+        // Session refreshed silently, no action needed
       }
     });
 
@@ -879,7 +879,7 @@ function App() {
   // Computed values
   const currentUser = data.currentUser;
 
-  // Memoized heavy filters — recompute only when the source arrays change.
+  // Memoized heavy filters, recompute only when the source arrays change.
   // With 400+ customers and frequent re-renders, these were running on every
   // keystroke in search boxes and every kanban drag.
   const unbilledCount = useMemo(
@@ -1030,7 +1030,7 @@ function App() {
     saveContractorJobs(nextContractorJobs);
 
     // Audit the contractor-side write itself (previously unlogged) with a field-
-    // level diff and the contractor as the actor — keyed to the admin Job id when
+    // level diff and the contractor as the actor, keyed to the admin Job id when
     // linked so it shows in that work order's history.
     logJobChange(
       'job.contractor_update',
@@ -1041,7 +1041,7 @@ function App() {
     );
 
     // ── Phase 1: Full bidirectional mirror to admin-side Job ────────────
-    // Mirror ALL field-side data back to admin Job — not just status.
+    // Mirror ALL field-side data back to admin Job, not just status.
     // This closes the dual-store gap where photos, service reports, parts,
     // and service status written by the contractor never reached the admin record.
     if (updatedJob.sourceJobId) {
@@ -1052,7 +1052,7 @@ function App() {
       };
 
       // All 14 contractor photo categories now map 1:1 to admin WOPhoto categories.
-      // WOPhoto.category was expanded in Phase 2 to include all 14 values — no
+      // WOPhoto.category was expanded in Phase 2 to include all 14 values, no
       // more lossy collapse that made PPE/voltage/inverter photos invisible in admin.
       const VALID_WO_CATEGORIES = new Set([
         'before', 'after', 'serial', 'process', 'parts',
@@ -1072,7 +1072,7 @@ function App() {
         for (const [cat, urls] of Object.entries(photos)) {
           for (const url of (urls ?? [])) {
             if (!url) continue;
-            // NEVER mirror base64 into solarflow_data — that blob overflows localStorage.
+            // NEVER mirror base64 into solarflow_data, that blob overflows localStorage.
             // base64 only lives in React state + IndexedDB (IDB); it will be mirrored
             // here automatically once the IDB background mirror produces an https:// URL.
             if (url.startsWith('data:')) continue;
@@ -1305,7 +1305,7 @@ function App() {
     const newActivity = {
       id: `activity-${Date.now()}`,
       type: 'job_updated' as const,
-      description: `Work order ${updatedJob.woNumber ?? updatedJob.id} updated — ${updatedJob.serviceType} · ${updatedJob.status}`,
+      description: `Work order ${updatedJob.woNumber ?? updatedJob.id} updated, ${updatedJob.serviceType} · ${updatedJob.status}`,
       timestamp: new Date().toISOString(),
     };
     // Field-level audit: log WHAT changed (before→after) and WHO, not a blind snapshot.
@@ -1380,7 +1380,7 @@ function App() {
         saveContractorJobs(nextCj);
         logChange('contractor_job.create', 'contractor_job', mirror.id, mirror, data.currentUser?.email ?? 'unknown');
       } else {
-        // Already mirrored — keep contractor row in sync with admin edits (assignment / schedule / scope).
+        // Already mirrored, keep contractor row in sync with admin edits (assignment / schedule / scope).
         const nextCj = contractorJobs.map(cj => cj.sourceJobId === updatedJob.id
           ? { ...cj,
               contractorId: updatedJob.contractorId!,
@@ -1460,14 +1460,14 @@ function App() {
       solarEdgeSiteId: customer.solarEdgeSiteId,
       createdAt: customer.createdAt || new Date().toISOString(),
     };
-    // Log before state update — append-only audit trail
+    // Log before state update, append-only audit trail
     logChange('customer.create', 'customer', newCustomer.id, newCustomer,
       data.currentUser?.email ?? 'unknown');
 
     // Use prev => pattern to avoid stale-closure data loss
     setData(prev => {
       const next = { ...prev, customers: [...prev.customers, newCustomer] };
-      // Immediate synchronous save — never rely solely on the 500ms debounce
+      // Immediate synchronous save, never rely solely on the 500ms debounce
       saveData(next);
       return next;
     });
@@ -1647,7 +1647,7 @@ function App() {
         if (page.length < SE_PAGE || sites.length >= seTotalCount) break;
         seStartIndex += SE_PAGE;
       }
-      // ── Filter: Florida portfolio only — drop GT-, USP-, GA-, DELETE, non-FL ──
+      // ── Filter: Florida portfolio only, drop GT-, USP-, GA-, DELETE, non-FL ──
       sites = sites.filter(isFloridaSite);
 
       // Match sites with customers and update
@@ -1764,7 +1764,7 @@ function App() {
   };
 
   // ── Site filter: Conexsol Florida group ──────────────────────────────────
-  // The SolarEdge account IS the Florida group — all sites in the account belong.
+  // The SolarEdge account IS the Florida group, all sites in the account belong.
   // We keep this helper for optional secondary filtering (currently accepts ALL).
   const isFLSite = (_s: any): boolean => true;
 
@@ -1780,7 +1780,7 @@ function App() {
       );
       if (!response.ok) {
         if (response.status === 401 || response.status === 403)
-          throw new Error('Invalid API key — check Settings');
+          throw new Error('Invalid API key, check Settings');
         throw new Error(`SolarEdge API error ${response.status}`);
       }
       const result = await response.json();
@@ -1799,7 +1799,7 @@ function App() {
   // records for any site that doesn't already have one, returns a summary.
   const handleUpdateFloridaSites = async (): Promise<{ newCount: number; total: number }> => {
     const apiKey = data.solarEdgeConfig.apiKey;
-    if (!apiKey) throw new Error('No SolarEdge API key — add one in Settings');
+    if (!apiKey) throw new Error('No SolarEdge API key, add one in Settings');
 
     const allSites = await fetchAllSESites(apiKey);
     // Only keep FL state or US-15 name prefix sites
@@ -1920,7 +1920,7 @@ function App() {
           // (catches edge cases where buildDiff missed a prior import)
           const alreadyLinked = customers.some(c => c.solarEdgeSiteId === siteId);
           if (!alreadyLinked) {
-            // Stable ID — no Date.now() suffix so re-importing never duplicates
+            // Stable ID, no Date.now() suffix so re-importing never duplicates
             const newC: Customer = {
               id: `cust-se-${s.id}`,
               name: s.name,
@@ -2017,7 +2017,7 @@ function App() {
     });
   };
 
-  // Loading gate — wait for Neon sync before rendering
+  // Loading gate, wait for Neon sync before rendering
   if (!dbReady) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center">
@@ -2070,7 +2070,7 @@ function App() {
     );
   }
 
-  // Force password change — shown before entering the app (staff or contractor)
+  // Force password change, shown before entering the app (staff or contractor)
   if (mustChangePassword) {
     return (
       <ForceChangePasswordScreen
@@ -2138,7 +2138,7 @@ function App() {
       return <CRMDashboard currentUserId={data.currentUser?.id || 'user-1'} />;
     }
 
-    // Financial views are admin-only — block direct/programmatic access by staff
+    // Financial views are admin-only, block direct/programmatic access by staff
     if (isFinancialView(currentView) && !canSeeFinancials(currentUser)) {
       return (
         <div className="p-6 max-w-md mx-auto text-center">
@@ -2323,7 +2323,7 @@ function App() {
               onClose={() => { setSelectedJobId(null); setCurrentView('jobs'); }}
               onSave={(partial) => {
                 handleUpdateJob({ ...selectedJob, ...partial, id: selectedJob.id } as Job);
-                // Panel stays open — user closes manually
+                // Panel stays open, user closes manually
               }}
               onDeleteJob={(jobId) => {
                 handleDeleteJob(jobId);

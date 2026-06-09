@@ -121,7 +121,7 @@ const PlannerDayColumn: React.FC<{
       <div className={`flex-1 p-1.5 min-h-[120px] ${today ? 'bg-orange-50/30' : 'bg-white'} ${!isCurrentMonth ? 'bg-slate-50/60' : ''}`}>
         {jobs.length === 0 ? (
           <div className="h-full flex items-start justify-center pt-4">
-            <span className="text-[10px] text-slate-300">—</span>
+            <span className="text-[10px] text-slate-300">-</span>
           </div>
         ) : (
           jobs.map(job => (
@@ -386,13 +386,13 @@ export const WorkOrderCalendar: React.FC<WorkOrderCalendarProps> = ({
     if (calendarView === 'week') {
       const weekEnd = addDays(weekStart, 6);
       return isSameMonth(weekStart, weekEnd)
-        ? `${format(weekStart, 'MMM d')} – ${format(weekEnd, 'd, yyyy')}`
-        : `${format(weekStart, 'MMM d')} – ${format(weekEnd, 'MMM d, yyyy')}`;
+        ? `${format(weekStart, 'MMM d')}, ${format(weekEnd, 'd, yyyy')}`
+        : `${format(weekStart, 'MMM d')}, ${format(weekEnd, 'MMM d, yyyy')}`;
     }
     const twoWeekEnd = addDays(weekStart, 13);
     return isSameMonth(weekStart, twoWeekEnd)
-      ? `${format(weekStart, 'MMM d')} – ${format(twoWeekEnd, 'd, yyyy')}`
-      : `${format(weekStart, 'MMM d')} – ${format(twoWeekEnd, 'MMM d, yyyy')}`;
+      ? `${format(weekStart, 'MMM d')}, ${format(twoWeekEnd, 'd, yyyy')}`
+      : `${format(weekStart, 'MMM d')}, ${format(twoWeekEnd, 'MMM d, yyyy')}`;
   };
 
   const weekStart = getWeekStart(focusDate);

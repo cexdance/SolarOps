@@ -1,5 +1,5 @@
 /**
- * SolarOps — Send Quote Email API
+ * SolarOps, Send Quote Email API
  *
  * POST /api/send-quote
  * Body: { customerName, customerEmail, address, woNumber, lineItems, laborTotal, partsTotal, grandTotal, notes?, validDays? }
@@ -7,7 +7,7 @@
  * Sends a branded HTML quote email to the customer with a one-click approval link.
  * Stores the quote token in Supabase for approval verification.
  *
- * Uses native fetch only — no SDK dependencies (avoids Vercel bundling issues).
+ * Uses native fetch only, no SDK dependencies (avoids Vercel bundling issues).
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import crypto from 'crypto';
@@ -204,7 +204,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     body: JSON.stringify({
       from:     'Conexsol Energy <notifications@conexsol.us>',
       to:       customerEmail,
-      subject:  `Service Quote ${woNumber} — Conexsol Energy`,
+      subject:  `Service Quote ${woNumber}, Conexsol Energy`,
       html,
       reply_to: 'daniel.matos@conexsol.us',
     }),

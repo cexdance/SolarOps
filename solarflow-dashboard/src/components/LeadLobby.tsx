@@ -1,4 +1,4 @@
-// SolarOps — Lead Lobby
+// SolarOps, Lead Lobby
 // Triage view: all incoming leads land here; admins route, sales reps contact/note
 import React, { useState, useMemo, useRef } from 'react';
 import { authedFetch } from '../lib/supabase';
@@ -288,7 +288,7 @@ export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserRole, customers
     try {
       const card = await fetchTrelloCard(trelloLeadUrl.trim());
       const contact = extractContactInfo(card);
-      // Parse name from card title — strip leading "US-XXXXX " if present
+      // Parse name from card title, strip leading "US-XXXXX " if present
       const namePart = card.name.replace(/^US-\d+\s*/i, '').trim();
       const parts = namePart.split(/\s+/);
       setTrelloLeadPreview({
@@ -335,13 +335,13 @@ export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserRole, customers
 
   const customSources: string[] = crmData.customSources ?? [];
 
-  // All leads minus closed_won (converted) — drives stats, duplicate detection, list view
+  // All leads minus closed_won (converted), drives stats, duplicate detection, list view
   const activeLeads = useMemo(() =>
     crmData.leads.filter(l => l.status !== 'closed_won'),
     [crmData.leads]
   );
 
-  // Converted leads — archived in the Converted column for growth tracking
+  // Converted leads, archived in the Converted column for growth tracking
   const convertedLeads = useMemo(() =>
     crmData.leads.filter(l => l.status === 'closed_won'),
     [crmData.leads]
@@ -399,7 +399,7 @@ export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserRole, customers
     [crmData.leads, selectedLeadId]
   );
 
-  // Stats — active only (exclude converted/closed_won)
+  // Stats, active only (exclude converted/closed_won)
   const totalCount     = activeLeads.length;
   const newCount       = activeLeads.filter(l => getLeadCol(l) === 'lead_in').length;
   const serviceCount   = activeLeads.filter(l => l.leadType === 'service').length;
@@ -550,7 +550,7 @@ export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserRole, customers
         note:      noteLines || prev.note,
       }));
       if (noteLines) setPendingAddressNote(noteLines);
-      setSsOk('✓ Fields filled — review below and save.');
+      setSsOk('✓ Fields filled, review below and save.');
       setShowImport(false);
     } catch (err) {
       setSsError(err instanceof Error ? err.message : 'Unexpected error');
@@ -780,7 +780,7 @@ export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserRole, customers
     const newJob: Job = {
       id: `job-sitex-${Date.now()}`,
       customerId: '', technicianId: '',
-      title: `Site Transfer — ${lead.firstName} ${lead.lastName}`,
+      title: `Site Transfer, ${lead.firstName} ${lead.lastName}`,
       serviceType: 'SITE-TRX',
       status: 'new',
       scheduledDate: now.slice(0, 10),
@@ -939,7 +939,7 @@ export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserRole, customers
             }`}>
               {leads.map(lead => <LeadCard key={lead.id} lead={lead} kanban />)}
 
-              {/* Lost — older leads toggle */}
+              {/* Lost, older leads toggle */}
               {col.id === 'lost' && lostOlder.length > 0 && (
                 <button
                   onClick={() => setLostExpanded(v => !v)}
@@ -951,7 +951,7 @@ export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserRole, customers
                 </button>
               )}
 
-              {/* Converted — older leads toggle */}
+              {/* Converted, older leads toggle */}
               {col.id === 'converted' && convertedOlder.length > 0 && (
                 <button
                   onClick={() => setConvertedExpanded(v => !v)}
@@ -981,10 +981,10 @@ export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserRole, customers
 
   return (
     <div className="h-screen flex flex-col bg-slate-50">
-      {/* Header — double stack */}
+      {/* Header, double stack */}
       <div className="bg-white border-b border-slate-200 flex-shrink-0">
 
-        {/* Row 1 — Title + primary action */}
+        {/* Row 1, Title + primary action */}
         <div className="px-4 sm:px-6 pt-4 pb-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
             <div className="w-10 h-10 bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl flex items-center justify-center shadow-sm flex-shrink-0">
@@ -996,7 +996,7 @@ export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserRole, customers
             </div>
           </div>
 
-          {/* Primary CTA — always visible and prominent */}
+          {/* Primary CTA, always visible and prominent */}
           <div className="flex items-center gap-2 flex-shrink-0">
             <button
               onClick={handleForceSync}
@@ -1031,7 +1031,7 @@ export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserRole, customers
           </div>
         </div>
 
-        {/* Row 2 — Stats chips + search + view toggle */}
+        {/* Row 2, Stats chips + search + view toggle */}
         <div className="px-4 sm:px-6 pb-3 flex items-center gap-2 sm:gap-3 flex-wrap">
           {/* Stats */}
           <div className="flex items-center gap-1.5 flex-wrap">
@@ -1059,7 +1059,7 @@ export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserRole, customers
             </div>
           </div>
 
-          {/* Search — grows to fill space */}
+          {/* Search, grows to fill space */}
           <div className="relative flex-1 min-w-[160px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
             <input
@@ -1358,12 +1358,12 @@ export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserRole, customers
                               {excelRows.map((row, i) => (
                                 <tr key={i} className="border-b border-slate-50 last:border-0">
                                   <td className="px-2 py-1.5 text-slate-700 max-w-[100px] truncate">{row.firstName} {row.lastName}</td>
-                                  <td className="px-2 py-1.5 text-slate-600">{row.phone || '—'}</td>
-                                  <td className="px-2 py-1.5 text-slate-600 font-mono text-[10px]">{row.caseNumber || '—'}</td>
+                                  <td className="px-2 py-1.5 text-slate-600">{row.phone || '-'}</td>
+                                  <td className="px-2 py-1.5 text-slate-600 font-mono text-[10px]">{row.caseNumber || '-'}</td>
                                   <td className="px-2 py-1.5 font-mono text-[10px] max-w-[80px] truncate">
                                     {row.tracking
                                       ? <a href={getTrackingUrl(row.tracking)} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{row.tracking}</a>
-                                      : <span className="text-slate-400">—</span>}
+                                      : <span className="text-slate-400">-</span>}
                                   </td>
                                 </tr>
                               ))}
@@ -1530,7 +1530,7 @@ export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserRole, customers
                     className="border-2 border-dashed border-slate-200 rounded-lg px-4 py-3 text-center cursor-pointer hover:border-orange-300 hover:bg-orange-50/40 transition-colors"
                   >
                     <p className="text-xs text-slate-400">
-                      📎 Attach photos or documents — <span className="text-orange-500 font-medium">click or drag & drop</span>
+                      📎 Attach photos or documents, <span className="text-orange-500 font-medium">click or drag & drop</span>
                     </p>
                   </div>
                   {leadAttachments.length > 0 && (
@@ -1846,25 +1846,25 @@ const DetailPanel: React.FC<DetailPanelProps> = ({
       <div className="grid grid-cols-2 gap-2 mb-5">
         <div className="bg-slate-50 rounded-lg border border-slate-100 p-3">
           <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Phone</p>
-          <p className="text-sm font-medium text-slate-900 font-mono">{lead.phone || '—'}</p>
+          <p className="text-sm font-medium text-slate-900 font-mono">{lead.phone || '-'}</p>
         </div>
         <div className="bg-slate-50 rounded-lg border border-slate-100 p-3">
           <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Email</p>
-          <p className="text-sm font-medium text-slate-900 truncate">{lead.email || '—'}</p>
+          <p className="text-sm font-medium text-slate-900 truncate">{lead.email || '-'}</p>
         </div>
         <div className="bg-slate-50 rounded-lg border border-slate-100 p-3">
           <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Address</p>
           <p className="text-sm font-medium text-slate-900">
-            {lead.address ? `${lead.address}, ${lead.city}` : `${lead.city}, ${lead.state}` || '—'}
+            {lead.address ? `${lead.address}, ${lead.city}` : `${lead.city}, ${lead.state}` || '-'}
           </p>
         </div>
         <div className="bg-slate-50 rounded-lg border border-slate-100 p-3">
           <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Monthly Bill</p>
-          <p className="text-sm font-bold text-emerald-600">{lead.monthlyBill ? `$${lead.monthlyBill}/mo` : '—'}</p>
+          <p className="text-sm font-bold text-emerald-600">{lead.monthlyBill ? `$${lead.monthlyBill}/mo` : '-'}</p>
         </div>
         <div className="bg-slate-50 rounded-lg border border-slate-100 p-3">
           <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Roof Type</p>
-          <p className="text-sm font-medium text-slate-900 capitalize">{lead.roofType || '—'}</p>
+          <p className="text-sm font-medium text-slate-900 capitalize">{lead.roofType || '-'}</p>
         </div>
         <div className="bg-slate-50 rounded-lg border border-slate-100 p-3">
           <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Homeowner</p>

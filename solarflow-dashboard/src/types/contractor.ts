@@ -56,7 +56,7 @@ export interface Expense {
 export interface Contractor {
   id: string;
   email: string;
-  password?: string; // Removed from client — auth handled by Supabase
+  password?: string; // Removed from client, auth handled by Supabase
   role: 'contractor';
   status: ContractorStatus;
   createdAt: string;
@@ -321,15 +321,15 @@ export interface ContractorJob {
   paymentApprovedAt?: string;
   paymentProcessedAt?: string;
 
-  // Mileage (PowerCare jobs) — cost paid to contractor: $0.54/mi; charged to client: $0.89/mi
+  // Mileage (PowerCare jobs), cost paid to contractor: $0.54/mi; charged to client: $0.89/mi
   miles?: number;
   mileageCost?: number;   // miles × 0.54
   mileageCharge?: number; // miles × 0.89
 
-  // Parts reimbursement — set by contractor, visible to accounting
+  // Parts reimbursement, set by contractor, visible to accounting
   partsReimbursementRequested?: boolean;
 
-  // Upsell referral — contractor flags a sales opportunity on this job
+  // Upsell referral, contractor flags a sales opportunity on this job
   upsellFlagged?: boolean;
   upsellNotes?: string;
   upsellLeadCreated?: boolean;
@@ -339,7 +339,7 @@ export interface ContractorJob {
   payUnit: 'hour' | 'flat';
   totalPay: number;
 
-  // Sync metadata — stamped on every contractor-side edit so cross-device
+  // Sync metadata, stamped on every contractor-side edit so cross-device
   // merges can resolve conflicts last-writer-wins instead of whole-blob clobber.
   updatedAt?: string;
 }

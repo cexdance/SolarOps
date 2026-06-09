@@ -1,4 +1,4 @@
-// SolarOps — RMA Compensation Tracker (standalone page)
+// SolarOps, RMA Compensation Tracker (standalone page)
 import { useState } from 'react';
 import {
   RotateCcw, Users, CheckCircle, Plus, Package, LayoutGrid, List, Calendar, ChevronLeft, ChevronRight,
@@ -371,7 +371,7 @@ export function RMADashboard({
                           {/* RMA # + amount */}
                           <div className="flex items-start justify-between gap-1">
                             <span className={`text-xs font-bold leading-tight ${isPaid ? 'line-through text-slate-400' : 'text-slate-900'}`}>
-                              #{row.entry.rmaNumber || row.entry.caseNumber || '—'}
+                              #{row.entry.rmaNumber || row.entry.caseNumber || '-'}
                             </span>
                             {(row.entry.compensationAmount ?? 0) > 0 && (
                               <span className={`text-[10px] font-bold whitespace-nowrap ${isPaid ? 'text-green-500' : 'text-slate-700'}`}>
@@ -475,10 +475,10 @@ export function RMADashboard({
                   return (
                     <tr key={`${row.job.id}-${row.entry.id}`} className="hover:bg-slate-50 transition-colors">
                       <td className="px-4 py-3 text-sm font-bold text-slate-900 font-mono">
-                        #{row.entry.rmaNumber || row.entry.caseNumber || '—'}
+                        #{row.entry.rmaNumber || row.entry.caseNumber || '-'}
                       </td>
                       <td className="px-4 py-3 text-sm text-slate-600">{row.entry.partDescription}</td>
-                      <td className="px-4 py-3 text-sm text-slate-500">{row.entry.manufacturer || '—'}</td>
+                      <td className="px-4 py-3 text-sm text-slate-500">{row.entry.manufacturer || '-'}</td>
                       <td className="px-4 py-3">
                         {row.customer && (
                           <button

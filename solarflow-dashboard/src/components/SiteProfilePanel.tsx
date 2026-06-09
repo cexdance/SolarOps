@@ -1,4 +1,4 @@
-// Site Profile Panel — full customer window with Overview, Story, Work Orders, Notes
+// Site Profile Panel, full customer window with Overview, Story, Work Orders, Notes
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   X, FileText, MessageSquare, Trash2, Upload, Image, File,
@@ -366,11 +366,11 @@ export const SiteProfilePanel: React.FC<Props> = ({
     setApprovingQuote(true);
     // Change status to WO Pending and log a note
     handleStatusChange('wo_pending');
-    addNote(site.siteId, 'Quote approved — Work Order sent to contractor queue.', currentUserName, []);
+    addNote(site.siteId, 'Quote approved, Work Order sent to contractor queue.', currentUserName, []);
     setProfile(prev => ({
       ...prev,
       clientStatus: 'wo_pending',
-      notes: [{ id: `note-${Date.now()}`, content: 'Quote approved — Work Order sent to contractor queue.', author: currentUserName, createdAt: new Date().toISOString(), attachments: [] }, ...prev.notes],
+      notes: [{ id: `note-${Date.now()}`, content: 'Quote approved, Work Order sent to contractor queue.', author: currentUserName, createdAt: new Date().toISOString(), attachments: [] }, ...prev.notes],
     }));
     setApprovingQuote(false);
     onNavigateToJobs();
@@ -490,17 +490,17 @@ export const SiteProfilePanel: React.FC<Props> = ({
                     ? 'bg-red-50 border-red-200 text-red-700'
                     : 'bg-amber-50 border-amber-200 text-amber-700'}`}>
                   <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-                  <span><span className="font-semibold">{site.alerts} active alert{site.alerts !== 1 ? 's' : ''}</span> — highest impact level {site.highestImpact}</span>
+                  <span><span className="font-semibold">{site.alerts} active alert{site.alerts !== 1 ? 's' : ''}</span>, highest impact level {site.highestImpact}</span>
                 </div>
               )}
 
               {/* Site info grid */}
               <div className="grid grid-cols-2 gap-3">
                 {[
-                  { label: 'Install Date',  value: site.installDate || '—',      icon: Calendar },
-                  { label: 'PTO Date',      value: site.ptoDate || '—',          icon: Calendar },
-                  { label: 'Peak Power',    value: site.peakPower ? `${site.peakPower} kW` : '—', icon: Zap },
-                  { label: 'Last Update',   value: site.lastUpdate?.split(' ')[0] || '—', icon: Clock },
+                  { label: 'Install Date',  value: site.installDate || '-',      icon: Calendar },
+                  { label: 'PTO Date',      value: site.ptoDate || '-',          icon: Calendar },
+                  { label: 'Peak Power',    value: site.peakPower ? `${site.peakPower} kW` : '-', icon: Zap },
+                  { label: 'Last Update',   value: site.lastUpdate?.split(' ')[0] || '-', icon: Clock },
                 ].map(({ label, value, icon: Icon }) => (
                   <div key={label} className="bg-slate-50 rounded-lg p-3">
                     <div className="flex items-center gap-1.5 text-xs text-slate-500 mb-1">
@@ -530,7 +530,7 @@ export const SiteProfilePanel: React.FC<Props> = ({
                     { label: 'Year',     value: site.yearKwh },
                     { label: 'Lifetime', value: site.lifetimeKwh },
                   ].map(({ label, value }) => {
-                    const display = !value ? '—'
+                    const display = !value ? '-'
                       : value >= 1000 ? `${(value / 1000).toFixed(2)} MWh`
                       : `${value.toFixed(1)} kWh`;
                     return (
@@ -761,7 +761,7 @@ export const SiteProfilePanel: React.FC<Props> = ({
         </div>
       </div>
 
-      {/* WorkOrderPanel — stacked over site panel */}
+      {/* WorkOrderPanel, stacked over site panel */}
       {woOpen && (
         <WorkOrderPanel
           job={woTarget}

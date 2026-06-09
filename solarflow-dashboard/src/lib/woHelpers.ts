@@ -1,5 +1,5 @@
 /**
- * Work Order Helpers — Phase 2 Foundation
+ * Work Order Helpers, Phase 2 Foundation
  *
  * These selectors derive contractor-visible views from the single `Job[]`
  * source of truth. Today they are used as read-side helpers; in Phase 2
@@ -38,7 +38,7 @@ const STATUS_MAP: Record<string, JobStatusContractor> = {
 /**
  * Project an admin Job into a ContractorJob view. Used for PDF/email
  * payloads and any code that still expects the ContractorJob shape.
- * This is a read-only projection — mutations should go through handleUpdateJob.
+ * This is a read-only projection, mutations should go through handleUpdateJob.
  */
 export function toContractorJobView(job: Job, existingCj?: ContractorJob): ContractorJob {
   const emptyPhotos: ContractorJob['photos'] = {

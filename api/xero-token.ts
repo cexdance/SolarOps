@@ -12,7 +12,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const body = typeof req.body === 'string' ? req.body : new URLSearchParams(req.body as Record<string, string>).toString();
   const params = new URLSearchParams(body);
 
-  // Never accept client_secret from request — always use server env var
+  // Never accept client_secret from request, always use server env var
   params.delete('client_secret');
   params.set('client_secret', clientSecret);
 

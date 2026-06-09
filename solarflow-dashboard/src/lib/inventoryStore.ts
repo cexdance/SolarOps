@@ -1,4 +1,4 @@
-// Inventory persistence — localStorage + Neon sync
+// Inventory persistence, localStorage + Neon sync
 // Seeds from partsCatalog on first load (if store is empty).
 
 import { InventoryItem } from '../types';
@@ -32,7 +32,7 @@ function seedFromCatalog(): InventoryItem[] {
     id: 'inv-jobsite-panels-001',
     sku: 'PAN-TOPHIKU6',
     partNumber: undefined,
-    name: 'TOPHiKu6 Panel — Job Site',
+    name: 'TOPHiKu6 Panel, Job Site',
     category: 'panel',
     description: '60 TOPHiKu6 panels staged at job site (pending installation)',
     quantity: 60,
@@ -67,7 +67,7 @@ export function saveInventory(items: InventoryItem[]): void {
     localStorage.setItem(INVENTORY_KEY, JSON.stringify(items));
   } catch (err) {
     // QuotaExceededError (e.g. an oversized inline image) must NOT abort the
-    // save and lose the item — fall through to the DB write below.
+    // save and lose the item, fall through to the DB write below.
     console.warn('[inventory] localStorage save failed (likely quota); persisting to DB only', err);
   }
   dbSet(INVENTORY_KEY, items);

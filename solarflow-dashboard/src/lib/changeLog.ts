@@ -1,10 +1,10 @@
 /**
- * SolarOps — Append-Only Change Log
+ * SolarOps, Append-Only Change Log
  *
  * Every mutation (create / update / delete) is recorded here BEFORE
  * touching React state. Entries persist in localStorage and are
  * asynchronously pushed to Supabase. Nothing is ever deleted from
- * this log — it is the authoritative audit trail.
+ * this log, it is the authoritative audit trail.
  *
  * v2: adds device fingerprint (userAgent, platform, screen), upload
  *     timing (durationMs), and typed photo/avatar event helpers.
@@ -25,7 +25,7 @@ export const DEVICE_ID = (() => {
     }
     return id;
   } catch {
-    // iOS Private Mode — generate ephemeral ID
+    // iOS Private Mode, generate ephemeral ID
     return `eph-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
   }
 })();
@@ -75,7 +75,7 @@ function readLog(): ChangeEntry[] {
 function writeLog(entries: ChangeEntry[]): void {
   try {
     localStorage.setItem(LOG_KEY, JSON.stringify(entries.slice(-MAX_ENTRIES)));
-  } catch {} // storage quota: fail silently — log is a bonus, not critical path
+  } catch {} // storage quota: fail silently, log is a bonus, not critical path
 }
 
 // ── Public API ─────────────────────────────────────────────────────────────
@@ -110,7 +110,7 @@ export function logChange(
   log.push(entry);
   writeLog(log);
 
-  // Async Supabase push — does NOT block the UI
+  // Async Supabase push, does NOT block the UI
   pushEntry(entry).catch((e) => console.error('[changeLog] pushEntry to Supabase failed', e));
 
   return entry;
@@ -137,7 +137,7 @@ export async function flushChangeLog(): Promise<void> {
   // getSession() was previously called inside pushEntry for every row, so a
   // 50-entry backlog meant 50 redundant session reads. One check up front.
   const { data: { session } } = await supabase.auth.getSession();
-  if (!session) return; // not logged in — flush on next login
+  if (!session) return; // not logged in, flush on next login
 
   const pending = readLog().filter(e => e.syncedAt === null);
   const BATCH = 10;
@@ -308,6 +308,6 @@ async function pushEntry(entry: ChangeEntry): Promise<void> {
         : e));
     }
   } catch {
-    // Network error — will retry on next flush
+    // Network error, will retry on next flush
   }
 }

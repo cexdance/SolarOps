@@ -1,5 +1,5 @@
 /**
- * SolarOps — Trello Card Proxy
+ * SolarOps, Trello Card Proxy
  *
  * Proxies Trello API calls server-side to:
  *   1. Bypass CORS restrictions (browser cannot fetch Trello API directly)
@@ -21,14 +21,14 @@ const API_TOKEN = (process.env.TRELLO_API_TOKEN || process.env.VITE_TRELLO_TOKEN
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Top-level safety net: if ANYTHING below throws, return a clean 500 instead
-  // of Vercel's FUNCTION_INVOCATION_FAILED page (the previous behavior — an
+  // of Vercel's FUNCTION_INVOCATION_FAILED page (the previous behavior, an
   // un-stringifiable cardId array crashed before the inner try/catch ran).
   try {
     if (req.method !== 'GET') {
       return res.status(405).json({ error: 'Method not allowed' });
     }
 
-    // req.query values are string | string[] | undefined — normalize to string.
+    // req.query values are string | string[] | undefined, normalize to string.
     // Previously typed as `string` and used directly with .match()/.trim(); if a
     // caller (or a duplicated query param) made it an array, the function
     // crashed with "cardId.match is not a function" → FUNCTION_INVOCATION_FAILED.
@@ -42,7 +42,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const idMatch = cardId.match(/trello\.com\/c\/([a-zA-Z0-9]+)/);
     const finalCardId = (idMatch ? idMatch[1] : cardId).trim();
     if (!/^[a-zA-Z0-9]+$/.test(finalCardId)) {
-      return res.status(400).json({ error: 'Invalid cardId — expected an alphanumeric Trello card id or URL.' });
+      return res.status(400).json({ error: 'Invalid cardId, expected an alphanumeric Trello card id or URL.' });
     }
 
     if (!API_KEY || !API_TOKEN) {

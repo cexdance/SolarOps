@@ -1,6 +1,6 @@
-// Master parts catalog — single source of truth for inventory seeding and work-order autocomplete.
+// Master parts catalog, single source of truth for inventory seeding and work-order autocomplete.
 // Services (commission, permitting, NOC, etc.) and installation items (labor, dumpster)
-// are intentionally excluded — they are handled as work-order line items of type 'other'/'labor'.
+// are intentionally excluded, they are handled as work-order line items of type 'other'/'labor'.
 
 import { InventoryCategory, UnitOfMeasure } from '../types';
 
@@ -304,7 +304,7 @@ export const PARTS_CATALOG: CatalogPart[] = [
     description: 'ChemLink eCurb flashing and sealant kit',
   },
 
-  // ── BOS — Electrical / Disconnects / Protection ───────────────────────────────
+  // ── BOS, Electrical / Disconnects / Protection ───────────────────────────────
   {
     id: 'cat-bos-001',
     partNumber: '',

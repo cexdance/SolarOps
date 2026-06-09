@@ -1,4 +1,4 @@
-// Auto-generated from SolarEdge API — do not edit manually
+// Auto-generated from SolarEdge API, do not edit manually
 // Conexsol Florida Group | 191 sites | Fetched live
 export interface SolarEdgeSite {
   siteId: string;

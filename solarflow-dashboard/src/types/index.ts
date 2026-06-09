@@ -89,7 +89,7 @@ export interface Customer {
   systemType?: SystemType;
   clientStatus?: ClientStatus;
   createdAt: string;
-  updatedAt?: string; // last local edit / push time — drives sync conflict resolution
+  updatedAt?: string; // last local edit / push time, drives sync conflict resolution
   notes: string;
   referralSource?: string;
   howFound?: string;
@@ -110,7 +110,7 @@ export interface Customer {
 export interface CustomerFile {
   id: string;
   name: string;
-  url: string;        // authenticated URL — ready to use in <img src> or <a href>
+  url: string;        // authenticated URL, ready to use in <img src> or <a href>
   mimeType: string;
   size?: number;
   source: 'trello' | 'upload';
@@ -122,7 +122,7 @@ export type ServiceType = string;
 export type JobStatus = 'new' | 'assigned' | 'in_progress' | 'completed' | 'invoiced' | 'paid' | 'archived';
 export type UrgencyLevel = 'low' | 'medium' | 'high' | 'critical';
 
-// Extended Work Order status (superset of JobStatus — drives the WO Panel workflow)
+// Extended Work Order status (superset of JobStatus, drives the WO Panel workflow)
 export type WOStatus =
   | 'draft'
   | 'quote_sent'
@@ -211,7 +211,7 @@ export interface Job {
   partsCost: number;
   totalAmount: number;
   createdAt: string;
-  updatedAt?: string; // last local edit / push time — drives sync conflict resolution
+  updatedAt?: string; // last local edit / push time, drives sync conflict resolution
   urgency: UrgencyLevel;
   isPowercare: boolean;
   contractorId?: string;
@@ -242,7 +242,7 @@ export interface Job {
   serviceStatus?: WOServiceStatus;
   requiresFollowUp?: boolean;
   nextSteps?: string;
-  jobCompletion?: number; // 0–100 percent
+  jobCompletion?: number; // 0-100 percent
   // SE Compensation tracking
   seCompensationEligible?: boolean;
   seCompensationAmount?: number;       // total SE comp claimable for this WO
@@ -261,7 +261,7 @@ export interface Job {
   // Serial number tracking (inverter / optimizer swaps)
   oldSerialNumber?: string;
   newSerialNumber?: string;
-  snSyncScheduledAt?: string;   // ISO timestamp — SolarEdge API update due by +2h
+  snSyncScheduledAt?: string;   // ISO timestamp, SolarEdge API update due by +2h
   snSyncCompletedAt?: string;
   // Travel
   travelMiles?: number;
@@ -289,7 +289,7 @@ export interface Job {
   // ── Contractor-entered fields mirrored onto the single source (Phase D) ──────
   // So data.jobs holds the COMPLETE work-order record (parts, signatures,
   // contractor invoice/billing, mileage). These are the durable, per-record-
-  // synced, audit-logged home for what the contractor enters — letting the
+  // synced, audit-logged home for what the contractor enters, letting the
   // contractor view become a pure projection with no separate store to diverge.
   contractorParts?: { id: string; name: string; partNumber: string; quantity: number; unitPrice: number; totalPrice: number }[];
   contractorPartsAmount?: number;
@@ -326,7 +326,7 @@ export interface RMAEntry {
   createdBy: string;
   /** Work order this RMA links to. Absent on standalone RMAs (shown with a red "No work order" flag). */
   linkedJobId?: string;
-  /** Last edit time — used to resolve sync merges of standalone RMAs. */
+  /** Last edit time, used to resolve sync merges of standalone RMAs. */
   updatedAt?: string;
 }
 
@@ -350,7 +350,7 @@ export interface SolarEdgeConfig {
   lastSync?: string;
   siteCount?: number;
   // Rate-limit tracking (SolarEdge allows 300 calls/day)
-  nextSyncAllowed?: string; // ISO datetime — earliest allowed next manual sync
+  nextSyncAllowed?: string; // ISO datetime, earliest allowed next manual sync
   dailyCallCount?: number;  // API calls made on dailyCallDate
   dailyCallDate?: string;   // YYYY-MM-DD UTC date for daily counter reset
 }
@@ -425,7 +425,7 @@ export interface InventoryItem {
   purchaseDate: string;
   createdAt: string;
   imageUrl?: string;
-  /** Receiving / provenance history — each delivery into stock with its proof image and optional RMA match. */
+  /** Receiving / provenance history, each delivery into stock with its proof image and optional RMA match. */
   receipts?: StockReceipt[];
 }
 

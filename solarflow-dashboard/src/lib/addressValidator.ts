@@ -1,5 +1,5 @@
-// SolarOps — Address Validation Utility
-// Uses Nominatim (OpenStreetMap) for free geocoding/validation — no API key required
+// SolarOps, Address Validation Utility
+// Uses Nominatim (OpenStreetMap) for free geocoding/validation, no API key required
 // Rate limit: 1 req/sec (respectful usage with caching)
 
 export interface ValidatedAddress {
@@ -205,7 +205,7 @@ export async function validateAddresses(
 }
 
 /**
- * Quick validation without full geocoding — checks format only
+ * Quick validation without full geocoding, checks format only
  * Use for immediate feedback, then call validateAddress for full validation
  */
 export function quickValidate(input: ValidatedAddress['input']): { valid: boolean; issues: string[] } {

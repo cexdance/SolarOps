@@ -1,5 +1,5 @@
 /**
- * SolarOps — Client-side notification helpers
+ * SolarOps, Client-side notification helpers
  *
  * Fetches, polls, and marks notifications from the Supabase `notifications` table.
  */
@@ -61,7 +61,7 @@ export async function markNotificationReadRemote(id: string): Promise<void> {
       .update({ read: true })
       .eq('id', id);
   } catch {
-    // silently ignore — local state already updated optimistically
+    // silently ignore, local state already updated optimistically
   }
 }
 

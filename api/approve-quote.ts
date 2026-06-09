@@ -1,5 +1,5 @@
 /**
- * SolarOps — Approve Quote (one-click from email)
+ * SolarOps, Approve Quote (one-click from email)
  *
  * GET /api/approve-quote?token=<token>
  *
@@ -8,7 +8,7 @@
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
-// Native fetch — no SDK dependency (avoids Vercel bundling issues)
+// Native fetch, no SDK dependency (avoids Vercel bundling issues)
 const SUPABASE_URL      = 'https://cjmhfagkkayelcsprbai.supabase.co';
 // .trim() strips trailing \n that Vercel env-pull embeds in quoted values
 const SERVICE_ROLE_KEY  = (process.env.SUPABASE_SERVICE_ROLE_KEY ?? '').trim();
@@ -26,7 +26,7 @@ function htmlPage(title: string, message: string, success: boolean) {
 <html>
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>${title} — Conexsol Energy</title>
+  <title>${title}, Conexsol Energy</title>
 </head>
 <body style="margin:0;padding:0;background:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh">
   <div style="background:#fff;border-radius:16px;box-shadow:0 4px 24px rgba(0,0,0,.08);max-width:480px;width:90%;text-align:center;overflow:hidden">

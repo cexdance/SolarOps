@@ -202,7 +202,7 @@ export const Layout: React.FC<LayoutProps> = ({
           >
             <Menu className="w-6 h-6" />
           </button>
-          {/* Logo — cropped wrapper removes PNG whitespace */}
+          {/* Logo, cropped wrapper removes PNG whitespace */}
           <div className="overflow-hidden" style={{ height: 34, width: 150 }}>
             <img
               src="/conexsol-logo.png"
@@ -395,7 +395,7 @@ export const Layout: React.FC<LayoutProps> = ({
               const badge = getBadgeCount(item.badge);
 
               if (item.dispatch) {
-                // DISPATCH — special high-contrast styling
+                // DISPATCH, special high-contrast styling
                 return (
                   <button
                     key={item.id}
@@ -413,7 +413,7 @@ export const Layout: React.FC<LayoutProps> = ({
               }
 
               if (item.indent) {
-                // Collapsible sub-item — only render when parent is expanded
+                // Collapsible sub-item, only render when parent is expanded
                 const parentExpanded = item.parent === 'billing' ? billingExpanded : customersExpanded;
                 if (!parentExpanded) return null;
                 return (
@@ -432,7 +432,7 @@ export const Layout: React.FC<LayoutProps> = ({
                 );
               }
 
-              // Billing — has collapsible Contractor Pay + Service Rates sub-items
+              // Billing, has collapsible Contractor Pay + Service Rates sub-items
               if (item.id === 'billing') {
                 return (
                   <div key={item.id}>
@@ -464,7 +464,7 @@ export const Layout: React.FC<LayoutProps> = ({
                 );
               }
 
-              // Customers — has collapsible SolarEdge sub-item
+              // Customers, has collapsible SolarEdge sub-item
               if (item.id === 'customers') {
                 return (
                   <div key={item.id}>
@@ -513,7 +513,7 @@ export const Layout: React.FC<LayoutProps> = ({
               );
             })}
 
-            {/* My Jobs — shown for dual-role staff/contractor users */}
+            {/* My Jobs, shown for dual-role staff/contractor users */}
             {linkedContractorName && (
               <div className="mt-2 pt-2 border-t border-slate-800">
                 <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Contractor</p>
@@ -569,16 +569,16 @@ export const Layout: React.FC<LayoutProps> = ({
             </div>
           )}
 
-          {/* Version badge — always clickable: check for updates or apply */}
+          {/* Version badge, always clickable: check for updates or apply */}
           <div className="px-4 py-1.5 text-center select-none border-t border-slate-800/60">
             {versionState === 'update-available' ? (
               <button
                 onClick={onUpdate}
-                title={`Update to ${remoteVersion ?? 'latest'} — click to restart`}
+                title={`Update to ${remoteVersion ?? 'latest'}, click to restart`}
                 className="group w-full flex items-center justify-center gap-2 text-[10px] font-semibold text-orange-300 hover:text-white bg-orange-500/10 hover:bg-orange-500/25 rounded-md px-2.5 py-1.5 transition-all cursor-pointer"
               >
                 <Download className="w-3 h-3 animate-bounce" />
-                <span>Update available{remoteVersion ? ` — ${remoteVersion}` : ''}</span>
+                <span>Update available{remoteVersion ? `, ${remoteVersion}` : ''}</span>
               </button>
             ) : (
               <button
@@ -596,7 +596,7 @@ export const Layout: React.FC<LayoutProps> = ({
                 )}
                 <span>
                   {versionState === 'checking' ? 'Checking…' :
-                   versionState === 'up-to-date' ? `${getVersionString()} — up to date` :
+                   versionState === 'up-to-date' ? `${getVersionString()}, up to date` :
                    getVersionString()}
                 </span>
               </button>

@@ -1,4 +1,4 @@
-// SolarOps — Trello Card Importer
+// SolarOps, Trello Card Importer
 // Fetches a Trello card and maps it to SolarOps Customer fields.
 // Uses backend proxy (/api/trello-card.ts) for secure server-side API calls.
 
@@ -196,7 +196,7 @@ export function extractContactInfo(card: TrelloCardData): { phone: string; email
 
 // ── Build Activity entries ─────────────────────────────────────────────────────
 // IDs are derived from the card's stable short key so re-importing the same
-// card produces identical IDs — enabling dedup by ID in importTrelloCard.
+// card produces identical IDs, enabling dedup by ID in importTrelloCard.
 
 export function buildImportActivities(card: TrelloCardData, userName: string): Activity[] {
   const activities: Activity[] = [];
@@ -207,13 +207,13 @@ export function buildImportActivities(card: TrelloCardData, userName: string): A
     activities.push({
       id:          `trello-desc-${cardKey}`,
       type:        'note_added',
-      description: `📋 Trello import — "${card.name}":\n\n${card.desc.trim()}`,
+      description: `📋 Trello import, "${card.name}":\n\n${card.desc.trim()}`,
       timestamp:   now,
       userName,
     });
   }
 
-  // Attachments are imported as real CustomerFile records — no note needed
+  // Attachments are imported as real CustomerFile records, no note needed
 
   card.comments.forEach((c) => {
     // Use author + exact timestamp as stable comment key
@@ -264,7 +264,7 @@ export async function importTrelloCard(
   const existingActivityIds = new Set((customer.activityHistory ?? []).map(a => a.id));
   const activities = allActivities.filter(a => !existingActivityIds.has(a.id));
 
-  // Build CustomerFile records — download each attachment and re-host in Supabase
+  // Build CustomerFile records, download each attachment and re-host in Supabase
   // so the URL is permanent and never blocked by browser CSP or Trello token expiry.
   const cardKey = card.shortUrl.split('/').pop() ?? card.shortUrl;
   const files: CustomerFile[] = await Promise.all(
@@ -296,7 +296,7 @@ export async function importTrelloCard(
   const existingHistory = customer.activityHistory ?? [];
   const updates: Partial<Customer> = {
     trelloBackupUrl: card.shortUrl,
-    // Only prepend net-new activities — skip anything already in the timeline
+    // Only prepend net-new activities, skip anything already in the timeline
     activityHistory: activities.length > 0
       ? [...activities, ...existingHistory]
       : existingHistory,

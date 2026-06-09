@@ -1,6 +1,6 @@
-// RingCentral — deep-link helpers only (no widget, no iframe)
+// RingCentral, deep-link helpers only (no widget, no iframe)
 // Phone numbers throughout the app open the RC desktop/mobile app via URI scheme.
-// rcmobile:// is registered by the RC app on install — no auth or Client ID required.
+// rcmobile:// is registered by the RC app on install, no auth or Client ID required.
 
 export const RC_CLIENT_ID_KEY = 'solarops_rc_client_id';
 export const RC_ENV_KEY       = 'solarops_rc_env';
@@ -72,7 +72,7 @@ export interface RCCallEndData {
   toNumber?: string;
 }
 
-/** No-op — widget removed; returns a no-op cleanup */
+/** No-op, widget removed; returns a no-op cleanup */
 export function onRCCallEnd(_callback: (data: RCCallEndData) => void): () => void {
   return () => {};
 }

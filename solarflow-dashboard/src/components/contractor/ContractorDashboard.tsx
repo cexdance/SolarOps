@@ -174,7 +174,7 @@ export const ContractorDashboard: React.FC<ContractorDashboardProps> = ({
     </div>
   );
 
-  // Status filter chips — label + count for each
+  // Status filter chips, label + count for each
   const statusChips: { id: StatusFilter; label: string }[] = [
     { id: 'all',         label: 'All'         },
     { id: 'assigned',    label: 'Queue'       },

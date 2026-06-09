@@ -5,9 +5,9 @@
  * tombstone filtering, photo-stripping in saveData.
  *
  * dataStore depends on:
- *   - mergedCustomers (large static list) — allowed to run as-is
- *   - solarEdgeSiteFilter — allowed to run as-is
- *   - db (dbSet) — mocked to avoid Supabase calls
+ *   - mergedCustomers (large static list), allowed to run as-is
+ *   - solarEdgeSiteFilter, allowed to run as-is
+ *   - db (dbSet), mocked to avoid Supabase calls
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -89,7 +89,7 @@ function storeState(state: AppState, version?: string): void {
 // loadData
 // ---------------------------------------------------------------------------
 
-describe('loadData — first load (no localStorage)', () => {
+describe('loadData, first load (no localStorage)', () => {
   it('returns a valid AppState with seed customers', () => {
     const state = loadData();
     expect(state).toBeDefined();
@@ -115,7 +115,7 @@ describe('loadData — first load (no localStorage)', () => {
   });
 });
 
-describe('loadData — restoring stored state', () => {
+describe('loadData, restoring stored state', () => {
   it('restores customers from localStorage', () => {
     const c = minCustomer('c-stored');
     const stored = minState({ customers: [c] });
@@ -159,7 +159,7 @@ describe('loadData — restoring stored state', () => {
   });
 });
 
-describe('loadData — corrupted localStorage', () => {
+describe('loadData, corrupted localStorage', () => {
   it('returns seed state when stored JSON is malformed', () => {
     localStorage.setItem(STORAGE_KEY, 'NOT VALID JSON {{{{');
 
@@ -170,10 +170,10 @@ describe('loadData — corrupted localStorage', () => {
 });
 
 // ---------------------------------------------------------------------------
-// loadData — tombstone filtering
+// loadData, tombstone filtering
 // ---------------------------------------------------------------------------
 
-describe('loadData — tombstone filtering', () => {
+describe('loadData, tombstone filtering', () => {
   it('excludes deleted customers from loaded state', () => {
     const c1 = minCustomer('c-kept');
     const c2 = minCustomer('c-deleted');
@@ -189,10 +189,10 @@ describe('loadData — tombstone filtering', () => {
 });
 
 // ---------------------------------------------------------------------------
-// loadData — safe migration (version bump)
+// loadData, safe migration (version bump)
 // ---------------------------------------------------------------------------
 
-describe('loadData — safe migration', () => {
+describe('loadData, safe migration', () => {
   it('does NOT wipe user-created customers on version bump', () => {
     const userCustomer = minCustomer('c-user-created');
     // Store with an OLD version so migration is triggered

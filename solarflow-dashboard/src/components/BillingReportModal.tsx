@@ -1,14 +1,14 @@
 /**
- * BillingReportModal — A4 print-ready billing summary report
+ * BillingReportModal, A4 print-ready billing summary report
  *
  * Triggered from the Billing dashboard via "Print Report" button.
  * Shows summary stats + line-item table for the currently filtered jobs.
  * Logo header matches the SOW report style.
  *
  * Sections:
- *   1. Header — Conexsol logo + report title + generated date
- *   2. Summary — Total / Unbilled / Invoiced / Paid stat boxes
- *   3. Line Items — one row per job (WO#, Client, Service, Date, Status, Amount)
+ *   1. Header, Conexsol logo + report title + generated date
+ *   2. Summary, Total / Unbilled / Invoiced / Paid stat boxes
+ *   3. Line Items, one row per job (WO#, Client, Service, Date, Status, Amount)
  *   4. Totals footer
  */
 
@@ -37,7 +37,7 @@ function fmt(n: number) {
 }
 
 function fmtDate(iso?: string) {
-  if (!iso) return '—';
+  if (!iso) return '-';
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
@@ -222,9 +222,9 @@ export const BillingReportModal: React.FC<Props> = ({
                         `}
                         style={{ gridTemplateColumns: '7rem 1fr 1fr 6rem 5.5rem 5rem 5.5rem 5.5rem' }}
                       >
-                        <p className="font-mono text-[10px] text-slate-500 truncate">{job.woNumber ?? '—'}</p>
+                        <p className="font-mono text-[10px] text-slate-500 truncate">{job.woNumber ?? '-'}</p>
                         <div className="min-w-0">
-                          <p className="font-semibold text-slate-900 truncate">{customer?.name ?? '—'}</p>
+                          <p className="font-semibold text-slate-900 truncate">{customer?.name ?? '-'}</p>
                           {customer?.city && <p className="text-[10px] text-slate-400 truncate">{customer.city}</p>}
                         </div>
                         <p className="text-slate-600 truncate">{job.serviceType}</p>
@@ -232,8 +232,8 @@ export const BillingReportModal: React.FC<Props> = ({
                         <span className={`inline-flex items-center justify-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${st.bg} ${st.text}`}>
                           {st.label}
                         </span>
-                        <p className="text-right text-slate-700">{job.laborHours ? `${job.laborHours}h` : '—'}</p>
-                        <p className="text-right text-slate-700">{job.partsCost > 0 ? `$${fmt(job.partsCost)}` : '—'}</p>
+                        <p className="text-right text-slate-700">{job.laborHours ? `${job.laborHours}h` : '-'}</p>
+                        <p className="text-right text-slate-700">{job.partsCost > 0 ? `$${fmt(job.partsCost)}` : '-'}</p>
                         <p className="text-right font-bold text-slate-900">${fmt(job.totalAmount)}</p>
                       </div>
                     );

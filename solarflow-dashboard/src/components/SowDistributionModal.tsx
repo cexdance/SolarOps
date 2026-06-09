@@ -1,5 +1,5 @@
 /**
- * SOW Distribution Report — v2 (Professional A4 redesign)
+ * SOW Distribution Report, v2 (Professional A4 redesign)
  *
  * Clean, print-ready Scope-of-Work completion report.
  * Auto-triggered when a Work Order is marked "completed".
@@ -7,14 +7,14 @@
  * via @mention notifications.
  *
  * Sections:
- *   1. Header — company logo bar + WO# + completion date
- *   2. Job Details — client, address, service type, dates
- *   3. Manpower — contractor, hours, travel
- *   4. Weather — real weather from Open-Meteo for service date
- *   5. Work Order Notes — job.notes before photos
- *   6. Photos — by category (empty categories skipped)
- *   7. Field Notes — contractor completionNotes
- *   8. Service Report — admin serviceReport
+ *   1. Header, company logo bar + WO# + completion date
+ *   2. Job Details, client, address, service type, dates
+ *   3. Manpower, contractor, hours, travel
+ *   4. Weather, real weather from Open-Meteo for service date
+ *   5. Work Order Notes, job.notes before photos
+ *   6. Photos, by category (empty categories skipped)
+ *   7. Field Notes, contractor completionNotes
+ *   8. Service Report, admin serviceReport
  *   9. Next Steps
  *
  * Print: targets A4 via @page CSS injected in component.
@@ -127,7 +127,7 @@ async function fetchWeatherForDate(address: string, dateISO: string): Promise<We
 
     const daily = wData?.daily;
     // Bail if the forecast is missing. Previously `!daily?.weathercode?.[0] == null`
-    // parsed as `(!value) == null` which is ALWAYS false — the guard never fired and
+    // parsed as `(!value) == null` which is ALWAYS false, the guard never fired and
     // the non-optional accesses below crashed when `daily`/weathercode was absent.
     if (daily?.weathercode?.[0] == null) return null;
 
@@ -157,12 +157,12 @@ function hasWeatherContent(text?: string): boolean {
 // ── Date helpers ──────────────────────────────────────────────────────────────
 
 function formatDate(iso?: string): string {
-  if (!iso) return '—';
+  if (!iso) return '-';
   return new Date(iso).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 }
 
 function formatDateShort(iso?: string): string {
-  if (!iso) return '—';
+  if (!iso) return '-';
   return new Date(iso).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
@@ -210,7 +210,7 @@ const Row: React.FC<{ label: string; value?: string | React.ReactNode; mono?: bo
 );
 
 // ── Print styles injected as <style> ─────────────────────────────────────────
-// IMPORTANT: Do NOT use display:none on the outer modal wrapper — it blocks
+// IMPORTANT: Do NOT use display:none on the outer modal wrapper, it blocks
 // visibility:visible on children. Instead we restyle the overlay in @media print.
 
 const PRINT_STYLE = `
@@ -344,12 +344,12 @@ export const SowDistributionModal: React.FC<Props> = ({
                     className="h-10 w-auto object-contain"
                     style={{ maxWidth: '200px' }}
                   />
-                  <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-widest">Scope of Work — Completion Report</p>
+                  <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-widest">Scope of Work, Completion Report</p>
                 </div>
 
                 {/* Right: WO# + date */}
                 <div className="text-right shrink-0">
-                  <p className="text-base font-black text-slate-900 font-mono">{job.woNumber ?? '—'}</p>
+                  <p className="text-base font-black text-slate-900 font-mono">{job.woNumber ?? '-'}</p>
                   <p className="text-[10px] text-slate-400 mt-0.5">Completed {completedLabel}</p>
                 </div>
               </div>
@@ -357,7 +357,7 @@ export const SowDistributionModal: React.FC<Props> = ({
               {/* ── Job Details ─────────────────────────────────────── */}
               <Section label="Job Details" icon={<Briefcase className="w-3.5 h-3.5" />}>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-10 gap-y-2">
-                  <Row label="Client"    value={<strong>{siteName || customer?.name || '—'}</strong>} wide />
+                  <Row label="Client"    value={<strong>{siteName || customer?.name || '-'}</strong>} wide />
                   <Row label="WO #"      value={job.woNumber} mono wide />
                   <Row label="Address"   value={siteAddress || job.siteAddress} wide />
                   <Row label="Service"   value={job.serviceType} wide />

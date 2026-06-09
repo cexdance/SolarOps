@@ -2,10 +2,10 @@
  * Version Configuration
  *
  * All values are auto-derived at build time by vite.config.ts:
- *   APP_VERSION  — reads `version` from package.json (single source of truth)
- *   BUILD_ID     — unique stamp per build (version+git-sha+epoch); also written to public/version.json
- *   BUILT_AT     — ISO timestamp of the build
- *   DB_VERSION   — mm-dd of the build date (advances automatically per deploy)
+ *   APP_VERSION , reads `version` from package.json (single source of truth)
+ *   BUILD_ID    , unique stamp per build (version+git-sha+epoch); also written to public/version.json
+ *   BUILT_AT    , ISO timestamp of the build
+ *   DB_VERSION  , mm-dd of the build date (advances automatically per deploy)
  *
  * Non-Vite environments (Jest, Node scripts) fall back to package.json import.
  */

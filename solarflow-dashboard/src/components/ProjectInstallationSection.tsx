@@ -1,4 +1,4 @@
-// Section 3 — Installation: weekly schedule, contractor reports, progress
+// Section 3, Installation: weekly schedule, contractor reports, progress
 import React, { useState, useMemo } from 'react';
 import {
   ChevronLeft, ChevronRight, Plus, CheckCircle2, Circle,
@@ -122,7 +122,7 @@ const AddEntryModal: React.FC<{
               <div>
                 <label className="block text-xs font-medium text-slate-500 mb-1">Title</label>
                 <input type="text" value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
-                  placeholder="e.g., Panel installation — Day 1"
+                  placeholder="e.g., Panel installation, Day 1"
                   className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500" />
               </div>
               <div>

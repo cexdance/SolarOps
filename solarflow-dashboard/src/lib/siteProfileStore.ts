@@ -1,4 +1,4 @@
-// Site Profile Store — persists customer story, file attachments, and interaction notes
+// Site Profile Store, persists customer story, file attachments, and interaction notes
 // Stored in localStorage under key: solarops_site_profiles (+ Neon via dbSet)
 
 import { dbSet } from './db';
@@ -25,7 +25,7 @@ export interface SiteAttachment {
   name: string;
   type: string;   // MIME type
   size: number;   // bytes
-  dataUrl?: string; // base64 — stored for images; omitted for large non-image files
+  dataUrl?: string; // base64, stored for images; omitted for large non-image files
   createdAt: string;
 }
 

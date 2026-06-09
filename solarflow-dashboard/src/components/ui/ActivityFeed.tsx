@@ -1,9 +1,9 @@
-// ActivityFeed — shared timeline component
+// ActivityFeed, shared timeline component
 // Used everywhere the team talks: customer comments, work order comments,
 // future to-do threads. Twitter/Trello-style: avatar + name + relative time,
 // full-width body (never truncated), inline edit, reactions, @mention chips.
 //
-// Compose box is intentionally NOT part of this component — each caller wires
+// Compose box is intentionally NOT part of this component, each caller wires
 // its own (Customer notes already has paste-image support, etc.). This file
 // renders the read/edit/react surface only.
 
@@ -38,7 +38,7 @@ interface Props {
   // Only these activity types are user-editable; others are auto-generated
   editableTypes?: Activity['type'][];
   emptyMessage?: string;
-  // Customer/job files — used to resolve thumbnails for legacy comments whose
+  // Customer/job files, used to resolve thumbnails for legacy comments whose
   // attachment is only referenced as "📎 filename" text in the description.
   files?: FeedFile[];
 }
@@ -93,7 +93,7 @@ const MentionBody: React.FC<{
             u.name.toLowerCase() === handle,
           );
           if (!user) {
-            // Unknown mention — render as plain text
+            // Unknown mention, render as plain text
             return <span key={i} className="text-slate-500">{part}</span>;
           }
           return (
@@ -191,7 +191,7 @@ export const ActivityFeed: React.FC<Props> = ({
   onReact,
   onMentionClick,
   editableTypes = ['note_added'],
-  emptyMessage = 'No activity yet — start the conversation below.',
+  emptyMessage = 'No activity yet, start the conversation below.',
   files = [],
 }) => {
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -331,7 +331,7 @@ export const ActivityFeed: React.FC<Props> = ({
                 </div>
               )}
 
-              {/* Attachments — image files render as thumbnails, others as a chip link */}
+              {/* Attachments, image files render as thumbnails, others as a chip link */}
               {!isEditing && attachments.length > 0 && (
                 <div className="flex flex-wrap gap-2 mt-1.5">
                   {attachments.map(att => (

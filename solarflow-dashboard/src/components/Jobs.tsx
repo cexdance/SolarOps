@@ -13,15 +13,15 @@ import { Job, Customer, User as UserType, JobStatus, UrgencyLevel, ServiceType, 
 
 // The board groups by `status`, but RMA/imported work orders often carry a stale
 // or undefined `status` while their real pipeline state lives in `woStatus`.
-// Respect `status` when it's a valid column (so drag-drop — which writes only
-// `status` — keeps working), otherwise derive the column from `woStatus`, and
+// Respect `status` when it's a valid column (so drag-drop, which writes only
+// `status`, keeps working), otherwise derive the column from `woStatus`, and
 // finally fall back to "new" so NO work order is ever invisible on the board.
 const BOARD_COLUMN_STATUSES: JobStatus[] = ['new', 'assigned', 'in_progress', 'completed', 'invoiced', 'paid'];
 function boardStatus(job: Job): JobStatus {
   if (job.status === 'archived') return 'archived' as JobStatus;
   // `woStatus` is the authoritative pipeline stage (the WO panel advances it).
-  // The coarse `status` can drift — e.g. a board drag set it without updating
-  // woStatus — which made the list badge disagree with the panel. Derive the
+  // The coarse `status` can drift, e.g. a board drag set it without updating
+  // woStatus, which made the list badge disagree with the panel. Derive the
   // column from woStatus when present, then fall back to status.
   const fromWo = job.woStatus ? WO_TO_JOB_STATUS[job.woStatus as WOStatus] : undefined;
   if (fromWo) return fromWo;
@@ -29,7 +29,7 @@ function boardStatus(job: Job): JobStatus {
   return 'new';
 }
 // Representative woStatus for each board column, used when a drag moves a card to
-// a column its current woStatus doesn't already map to — keeps status + woStatus
+// a column its current woStatus doesn't already map to, keeps status + woStatus
 // in sync so they can never drift apart again.
 const COLUMN_TO_WOSTATUS: Record<string, WOStatus> = {
   new: 'quote_approved', assigned: 'scheduled', in_progress: 'in_progress',
@@ -355,7 +355,7 @@ export const Jobs: React.FC<JobsProps> = ({
       customer?.address.toLowerCase().includes(searchQuery.toLowerCase()) ||
       job.notes.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStatus = filterStatus === 'all' || boardStatus(job) === filterStatus;
-    // Period filter — uses scheduledDate or createdAt
+    // Period filter, uses scheduledDate or createdAt
     let matchesPeriod = true;
     if (periodRange) {
       const dateStr = job.scheduledDate || job.createdAt;
@@ -584,7 +584,7 @@ export const Jobs: React.FC<JobsProps> = ({
         />
       )}
 
-      {/* Step 3: Edit mode after WO creation — panel stays open */}
+      {/* Step 3: Edit mode after WO creation, panel stays open */}
       {editingCreatedJob && (
         <WorkOrderPanel
           job={editingCreatedJob}
@@ -608,7 +608,7 @@ export const Jobs: React.FC<JobsProps> = ({
   );
 };
 
-// Customer Picker Modal — step 1 of new WO flow
+// Customer Picker Modal, step 1 of new WO flow
 interface CustomerPickerModalProps {
   customers: Customer[];
   onSelect: (customer: Customer) => void;

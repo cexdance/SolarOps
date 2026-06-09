@@ -1,5 +1,5 @@
 /**
- * SolarOps — @mention Notification API
+ * SolarOps, @mention Notification API
  *
  * POST /api/notify
  * Body: { mentionedUserIds: string[], notifierName: string, customerName: string, customerId: string, message: string }
@@ -8,7 +8,7 @@
  * 2. Writes AppNotification rows to Supabase (one per mentioned user)
  * 3. Sends email to each mentioned user via Resend (if RESEND_API_KEY is set)
  *
- * Uses native fetch only — no SDK dependencies (avoids Vercel bundling issues).
+ * Uses native fetch only, no SDK dependencies (avoids Vercel bundling issues).
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
@@ -50,7 +50,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // ── Fetch ONLY the mentioned users by id (targeted lookups) ────────────────
-  // Previously this listed up to 200 users and filtered in-memory — O(all-users)
+  // Previously this listed up to 200 users and filtered in-memory, O(all-users)
   // and silently missed anyone past the page limit. Mentions are typically 1-3
   // users, so fetch each by id directly. Correct and scales to any org size.
   const ids = mentionedUserIds as string[];

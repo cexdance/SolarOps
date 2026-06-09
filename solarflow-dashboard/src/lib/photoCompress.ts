@@ -1,11 +1,11 @@
 /**
  * Resize and re-encode a user-supplied image File to a JPEG dataURL.
  *
- * Phone photos arrive as 3–8 MB JPEGs (or HEIC auto-converted by Safari).
+ * Phone photos arrive as 3-8 MB JPEGs (or HEIC auto-converted by Safari).
  * Stored verbatim as base64, a single Work Order with 5 photos blows past
  * Supabase's practical row/upsert size, which silently kills every sync push.
  * Compressing to a max edge of 1600px @ 0.75 quality drops each photo to
- * ~150–300 KB while staying visually lossless for documentation use.
+ * ~150-300 KB while staying visually lossless for documentation use.
  */
 export async function compressImageToDataUrl(
   file: File,
@@ -17,7 +17,7 @@ export async function compressImageToDataUrl(
   }
 
   // NOTE: do NOT preemptively bail on HEIC/HEIF. iPhone photos are HEIC by
-  // default, and bailing stored the RAW multi-MB file as base64 — a single
+  // default, and bailing stored the RAW multi-MB file as base64, a single
   // photo could blow the ~5MB localStorage cap and trigger "Storage full".
   // loadBitmap() decodes HEIC on iOS Safari via createImageBitmap/<img>; the
   // catch below falls back to the raw file only if decoding genuinely fails.
@@ -39,7 +39,7 @@ export async function compressImageToDataUrl(
 
     return canvas.toDataURL('image/jpeg', quality);
   } catch {
-    // Any canvas/decode failure — fall back to raw dataURL
+    // Any canvas/decode failure, fall back to raw dataURL
     return await fileToDataUrl(file);
   }
 }
@@ -84,7 +84,7 @@ function fileToDataUrl(file: File): Promise<string> {
 
 /**
  * Compress a File to a Blob (JPEG) without the base64 round-trip.
- * Use this when you only need a Blob for upload — saves ~33% memory vs
+ * Use this when you only need a Blob for upload, saves ~33% memory vs
  * compressImageToDataUrl + fetch(dataUrl).blob().
  */
 export async function compressImageToBlob(
@@ -94,7 +94,7 @@ export async function compressImageToBlob(
 ): Promise<Blob> {
   if (!file.type.startsWith('image/')) return file;
 
-  // Do NOT preemptively bail on HEIC/HEIF — loadBitmap decodes it on iOS Safari
+  // Do NOT preemptively bail on HEIC/HEIF, loadBitmap decodes it on iOS Safari
   // via createImageBitmap/<img>, and the catch below uploads the original file
   // only if decoding genuinely fails. Compressing keeps the upload payload small.
   try {
@@ -119,7 +119,7 @@ export async function compressImageToBlob(
     return blob ?? file;
   } catch {
     // Any compression error (HEIC decode failure, canvas SecurityError, etc.)
-    // — upload the original file rather than failing the whole operation.
+    //, upload the original file rather than failing the whole operation.
     return file;
   }
 }

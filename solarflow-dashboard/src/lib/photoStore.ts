@@ -1,5 +1,5 @@
 /**
- * SolarOps — Local Photo Store (IndexedDB)
+ * SolarOps, Local Photo Store (IndexedDB)
  *
  * Append-row photo storage backed by IndexedDB on the device, with a
  * background mirror queue that uploads each row to Supabase Storage.
@@ -24,7 +24,7 @@ import { supabase } from './supabase';
 const DB_NAME    = 'solarops_photos';
 const DB_VERSION = 1;
 const STORE      = 'rows';
-const BUCKET     = 'customer-files'; // aligned with photoStorage.ts — was 'wo-photos'
+const BUCKET     = 'customer-files'; // aligned with photoStorage.ts, was 'wo-photos'
 
 export interface PhotoRow {
   id:           string;
@@ -133,12 +133,12 @@ export async function flushPendingMirrors(): Promise<{ ok: number; failed: numbe
 //     For any photo whose dataUrl is a base64 string and which has no
 //     `photoStoreId` yet, write it as a Blob row in IndexedDB and return a
 //     rewritten array where `dataUrl=''` and `photoStoreId` points at the row.
-//     Idempotent — already-migrated photos pass through unchanged.
+//     Idempotent, already-migrated photos pass through unchanged.
 //
 //   hydrateWoPhotos(photos)
 //     Inverse: for any photo with `photoStoreId` and no `dataUrl`, read the
 //     blob from IndexedDB and produce an object URL so <img src=...> works.
-//     Object URLs are NOT auto-revoked here — caller must `URL.revokeObjectURL`
+//     Object URLs are NOT auto-revoked here, caller must `URL.revokeObjectURL`
 //     when the component unmounts to avoid leaks.
 
 interface WoPhotoLike {

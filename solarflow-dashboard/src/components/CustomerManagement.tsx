@@ -840,7 +840,7 @@ export const CustomerManagement: React.FC<CustomerManagementProps> = ({ currentU
                               )}
                               {interaction.type === 'quote' && (() => {
                                 const urlMatch = interaction.content.match(/https?:\/\/\S+/);
-                                const text = urlMatch ? interaction.content.replace(urlMatch[0], '').replace(/—\s*$/, '').trim() : interaction.content;
+                                const text = urlMatch ? interaction.content.replace(urlMatch[0], '').replace(/-\s*$/, '').trim() : interaction.content;
                                 return (
                                   <div className="text-sm text-slate-700 mt-2">
                                     {text}
@@ -1073,7 +1073,7 @@ const InteractionModal: React.FC<{
               onChange={(e) => setContent(e.target.value)}
               onPaste={handlePaste}
               className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 h-32 resize-none"
-              placeholder={`Enter ${type} details...${type === 'note' ? ' — paste images directly here' : ''}`}
+              placeholder={`Enter ${type} details...${type === 'note' ? ', paste images directly here' : ''}`}
             />
             {/* Pasted image previews */}
             {pastedImages.length > 0 && (

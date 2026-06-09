@@ -1,5 +1,5 @@
 /**
- * LogViewer — Admin audit log panel (Settings page)
+ * LogViewer, Admin audit log panel (Settings page)
  *
  * Reads from localStorage change_log (up to last 100 entries) and
  * displays a color-coded, time-sorted table. Includes a Refresh button
@@ -38,7 +38,7 @@ function relativeTime(iso: string): string {
 // ── Compact payload summary ───────────────────────────────────────────────────
 function payloadSummary(entry: ChangeEntry): string {
   const p = entry.payload as Record<string, unknown> | null;
-  if (!p) return '—';
+  if (!p) return '-';
 
   // Photo events
   if (entry.opType === 'photo.upload_start')   return `${p['name'] ?? '?'} · ${p['type'] ?? '?'} · ${Math.round((p['size'] as number ?? 0) / 1024)}KB`;
@@ -48,9 +48,9 @@ function payloadSummary(entry: ChangeEntry): string {
   if (entry.opType === 'avatar.upload_success') return `✓ avatar updated`;
   if (entry.opType === 'avatar.upload_fail')   return `✗ ${p['error'] ?? 'unknown error'}`;
 
-  // Generic — show first meaningful key
+  // Generic, show first meaningful key
   const keys = Object.keys(p).filter(k => !k.startsWith('_'));
-  if (keys.length === 0) return '—';
+  if (keys.length === 0) return '-';
   const val = p[keys[0]];
   const str = typeof val === 'string' ? val : JSON.stringify(val);
   return str.slice(0, 60) + (str.length > 60 ? '…' : '');

@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
-// Proxy for all Xero API calls — strips /api/xero-api prefix and forwards to api.xero.com
+// Proxy for all Xero API calls, strips /api/xero-api prefix and forwards to api.xero.com
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const auth = req.headers.authorization;
   if (!auth) return res.status(401).json({ error: 'Unauthorized' });

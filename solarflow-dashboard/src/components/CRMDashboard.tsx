@@ -1076,7 +1076,7 @@ const AddLeadModal: React.FC<{
       state: c.leadData['state'] || f.state,
       zip: c.leadData['zip'] || f.zip,
       source: 'solaredge' as LeadSource,
-      notes: `[Imported from RMA Excel — ${ts}]\n\n${c.report}`,
+      notes: `[Imported from RMA Excel, ${ts}]\n\n${c.report}`,
     }));
     setTab('manual');
   };
@@ -1085,7 +1085,7 @@ const AddLeadModal: React.FC<{
   const applyEmail = () => {
     if (!emailParsed) return;
     const ts = new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
-    const noteParts: string[] = [`[SolarEdge Lead — ${ts}]`];
+    const noteParts: string[] = [`[SolarEdge Lead, ${ts}]`];
     if (emailParsed.contractName) noteParts.push(`Contract: ${emailParsed.contractName}`);
     if (emailParsed.hsId) noteParts.push(`HS ID: ${emailParsed.hsId}`);
     if (emailParsed.notes) noteParts.push(`\nCustomer Notes: ${emailParsed.notes}`);
@@ -1130,7 +1130,7 @@ const AddLeadModal: React.FC<{
   const handleParseEmail = () => {
     setEmailError('');
     const result = parseSolarEdgeEmail(emailText);
-    if (!result) { setEmailError('Could not parse — ensure you pasted the full SolarEdge lead email.'); return; }
+    if (!result) { setEmailError('Could not parse, ensure you pasted the full SolarEdge lead email.'); return; }
     setEmailParsed(result);
   };
 
@@ -1253,7 +1253,7 @@ const AddLeadModal: React.FC<{
           {tab === 'excel' && (
             <div className="space-y-5">
               <p className="text-sm text-slate-600">
-                Upload the <strong>SolarEdge RMA Excel</strong> file. Each case will be extracted using the RMA spec — contact info, shipping details, parts table, and work description are all pulled into the Customer Story.
+                Upload the <strong>SolarEdge RMA Excel</strong> file. Each case will be extracted using the RMA spec, contact info, shipping details, parts table, and work description are all pulled into the Customer Story.
               </p>
 
               {/* Drop zone */}
@@ -1281,7 +1281,7 @@ const AddLeadModal: React.FC<{
                   {excelCases.length > 1 && (
                     <div>
                       <label className="block text-sm font-medium text-slate-700 mb-1">
-                        {excelCases.length} cases found — select one:
+                        {excelCases.length} cases found, select one:
                       </label>
                       <select
                         value={excelCaseIdx}
@@ -1290,7 +1290,7 @@ const AddLeadModal: React.FC<{
                       >
                         {excelCases.map((c, i) => (
                           <option key={c.caseNum} value={i}>
-                            Case {c.caseNum} — {c.leadData['firstName']} {c.leadData['lastName']}
+                            Case {c.caseNum}, {c.leadData['firstName']} {c.leadData['lastName']}
                           </option>
                         ))}
                       </select>
@@ -1305,9 +1305,9 @@ const AddLeadModal: React.FC<{
                         <p className="font-semibold text-slate-800">Case {c.caseNum}</p>
                         <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-slate-600">
                           <span><strong>Name:</strong> {c.leadData['firstName']} {c.leadData['lastName']}</span>
-                          <span><strong>Phone:</strong> {c.leadData['phone'] || '—'}</span>
-                          <span><strong>Email:</strong> {c.leadData['email'] || '—'}</span>
-                          <span><strong>Zip:</strong> {c.leadData['zip'] || '—'}</span>
+                          <span><strong>Phone:</strong> {c.leadData['phone'] || '-'}</span>
+                          <span><strong>Email:</strong> {c.leadData['email'] || '-'}</span>
+                          <span><strong>Zip:</strong> {c.leadData['zip'] || '-'}</span>
                         </div>
                         <div className="mt-3">
                           <p className="text-xs font-medium text-slate-500 mb-1">Customer Story Preview:</p>
@@ -1362,9 +1362,9 @@ const AddLeadModal: React.FC<{
                   <p className="font-semibold text-slate-800 text-xs uppercase tracking-wide text-amber-600">Parsed Successfully ✓</p>
                   <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-slate-600">
                     <span><strong>Name:</strong> {emailParsed.firstName} {emailParsed.lastName}</span>
-                    <span><strong>Phone:</strong> {emailParsed.phone || '—'}</span>
-                    <span><strong>Email:</strong> {emailParsed.email || '—'}</span>
-                    <span><strong>ZIP:</strong> {emailParsed.zip || '—'}</span>
+                    <span><strong>Phone:</strong> {emailParsed.phone || '-'}</span>
+                    <span><strong>Email:</strong> {emailParsed.email || '-'}</span>
+                    <span><strong>ZIP:</strong> {emailParsed.zip || '-'}</span>
                     {emailParsed.contractName && <span className="col-span-2"><strong>Contract:</strong> {emailParsed.contractName}</span>}
                     {emailParsed.hsId && <span><strong>HS ID:</strong> {emailParsed.hsId}</span>}
                     {emailParsed.notes && <span className="col-span-2"><strong>Notes:</strong> {emailParsed.notes}</span>}
@@ -1381,7 +1381,7 @@ const AddLeadModal: React.FC<{
           )}
         </div>
 
-        {/* Footer — only show submit on manual tab */}
+        {/* Footer, only show submit on manual tab */}
         <div className="px-6 py-4 border-t border-slate-100 shrink-0 flex gap-2">
           <button type="button" onClick={onClose} className="flex-1 px-4 py-2 border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors text-sm">
             Cancel

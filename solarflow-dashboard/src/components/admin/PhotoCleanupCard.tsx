@@ -37,7 +37,7 @@ export const PhotoCleanupCard: React.FC = () => {
     let state: AppState;
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) throw new Error('No local app state — open the app once before running cleanup.');
+      if (!raw) throw new Error('No local app state, open the app once before running cleanup.');
       state = JSON.parse(raw) as AppState;
     } catch (err) {
       setStatus('error');
@@ -122,7 +122,7 @@ export const PhotoCleanupCard: React.FC = () => {
           <h3 className="font-semibold text-slate-900">Photo storage cleanup</h3>
           <p className="text-sm text-slate-500 mt-0.5">
             Recompresses any Work Order photos still stored at full phone resolution
-            (~3–8 MB each) so they fit in a single Supabase row and sync to other devices.
+            (~3-8 MB each) so they fit in a single Supabase row and sync to other devices.
           </p>
 
           {status === 'running' && progress.total > 0 && (
@@ -136,7 +136,7 @@ export const PhotoCleanupCard: React.FC = () => {
               <div className="flex items-center gap-1.5 font-semibold">
                 <Check className="w-4 h-4" />
                 {result.photosCompressed === 0
-                  ? 'All clear — nothing oversized to rewrite.'
+                  ? 'All clear, nothing oversized to rewrite.'
                   : `Rewrote ${result.photosCompressed} photo${result.photosCompressed === 1 ? '' : 's'}.`}
               </div>
               <div className="text-xs text-emerald-800/90">

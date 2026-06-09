@@ -1,5 +1,5 @@
 /**
- * UserPermissionsPanel — Admin-only staff & permits management (Settings page).
+ * UserPermissionsPanel, Admin-only staff & permits management (Settings page).
  *
  * Lists every staff user, lets an admin grant/revoke granular permits, change
  * roles, create and delete users, and send a set-password / reset email. A

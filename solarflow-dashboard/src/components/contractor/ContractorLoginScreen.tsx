@@ -1,4 +1,4 @@
-// SolarOps — Contractor Login Screen
+// SolarOps, Contractor Login Screen
 // Separate portal with field-worker design: dark, bold, orange energy
 
 import React, { useState, useEffect } from 'react';
@@ -147,7 +147,7 @@ export const ContractorLoginScreen: React.FC<ContractorLoginScreenProps> = ({
   };
 
   // ─────────────────────────────────────────────────────────────────────────
-  // FORGOT — sent confirmation
+  // FORGOT, sent confirmation
   // ─────────────────────────────────────────────────────────────────────────
   if (view === 'sent') {
     return (
@@ -176,7 +176,7 @@ export const ContractorLoginScreen: React.FC<ContractorLoginScreenProps> = ({
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // FORGOT — email input
+  // FORGOT, email input
   // ─────────────────────────────────────────────────────────────────────────
   if (view === 'forgot') {
     return (
@@ -247,7 +247,7 @@ export const ContractorLoginScreen: React.FC<ContractorLoginScreenProps> = ({
               <path d="M12 2C8.686 2 6 4.686 6 8c0 2.09.81 3.98 2.13 5.37L6 22h12l-2.13-8.63A7.96 7.96 0 0 0 18 8c0-3.314-2.686-6-6-6z"/>
               <circle cx="12" cy="8" r="2"/>
             </svg>
-            {passkeyStored ? 'Sign in with Face ID / Touch ID' : 'Face ID available — sign in once to enable'}
+            {passkeyStored ? 'Sign in with Face ID / Touch ID' : 'Face ID available, sign in once to enable'}
           </button>
         )}
 

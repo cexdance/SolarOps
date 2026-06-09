@@ -1,5 +1,5 @@
 /**
- * SolarOps — Sync Engine (Phase 2)
+ * SolarOps, Sync Engine (Phase 2)
  *
  * Architecture: uses the existing `app_data` table (key TEXT PK, value JSONB,
  * updated_at TIMESTAMPTZ). Per-record rows use prefixed keys:
@@ -12,7 +12,7 @@
  *   • No full-array race: writing customer A never touches customer B's row.
  *   • Incremental pull: only fetch rows changed since last sync (updated_at >).
  *   • Supabase Realtime: INSERT/UPDATE on app_data → instant push to all tabs.
- *   • key index already exists (unique constraint) — prefix scans are fast.
+ *   • key index already exists (unique constraint), prefix scans are fast.
  *
  * Backward compat: blob rows (key='customers' etc.) are still written as a
  * fallback so old clients and admin recovery tools continue to work.
@@ -250,7 +250,7 @@ export async function pushKeyValue(key: string, value: unknown): Promise<void> {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
       window.dispatchEvent(new CustomEvent('supabase-sync-error', {
-        detail: { message: 'Session expired — your changes are saved locally but not synced. Please re-login.' },
+        detail: { message: 'Session expired, your changes are saved locally but not synced. Please re-login.' },
       }));
       return;
     }
@@ -307,7 +307,7 @@ function markClean(key: string, value: unknown): void {
   _lastPushed.set(key, JSON.stringify(value));
 }
 
-// ── Full AppState push (Phase 2 — dirty-only) ───────────────────────────────
+// ── Full AppState push (Phase 2, dirty-only) ───────────────────────────────
 
 /**
  * Push changed records from AppState to Supabase.
@@ -319,7 +319,7 @@ export async function pushToSupabase(state: AppState): Promise<void> {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
       window.dispatchEvent(new CustomEvent('supabase-sync-error', {
-        detail: { message: 'Session expired — your changes are saved locally but not synced. Please re-login.' },
+        detail: { message: 'Session expired, your changes are saved locally but not synced. Please re-login.' },
       }));
       return;
     }
@@ -513,7 +513,7 @@ export async function pullFromSupabase(): Promise<Partial<AppState> | null> {
                   if (!existing || (l.updatedAt && existing.updatedAt && l.updatedAt > existing.updatedAt)) {
                     merged[l.id] = l;
                   } else if (!existing) {
-                    merged[l.id] = l; // local-only lead — keep it
+                    merged[l.id] = l; // local-only lead, keep it
                   }
                 }
                 const finalData = { ...remote, leads: Object.values(merged) };
@@ -523,7 +523,7 @@ export async function pullFromSupabase(): Promise<Partial<AppState> | null> {
                   changedKVKeys.push(row.key);
                 }
               } else {
-                // No local data yet — just write remote.
+                // No local data yet, just write remote.
                 const next = JSON.stringify(remote);
                 if (prev !== next) {
                   localStorage.setItem(row.key, next);
@@ -620,7 +620,7 @@ export function mergeRemote(local: AppState, remote: Partial<AppState>): AppStat
     const remoteMap = new Map(remote.customers.map(c => [c.id, c]));
 
     // Merge by ID. On conflict, keep whichever record is newer (LWW). Keep
-    // local-only records — real deletions are handled by the tombstone filter.
+    // local-only records, real deletions are handled by the tombstone filter.
     const merged = new Map(localMap);
     for (const [id, rc] of remoteMap) {
       const lc = localMap.get(id);
@@ -646,7 +646,7 @@ export function mergeRemote(local: AppState, remote: Partial<AppState>): AppStat
       const localJ = localMap.get(id);
       if (!localJ) { merged.set(id, remoteJ); continue; }
       // Last-writer-wins on updatedAt, but always keep whichever copy has more
-      // photos — prevents a stale remote pull (race with an in-flight push) from
+      // photos, prevents a stale remote pull (race with an in-flight push) from
       // wiping locally-uploaded photos regardless of which record wins on time.
       const winner = remoteWins(remoteJ, localJ) ? remoteJ : localJ;
       const remotePhotos = remoteJ.woPhotos ?? [];
@@ -664,17 +664,17 @@ export function mergeRemote(local: AppState, remote: Partial<AppState>): AppStat
       .filter(j => !deletedJobIds.has(j.id));
   }
 
-  // ── SolarEdge extra sites (still blob — low volume, no Realtime needed) ───
+  // ── SolarEdge extra sites (still blob, low volume, no Realtime needed) ───
   let solarEdgeExtraSites = local.solarEdgeExtraSites ?? [];
 
-  // ── SolarEdge config — sync API key across devices ────────────────────────
+  // ── SolarEdge config, sync API key across devices ────────────────────────
   // Remote wins if it has a key and local is empty; otherwise keep local.
   // This lets desktop-saved API keys propagate to mobile automatically.
   const solarEdgeConfig = (remote.solarEdgeConfig?.apiKey && !local.solarEdgeConfig?.apiKey)
     ? { ...local.solarEdgeConfig, ...remote.solarEdgeConfig }
     : local.solarEdgeConfig;
 
-  // ── Standalone RMAs — merge the synced blob by id (newest updatedAt wins) ──
+  // ── Standalone RMAs, merge the synced blob by id (newest updatedAt wins) ──
   const standaloneRmas = (() => {
     const localList = local.standaloneRmas ?? [];
     const remoteList = remote.standaloneRmas ?? [];
@@ -702,7 +702,7 @@ export async function syncOnLogin(localState: AppState): Promise<AppState> {
     if (!remote) return localState;
     const merged = mergeRemote(localState, remote);
     console.info(
-      `[SyncEngine] synced — customers: ${merged.customers.length}, jobs: ${merged.jobs.length}`,
+      `[SyncEngine] synced, customers: ${merged.customers.length}, jobs: ${merged.jobs.length}`,
     );
     return merged;
   } catch (err) {
@@ -841,7 +841,7 @@ export function subscribeToChanges(handlers: RealtimeHandlers): () => void {
       } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
         consecutiveErrors++;
         if (consecutiveErrors >= MAX_REALTIME_ERRORS) {
-          console.warn(`[Realtime] ${consecutiveErrors} consecutive failures — disabling to stop reconnect storm. Poll fallback active.`);
+          console.warn(`[Realtime] ${consecutiveErrors} consecutive failures, disabling to stop reconnect storm. Poll fallback active.`);
           if (realtimeChannel) {
             supabase.removeChannel(realtimeChannel);
             realtimeChannel = null;

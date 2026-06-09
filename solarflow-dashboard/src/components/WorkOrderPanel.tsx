@@ -1,4 +1,4 @@
-// WorkOrderPanel — full WO create/edit slide-over
+// WorkOrderPanel, full WO create/edit slide-over
 // Opened from SiteProfilePanel or SolarEdgeMonitoring
 
 import React, { useState, useRef, useCallback, useMemo, useEffect } from 'react';
@@ -51,7 +51,7 @@ const ACTION_CONFIG: Record<WOStatus, { label: string; color: string } | null> =
   paid:           null,
 };
 
-// Service-account WOs skip the quote flow — admin approval replaces it
+// Service-account WOs skip the quote flow, admin approval replaces it
 const SERVICE_ACCOUNT_ACTIONS: Record<WOStatus, { label: string; color: string; adminOnly?: boolean } | null> = {
   draft:          { label: 'Submit for Admin Approval', color: 'bg-blue-600 hover:bg-blue-700' },
   quote_sent:     { label: 'Approve Expense',           color: 'bg-violet-600 hover:bg-violet-700', adminOnly: true },
@@ -284,8 +284,8 @@ export interface WorkOrderPanelProps {
   siteName: string;
   clientId?: string;
   siteAddress?: string;
-  siteInstallDate?: string; // ISO date — used for SE compensation eligibility check
-  clientPaidJobCount?: number; // number of paid/closed WOs for this client — triggers recurring discount
+  siteInstallDate?: string; // ISO date, used for SE compensation eligibility check
+  clientPaidJobCount?: number; // number of paid/closed WOs for this client, triggers recurring discount
   onClose: () => void;
   onSave: (job: Partial<Job>) => void;
   onDeleteJob?: (jobId: string) => void;
@@ -353,7 +353,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
   const [urgency, setUrgency]       = useState(job?.urgency ?? 'medium');
   const [notes, setNotes]           = useState(job?.notes ?? '');
   const [quoteAmount, setQuoteAmount] = useState<number>(job?.quoteAmount ?? 0);
-  // RMA — pre-populate with PowerCare case number for new WOs
+  // RMA, pre-populate with PowerCare case number for new WOs
   const defaultRmaEntries: RMAEntry[] = (() => {
     if (job?.rmaEntries) return job.rmaEntries;
     if (!job && customer?.isPowerCare && customer.powerCareCaseNumber) {
@@ -438,8 +438,8 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
 
     // Base labour line
     const baseDesc = optimizerCount <= 4
-      ? `Optimizer Replacement — Base Charge (${optimizerCount} optimizer${optimizerCount > 1 ? 's' : ''}, incl. mobilization, diagnostics, commissioning)`
-      : `Optimizer Replacement — Base (4 units) + ${optimizerCount - 4} additional @ $100ea`;
+      ? `Optimizer Replacement, Base Charge (${optimizerCount} optimizer${optimizerCount > 1 ? 's' : ''}, incl. mobilization, diagnostics, commissioning)`
+      : `Optimizer Replacement, Base (4 units) + ${optimizerCount - 4} additional @ $100ea`;
     addItems.push({ id: `opt-base-${Date.now()}`, type: 'labor', description: baseDesc, quantity: 1, unitCost: base, totalCost: base });
 
     // Surcharge line (if any)
@@ -457,14 +457,14 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
     // Critter guard
     if (critterGuard) {
       const cgDesc = critterPanels > 20
-        ? `Critter Guard Installation — up to 20 panels $750 + ${Math.ceil((critterPanels - 20) / 4)} extra sections`
-        : `Critter Guard Installation — up to 20 panels`;
+        ? `Critter Guard Installation, up to 20 panels $750 + ${Math.ceil((critterPanels - 20) / 4)} extra sections`
+        : `Critter Guard Installation, up to 20 panels`;
       addItems.push({ id: `opt-cg-${Date.now()}`, type: 'labor', description: cgDesc, quantity: 1, unitCost: critter, totalCost: critter });
     }
 
     // Detached / difficult access
     if (detachedArray) {
-      addItems.push({ id: `opt-da-${Date.now()}`, type: 'other', description: 'Detached Array / Difficult Access — Custom (price TBD)', quantity: 1, unitCost: 0, totalCost: 0 });
+      addItems.push({ id: `opt-da-${Date.now()}`, type: 'other', description: 'Detached Array / Difficult Access, Custom (price TBD)', quantity: 1, unitCost: 0, totalCost: 0 });
     }
 
     setLineItems(prev => [...prev, ...addItems]);
@@ -473,7 +473,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
   // Line items
   const [lineItems, setLineItems]   = useState<WOLineItem[]>(job?.lineItems ?? []);
 
-  // Stable upload folder — generated once per panel open. New WOs get a UUID
+  // Stable upload folder, generated once per panel open. New WOs get a UUID
   // so photos don't all land in wo-photos/unsaved/. Existing WOs use job.id.
   const stableWoIdRef = useRef<string>(job?.id ?? `wo-${crypto.randomUUID()}`);
 
@@ -483,7 +483,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
-  // Always-fresh ref to handleSave — lets async useCallback closures call the
+  // Always-fresh ref to handleSave, lets async useCallback closures call the
   // CURRENT version of handleSave (with up-to-date woPhotos/lineItems state)
   // instead of the stale version captured when the callback was last created.
   // Assigned below (after handleSave is defined); declared here so it's in scope.
@@ -622,7 +622,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
     }
     try {
       const img = await createImageBitmap(file);
-      // @ts-ignore — BarcodeDetector is not yet in TypeScript lib
+      // @ts-ignore, BarcodeDetector is not yet in TypeScript lib
       const detector = new window.BarcodeDetector({ formats: ['qr_code', 'code_128', 'data_matrix', 'code_39'] });
       const barcodes = await detector.detect(img);
       if (barcodes.length > 0) {
@@ -662,7 +662,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
   const [isServiceAccountExpense, setIsServiceAccountExpense] = useState(job?.isServiceAccountExpense ?? false);
   const isAdmin = currentUserRole === 'admin' || currentUserRole === 'coo';
 
-  // Discount — 10% for any of these types
+  // Discount, 10% for any of these types
   const isRecurringClient = clientPaidJobCount > 2;
   type DiscountType = 'repeating_client' | 'military' | 'friends_family';
   const [discountType, setDiscountType] = useState<DiscountType | ''>(
@@ -672,7 +672,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
 
   // Active tab
   const [activeTab, setActiveTab] = useState<'overview' | 'parts' | 'photos' | 'report' | 'comments' | 'history'>('overview');
-  // WO audit trail (Phase B) — loaded lazily when the History tab is opened.
+  // WO audit trail (Phase B), loaded lazily when the History tab is opened.
   const [historyEntries, setHistoryEntries] = useState<ChangeEntry[] | null>(null);
   const [historyLoading, setHistoryLoading] = useState(false);
   useEffect(() => {
@@ -774,7 +774,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
       if (woStatus === 'quote_sent' && !isAdmin) return;
     } else {
       if (woStatus === 'draft') {
-        // PowerCare work orders skip the quote flow entirely — the plan covers
+        // PowerCare work orders skip the quote flow entirely, the plan covers
         // the work, so no quote is emailed. Advance straight past the preview.
         if (skipQuoteForPowerCare) {
           updateClientStatus(siteId, 'quote_approval');
@@ -803,7 +803,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
     }
 
     setWoStatus(next);
-    // Auto-save so kanban status stays in sync — panel stays open for further editing
+    // Auto-save so kanban status stays in sync, panel stays open for further editing
     handleSave(next, true);
   };
 
@@ -823,7 +823,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
 
   const removeLineItem = (id: string) => setLineItems(prev => prev.filter(i => i.id !== id));
 
-  // Photo upload — compress then push to Supabase Storage; store URL not base64.
+  // Photo upload, compress then push to Supabase Storage; store URL not base64.
   // Uses a stable folder ID (stableWoIdRef) so new WOs don't collide in /unsaved/.
   // Tracks in-flight uploads and auto-saves the WO after each successful upload.
   const handlePhotoFiles = useCallback((files: FileList | null, forceCat?: WOPhoto['category']) => {
@@ -876,7 +876,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
             error: result.error, name: file.name, jobId: stableWoIdRef.current,
           }, undefined, durationMs);
           if (result.error === 'session_expired') {
-            setUploadError('Session expired — please re-login to save photos.');
+            setUploadError('Session expired, please re-login to save photos.');
           } else {
             setUploadError(`Photo upload failed: ${result.error ?? 'unknown error'}`);
           }
@@ -898,7 +898,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
         }, undefined, Date.now() - uploadStart);
         console.error('[WorkOrderPanel] photo upload error', err);
         setUploadError('Photo upload failed. Check your connection.');
-        // Still save — other concurrent uploads may have succeeded.
+        // Still save, other concurrent uploads may have succeeded.
         if (pendingUploads.current.size === 0) {
           setTimeout(() => handleSaveRef.current(undefined, true), 0);
         }
@@ -913,13 +913,13 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
     const photo = woPhotos.find(p => p.id === id);
     // Remove from UI first (optimistic), then persist + delete from Storage
     setWoPhotos(prev => prev.filter(p => p.id !== id));
-    // Persist the deletion immediately — without this the photo comes back on refresh
+    // Persist the deletion immediately, without this the photo comes back on refresh
     setTimeout(() => handleSaveRef.current(undefined, true), 0);
     if (photo?.storageUrl) {
       try {
         await deletePhotoFromStorage(photo.storageUrl);
       } catch (err) {
-        console.error('[WorkOrderPanel] Storage delete failed — object may be orphaned', err);
+        console.error('[WorkOrderPanel] Storage delete failed, object may be orphaned', err);
       }
     }
   };
@@ -975,7 +975,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
     }));
   }, [currentUserName, users]);
 
-  // Paste images from clipboard into notes — they become attached photos under "process"
+  // Paste images from clipboard into notes, they become attached photos under "process"
   const [pasteToast, setPasteToast] = useState<string | null>(null);
   const [pasteError, setPasteError] = useState<string | null>(null);
   const handleNotesPaste = useCallback((e: React.ClipboardEvent<HTMLTextAreaElement>) => {
@@ -986,9 +986,9 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
     fileItems.forEach(async (item) => {
       const file = item.getAsFile();
       if (!file || !file.type.startsWith('image/')) return;
-      // File size guard — Supabase free tier max
+      // File size guard, Supabase free tier max
       if (file.size > 20 * 1024 * 1024) {
-        setPasteError(`Image too large (${Math.round(file.size / 1024 / 1024)}MB) — max 20MB`);
+        setPasteError(`Image too large (${Math.round(file.size / 1024 / 1024)}MB), max 20MB`);
         setTimeout(() => setPasteError(null), 5000);
         return;
       }
@@ -1004,7 +1004,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
         };
         setWoPhotos(prev => [...prev, photo]);
         added++;
-        setPasteToast(`${added} image${added > 1 ? 's' : ''} attached — see Photos tab`);
+        setPasteToast(`${added} image${added > 1 ? 's' : ''} attached, see Photos tab`);
         setTimeout(() => setPasteToast(null), 2500);
         // Upload pasted image to Storage in background
         pendingUploads.current.add(photoId);
@@ -1020,7 +1020,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
         } else {
           // Surface upload failure to user (was silent console.error)
           const errMsg = result.error === 'session_expired'
-            ? 'Session expired — please re-login to save photo'
+            ? 'Session expired, please re-login to save photo'
             : `Photo upload failed: ${result.error || 'Unknown error'}`;
           setPasteError(errMsg);
           setTimeout(() => setPasteError(null), 6000);
@@ -1084,7 +1084,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
     if (deleteStep === 1) { onDeleteJob?.(job!.id); onClose(); }
   };
 
-  // Save — optionally override woStatus (used when auto-saving after stage advance)
+  // Save, optionally override woStatus (used when auto-saving after stage advance)
   const handleSave = (statusOverride?: WOStatus, _keepOpen?: boolean) => {
     const effectiveWoStatus = statusOverride ?? woStatus;
     const { parts, total } = sumLineItems(lineItems);
@@ -1093,7 +1093,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
     const effectiveQuote = applyRecurringDiscount ? baseQuote * 0.9 : baseQuote;
     const partialJob: Partial<Job> = {
       ...(job ?? {}),
-      title: title || `WO – ${siteName}`,
+      title: title || `WO, ${siteName}`,
       serviceType: serviceType as Job['serviceType'],
       status: WO_TO_JOB_STATUS[effectiveWoStatus],
       woStatus: effectiveWoStatus,
@@ -1189,7 +1189,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
           mentionedUserIds: mentionedIds,
           mentionedUserEmails: parseMentionEmails(allText, users as (MentionUser & { email?: string })[]),
           notifierName: currentUserName || 'Staff',
-          context: `${siteName} — ${woLabel}`,
+          context: `${siteName}, ${woLabel}`,
           contextId: siteId,
           contextType: 'workOrder',
           message: allText.trim(),
@@ -1197,7 +1197,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
       }
     }
 
-    // ── SOW Distribution — fires when WO is marked completed ─────────────
+    // ── SOW Distribution, fires when WO is marked completed ─────────────
     // Notify Anthony Lopez, Daniel Matos, Cesar Jurado and auto-open the report.
     const isNowCompleted =
       effectiveWoStatus === 'completed' && job?.woStatus !== 'completed';
@@ -1216,7 +1216,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
           mentionedUserIds: distIds,
           mentionedUserEmails: distEmails,
           notifierName: currentUserName || 'Staff',
-          context: `${siteName} — ${woLabel}`,
+          context: `${siteName}, ${woLabel}`,
           contextId: siteId,
           contextType: 'workOrder',
           message: `✅ Work Order ${woLabel} has been marked COMPLETED for ${siteName}. SOW Distribution Report is ready for review.`,
@@ -1226,7 +1226,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
       setShowSowDistribution(true);
     }
 
-    // Panel always stays open after save — user closes manually
+    // Panel always stays open after save, user closes manually
   };
 
   // Sync the ref on every render so async callbacks always call the fresh handleSave.
@@ -1237,7 +1237,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
   // Computed
   const stageIdx = STAGE_INDEX[woStatus];
   const baseAction = isSiteTransfer ? SITE_TRANSFER_ACTIONS[woStatus] : isServiceAccountExpense ? SERVICE_ACCOUNT_ACTIONS[woStatus] : ACTION_CONFIG[woStatus];
-  // PowerCare draft WOs skip the quote — relabel the button so it's not "Send Quote".
+  // PowerCare draft WOs skip the quote, relabel the button so it's not "Send Quote".
   const action = baseAction && skipQuoteForPowerCare && woStatus === 'draft' && !isSiteTransfer && !isServiceAccountExpense
     ? { ...baseAction, label: 'Advance (No Quote)' }
     : baseAction;
@@ -1388,7 +1388,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                 <span className="text-xs text-slate-400">Will email quote to {customer.email}</span>
               )}
               {!isSiteTransfer && !skipQuoteForPowerCare && woStatus === 'draft' && !customer?.email && (
-                <span className="text-xs text-amber-500">No customer email — add one to send quote</span>
+                <span className="text-xs text-amber-500">No customer email, add one to send quote</span>
               )}
               {isSiteTransfer && woStatus === 'draft' && (
                 <span className="text-xs text-teal-600">Admin agentic workflow · No quote sent · $120 flat fee</span>
@@ -1443,7 +1443,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
           {/* Overview */}
           {activeTab === 'overview' && (
             <div className="p-6 space-y-5">
-              {/* Priority — top of form for quick triage */}
+              {/* Priority, top of form for quick triage */}
               <div>
                 <label className="block text-xs font-medium text-slate-500 mb-1">Priority</label>
                 <div className="flex gap-2">
@@ -1472,11 +1472,11 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                   <input
                     value={title}
                     onChange={e => setTitle(e.target.value)}
-                    placeholder={`WO – ${siteName}`}
+                    placeholder={`WO, ${siteName}`}
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
                   />
                 </div>
-                {/* Service — full width, fed from Excel rate table */}
+                {/* Service, full width, fed from Excel rate table */}
                 <div className="col-span-2">
                   <div className="flex items-center justify-between mb-1">
                     <label className="block text-xs font-medium text-slate-500">Service</label>
@@ -1507,7 +1507,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                           additions.push({
                             id: `li-${Date.now()}-${Math.random().toString(36).slice(2, 6)}-p`,
                             type: 'part',
-                            description: `${rate.serviceName} — parts`,
+                            description: `${rate.serviceName}, parts`,
                             quantity: 1,
                             unitCost: rate.partsCost,
                             totalCost: rate.partsCost,
@@ -1560,7 +1560,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                             return [...prev, {
                               ...newLineItem(),
                               type: 'other' as WOLineItem['type'],
-                              description: 'Site Transfer — SolarEdge ownership transfer (admin agentic workflow)',
+                              description: 'Site Transfer, SolarEdge ownership transfer (admin agentic workflow)',
                               quantity: 1,
                               unitCost: 120,
                               totalCost: 120,
@@ -1581,7 +1581,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                     if (!rate) return null;
                     return (
                       <p className="text-xs text-slate-400 mt-1">
-                        {rate.estimatedHours ? `~${rate.estimatedHours}h` : 'Variable'} · Labor ${rate.laborCost ? `$${rate.laborCost}` : '—'}
+                        {rate.estimatedHours ? `~${rate.estimatedHours}h` : 'Variable'} · Labor ${rate.laborCost ? `$${rate.laborCost}` : '-'}
                         {rate.partsCost ? ` · Parts ~$${rate.partsCost}` : ''}
                         {rate.clientRateStandard ? ` · Client $${rate.clientRateStandard}` : ''}
                         {rate.isPowercareEligible ? ' · PowerCare eligible' : ''}
@@ -1610,11 +1610,11 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                 </div>
               </div>
 
-              {/* Contractor — hidden for Site Transfer (admin-team-only WO) */}
+              {/* Contractor, hidden for Site Transfer (admin-team-only WO) */}
               {isSiteTransfer && (
                 <div className="flex items-center gap-2 rounded-lg bg-teal-50 border border-teal-200 px-3 py-2">
                   <svg className="w-4 h-4 text-teal-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
-                  <p className="text-xs text-teal-700 font-medium">Handled by admin team — no contractor assigned</p>
+                  <p className="text-xs text-teal-700 font-medium">Handled by admin team, no contractor assigned</p>
                 </div>
               )}
 
@@ -1632,7 +1632,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                   {stMissingOne && (
                     <div className="flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 p-3">
                       <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-                      <p className="text-xs text-amber-700">Only one identifier provided — contact SolarEdge support for the missing {!stInverterSerial ? 'Inverter Serial Number' : 'Site ID'}.</p>
+                      <p className="text-xs text-amber-700">Only one identifier provided, contact SolarEdge support for the missing {!stInverterSerial ? 'Inverter Serial Number' : 'Site ID'}.</p>
                     </div>
                   )}
 
@@ -1726,7 +1726,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                     onChange={e => setAssignedContractorId(e.target.value)}
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 cursor-pointer"
                   >
-                    <option value="">— Unassigned —</option>
+                    <option value="">- Unassigned -</option>
                     {approvedContractors.map(c => (
                       <option key={c.id} value={c.id}>{c.contactName} · {c.businessName}</option>
                     ))}
@@ -1824,7 +1824,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
               {woStatus === 'quote_approved' && !assignedContractorId && (
                 <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-700">
                   <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
-                  <span>Assign a contractor before scheduling — required to dispatch the job.</span>
+                  <span>Assign a contractor before scheduling, required to dispatch the job.</span>
                 </div>
               )}
 
@@ -1834,7 +1834,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                 {isRecurringClient && discountType === '' && (
                   <p className="text-xs text-emerald-600 mb-1.5 flex items-center gap-1">
                     <Users className="w-3.5 h-3.5" />
-                    {clientPaidJobCount} completed jobs — eligible for repeating client discount
+                    {clientPaidJobCount} completed jobs, eligible for repeating client discount
                   </p>
                 )}
                 <div className="grid grid-cols-2 gap-2">
@@ -1907,7 +1907,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                     onChange={e => setIsServiceAccountExpense(e.target.checked)}
                     className="w-4 h-4 rounded border-slate-300 accent-blue-600"
                   />
-                  <span className="font-medium">Service Account Expense (internal — not billed to client)</span>
+                  <span className="font-medium">Service Account Expense (internal, not billed to client)</span>
                 </label>
               </div>
               {isServiceAccountExpense && (
@@ -1929,7 +1929,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
               <div>
                 <label className="block text-xs font-medium text-slate-500 mb-1">
                   Scope of Work / Notes
-                  {users.length > 0 && <span className="ml-1 text-slate-400 font-normal">— type @ to mention · Ctrl/Cmd+V to paste images</span>}
+                  {users.length > 0 && <span className="ml-1 text-slate-400 font-normal">- type @ to mention · Ctrl/Cmd+V to paste images</span>}
                 </label>
                 <MentionTextarea
                   value={notes}
@@ -1948,13 +1948,13 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                 )}
               </div>
 
-              {/* SE Compensation banner — shown when warranty SolarEdge parts added + site < 5 yrs */}
+              {/* SE Compensation banner, shown when warranty SolarEdge parts added + site < 5 yrs */}
               {seCompEligible && (
                 <div className="flex items-start gap-2 px-3 py-2.5 bg-yellow-50 border border-yellow-300 rounded-lg text-xs text-yellow-900">
                   <Zap className="w-4 h-4 flex-shrink-0 mt-0.5 text-yellow-600" />
                   <div className="flex-1">
                     <p className="font-semibold">
-                      SE Compensation Eligible — site is {siteAgeYears!.toFixed(1)} years old
+                      SE Compensation Eligible, site is {siteAgeYears!.toFixed(1)} years old
                     </p>
                     <p className="mt-0.5 text-yellow-800">
                       SolarEdge compensates for warranty parts on systems &lt; 5 years old.
@@ -1978,11 +1978,11 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                 <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Site Info</p>
                 <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
                   <span className="text-slate-500">Client ID</span>
-                  <span className="font-mono text-slate-800">{clientId ?? '—'}</span>
+                  <span className="font-mono text-slate-800">{clientId ?? '-'}</span>
                   <span className="text-slate-500">Site ID</span>
                   <span className="font-mono text-slate-800">{siteId}</span>
                   <span className="text-slate-500">Address</span>
-                  <span className="text-slate-800">{siteAddress ?? '—'}</span>
+                  <span className="text-slate-800">{siteAddress ?? '-'}</span>
                 </div>
               </div>
             </div>
@@ -2012,7 +2012,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                       />
                       <p className="text-[10px] text-slate-400 mt-0.5">
                         {optCalc.optimizerCount <= 4
-                          ? `$450 flat (covers 1–4)`
+                          ? `$450 flat (covers 1-4)`
                           : `$450 + ${optCalc.optimizerCount - 4}×$100 extra`}
                       </p>
                     </div>
@@ -2196,7 +2196,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                             </td>
                           </tr>
 
-                          {/* Warranty sub-row — expands when "Warranty" is checked */}
+                          {/* Warranty sub-row, expands when "Warranty" is checked */}
                           {item.type === 'part' && item.isWarrantyPart && (
                             <tr className="bg-orange-50/60">
                               <td colSpan={6} className="px-4 py-2.5">
@@ -2234,11 +2234,11 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                                 </div>
                                 {item.manufacturer?.toLowerCase().includes('solaredge') && (item.seCompAmount ?? 0) > 0 && siteAgeYears !== null && siteAgeYears < 5 && (
                                   <p className="text-[10px] text-yellow-700 mt-1.5 font-medium">
-                                    ⚡ SE Compensation of ${item.seCompAmount} is claimable — site is {siteAgeYears.toFixed(1)} yrs old.
+                                    ⚡ SE Compensation of ${item.seCompAmount} is claimable, site is {siteAgeYears.toFixed(1)} yrs old.
                                   </p>
                                 )}
                                 {item.manufacturer?.toLowerCase().includes('solaredge') && siteAgeYears !== null && siteAgeYears >= 5 && (
-                                  <p className="text-[10px] text-slate-500 mt-1.5">Site is {siteAgeYears.toFixed(1)} yrs old — outside the 5-year SE compensation window.</p>
+                                  <p className="text-[10px] text-slate-500 mt-1.5">Site is {siteAgeYears.toFixed(1)} yrs old, outside the 5-year SE compensation window.</p>
                                 )}
                               </td>
                             </tr>
@@ -2365,7 +2365,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                     {rmaEntries.map(entry => (
                       <div key={entry.id} className="flex items-start justify-between bg-white rounded-lg border border-slate-200 px-3 py-2 text-xs">
                         <div className="space-y-0.5">
-                          <p className="font-semibold text-slate-800">{entry.manufacturer} — {entry.partDescription}</p>
+                          <p className="font-semibold text-slate-800">{entry.manufacturer}, {entry.partDescription}</p>
                           <p className="text-slate-500">
                             {entry.rmaNumber && <span className="font-mono">{entry.rmaNumber}</span>}
                             {!entry.rmaNumber && entry.caseNumber && <span className="font-mono">{entry.caseNumber}</span>}
@@ -2396,7 +2396,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
 
               {/* Profit Breakdown Summary */}
               {(lineItems.length > 0 || contractorPayRate > 0 || quoteAmount > 0) && (() => {
-                // Default contractor labor fee — always counted as cost even without a labor line item.
+                // Default contractor labor fee, always counted as cost even without a labor line item.
                 // Labor line items are EXTRA labor on top of the baseline pay.
                 const baseLabor = contractorPayUnit === 'flat'
                   ? contractorPayRate
@@ -2568,7 +2568,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                   iOS Safari/Chrome blocks programmatic input.click() from div onClick handlers.
                   Using <label htmlFor> is the only reliable cross-platform pattern.
                   capture="environment" is intentionally omitted so users can choose between
-                  camera, photo library, and files — not just the rear camera.
+                  camera, photo library, and files, not just the rear camera.
                 */}
                 <label htmlFor="wo-photo-upload" className="flex flex-col items-center gap-3 cursor-pointer w-full">
                   <div className="flex items-center gap-4">
@@ -2621,7 +2621,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                 </div>
               )}
 
-              {/* Hint — shown when photos exist and not in select mode */}
+              {/* Hint, shown when photos exist and not in select mode */}
               {woPhotos.length > 0 && !selectMode && (
                 <p className="text-[10px] text-slate-400 text-center flex items-center justify-center gap-1">
                   <FolderOpen className="w-3 h-3" />
@@ -2629,7 +2629,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                 </p>
               )}
 
-              {/* ── Photo grid — grouped by category ───────────────────── */}
+              {/* ── Photo grid, grouped by category ───────────────────── */}
               {PHOTO_CATEGORIES.map(cat => {
                 const photos = photosByCategory[cat];
                 if (photos.length === 0) return null;
@@ -2675,7 +2675,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                               className="w-full h-full object-cover"
                             />
 
-                            {/* Checkbox — select mode only */}
+                            {/* Checkbox, select mode only */}
                             {selectMode && (
                               <div className={`absolute top-2 left-2 w-6 h-6 rounded-full border-2 flex items-center justify-center pointer-events-none transition-colors ${
                                 isSelected ? 'bg-orange-500 border-orange-500' : 'bg-white/80 border-white'
@@ -2684,7 +2684,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                               </div>
                             )}
 
-                            {/* Delete — not in select mode, always visible on mobile */}
+                            {/* Delete, not in select mode, always visible on mobile */}
                             {!selectMode && !isEditingCat && (
                               <button
                                 onClick={e => { e.stopPropagation(); cancelLongPress(); removePhoto(photo.id); }}
@@ -2694,10 +2694,10 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                               </button>
                             )}
 
-                            {/* Bottom bar — category chip (tap) or inline category picker */}
+                            {/* Bottom bar, category chip (tap) or inline category picker */}
                             <div className="absolute bottom-0 left-0 right-0">
                               {isEditingCat ? (
-                                /* Inline picker — tap to reassign this single photo */
+                                /* Inline picker, tap to reassign this single photo */
                                 <div
                                   className="bg-black/90 px-2 py-2.5 flex gap-1.5 flex-wrap justify-center"
                                   onClick={e => e.stopPropagation()}
@@ -2739,7 +2739,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                         );
                       })}
 
-                      {/* Per-category add button — label/input for iOS compatibility */}
+                      {/* Per-category add button, label/input for iOS compatibility */}
                       <label
                         htmlFor={`wo-photo-add-${cat}`}
                         className="aspect-square rounded-xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center gap-1 hover:border-orange-300 hover:bg-orange-50 transition-colors cursor-pointer text-slate-400 hover:text-orange-500"
@@ -2790,7 +2790,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
               <div>
                 <label className="block text-xs font-medium text-slate-500 mb-1">
                   Service Report Notes
-                  {users.length > 0 && <span className="ml-1 text-slate-400 font-normal">— type @ to mention a teammate</span>}
+                  {users.length > 0 && <span className="ml-1 text-slate-400 font-normal">- type @ to mention a teammate</span>}
                 </label>
                 <MentionTextarea
                   value={serviceReport}
@@ -2935,13 +2935,13 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                   onMentionClick={(userId) => {
                     const u = (users ?? []).find((x) => x.id === userId) as FeedUser | undefined;
                     if (u) {
-                      // Could navigate to user profile in future — for now show info
+                      // Could navigate to user profile in future, for now show info
                       const username = u.username;
                       const role = u.role;
                       alert(`${u.name}${username ? ' (@' + username + ')' : ''}${role ? '\nRole: ' + role : ''}`);
                     }
                   }}
-                  emptyMessage="No comments yet — start the conversation by posting an update above."
+                  emptyMessage="No comments yet, start the conversation by posting an update above."
                 />
               </div>
             </div>
@@ -2951,7 +2951,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
             <div className="p-6 space-y-3">
               <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
                 <History className="w-3.5 h-3.5" />
-                Change History — who created, modified, or updated this work order
+                Change History, who created, modified, or updated this work order
               </p>
               {historyLoading && !historyEntries && (
                 <p className="text-sm text-slate-400 py-6 text-center">Loading history…</p>
@@ -3006,7 +3006,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                 Preview Report
               </button>
             )}
-            {/* SOW Distribution Report — always accessible once a WO exists */}
+            {/* SOW Distribution Report, always accessible once a WO exists */}
             {!isNew && (
               <button
                 onClick={() => setShowSowDistribution(true)}
@@ -3151,7 +3151,7 @@ export const WorkOrderPanel: React.FC<WorkOrderPanelProps> = ({
                       <div className="w-6 h-6 rounded-full bg-teal-500 flex items-center justify-center shrink-0">
                         <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
                       </div>
-                      <p className="text-xs font-bold text-teal-800 uppercase tracking-widest">Site Transfer — Admin Agentic Workflow</p>
+                      <p className="text-xs font-bold text-teal-800 uppercase tracking-widest">Site Transfer, Admin Agentic Workflow</p>
                     </div>
 
                     {/* Missing-data warning */}

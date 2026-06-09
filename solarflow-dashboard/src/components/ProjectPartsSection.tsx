@@ -1,4 +1,4 @@
-// Section 2 — Equipment & BOM (Parts) for Solar Project workflow
+// Section 2, Equipment & BOM (Parts) for Solar Project workflow
 import React, { useState, useMemo, useRef } from 'react';
 import {
   ChevronDown, ChevronUp, Plus, X, CheckCircle2, Link2,
@@ -742,11 +742,11 @@ const MetricsBar: React.FC<{ parts: ProjectPart[] }> = ({ parts }) => {
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 bg-white rounded-xl border border-slate-200">
       <div>
         <div className="text-xs text-slate-500 mb-0.5">System Size</div>
-        <div className="font-bold text-slate-900">{kwdc > 0 ? `${kwdc.toFixed(2)} kWdc` : '—'}</div>
+        <div className="font-bold text-slate-900">{kwdc > 0 ? `${kwdc.toFixed(2)} kWdc` : '-'}</div>
       </div>
       <div>
         <div className="text-xs text-slate-500 mb-0.5">Total Cost</div>
-        <div className="font-bold text-slate-900">{totalCost > 0 ? fmt(totalCost) : '—'}</div>
+        <div className="font-bold text-slate-900">{totalCost > 0 ? fmt(totalCost) : '-'}</div>
       </div>
       {kwdc > 0 && totalCost > 0 && (
         <div>

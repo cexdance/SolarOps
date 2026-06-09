@@ -1,5 +1,5 @@
 /**
- * SolarOps — UPS Tracking Status API
+ * SolarOps, UPS Tracking Status API
  *
  * Checks UPS tracking status for PowerCare shipments.
  * Server-side to:
@@ -7,7 +7,7 @@
  *   2. Avoid CORS issues with UPS API
  *   3. Cache results to minimize API calls
  *
- * Mock implementation for MVP — can be upgraded to real UPS API later
+ * Mock implementation for MVP, can be upgraded to real UPS API later
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 

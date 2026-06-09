@@ -1,7 +1,7 @@
 /**
  * Tests for src/lib/outbox.ts
  *
- * Strategy: outbox only touches localStorage and navigator.onLine — no Supabase
+ * Strategy: outbox only touches localStorage and navigator.onLine, no Supabase
  * calls in the pure API functions. drainOutbox() imports syncEngine lazily, so
  * we mock those modules to keep tests isolated.
  */
@@ -259,7 +259,7 @@ describe('drainOutbox', () => {
     markPushPending('err');
 
     // Re-import to pick up mocks (drainOutbox uses dynamic import internally)
-    // We call the real drainOutbox — it resolves the mock via dynamic import
+    // We call the real drainOutbox, it resolves the mock via dynamic import
     const result = await drainOutbox();
     // If mocks aren't picked up by the lazy import inside drainOutbox,
     // the call will fail and return false. Either outcome documents behavior.
@@ -276,7 +276,7 @@ describe('drainOutbox', () => {
     const result = await drainOutbox();
 
     if (!result) {
-      // Either offline path or error path — attempts should be same or incremented
+      // Either offline path or error path, attempts should be same or incremented
       expect(getPendingAttempts()).toBeGreaterThanOrEqual(attemptsBefore);
     }
   });

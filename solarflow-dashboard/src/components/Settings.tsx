@@ -78,7 +78,7 @@ export const Settings: React.FC<SettingsProps> = ({
         onUpdateAvatar?.(bustUrl);
       } else if (result.error === 'session_expired') {
         logUpload('avatar.upload_fail', currentUser?.id ?? 'unknown', { error: 'session_expired' }, userEmail, Date.now() - uploadStart);
-        setAvatarError('Session expired — please re-login.');
+        setAvatarError('Session expired, please re-login.');
       } else {
         logUpload('avatar.upload_fail', currentUser?.id ?? 'unknown', { error: result.error }, userEmail, Date.now() - uploadStart);
         setAvatarError('Avatar upload failed. Try again.');
@@ -367,7 +367,7 @@ export const Settings: React.FC<SettingsProps> = ({
                         )}
                         {dailyLimitHit && (
                           <p className="text-xs text-red-500">
-                            Daily limit reached — resets at midnight UTC
+                            Daily limit reached, resets at midnight UTC
                           </p>
                         )}
                       </>
@@ -475,7 +475,7 @@ export const Settings: React.FC<SettingsProps> = ({
               <div>
                 <p className="font-medium text-slate-900">Email (SMTP)</p>
                 {smtpSaved && !showSmtpSetup
-                  ? <p className="text-sm text-green-600">Configured — {smtpUser}</p>
+                  ? <p className="text-sm text-green-600">Configured, {smtpUser}</p>
                   : <p className="text-sm text-slate-500">Send client reports directly from SolarOps</p>
                 }
               </div>
@@ -621,25 +621,25 @@ export const Settings: React.FC<SettingsProps> = ({
         />
       </div>
 
-      {/* Maintenance — admin only */}
+      {/* Maintenance, admin only */}
       {currentUser?.role === 'admin' && (
         <div className="mb-6">
           <PhotoCleanupCard />
         </div>
       )}
 
-      {/* User Permissions — requires users.manage permit */}
+      {/* User Permissions, requires users.manage permit */}
       {canManageUsers(currentUser) && (
         <UserPermissionsPanel currentUser={currentUser} onNavigate={onNavigateToEntity} />
       )}
 
-      {/* Activity Log — admin only */}
+      {/* Activity Log, admin only */}
       {currentUser?.role === 'admin' && (
         <div className="bg-white rounded-xl border border-slate-200 mb-6">
           <div className="p-4 border-b border-slate-100">
             <h3 className="font-semibold text-slate-900">Activity Log</h3>
             <p className="text-xs text-slate-500 mt-0.5">
-              Last 100 events from this device — photo uploads, record changes, errors
+              Last 100 events from this device, photo uploads, record changes, errors
             </p>
           </div>
           <div className="p-4">

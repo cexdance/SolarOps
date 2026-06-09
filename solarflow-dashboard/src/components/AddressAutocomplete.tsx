@@ -1,4 +1,4 @@
-// AddressAutocomplete — Google Places-backed address input
+// AddressAutocomplete, Google Places-backed address input
 // Reads API key from localStorage (solarops_gmaps_key).
 // Falls back to a plain input if no key is set or if the API fails.
 import React, { useRef, useEffect, useCallback } from 'react';
@@ -84,7 +84,7 @@ export function loadGoogleMaps(apiKey: string): Promise<void> {
     };
     script.onerror = () => {
       globalState = 'error';
-      const err = new Error('Google Maps failed to load — check your API key');
+      const err = new Error('Google Maps failed to load, check your API key');
       pendingRejectors.forEach(r => r(err));
       pendingResolvers.length = 0;
       pendingRejectors.length = 0;
@@ -149,7 +149,7 @@ export const AddressAutocomplete: React.FC<Props> = ({
     const apiKey = sessionStorage.getItem(GMAPS_KEY_STORAGE)
       || (import.meta.env['VITE_GOOGLE_MAPS_API_KEY'] as string)
       || '';
-    if (!apiKey) return; // no key — plain input mode
+    if (!apiKey) return; // no key, plain input mode
 
     if (globalState === 'ready') {
       initAC();
@@ -193,7 +193,7 @@ export const AddressAutocomplete: React.FC<Props> = ({
         <CheckCircle2 className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-500" />
       )}
       {hasKey && status === 'error' && (
-        <span className="absolute right-2.5 top-1/2 -translate-y-1/2" title="Maps unavailable — check API key in Settings">
+        <span className="absolute right-2.5 top-1/2 -translate-y-1/2" title="Maps unavailable, check API key in Settings">
           <AlertCircle className="w-4 h-4 text-amber-400" />
         </span>
       )}

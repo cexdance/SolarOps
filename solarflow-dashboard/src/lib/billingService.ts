@@ -120,7 +120,7 @@ export function processBillingTimers(jobs: Job[]): BillingResult {
         j.contractorAutoPayAt = new Date().toISOString();
         ADMIN_USER_IDS.forEach(uid => newNotifications.push(makeNotif(
           uid, 'contractor_autopay', 'Contractor Auto-Pay Triggered',
-          `WO ${label}: 28 days since completion — contractor auto-pay triggered regardless of client payment status.`,
+          `WO ${label}: 28 days since completion, contractor auto-pay triggered regardless of client payment status.`,
           job.id, j.contractorId,
         )));
       }

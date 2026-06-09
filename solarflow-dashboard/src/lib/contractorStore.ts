@@ -124,7 +124,7 @@ const defaultServiceRates: ServiceRate[] = [
     id: 'sr-8',
     serviceCode: 'OPT-CHANGE',
     serviceName: 'Optimizer / Microinverter Change',
-    description: 'Optimizer or microinverter replacement — $180 base (up to 4 units), $60 each additional. Serial # + voltage test photo required per unit.',
+    description: 'Optimizer or microinverter replacement, $180 base (up to 4 units), $60 each additional. Serial # + voltage test photo required per unit.',
     estimatedHours: 3,
     laborCost: 120,
     partsCost: 0,
@@ -172,7 +172,7 @@ const defaultServiceRates: ServiceRate[] = [
     id: 'sr-12',
     serviceCode: 'DELIVERY',
     serviceName: 'Delivery Run up to 100 miles',
-    description: 'Internal delivery service within 100 miles — billed to service account, not client. Requires admin approval.',
+    description: 'Internal delivery service within 100 miles, billed to service account, not client. Requires admin approval.',
     estimatedHours: 2,
     laborCost: 60,
     partsCost: 0,
@@ -204,8 +204,8 @@ const defaultServiceRates: ServiceRate[] = [
   {
     id: 'sr-14',
     serviceCode: 'BATTERY-CHG-STD',
-    serviceName: 'Battery Change – Standard (w/ PowerCare)',
-    description: 'Complete battery replacement including disposal and return. PowerCare eligible — client rate $1,200, PowerCare rate $770.',
+    serviceName: 'Battery Change, Standard (w/ PowerCare)',
+    description: 'Complete battery replacement including disposal and return. PowerCare eligible, client rate $1,200, PowerCare rate $770.',
     estimatedHours: 4,
     laborCost: 500,
     partsCost: 0,
@@ -268,7 +268,7 @@ const defaultServiceRates: ServiceRate[] = [
   {
     id: 'sr-18',
     serviceCode: 'BATTERY-CHG-DIRECT',
-    serviceName: 'Battery Change – Direct Client (no PowerCare)',
+    serviceName: 'Battery Change, Direct Client (no PowerCare)',
     description: 'Battery replacement for clients not under PowerCare. Includes disposal and return. Client rate $1,000.',
     estimatedHours: 4,
     laborCost: 500,
@@ -301,7 +301,7 @@ const defaultServiceRates: ServiceRate[] = [
     id: 'sr-20',
     serviceCode: 'SITE-TRX',
     serviceName: 'Site Transfer',
-    description: 'SolarEdge site ownership transfer — handled by admin team via agentic workflow. Requires Inverter Serial Number and/or Site ID. Client charge $120, no field cost.',
+    description: 'SolarEdge site ownership transfer, handled by admin team via agentic workflow. Requires Inverter Serial Number and/or Site ID. Client charge $120, no field cost.',
     estimatedHours: 0,
     laborCost: 0,
     partsCost: 0,
@@ -317,7 +317,7 @@ const defaultServiceRates: ServiceRate[] = [
   },
 ];
 
-// No demo contractor jobs — clean slate
+// No demo contractor jobs, clean slate
 const demoContractorJobs: ContractorJob[] = [];
 
 // IDs of old demo jobs to purge from any existing localStorage/DB data
@@ -513,10 +513,10 @@ export const loadContractorJobs = (): ContractorJob[] => {
 };
 
 export const saveContractorJobs = (jobs: ContractorJob[]): void => {
-  // Always push to the cloud first — the Supabase write does NOT depend on
+  // Always push to the cloud first, the Supabase write does NOT depend on
   // localStorage and is the durable copy, so it must run even if localStorage
   // is full. (Previously a quota throw on setItem skipped dbSet entirely.)
-  // Push full payload (incl. base64) to cloud — Supabase handles large data fine.
+  // Push full payload (incl. base64) to cloud, Supabase handles large data fine.
   dbSet(CONTRACTOR_JOBS_KEY, jobs);
   try {
     // Strip base64 photo strings before writing to localStorage to prevent quota overflow.
@@ -534,7 +534,7 @@ export const saveContractorJobs = (jobs: ContractorJob[]): void => {
     localStorage.setItem(CONTRACTOR_JOBS_KEY, JSON.stringify(slim));
   } catch (e) {
     // localStorage quota exceeded (heavy base64 photos). The cloud write above
-    // still ran, so data is not lost — but surface the warning instead of
+    // still ran, so data is not lost, but surface the warning instead of
     // failing silently, so the contractor knows to get online / export a backup.
     console.error('Failed to save contractor jobs to localStorage (quota):', e);
     try {

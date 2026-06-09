@@ -13,12 +13,12 @@ if (!supabaseUrl || !supabaseAnonKey) {
 // but the upload doesn't crash). All other browsers use the real localStorage.
 function safeStorage(): Storage {
   try {
-    // Probe for access — throws SecurityError in iOS Private Mode
+    // Probe for access, throws SecurityError in iOS Private Mode
     localStorage.setItem('__sb_probe__', '1');
     localStorage.removeItem('__sb_probe__');
     return localStorage;
   } catch {
-    // In-memory fallback — session not persisted across page loads, but no crash
+    // In-memory fallback, session not persisted across page loads, but no crash
     const store: Record<string, string> = {};
     return {
       getItem: (k: string) => store[k] ?? null,

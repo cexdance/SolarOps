@@ -1,4 +1,4 @@
-// mentionsStore — per-user inbox of @mentions across the app
+// mentionsStore, per-user inbox of @mentions across the app
 // Mentions are pushed whenever a comment / note / todo containing
 // @handles is saved (see notify.ts hook). The Ops Center MentionsWidget
 // reads from here and filters by current user.
@@ -30,7 +30,7 @@ function safeRead(): MentionRecord[] {
 function safeWrite(records: MentionRecord[]): void {
   try {
     localStorage.setItem(KEY, JSON.stringify(records.slice(0, MAX)));
-  } catch { /* quota — silently drop */ }
+  } catch { /* quota, silently drop */ }
 }
 
 export function getMentions(): MentionRecord[] {

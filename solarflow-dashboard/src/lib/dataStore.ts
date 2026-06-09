@@ -1,4 +1,4 @@
-// SolarOps — Fault-Tolerant Data Store
+// SolarOps, Fault-Tolerant Data Store
 // ─────────────────────────────────────────────────────────────────────────────
 // PREVIOUS BUG: DATA_VERSION bump wiped ALL localStorage (including user-created
 // customers, jobs, and edits). This has been replaced with a SAFE MERGE:
@@ -89,7 +89,7 @@ export const generateDefaultState = (): AppState => ({
   standaloneRmas: [],
 });
 
-// ── Tombstone list — customers explicitly deleted by the user ──────────────────
+// ── Tombstone list, customers explicitly deleted by the user ──────────────────
 export function getDeletedCustomerIds(): Set<string> {
   try {
     return new Set(JSON.parse(localStorage.getItem('solarflow_deleted_customer_ids') || '[]'));
@@ -105,7 +105,7 @@ function addToTombstone(ids: string[]): void {
   } catch (e) { console.error('[dataStore] markCustomersDeleted tombstone write failed', e); }
 }
 
-// ── Tombstone list — jobs explicitly deleted by the user ──────────────────────
+// ── Tombstone list, jobs explicitly deleted by the user ──────────────────────
 // Prevents realtime/sync from resurrecting a job after the user deletes it.
 const DELETED_JOBS_KEY = 'solarflow_deleted_job_ids';
 
@@ -125,7 +125,7 @@ export function markJobDeleted(jobId: string): void {
 }
 
 // ── Always-on exclusion filter ────────────────────────────────────────────────
-// Runs on EVERY loadData() — not flag-gated — so bad accounts added by the
+// Runs on EVERY loadData(), not flag-gated, so bad accounts added by the
 // SolarEdge sync (or any other path) are removed on the next page load.
 // Also tombstones removed IDs so seed/sync migrations can't re-add them.
 
@@ -160,7 +160,7 @@ function applyUsIdOmEnrichment(customers: Customer[]): { customers: Customer[]; 
       }
     }
 
-    // SolarEdge site ID present → category O&M (always — SE = monitored = O&M)
+    // SolarEdge site ID present → category O&M (always, SE = monitored = O&M)
     if (c.solarEdgeSiteId && c.category !== 'O&M') {
       updated.category = 'O&M';
       dirty = true;
@@ -186,7 +186,7 @@ function applyDedup(customers: Customer[]): { customers: Customer[]; removed: st
   const kept = new Map<string, Customer>(); // id → record to keep
   const tombstone: string[] = [];
 
-  // Group by solarEdgeSiteId (strongest signal — same physical site)
+  // Group by solarEdgeSiteId (strongest signal, same physical site)
   const bySiteId = new Map<string, Customer[]>();
   customers.forEach(c => {
     if (c.solarEdgeSiteId) {
@@ -220,7 +220,7 @@ function applyDedup(customers: Customer[]): { customers: Customer[]; removed: st
     sorted.slice(1).forEach(c => { dupIds.add(c.id); tombstone.push(c.id); });
   });
 
-  kept; // unused — suppress lint
+  kept; // unused, suppress lint
   const deduped = customers.filter(c => !dupIds.has(c.id));
   return { customers: deduped, removed: tombstone };
 }
@@ -284,7 +284,7 @@ export const loadData = (): AppState => {
         ? rawCustomers.filter(c => !deletedIds.has(c.id))
         : rawCustomers;
 
-      // Always-on exclusion filter — runs every load, self-heals after any bad sync
+      // Always-on exclusion filter, runs every load, self-heals after any bad sync
       {
         const { customers: cleaned, removed } = applyExclusionFilter(customers);
         if (removed.length > 0) {
@@ -335,7 +335,7 @@ export const loadData = (): AppState => {
     console.error('[DataStore] Failed to load:', e);
   }
 
-  // First load or corrupted storage — start fresh from seed data
+  // First load or corrupted storage, start fresh from seed data
   const fresh = generateDefaultState();
   localStorage.setItem(VERSION_KEY, DATA_VERSION);
   return fresh;
@@ -348,7 +348,7 @@ export const loadData = (): AppState => {
 // Then kicks off an async Supabase cloud backup with the full state (including photos).
 
 export const saveData = (state: AppState): void => {
-  // Always strip base64 photos from localStorage — they're stored in Supabase
+  // Always strip base64 photos from localStorage, they're stored in Supabase
   const slimState: AppState = {
     ...state,
     customers: state.customers.map(c => ({
@@ -367,7 +367,7 @@ export const saveData = (state: AppState): void => {
     })),
     jobs: state.jobs.map(j => ({
       ...j,
-      // Keep photos that have a Supabase storageUrl (just a URL string — negligible space).
+      // Keep photos that have a Supabase storageUrl (just a URL string, negligible space).
       // Strip only the inline base64 dataUrl so the localStorage blob stays small.
       // Stripping ALL woPhotos was the root cause: pullAndMerge reads localStorage, so if
       // the Supabase write hadn't landed yet the merge returned a job without photos and
@@ -379,8 +379,8 @@ export const saveData = (state: AppState): void => {
       woPhotos: j.woPhotos?.length
         ? j.woPhotos.map(p =>
             (p.storageUrl || p.photoStoreId)
-              ? { ...p, dataUrl: '' } // durable elsewhere — safe to strip base64
-              : p                      // in-flight — keep dataUrl so it survives reload
+              ? { ...p, dataUrl: '' } // durable elsewhere, safe to strip base64
+              : p                      // in-flight, keep dataUrl so it survives reload
           )
         : undefined,
     })),
@@ -407,7 +407,7 @@ export const saveData = (state: AppState): void => {
         }));
       } catch (e) { console.error('[dataStore] storage-warning dispatch (trimmed) failed', e); }
     } catch (e2) {
-      console.error('[DataStore] FAILED TO SAVE — storage quota exceeded, work is at risk:', e2);
+      console.error('[DataStore] FAILED TO SAVE, storage quota exceeded, work is at risk:', e2);
       try {
         window.dispatchEvent(new CustomEvent('solarops:storage-warning', {
           detail: { kind: 'failed', reason: 'quota-exceeded' },

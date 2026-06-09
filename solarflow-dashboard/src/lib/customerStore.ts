@@ -1,5 +1,5 @@
 // SolarFlow CRM - Customer Data Store
-// Source: Trello "SOLAREDGE LEADS (Servicios)" — Conexsol Funnel strategyn
+// Source: Trello "SOLAREDGE LEADS (Servicios)", Conexsol Funnel strategyn
 // Regenerate with: npx tsx scripts/import_from_trello.mts
 
 import { CRMCustomer, CustomerInteraction, CustomerStatus, InteractionType, InteractionOutcome } from '../types';
@@ -15,7 +15,7 @@ const TRELLO_VERSION_KEY = 'solarflow_crm_version';
 // customers' names, emails, phones and addresses. Importing it here shipped all
 // of that PII to every browser in the JS bundle. The org was already seeded into
 // Supabase on 2026-03-29, so authenticated clients hydrate customers from the
-// cloud via the sync engine — the bundled copy is no longer needed at runtime.
+// cloud via the sync engine, the bundled copy is no longer needed at runtime.
 // Defaulting to empty keeps the PII out of the client bundle entirely.
 // To re-seed, run the server-side script: npx tsx scripts/import_from_trello.mts
 export const initialCustomers: CRMCustomer[] = [];

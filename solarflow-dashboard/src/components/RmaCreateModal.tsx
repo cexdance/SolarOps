@@ -1,4 +1,4 @@
-// SolarOps — shared RMA create modal (standalone or work-order-linked)
+// SolarOps, shared RMA create modal (standalone or work-order-linked)
 import React, { useState } from 'react';
 import { X, AlertTriangle, FileText } from 'lucide-react';
 import { Job, RMAEntry } from '../types';
@@ -96,7 +96,7 @@ export const RmaCreateModal: React.FC<RmaCreateModalProps> = ({
           <label className="block">
             <span className="text-sm font-medium text-slate-700">Link to work order (optional)</span>
             <select value={linkedJobId} onChange={e => setLinkedJobId(e.target.value)} className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white">
-              <option value="">No work order — standalone RMA</option>
+              <option value="">No work order, standalone RMA</option>
               {jobs.map(j => <option key={j.id} value={j.id}>{jobLabel(j)}</option>)}
             </select>
           </label>

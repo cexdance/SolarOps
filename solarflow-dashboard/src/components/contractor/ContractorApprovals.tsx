@@ -28,9 +28,9 @@ const STATUS_COLORS: Record<ContractorStatus, string> = {
 };
 
 const fmt = (d: string | undefined | null) => {
-  if (!d) return '—';
+  if (!d) return '-';
   const dt = new Date(d);
-  return isNaN(dt.getTime()) ? '—' : dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return isNaN(dt.getTime()) ? '-' : dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 };
 
 export const ContractorApprovals: React.FC<ContractorApprovalsProps> = ({

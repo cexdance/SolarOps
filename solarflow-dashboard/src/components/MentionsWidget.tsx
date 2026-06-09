@@ -1,4 +1,4 @@
-// MentionsWidget — Ops Center widget showing @mentions for the current user
+// MentionsWidget, Ops Center widget showing @mentions for the current user
 // Reads from mentionsStore. Auto-refreshes on mentions-updated event.
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -64,7 +64,7 @@ export const MentionsWidget: React.FC<Props> = ({ userId, users, onOpenCustomer,
               {unreadCount} unread
             </span>
           )}
-          {/* Only show unread — iOS-style toggle switch */}
+          {/* Only show unread, iOS-style toggle switch */}
           <button
             type="button"
             role="switch"
@@ -97,7 +97,7 @@ export const MentionsWidget: React.FC<Props> = ({ userId, users, onOpenCustomer,
           <div className="text-center py-8">
             <AtSign className="w-8 h-8 text-slate-200 mx-auto mb-2" />
             <p className="text-xs text-slate-400">
-              {filter === 'unread' ? "You're all caught up — no unread mentions." : 'No mentions yet.'}
+              {filter === 'unread' ? "You're all caught up, no unread mentions." : 'No mentions yet.'}
             </p>
           </div>
         ) : visible.map(m => {

@@ -69,7 +69,7 @@ const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
 };
 
 const EnergyCell: React.FC<{ value: number }> = ({ value }) => {
-  if (!value) return <span className="text-slate-300">—</span>;
+  if (!value) return <span className="text-slate-300">-</span>;
   const display = value >= 1000 ? `${(value / 1000).toFixed(1)} MWh` : `${value.toFixed(1)} kWh`;
   return <span className="font-mono text-xs text-slate-700">{display}</span>;
 };
@@ -80,7 +80,7 @@ const IMPACT_COLORS: Record<string, string> = {
   '4': 'bg-red-100 text-red-700', '5': 'bg-red-200 text-red-800', '6': 'bg-red-300 text-red-900',
 };
 
-/** Interactive alert cell — shows live count, popover to acknowledge or open SolarEdge */
+/** Interactive alert cell, shows live count, popover to acknowledge or open SolarEdge */
 const AlertCell: React.FC<{
   site: SolarEdgeSite;
   alertOverrides?: Map<string, { count: number; impact: string }>;
@@ -103,7 +103,7 @@ const AlertCell: React.FC<{
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
 
-  if (count === 0) return <span className="text-slate-400 text-xs">—</span>;
+  if (count === 0) return <span className="text-slate-400 text-xs">-</span>;
 
   return (
     <div ref={ref} className="relative inline-block">
@@ -111,7 +111,7 @@ const AlertCell: React.FC<{
         <button
           onClick={() => setOpen(o => !o)}
           className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-400 hover:bg-slate-200 transition-colors"
-          title="Acknowledged locally — click for options"
+          title="Acknowledged locally, click for options"
         >
           ✓ Acked ({count})
         </button>
@@ -162,7 +162,7 @@ export const COLUMN_REGISTRY: MonitoringColumnDef[] = [
     defaultOrder: 0,
     render: ({ site, profileMeta }) => {
       const cs = profileMeta[site.siteId]?.clientStatus;
-      if (!cs) return <span className="text-slate-300 text-xs">—</span>;
+      if (!cs) return <span className="text-slate-300 text-xs">-</span>;
       const cfg = CLIENT_STATUS_CONFIG[cs as SiteClientStatus];
       if (cfg) return (
         <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${cfg.bg} ${cfg.color} ${cfg.border}`}>
@@ -222,7 +222,7 @@ export const COLUMN_REGISTRY: MonitoringColumnDef[] = [
 
       return resolved
         ? <span className="font-mono text-xs font-semibold text-orange-600 bg-orange-50 px-2 py-0.5 rounded">{resolved}</span>
-        : <span className="text-slate-300 text-xs">—</span>;
+        : <span className="text-slate-300 text-xs">-</span>;
     },
   },
   {
@@ -242,13 +242,13 @@ export const COLUMN_REGISTRY: MonitoringColumnDef[] = [
             className="text-orange-600 font-medium truncate block hover:underline text-left w-full"
             title={`Open customer: ${site.siteName}`}
           >
-            {site.siteName || '—'}
+            {site.siteName || '-'}
           </button>
         );
       }
       return (
         <span className="text-slate-800 font-medium truncate block" title={site.siteName}>
-          {site.siteName || '—'}
+          {site.siteName || '-'}
         </span>
       );
     },
@@ -262,7 +262,7 @@ export const COLUMN_REGISTRY: MonitoringColumnDef[] = [
     maxWidth: 'max-w-[200px]',
     render: ({ site }) => (
       <span className="text-slate-500 text-xs truncate block" title={site.address}>
-        {site.address || '—'}
+        {site.address || '-'}
       </span>
     ),
   },
@@ -300,7 +300,7 @@ export const COLUMN_REGISTRY: MonitoringColumnDef[] = [
     render: ({ site }) =>
       site.peakPower
         ? <span className="font-mono text-xs text-slate-700">{site.peakPower.toFixed(1)}</span>
-        : <span className="text-slate-300 text-xs">—</span>,
+        : <span className="text-slate-300 text-xs">-</span>,
   },
   {
     id: 'installDate',
@@ -309,7 +309,7 @@ export const COLUMN_REGISTRY: MonitoringColumnDef[] = [
     defaultVisible: true,
     defaultOrder: 7,
     render: ({ site }) => (
-      <span className="text-xs text-slate-600 font-mono">{site.installDate || '—'}</span>
+      <span className="text-xs text-slate-600 font-mono">{site.installDate || '-'}</span>
     ),
   },
   {
@@ -319,7 +319,7 @@ export const COLUMN_REGISTRY: MonitoringColumnDef[] = [
     defaultVisible: true,
     defaultOrder: 8,
     render: ({ site }) => (
-      <span className="text-xs text-slate-500 font-mono">{site.ptoDate || <span className="text-slate-300">—</span>}</span>
+      <span className="text-xs text-slate-500 font-mono">{site.ptoDate || <span className="text-slate-300">-</span>}</span>
     ),
   },
   {
@@ -383,12 +383,12 @@ export const COLUMN_REGISTRY: MonitoringColumnDef[] = [
     defaultOrder: 12,
     align: 'right',
     render: ({ siteJobs }) => {
-      if (siteJobs.length === 0) return <span className="text-slate-300 text-xs">—</span>;
+      if (siteJobs.length === 0) return <span className="text-slate-300 text-xs">-</span>;
       const revenue = siteJobs.reduce((s, j) => s + (j.totalAmount || 0), 0);
       const cost = siteJobs.reduce((s, j) => s + (j.laborHours * (j.contractorPayRate ?? j.laborRate)) + (j.partsCost || 0), 0);
       const profit = revenue - cost;
       const margin = revenue > 0 ? (profit / revenue) * 100 : 0;
-      if (revenue === 0) return <span className="text-slate-300 text-xs">—</span>;
+      if (revenue === 0) return <span className="text-slate-300 text-xs">-</span>;
       const isPos = profit >= 0;
       return (
         <div className="text-right">
@@ -444,7 +444,7 @@ export const COLUMN_REGISTRY: MonitoringColumnDef[] = [
     defaultVisible: true,
     defaultOrder: 17,
     render: ({ site }) => (
-      <span className="text-xs text-slate-400 font-mono">{site.lastUpdate ? site.lastUpdate.split(' ')[0] : '—'}</span>
+      <span className="text-xs text-slate-400 font-mono">{site.lastUpdate ? site.lastUpdate.split(' ')[0] : '-'}</span>
     ),
   },
   {
@@ -454,7 +454,7 @@ export const COLUMN_REGISTRY: MonitoringColumnDef[] = [
     defaultVisible: false,
     defaultOrder: 18,
     render: ({ site }) => (
-      <span className="text-xs text-slate-600">{site.systemType || '—'}</span>
+      <span className="text-xs text-slate-600">{site.systemType || '-'}</span>
     ),
   },
   {
@@ -464,7 +464,7 @@ export const COLUMN_REGISTRY: MonitoringColumnDef[] = [
     defaultVisible: false,
     defaultOrder: 19,
     render: ({ site }) => (
-      <span className="text-xs text-slate-600">{site.module || '—'}</span>
+      <span className="text-xs text-slate-600">{site.module || '-'}</span>
     ),
   },
   {

@@ -150,7 +150,7 @@ function buildDiff(sites: LiveSite[], customers: Customer[]): DiffItem[] {
         id: `rem-${customer.id}`,
         type: 'removed',
         customer,
-        accepted: false, // default off — don't auto-delete
+        accepted: false, // default off, don't auto-delete
       });
     }
   }
@@ -285,7 +285,7 @@ export const SolarEdgeImportModal: React.FC<Props> = ({
                       <p className="text-xs text-slate-500 mt-0.5 truncate">{fmtAddress(item.site)}</p>
                     )}
                     {type === 'removed' && item.customer && (
-                      <p className="text-xs text-slate-500 mt-0.5">{item.customer.clientId} — not found in live API</p>
+                      <p className="text-xs text-slate-500 mt-0.5">{item.customer.clientId}, not found in live API</p>
                     )}
                     {type === 'updated' && item.changes && (
                       <p className="text-xs text-slate-500 mt-0.5">{item.changes.map(c => c.field).join(', ')} changed</p>
@@ -306,9 +306,9 @@ export const SolarEdgeImportModal: React.FC<Props> = ({
                     {item.changes.map(ch => (
                       <div key={ch.field} className="flex items-start gap-2 text-xs">
                         <span className="font-medium text-slate-600 w-16 flex-shrink-0">{ch.field}</span>
-                        <span className="text-red-500 line-through truncate max-w-[140px]">{ch.from || '—'}</span>
+                        <span className="text-red-500 line-through truncate max-w-[140px]">{ch.from || '-'}</span>
                         <span className="text-slate-400">→</span>
-                        <span className="text-green-600 font-medium truncate max-w-[140px]">{ch.to || '—'}</span>
+                        <span className="text-green-600 font-medium truncate max-w-[140px]">{ch.to || '-'}</span>
                       </div>
                     ))}
                   </div>
@@ -329,7 +329,7 @@ export const SolarEdgeImportModal: React.FC<Props> = ({
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
           <div>
             <h2 className="text-lg font-bold text-slate-900">SolarEdge Import</h2>
-            <p className="text-sm text-slate-500 mt-0.5">Florida sites — live API vs current customer list</p>
+            <p className="text-sm text-slate-500 mt-0.5">Florida sites, live API vs current customer list</p>
           </div>
           <div className="flex items-center gap-2">
             {status === 'ready' && (
@@ -396,7 +396,7 @@ export const SolarEdgeImportModal: React.FC<Props> = ({
                 )}
               </div>
 
-              {/* Search — finds by US-NNNNN, name, address, or site ID */}
+              {/* Search, finds by US-NNNNN, name, address, or site ID */}
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
                 <input

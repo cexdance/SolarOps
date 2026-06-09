@@ -195,7 +195,7 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
   );
   const [showAfterModal, setShowAfterModal] = useState(false);
 
-  // Photos — initial shape always exposes every PhotoCategory key so callers can safely
+  // Photos, initial shape always exposes every PhotoCategory key so callers can safely
   // index into `photos[category]` without an undefined check.
   const emptyPhotosShape = (): Record<PhotoCategory, string[]> => ({
     before: [],
@@ -272,7 +272,7 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
   const [upsellNotes, setUpsellNotes]     = useState(job.upsellNotes ?? '');
   const [upsellXp, setUpsellXp]           = useState<number | null>(null);
 
-  // Live XP preview — recalculates as user fills out the report
+  // Live XP preview, recalculates as user fills out the report
   const previewXp = useMemo(() => {
     const preview: ContractorJob = {
       ...job,
@@ -287,7 +287,7 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
     return calcJobXpBreakdown(preview);
   }, [job, photos, serviceStatus, serviceNotes, nextSteps, parts]);
 
-  // Pause/resume timer state (local — doesn't need to persist across refresh)
+  // Pause/resume timer state (local, doesn't need to persist across refresh)
   const [isPaused,       setIsPaused]       = useState(false);
   const [pausedMs,       setPausedMs]       = useState(0);
   const [pauseStartTime, setPauseStartTime] = useState<number | undefined>(undefined);
@@ -311,7 +311,7 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
     pauseStartTime,
   );
 
-  // Auto-save photos + notes whenever they change — applies in any phase so uploads
+  // Auto-save photos + notes whenever they change, applies in any phase so uploads
   // before "Start Call" or after "Complete" still persist. Writes the FULL current
   // editor snapshot (not just photos+notes) so this save never clobbers other live
   // fields (serviceStatus, nextSteps, parts, ...) back to the prop's older values.
@@ -342,14 +342,14 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
 
   const addPhoto = async (category: PhotoCategory, dataUrl: string) => {
     setUploadError(null);
-    // Show base64 preview immediately — display only, never written to localStorage.
+    // Show base64 preview immediately, display only, never written to localStorage.
     // saveContractorJobs strips base64 before setItem so localStorage stays small.
     setPhotos(prev => ({ ...prev, [category]: [...(prev[category] ?? []), dataUrl] }));
 
     try {
-      // Use atob-based conversion — iOS Safari cannot fetch() a data: URL.
+      // Use atob-based conversion, iOS Safari cannot fetch() a data: URL.
       const blob = dataUrlToBlob(dataUrl);
-      if (!blob) throw new Error('Could not decode photo — unsupported format.');
+      if (!blob) throw new Error('Could not decode photo, unsupported format.');
 
       // IDB-FIRST: persist blob in IndexedDB for offline durability BEFORE upload.
       // This guarantees the photo survives app close, quota events, or a network drop.
@@ -357,8 +357,8 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
       pendingUploads.current.add(row.id);
 
       // DIRECT UPLOAD: also attempt Supabase immediately (same as original CB-2 fix)
-      // using the IDB row id. This gives an instant https:// URL swap when online —
-      // no timeout guessing — so admin sees the photo as soon as the WO is saved.
+      // using the IDB row id. This gives an instant https:// URL swap when online -
+      // no timeout guessing, so admin sees the photo as soon as the WO is saved.
       const result = await uploadPhotoToStorage(blob, job.id, row.id);
       pendingUploads.current.delete(row.id);
 
@@ -370,8 +370,8 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
           [category]: prev[category].map(p => p === dataUrl ? result.url! : p),
         }));
       } else {
-        // Offline / network error — blob safe in IDB; retry on reconnect.
-        setUploadError('Photo saved offline — will upload when connected.');
+        // Offline / network error, blob safe in IDB; retry on reconnect.
+        setUploadError('Photo saved offline, will upload when connected.');
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -395,7 +395,7 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
     if (!navigator.onLine) return;
     retryInFlight.current = true;
     try {
-      // 1. Flush all IDB-pending mirrors — the primary durability path.
+      // 1. Flush all IDB-pending mirrors, the primary durability path.
       await flushPendingMirrors();
 
       // 2. Swap base64 previews → https:// for any IDB rows that are now uploaded.
@@ -520,7 +520,7 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
 
     // Gate: block completion if other photos are still uploading
     if (pendingUploads.current.size > 0) {
-      setUploadError(`Wait — ${pendingUploads.current.size} photo${pendingUploads.current.size > 1 ? 's' : ''} still uploading. Please try again in a moment.`);
+      setUploadError(`Wait, ${pendingUploads.current.size} photo${pendingUploads.current.size > 1 ? 's' : ''} still uploading. Please try again in a moment.`);
       return;
     }
 
@@ -981,13 +981,13 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
                 </div>
 
                 <p className="text-xs text-slate-500 mb-3">
-                  {activePhotoTab === 'before'         && 'Document the site on arrival — optional but recommended.'}
-                  {activePhotoTab === 'serial'         && (isOptimizerJob ? `Photograph the serial number label of EACH replaced optimizer/microinverter. Need ${optimizerCount} photo${optimizerCount !== 1 ? 's' : ''}.` : 'Photograph serial number labels — old and new equipment.')}
+                  {activePhotoTab === 'before'         && 'Document the site on arrival, optional but recommended.'}
+                  {activePhotoTab === 'serial'         && (isOptimizerJob ? `Photograph the serial number label of EACH replaced optimizer/microinverter. Need ${optimizerCount} photo${optimizerCount !== 1 ? 's' : ''}.` : 'Photograph serial number labels, old and new equipment.')}
                   {activePhotoTab === 'voltage'        && `Photograph the voltage test reading for EACH replaced optimizer/microinverter. Need ${optimizerCount} photo${optimizerCount !== 1 ? 's' : ''}.`}
                   {activePhotoTab === 'parts'          && 'Document all replacement parts used on this job.'}
-                  {activePhotoTab === 'process'        && 'Capture the work in progress — wiring, installation steps.'}
+                  {activePhotoTab === 'process'        && 'Capture the work in progress, wiring, installation steps.'}
                   {activePhotoTab === 'after'          && 'Add after photos here, or via the prompt when completing the call.'}
-                  {activePhotoTab === 'progress'       && 'Document installation progress — panels, racking, wiring milestones.'}
+                  {activePhotoTab === 'progress'       && 'Document installation progress, panels, racking, wiring milestones.'}
                   {activePhotoTab === 'ppe'            && 'All crew members must be wearing full PPE. Required before completing.'}
                   {activePhotoTab === 'old_serial'     && 'Photograph the serial number label on the existing/old inverter before removal.'}
                   {activePhotoTab === 'string_voltage' && 'Photograph the voltage reading for each string before disconnecting.'}
@@ -1032,7 +1032,7 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
                 </div>
 
 
-                {/* Quick notes field — always visible on Photos tab */}
+                {/* Quick notes field, always visible on Photos tab */}
                 <div className="mt-4 pt-4 border-t border-slate-100">
                   <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
                     Notes
@@ -1076,7 +1076,7 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
                     <div className="mt-3 pt-3 border-t border-amber-200 flex items-center justify-between">
                       <div className="text-xs text-amber-700">
                         {optimizerCount <= 4
-                          ? <span>Base rate covers 1–4 units</span>
+                          ? <span>Base rate covers 1-4 units</span>
                           : <span>Base $180 + {optimizerCount - 4} additional × $60</span>
                         }
                       </div>
@@ -1185,7 +1185,7 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
                       <div>
                         <p className="text-sm font-semibold text-slate-800">Request parts reimbursement</p>
                         <p className="text-xs text-slate-500 mt-0.5">
-                          ${parts.reduce((s,p) => s + p.totalPrice, 0).toFixed(2)} total — accounting will review and include in your payment
+                          ${parts.reduce((s,p) => s + p.totalPrice, 0).toFixed(2)} total, accounting will review and include in your payment
                         </p>
                       </div>
                     </label>
@@ -1222,7 +1222,7 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
                         🌟 Flag upsell opportunity
                       </p>
                       <p className={`text-xs mt-0.5 ${upsellFlagged ? 'text-violet-700' : 'text-slate-500'}`}>
-                        Spotted an upgrade, expansion, or new service the client might want? Flag it — earns you +150 XP and creates a sales lead.
+                        Spotted an upgrade, expansion, or new service the client might want? Flag it, earns you +150 XP and creates a sales lead.
                       </p>
                     </div>
                   </label>
@@ -1238,7 +1238,7 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
                       />
                       <p className="text-xs text-violet-600 flex items-center gap-1">
                         <Sparkles className="w-3.5 h-3.5" />
-                        A sales lead will be created when you complete the job — +150 XP bonus
+                        A sales lead will be created when you complete the job, +150 XP bonus
                       </p>
                     </div>
                   )}
@@ -1331,10 +1331,10 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
 
                 <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-xs text-slate-500 space-y-1">
                   <p className="font-semibold text-slate-600">Safety reminders for this job:</p>
-                  {(currentWeather === 'rainy') && <p>• Wet metal roof surfaces — do not perform roof work in rain</p>}
-                  {(currentWeather === 'windy') && <p>• Wind conditions — check gusts before handling panels on roof</p>}
+                  {(currentWeather === 'rainy') && <p>• Wet metal roof surfaces, do not perform roof work in rain</p>}
+                  {(currentWeather === 'windy') && <p>• Wind conditions, check gusts before handling panels on roof</p>}
                   <p>• Fall protection required for any roof pitch &gt; 4:12</p>
-                  <p>• Hydrate every 20 min in outdoor heat — monitor for heat illness</p>
+                  <p>• Hydrate every 20 min in outdoor heat, monitor for heat illness</p>
                   <p>• Verify LOTO before touching any electrical connections</p>
                 </div>
               </div>
@@ -1414,7 +1414,7 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
                   <div className="w-2 h-2 rounded-full bg-blue-500 shrink-0" />
                   <div className="flex-1">
                     <p className="text-sm font-semibold text-blue-800">Parts reimbursement pending</p>
-                    <p className="text-xs text-blue-600">${job.partsAmount?.toFixed(2)} — under review by accounting</p>
+                    <p className="text-xs text-blue-600">${job.partsAmount?.toFixed(2)}, under review by accounting</p>
                   </div>
                 </div>
               )}
@@ -1499,12 +1499,12 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
                 <h3 className="font-semibold text-slate-900">Ask for a Google Review</h3>
               </div>
               <p className="text-xs text-slate-500 mb-3">
-                Send the client our Google review link — reviews help our business grow and support your continued work.
+                Send the client our Google review link, reviews help our business grow and support your continued work.
               </p>
               {(() => {
                 // Read the configured Google review URL (set by an admin in Settings).
                 // Previously this was a hardcoded placeholder that opened a 404 in
-                // front of the CLIENT — never link out unless a real URL is set.
+                // front of the CLIENT, never link out unless a real URL is set.
                 const reviewUrl = (typeof localStorage !== 'undefined'
                   && localStorage.getItem('solarflow_google_review_url')) || '';
                 const configured = /^https?:\/\//.test(reviewUrl) && !reviewUrl.includes('YOUR-GOOGLE-REVIEW-LINK');

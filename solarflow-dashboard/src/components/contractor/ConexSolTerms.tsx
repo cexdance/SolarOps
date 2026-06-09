@@ -159,7 +159,7 @@ const SECTIONS = [
         <p className="bt">
           This Agreement is between Conexsol Applications LLC ("Company") and the
           individual or entity registered on the SolarOps platform ("Contractor").
-          The Contractor is an independent business operator — not an employee or
+          The Contractor is an independent business operator, not an employee or
           agent of the Company.
         </p>
         <SubLabel>Contractor acknowledges</SubLabel>
@@ -179,7 +179,7 @@ const SECTIONS = [
         <SubLabel>Required credentials</SubLabel>
         <BulletList items={[
           "OSHA 10 or OSHA 30 Construction Safety (required within 90 days of onboarding).",
-          "Fall Protection training per 29 CFR 1926.502 — mandatory for all rooftop work.",
+          "Fall Protection training per 29 CFR 1926.502, mandatory for all rooftop work.",
           "NABCEP PV Installation Professional or equivalent (required for inverter commissioning).",
           "Valid driver's license and clean driving record.",
         ]} />
@@ -582,7 +582,7 @@ export default function ConexsolTerms({ onAccept, onDecline }: ConexsolTermsProp
         <div style={styles.logoMark}><SunIcon /></div>
         <div>
           <p style={styles.headerTitle}>Contractor Agreement & Terms of Service</p>
-          <p style={styles.headerSub}>Conexsol Applications LLC — SolarOps Platform · v2026.1</p>
+          <p style={styles.headerSub}>Conexsol Applications LLC, SolarOps Platform · v2026.1</p>
         </div>
       </div>
 

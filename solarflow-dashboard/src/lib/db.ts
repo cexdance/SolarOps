@@ -1,5 +1,5 @@
 /**
- * SolarOps — Database Client (Phase 2)
+ * SolarOps, Database Client (Phase 2)
  *
  * Routes saves through the per-record sync engine:
  *   solarflow_data  → pushToSupabase (per-record rows + metadata)
@@ -26,7 +26,7 @@ export async function dbSet(key: string, data: unknown): Promise<void> {
   }
 }
 
-/** @deprecated — generic get not used in new sync flow. Kept for compat. */
+/** @deprecated, generic get not used in new sync flow. Kept for compat. */
 export async function dbGet(_key: string): Promise<unknown | null> {
   return null;
 }
@@ -67,6 +67,6 @@ export async function syncFromDB(): Promise<void> {
     }
     localStorage.setItem('solarflow_data', JSON.stringify(merged));
   } catch {
-    // Network error or parse error — local data is untouched
+    // Network error or parse error, local data is untouched
   }
 }

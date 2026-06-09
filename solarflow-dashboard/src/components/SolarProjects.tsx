@@ -1,4 +1,4 @@
-// Solar Project Workflow — New Installation Tracker
+// Solar Project Workflow, New Installation Tracker
 import React, { useState, useMemo } from 'react';
 import {
   Plus, ChevronLeft, ChevronDown, ChevronUp, CheckCircle2, Circle,
@@ -283,7 +283,7 @@ const ProjectDetail: React.FC<{
           </div>
         </div>
 
-        {/* Section 1 — Permit */}
+        {/* Section 1, Permit */}
         {project.sections.map(section => {
           const pct = sectionProgress(section.steps);
           const collapsed = collapsedSections[section.id] ?? false;
@@ -297,7 +297,7 @@ const ProjectDetail: React.FC<{
               >
                 <div className="flex items-center gap-2">
                   <ClipboardCheck className="w-4 h-4 text-orange-500" />
-                  <h2 className="font-semibold text-slate-800">Section 1 — {section.title}</h2>
+                  <h2 className="font-semibold text-slate-800">Section 1, {section.title}</h2>
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="w-24 h-1.5 bg-slate-200 rounded-full overflow-hidden">
@@ -320,7 +320,7 @@ const ProjectDetail: React.FC<{
           );
         })}
 
-        {/* Section 2 — Parts */}
+        {/* Section 2, Parts */}
         {(() => {
           const sec2Collapsed = collapsedSections['parts'] ?? false;
           const partsCount = (project.parts ?? []).length;
@@ -334,7 +334,7 @@ const ProjectDetail: React.FC<{
               >
                 <div className="flex items-center gap-2">
                   <FileText className="w-4 h-4 text-orange-500" />
-                  <h2 className="font-semibold text-slate-800">Section 2 — Parts & Materials</h2>
+                  <h2 className="font-semibold text-slate-800">Section 2, Parts & Materials</h2>
                 </div>
                 <div className="flex items-center gap-2">
                   {partsCount > 0 && (
@@ -353,7 +353,7 @@ const ProjectDetail: React.FC<{
           );
         })()}
 
-        {/* Section 3 — Installation */}
+        {/* Section 3, Installation */}
         {(() => {
           const sec3Collapsed = collapsedSections['installation'] ?? false;
           return (
@@ -365,7 +365,7 @@ const ProjectDetail: React.FC<{
               >
                 <div className="flex items-center gap-2">
                   <Zap className="w-4 h-4 text-orange-500" />
-                  <h2 className="font-semibold text-slate-800">Section 3 — Installation</h2>
+                  <h2 className="font-semibold text-slate-800">Section 3, Installation</h2>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-slate-500">{project.installationProgress ?? 0}%</span>

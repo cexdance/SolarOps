@@ -81,7 +81,7 @@ export async function migrateInlinePhoto(
     const result = await uploadPhotoToStorage(blob, jobId, photoId);
     return result.url ?? dataUrl; // fall back to dataUrl if upload fails
   } catch {
-    return dataUrl; // non-fatal — return original
+    return dataUrl; // non-fatal, return original
   }
 }
 

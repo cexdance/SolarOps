@@ -1,5 +1,5 @@
 /**
- * UserActivityLog — Admin view of everything ONE user has done.
+ * UserActivityLog, Admin view of everything ONE user has done.
  *
  * Opened from the User Permissions panel "View log" quick link. Pulls that
  * user's cross-device history from Supabase change_log (merged with the local

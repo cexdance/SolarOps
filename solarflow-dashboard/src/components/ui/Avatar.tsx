@@ -1,4 +1,4 @@
-// Avatar — circular initials or uploaded photo
+// Avatar, circular initials or uploaded photo
 // Initials derived from name (first + last). Background color hashed from name
 // so each teammate gets a stable, distinct color. Falls back to user.avatar URL
 // if provided (set in Settings → Profile).

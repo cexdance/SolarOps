@@ -97,7 +97,7 @@ describe('isKVSyncKey', () => {
 // mergeRemote: basic behavior
 // ---------------------------------------------------------------------------
 
-describe('mergeRemote — basic', () => {
+describe('mergeRemote, basic', () => {
   it('returns local state unchanged when remote is empty', () => {
     const local = makeState({ customers: [makeCustomer()], jobs: [makeJob()] });
     const result = mergeRemote(local, {});
@@ -127,7 +127,7 @@ describe('mergeRemote — basic', () => {
   it('preserves local-only records when remote omits them (incremental pull)', () => {
     const localOnly = makeCustomer({ id: 'c-local', name: 'Local Only' });
     const local  = makeState({ customers: [localOnly, makeCustomer({ id: 'c1' })] });
-    // Remote only returns c1 (incremental — c-local not changed since last sync)
+    // Remote only returns c1 (incremental, c-local not changed since last sync)
     const remote = { customers: [makeCustomer({ id: 'c1', name: 'Updated' })] };
     const result = mergeRemote(local, remote);
 
@@ -140,7 +140,7 @@ describe('mergeRemote — basic', () => {
 // mergeRemote: tombstone (deleted IDs) filtering
 // ---------------------------------------------------------------------------
 
-describe('mergeRemote — tombstone filtering', () => {
+describe('mergeRemote, tombstone filtering', () => {
   it('filters out customers in the deleted-ids tombstone', () => {
     // Write a tombstone for c-deleted
     localStorage.setItem(
@@ -190,7 +190,7 @@ describe('mergeRemote — tombstone filtering', () => {
 // mergeRemote: photo preservation (race condition guard)
 // ---------------------------------------------------------------------------
 
-describe('mergeRemote — photo preservation', () => {
+describe('mergeRemote, photo preservation', () => {
   it('keeps local photos when local has more than remote (stale pull race)', () => {
     const localPhotos  = ['photo1.jpg', 'photo2.jpg', 'photo3.jpg'];
     const remotePhotos = ['photo1.jpg'];
@@ -221,7 +221,7 @@ describe('mergeRemote — photo preservation', () => {
 
     const result = mergeRemote(local, remote);
     const job = result.jobs.find(j => j.id === 'j1');
-    // Remote has 1 photo, local has 0 (undefined) — remote should win
+    // Remote has 1 photo, local has 0 (undefined), remote should win
     expect(job?.woPhotos).toEqual(['p.jpg']);
   });
 });
@@ -230,7 +230,7 @@ describe('mergeRemote — photo preservation', () => {
 // mergeRemote: solarEdgeConfig propagation
 // ---------------------------------------------------------------------------
 
-describe('mergeRemote — solarEdgeConfig', () => {
+describe('mergeRemote, solarEdgeConfig', () => {
   it('propagates remote API key when local has none', () => {
     const local  = makeState({ solarEdgeConfig: { apiKey: '' } });
     const remote = { solarEdgeConfig: { apiKey: 'REMOTE_KEY' } };
@@ -257,7 +257,7 @@ describe('mergeRemote — solarEdgeConfig', () => {
 // mergeRemote: edge cases
 // ---------------------------------------------------------------------------
 
-describe('mergeRemote — edge cases', () => {
+describe('mergeRemote, edge cases', () => {
   it('handles empty local and remote state without throwing', () => {
     const local  = makeState();
     expect(() => mergeRemote(local, {})).not.toThrow();
@@ -271,14 +271,14 @@ describe('mergeRemote — edge cases', () => {
     expect(result.customers.length).toBeGreaterThan(0);
   });
 
-  it('handles remote with empty customers array — preserves local', () => {
+  it('handles remote with empty customers array, preserves local', () => {
     const local  = makeState({ customers: [makeCustomer()] });
-    // Empty array means "no changes returned by incremental pull" — local preserved
+    // Empty array means "no changes returned by incremental pull", local preserved
     const result = mergeRemote(local, { customers: [] });
     expect(result.customers.length).toBe(1);
   });
 
-  it('handles remote with empty jobs array — preserves local', () => {
+  it('handles remote with empty jobs array, preserves local', () => {
     const local  = makeState({ jobs: [makeJob()] });
     const result = mergeRemote(local, { jobs: [] });
     expect(result.jobs.length).toBe(1);

@@ -1,4 +1,4 @@
-// PowerCare customers — imported from Trello "SOLAREDGE POWERCARE PROGRAM"
+// PowerCare customers, imported from Trello "SOLAREDGE POWERCARE PROGRAM"
 // Board: Conexsol - Service FL | Generated: 2026-03-31
 // 76 customers | Run scripts/import_powercare_from_trello.mts to regenerate
 

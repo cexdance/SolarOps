@@ -1,4 +1,4 @@
-// AddressLink — displays a validated address as a clickable Google Maps link
+// AddressLink, displays a validated address as a clickable Google Maps link
 // Usage (parts):  <AddressLink address="123 Main St" city="Miami" state="FL" zip="33101" />
 // Usage (string): <AddressLink fullAddress="123 Main St, Miami, FL 33101" />
 import React from 'react';

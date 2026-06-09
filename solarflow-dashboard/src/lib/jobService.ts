@@ -1,5 +1,5 @@
 /**
- * Work Order Service — Job archiving and lifecycle management
+ * Work Order Service, Job archiving and lifecycle management
  */
 
 import { Job } from '../types';

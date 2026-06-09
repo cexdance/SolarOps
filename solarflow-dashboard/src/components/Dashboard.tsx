@@ -1,4 +1,4 @@
-// SolarFlow — Ops Center Dashboard (single-column revamp)
+// SolarFlow, Ops Center Dashboard (single-column revamp)
 import React, { useState, useRef, useEffect } from 'react';
 import {
   Wrench, Users, AlertTriangle, CheckCircle, Clock, TrendingUp, TrendingDown,
@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { Job, Customer, User, AppNotification, RMAEntry, RMAStatus } from '../types';
 import { canSeeFinancials } from '../lib/access';
-// Shared, cloud-synced todo store — same source of truth as the Ops Center widget.
+// Shared, cloud-synced todo store, same source of truth as the Ops Center widget.
 import { loadTodos, saveTodos, TodoItem } from '../lib/todoStore';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -350,7 +350,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
       {/* ── 4-Widget Grid ─────────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
-        {/* ── Widget 1: Metrics (financial — admin only) ──────────────────── */}
+        {/* ── Widget 1: Metrics (financial, admin only) ──────────────────── */}
         {canSeeFinancials(currentUser) && (
         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 flex flex-col">
           <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
@@ -401,7 +401,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         </div>
         )}
 
-        {/* ── Widget 2: Work Orders Pending Payment (financial — admin only) ── */}
+        {/* ── Widget 2: Work Orders Pending Payment (financial, admin only) ── */}
         {canSeeFinancials(currentUser) && (
         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 flex flex-col">
           <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">

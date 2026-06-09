@@ -1,5 +1,5 @@
 /**
- * SolarOps — Customer File Storage (Supabase)
+ * SolarOps, Customer File Storage (Supabase)
  *
  * Handles uploading pasted images/files from Customer Notes to Supabase Storage.
  * After upload, files are stored in the Customer object with authenticated URLs.
@@ -34,10 +34,10 @@ export async function uploadCustomerFile(
   file: CustomerFileUpload,
   customerId: string
 ): Promise<StoredCustomerFile> {
-  // Auth precheck — avoids cryptic 403 from Storage when session expired
+  // Auth precheck, avoids cryptic 403 from Storage when session expired
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) {
-    throw new Error('Session expired — please re-login to upload files.');
+    throw new Error('Session expired, please re-login to upload files.');
   }
 
   // File size guard (Supabase free tier: 50MB max per object)

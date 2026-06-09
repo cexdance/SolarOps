@@ -1,4 +1,4 @@
-// SolarOps — Per-user TODO list storage
+// SolarOps, Per-user TODO list storage
 // All users' todos stored under a single key: solarops_todos (Record<userId, TodoItem[]>)
 // This is the SINGLE source of truth for the "My To-Do" widget shown in BOTH the
 // Home Dashboard and the Ops Center (DispatchDashboard). Previously the Home
@@ -58,7 +58,7 @@ const loadAll = (): Record<string, TodoItem[]> => {
   } catch (e) { console.error('[todoStore] loadAll parse failed', e); }
 
   // One-time merge-migration of legacy per-user keys into the canonical record:
-  //   solarops_todos_v1_<uid>  (Home dashboard widget — `text` field, no due date)
+  //   solarops_todos_v1_<uid>  (Home dashboard widget, `text` field, no due date)
   //   solarops_todos_<uid>     (older variant)
   // Items are normalized (text→task) and merged by id, then the legacy key is
   // deleted so it can't drift again.

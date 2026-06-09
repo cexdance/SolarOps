@@ -1,5 +1,5 @@
 /**
- * SolarOps — Supabase Error Handling & Status Management
+ * SolarOps, Supabase Error Handling & Status Management
  * Centralized error handling with user-visible feedback
  */
 
@@ -103,7 +103,7 @@ export async function withSupabaseError<T>(
 }
 
 // Initialize listeners for sync events. Returns a cleanup function that removes
-// every listener — previously these 4 window listeners were added with no way to
+// every listener, previously these 4 window listeners were added with no way to
 // remove them, so each App remount (StrictMode, re-login) stacked duplicate
 // handlers and the sync status flapped/fired N times.
 export function initSyncStatusListeners(): () => void {

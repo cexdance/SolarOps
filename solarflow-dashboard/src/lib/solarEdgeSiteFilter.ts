@@ -1,4 +1,4 @@
-// SolarOps — SolarEdge site filter (shared between Update Sites sync, Import Modal,
+// SolarOps, SolarEdge site filter (shared between Update Sites sync, Import Modal,
 // mergeRemote, and the loadData always-on exclusion pass).
 
 export interface RawSite {
@@ -42,12 +42,12 @@ export function isFloridaSite(s: RawSite): boolean {
   if (state === 'Florida' || state === 'FL') return true;
   if (/^US[\s-]\d+/i.test(name))             return true;  // Conexsol FL naming (US-NNNNN)
 
-  // Anything else (explicit non-FL state, unknown territory) — exclude
+  // Anything else (explicit non-FL state, unknown territory), exclude
   return false;
 }
 
 /**
- * Customer-record variant — same rules, different field shape.
+ * Customer-record variant, same rules, different field shape.
  * Use in loadData(), mergeRemote(), and anywhere Customer[] is filtered.
  */
 export function isAllowedCustomer(c: { name?: string; address?: string }): boolean {

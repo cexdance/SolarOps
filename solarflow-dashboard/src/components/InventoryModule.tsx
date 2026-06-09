@@ -22,7 +22,7 @@ import {
   ImageIcon,
 } from 'lucide-react';
 
-// ── Image uploader — URL input + optional file upload ─────────────────────
+// ── Image uploader, URL input + optional file upload ─────────────────────
 const ImageUploader: React.FC<{
   value?: string;
   onChange: (dataUrl: string | undefined) => void;
@@ -1014,7 +1014,7 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ jobs = [], onU
 };
 
 // Add Inventory Modal
-// ── Receive Stock — quick add into stock with a provenance photo + open-RMA match ──
+// ── Receive Stock, quick add into stock with a provenance photo + open-RMA match ──
 // ── Warehouse / location options (shared, locally persisted) ─────────────────────
 // Pictures attached to a receiving entry are capped at 1.2 MB before storage.
 const RECEIPT_PHOTO_MAX_BYTES = Math.round(1.2 * 1024 * 1024);
@@ -1246,7 +1246,7 @@ const ReceiveStockModal: React.FC<ReceiveStockModalProps> = ({ items, jobs, curr
   const [note, setNote] = useState('');
   const [err, setErr] = useState<string | null>(null);
 
-  // Open RMAs across all work orders — awaiting a replacement-part delivery.
+  // Open RMAs across all work orders, awaiting a replacement-part delivery.
   const openRmas = useMemo(() => {
     const out: { key: string; kind: 'job' | 'standalone'; jobId?: string; entry: RMAEntry; label: string }[] = [];
     for (const j of jobs) {
@@ -1509,7 +1509,7 @@ const ReceiveStockModal: React.FC<ReceiveStockModalProps> = ({ items, jobs, curr
               )}
             </div>
             <select value={rmaKey} onChange={e => setRmaKey(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white">
-              <option value="">No RMA — regular stock</option>
+              <option value="">No RMA, regular stock</option>
               {openRmas.map(r => <option key={r.key} value={r.key}>{r.label}</option>)}
             </select>
             {openRmas.length === 0 && <p className="text-xs text-slate-400">No open RMAs found.</p>}
