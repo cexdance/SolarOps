@@ -5,7 +5,7 @@ import React, { useEffect, useState } from 'react';
 import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { Loader2, AlertTriangle, MapPin, ExternalLink, UserPen } from 'lucide-react';
+import { Loader2, AlertTriangle, MapPin, ExternalLink, Pencil } from 'lucide-react';
 import { validateAddress } from '../../lib/addressValidator';
 
 interface Props {
@@ -88,7 +88,7 @@ const SiteMapView: React.FC<Props> = ({ address, city, state, zip, label, onEdit
     );
   }
 
-  if (status === 'error' || (!coord && status !== 'loading')) {
+  if (status === 'error' || !coord) {
     return (
       <div className="flex flex-col items-center justify-center gap-3 py-16 text-slate-400">
         <AlertTriangle className="w-6 h-6 text-amber-400" />
@@ -102,7 +102,7 @@ const SiteMapView: React.FC<Props> = ({ address, city, state, zip, label, onEdit
               onClick={onEditAddress}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-orange-500 hover:bg-orange-600 text-white text-xs font-semibold transition-colors cursor-pointer"
             >
-              <UserPen className="w-3.5 h-3.5" />
+              <Pencil className="w-3.5 h-3.5" />
               {fullAddr ? 'Edit address in customer card' : 'Add address in customer card'}
             </button>
           )}
