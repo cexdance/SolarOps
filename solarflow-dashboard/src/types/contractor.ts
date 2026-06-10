@@ -221,9 +221,19 @@ export interface ServiceRate {
   rate?: number;
 }
 
+// Read-only scope-of-work line for the contractor's SO review card. Costs are
+// intentionally omitted (money is hidden app-wide); this conveys scope only.
+export interface ScopeItem {
+  description: string;
+  quantity: number;
+  type: 'labor' | 'part' | 'other';
+}
+
 export interface ContractorJob {
   id: string;
   sourceJobId?: string;  // links back to admin-side Job.id
+  woNumber?: string;     // shared order number; shown as SO-/WO- per side
+  scopeItems?: ScopeItem[]; // scope of work mirrored from the SO for review
   contractorId: string;
   customerId: string;
   customerName: string;

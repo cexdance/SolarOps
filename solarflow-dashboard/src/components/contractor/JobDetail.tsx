@@ -19,6 +19,7 @@ import { compressImageToDataUrl } from '../../lib/photoCompress';
 import { uploadPhotoToStorage } from '../../lib/photoStorage';
 import { appendPhoto, getPhoto, flushPendingMirrors, listPhotosForJob, dataUrlToBlob, deletePhotoForJobByUrl } from '../../lib/photoStore';
 import { logChange } from '../../lib/changeLog';
+import ServiceOrderCard from './ServiceOrderCard';
 
 interface JobDetailProps {
   job: ContractorJob;
@@ -786,6 +787,10 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
       </header>
 
       <div className="p-4 pb-32 space-y-4 max-w-xl mx-auto">
+
+        {/* Service Order review: links the WO to its SO, scope of work, dates,
+            status, location, photos and notes in one read-only place. */}
+        <ServiceOrderCard job={job} />
 
         {/* ── PRE-START: Customer info + Start Call CTA ────────────────────── */}
         {phase === 'pre_start' && (
