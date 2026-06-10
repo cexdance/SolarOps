@@ -7,8 +7,9 @@ import {
   CheckCircle, Clock, AlertTriangle, DollarSign, Wrench,
   Camera, ClipboardList, Package, ZapOff, Zap,
   ShieldCheck, Banknote, TrendingUp, TrendingDown, Users,
-  RotateCcw, History, Loader2, FolderOpen,
+  RotateCcw, History, Loader2, FolderOpen, MapPin,
 } from 'lucide-react';
+import SiteMapView from './views/SiteMapView';
 import { Job, WOStatus, WOLineItem, WOPhoto, WOServiceStatus, WO_TO_JOB_STATUS, RMAEntry, AuditEntry } from '../types';
 import { updateClientStatus } from '../lib/siteProfileStore';
 import { QuotePreviewModal } from './QuotePreviewModal';
@@ -670,7 +671,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
   const applyRecurringDiscount = discountType !== ''; // kept for legacy compat
 
   // Active tab
-  const [activeTab, setActiveTab] = useState<'overview' | 'parts' | 'photos' | 'report' | 'comments' | 'history'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'parts' | 'photos' | 'report' | 'comments' | 'history' | 'map'>('overview');
   // WO audit trail (Phase B), loaded lazily when the History tab is opened.
   const [historyEntries, setHistoryEntries] = useState<ChangeEntry[] | null>(null);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -1328,6 +1329,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
     { key: 'report',   label: 'Service Report',  icon: <FileText className="w-4 h-4" /> },
     { key: 'comments', label: `Comments${woActivities.length ? ` (${woActivities.length})` : ''}`, icon: <Users className="w-4 h-4" /> },
     { key: 'history',  label: 'History',         icon: <History className="w-4 h-4" /> },
+    { key: 'map',      label: 'Map',             icon: <MapPin className="w-4 h-4" /> },
   ] as const;
 
   return (
@@ -3055,6 +3057,19 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                   })}
                 </ul>
               )}
+            </div>
+          )}
+
+          {/* Map */}
+          {activeTab === 'map' && (
+            <div className="flex flex-col" style={{ minHeight: 400 }}>
+              <SiteMapView
+                address={customer?.address || siteAddress}
+                city={customer?.city}
+                state={customer?.state}
+                zip={customer?.zip}
+                label={siteName}
+              />
             </div>
           )}
 
