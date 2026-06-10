@@ -123,7 +123,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             });
             try {
               await webPush.sendNotification(
-                row.subscription as Parameters<typeof webPush.sendNotification>[0],
+                row.subscription as unknown as Parameters<typeof webPush.sendNotification>[0],
                 payload,
                 { TTL: 86400 },
               );

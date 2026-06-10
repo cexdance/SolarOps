@@ -22,7 +22,7 @@ export interface UPSTrackingResponse {
 
 export default async function handler(
   req: VercelRequest,
-  res: VercelResponse<UPSTrackingResponse>
+  res: VercelResponse
 ) {
   // Only POST is allowed for tracking checks
   if (req.method !== 'POST') {
