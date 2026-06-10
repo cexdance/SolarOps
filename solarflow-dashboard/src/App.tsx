@@ -1357,6 +1357,18 @@ function App() {
     });
   };
 
+  // Assign a set of work orders to a contractor from the Dispatch Map. Routes
+  // each through handleUpdateJob so the change is audited, persisted, and
+  // auto-mirrored to the contractor's queue (which builds the ContractorJob).
+  const handleAssignJobsToContractor = (jobIds: string[], contractorId: string) => {
+    const now = new Date().toISOString();
+    const ids = new Set(jobIds);
+    const targets = data.jobs.filter(j => ids.has(j.id));
+    for (const job of targets) {
+      handleUpdateJob({ ...job, contractorId, contractorSentAt: job.contractorSentAt ?? now }, 'admin');
+    }
+  };
+
   const handleUpdateJob = (updatedJob: Job, role: 'admin' | 'contractor' | 'technician' = 'admin') => {
     const newActivity = {
       id: `activity-${Date.now()}`,
@@ -2312,7 +2324,9 @@ function App() {
           <DispatchMap
             jobs={data.jobs}
             customers={data.customers}
+            contractors={contractors}
             onOpenJob={(jobId) => handleViewChange('jobDetail', jobId)}
+            onAssign={handleAssignJobsToContractor}
           />
         );
 
