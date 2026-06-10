@@ -5,7 +5,7 @@
  * source of truth. Today they are used as read-side helpers; in Phase 2
  * they will replace the separate `contractorJobs` array entirely.
  */
-import type { Job } from '../types';
+import type { Job, Customer } from '../types';
 import type { ContractorJob, JobStatusContractor, PhotoCategory } from '../types/contractor';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -74,7 +74,7 @@ const STATUS_MAP: Record<string, JobStatusContractor> = {
  * payloads and any code that still expects the ContractorJob shape.
  * This is a read-only projection, mutations should go through handleUpdateJob.
  */
-export function toContractorJobView(job: Job, existingCj?: ContractorJob): ContractorJob {
+export function toContractorJobView(job: Job, existingCj?: ContractorJob, customer?: Customer): ContractorJob {
   const emptyPhotos: ContractorJob['photos'] = {
     before: [], serial: [], parts: [], process: [], after: [],
     progress: [], ppe: [], voltage: [],
@@ -118,10 +118,13 @@ export function toContractorJobView(job: Job, existingCj?: ContractorJob): Contr
     })),
     contractorId: job.contractorId ?? '',
     customerId: job.customerId,
-    customerName: job.clientName ?? '',
-    customerPhone: '',
-    address: job.siteAddress ?? '',
-    city: '', state: 'FL', zip: '',
+    customerName: job.clientName || customer?.name || '',
+    customerPhone: customer?.phone ?? '',
+    // Address resolves LIVE from the customer record so an address edit on the
+    // customer is reflected on the contractor WO immediately. Falls back to the
+    // job's siteAddress snapshot (a full string) when no customer is linked.
+    address: customer?.address || job.siteAddress || '',
+    city: customer?.city ?? '', state: customer?.state ?? 'FL', zip: customer?.zip ?? '',
     latitude: 0, longitude: 0,
     serviceType: job.serviceType,
     description: job.notes || job.title || '',

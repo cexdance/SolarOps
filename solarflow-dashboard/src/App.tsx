@@ -2241,7 +2241,7 @@ function App() {
         contractorName={currentContractor.contactName}
         contractorId={currentContractor.id}
         contractor={currentContractor}
-        jobs={pickupJobsForContractor(currentContractor.id, data.jobs).map(j => toContractorJobView(j, contractorJobs.find(cj => cj.sourceJobId === j.id)))}
+        jobs={pickupJobsForContractor(currentContractor.id, data.jobs).map(j => toContractorJobView(j, contractorJobs.find(cj => cj.sourceJobId === j.id), data.customers.find(c => c.id === j.customerId)))}
         onLogout={handleLogout}
         onUpdateJob={handleContractorJobUpdate}
         onUpdateContractor={(updated) => {
@@ -2289,7 +2289,7 @@ function App() {
         .filter(j => j.contractorId)
         .map(j => {
           linkedIds.add(j.id);
-          return toContractorJobView(j, contractorJobs.find(cj => cj.sourceJobId === j.id));
+          return toContractorJobView(j, contractorJobs.find(cj => cj.sourceJobId === j.id), data.customers.find(c => c.id === j.customerId));
         });
       const orphans = contractorJobs.filter(cj => !cj.sourceJobId || !linkedIds.has(cj.sourceJobId));
       return [...projected, ...orphans];
@@ -2632,7 +2632,7 @@ function App() {
               contractorName={linkedContractor.contactName}
               contractorId={linkedContractor.id}
               contractor={linkedContractor}
-              jobs={pickupJobsForContractor(linkedContractor.id, data.jobs).map(j => toContractorJobView(j, contractorJobs.find(cj => cj.sourceJobId === j.id)))}
+              jobs={pickupJobsForContractor(linkedContractor.id, data.jobs).map(j => toContractorJobView(j, contractorJobs.find(cj => cj.sourceJobId === j.id), data.customers.find(c => c.id === j.customerId)))}
               onLogout={() => setCurrentView('dashboard')}
               onUpdateJob={handleContractorJobUpdate}
               onUpdateContractor={(updated) => {
