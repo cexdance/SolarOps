@@ -4,11 +4,16 @@ import React, { useState, useEffect } from 'react';
 import { formatMoney } from '../../lib/money';
 import {
   Wrench, MapPin, Clock, LogOut, X, ChevronRight, Filter,
+  List as ListIcon, LayoutGrid, CalendarDays, Map as MapIcon,
 } from 'lucide-react';
 import { Contractor, ContractorJob, JobPriority, JobStatusContractor } from '../../types/contractor';
 import { Lead } from '../../types';
 import ConexSolTerms from './ConexSolTerms';
 import { JobDetail } from './JobDetail';
+import JobBoardView from '../views/JobBoardView';
+import JobCalendarView from '../views/JobCalendarView';
+import JobMapView from '../views/JobMapView';
+import { ViewJob, BoardColumn } from '../views/jobViewTypes';
 import {
   loadXpData, getLevelInfo, getLevelProgress, getNextLevel,
   ContractorXpData, BADGES,
@@ -46,10 +51,23 @@ export const ContractorDashboard: React.FC<ContractorDashboardProps> = ({
   onUpdateContractor,
 }) => {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [view, setView]                 = useState<'list' | 'board' | 'calendar' | 'map'>('list');
   const [openJob, setOpenJob]           = useState<ContractorJob | null>(null);
   const [xpData, setXpData]             = useState<ContractorXpData>(() => loadXpData(contractorId));
   const [showBadges, setShowBadges]     = useState(false);
   const [timeframe, setTimeframe]       = useState<'day' | 'week' | 'month' | 'ytd'>('day');
+
+  // Terms acceptance is also remembered per-device in localStorage, keyed by
+  // contractor id + version. The contractor record carries `termsAcceptedAt`,
+  // but that field can be lost if a remote sync overwrites the record with a
+  // copy that predates acceptance. The local flag guarantees an accepted
+  // contractor is never re-prompted on the same device. Bumping TERMS_VERSION
+  // intentionally re-prompts everyone for the new agreement.
+  const TERMS_VERSION = 'v2026.1';
+  const termsKey = `solarops_contractor_terms_${contractorId}`;
+  const [termsAcceptedLocal, setTermsAcceptedLocal] = useState<boolean>(() => {
+    try { return localStorage.getItem(termsKey) === TERMS_VERSION; } catch { return false; }
+  });
 
   // Refresh XP data whenever jobs change (e.g. job just completed)
   useEffect(() => { setXpData(loadXpData(contractorId)); }, [contractorId, jobs]);
@@ -185,15 +203,53 @@ export const ContractorDashboard: React.FC<ContractorDashboardProps> = ({
     { id: 'on_hold',     label: 'On Hold'     },
   ];
 
+  // ── Multi-view (List / Board / Calendar / Map) ─────────────────────────────
+  const viewTabs: { id: typeof view; label: string; Icon: typeof ListIcon }[] = [
+    { id: 'list',     label: 'List',     Icon: ListIcon },
+    { id: 'board',    label: 'Board',    Icon: LayoutGrid },
+    { id: 'calendar', label: 'Calendar', Icon: CalendarDays },
+    { id: 'map',      label: 'Map',      Icon: MapIcon },
+  ];
+
+  // Adapt ContractorJob -> shared ViewJob. `documentation` buckets with
+  // in_progress on the board (it is a sub-state of an active visit).
+  const toViewJob = (j: ContractorJob): ViewJob => ({
+    id: j.id,
+    title: j.customerName,
+    address: j.address, city: j.city, state: j.state, zip: j.zip,
+    status: j.status === 'documentation' ? 'in_progress' : j.status,
+    statusLabel: j.status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+    priority: j.priority,
+    scheduledDate: j.scheduledDate,
+    scheduledTime: j.scheduledTime,
+    serviceType: j.serviceType,
+    pay: j.contractorTotalPay,
+  });
+  const viewJobs: ViewJob[] = jobs.map(toViewJob);
+
+  const boardColumns: BoardColumn[] = [
+    { id: 'assigned',    label: 'Queue',       accent: 'bg-slate-100 text-slate-600'   },
+    { id: 'en_route',    label: 'En Route',    accent: 'bg-orange-100 text-orange-700'  },
+    { id: 'in_progress', label: 'In Progress', accent: 'bg-blue-100 text-blue-700'      },
+    { id: 'completed',   label: 'Completed',   accent: 'bg-emerald-100 text-emerald-700'},
+    { id: 'on_hold',     label: 'On Hold',     accent: 'bg-slate-200 text-slate-500'    },
+  ];
+
+  const openById = (id: string) => { const j = jobs.find(x => x.id === id); if (j) setOpenJob(j); };
+
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col">
       {/* ── T&C overlay for contractors who haven't accepted yet ────────────── */}
-      {contractor && !contractor.termsAcceptedAt && (
+      {contractor && !contractor.termsAcceptedAt && !termsAcceptedLocal && (
         <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl my-4 overflow-hidden">
             <ConexSolTerms
               onAccept={() => {
-                const updated = { ...contractor, termsAcceptedAt: new Date().toISOString(), termsVersion: 'v2026.1' };
+                // Remember acceptance on this device first so a later sync that
+                // drops termsAcceptedAt can never re-prompt this contractor.
+                try { localStorage.setItem(termsKey, TERMS_VERSION); } catch { /* ignore */ }
+                setTermsAcceptedLocal(true);
+                const updated = { ...contractor, termsAcceptedAt: new Date().toISOString(), termsVersion: TERMS_VERSION };
                 if (onUpdateContractor) onUpdateContractor(updated);
               }}
             />
@@ -334,49 +390,76 @@ export const ContractorDashboard: React.FC<ContractorDashboardProps> = ({
         </div>
       )}
 
-      {/* ── Status Filter Bar ──────────────────────────────────────────────── */}
-      <div className="bg-white border-b border-slate-200 px-3 py-1.5 flex items-center gap-1.5 flex-shrink-0 overflow-x-auto">
-        <Filter className="w-4 h-4 text-slate-400 flex-shrink-0" />
-        {statusChips.map(({ id, label }) => {
-          const count = id === 'all'
-            ? jobs.length
-            : jobs.filter(j => j.status === id || (id === 'in_progress' && j.status === 'documentation')).length;
-          return (
-            <button
-              key={id}
-              onClick={() => setStatusFilter(id)}
-              className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
-                statusFilter === id ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-100'
-              }`}
-            >
-              {label}
-              <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
-                statusFilter === id ? 'bg-white/20' : 'bg-slate-100'
-              }`}>{count}</span>
-            </button>
-          );
-        })}
+      {/* ── View Switcher ──────────────────────────────────────────────────── */}
+      <div className="bg-white border-b border-slate-200 px-3 py-1.5 flex items-center gap-1 flex-shrink-0">
+        {viewTabs.map(({ id, label, Icon }) => (
+          <button
+            key={id}
+            onClick={() => setView(id)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+              view === id ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-100'
+            }`}
+          >
+            <Icon className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">{label}</span>
+          </button>
+        ))}
       </div>
 
-      {/* ── Work Order List ──────────────────────────────────────────────────── */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
-        {filteredJobs.length === 0 ? (
-          <div className="text-center py-16">
-            <Wrench className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-            <p className="text-slate-500 font-medium">
-              {statusFilter !== 'all' ? 'No work orders match this filter' : 'No work orders assigned'}
-            </p>
-          </div>
-        ) : (
-          [...filteredJobs]
-            .sort((a, b) => {
-              const ord: Record<JobPriority, number> = { critical: 0, high: 1, normal: 2, low: 3 };
-              return ord[a.priority] - ord[b.priority] ||
-                `${a.scheduledDate}${a.scheduledTime}`.localeCompare(`${b.scheduledDate}${b.scheduledTime}`);
-            })
-            .map(job => <ListCard key={job.id} job={job} />)
-        )}
-      </div>
+      {/* ── Status Filter Bar (List view only) ─────────────────────────────── */}
+      {view === 'list' && (
+        <div className="bg-white border-b border-slate-200 px-3 py-1.5 flex items-center gap-1.5 flex-shrink-0 overflow-x-auto">
+          <Filter className="w-4 h-4 text-slate-400 flex-shrink-0" />
+          {statusChips.map(({ id, label }) => {
+            const count = id === 'all'
+              ? jobs.length
+              : jobs.filter(j => j.status === id || (id === 'in_progress' && j.status === 'documentation')).length;
+            return (
+              <button
+                key={id}
+                onClick={() => setStatusFilter(id)}
+                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
+                  statusFilter === id ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-100'
+                }`}
+              >
+                {label}
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+                  statusFilter === id ? 'bg-white/20' : 'bg-slate-100'
+                }`}>{count}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ── Active View ────────────────────────────────────────────────────── */}
+      {view === 'list' && (
+        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          {filteredJobs.length === 0 ? (
+            <div className="text-center py-16">
+              <Wrench className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+              <p className="text-slate-500 font-medium">
+                {statusFilter !== 'all' ? 'No work orders match this filter' : 'No work orders assigned'}
+              </p>
+            </div>
+          ) : (
+            [...filteredJobs]
+              .sort((a, b) => {
+                const ord: Record<JobPriority, number> = { critical: 0, high: 1, normal: 2, low: 3 };
+                return ord[a.priority] - ord[b.priority] ||
+                  `${a.scheduledDate}${a.scheduledTime}`.localeCompare(`${b.scheduledDate}${b.scheduledTime}`);
+              })
+              .map(job => <ListCard key={job.id} job={job} />)
+          )}
+        </div>
+      )}
+
+      {view === 'board' && (
+        <JobBoardView jobs={viewJobs} columns={boardColumns} onOpen={openById}
+          formatPay={(n) => formatMoney(n, { decimals: 0 })} />
+      )}
+      {view === 'calendar' && <JobCalendarView jobs={viewJobs} onOpen={openById} />}
+      {view === 'map' && <JobMapView jobs={viewJobs} onOpen={openById} />}
     </div>
   );
 };

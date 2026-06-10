@@ -28,6 +28,7 @@ const CustomerManagement = lazy(() => import('./components/CustomerManagement').
 const Operations         = lazy(() => import('./components/Operations'));
 const SolarEdgeMonitoring = lazy(() => import('./components/SolarEdgeMonitoring').then(m => ({ default: m.SolarEdgeMonitoring })));
 const DispatchDashboard  = lazy(() => import('./components/DispatchDashboard').then(m => ({ default: m.DispatchDashboard })));
+const DispatchMap        = lazy(() => import('./components/DispatchMap'));
 const LeadLobby          = lazy(() => import('./components/LeadLobby').then(m => ({ default: m.LeadLobby })));
 const RMADashboardPage   = lazy(() => import('./components/RMADashboard').then(m => ({ default: m.RMADashboard })));
 import { supabase, authedFetch } from './lib/supabase';
@@ -2303,6 +2304,15 @@ function App() {
               setCurrentView('customers');
             }}
             onViewChange={(view, id) => handleViewChange(view, id)}
+          />
+        );
+
+      case 'routes':
+        return (
+          <DispatchMap
+            jobs={data.jobs}
+            customers={data.customers}
+            onOpenJob={(jobId) => handleViewChange('jobDetail', jobId)}
           />
         );
 

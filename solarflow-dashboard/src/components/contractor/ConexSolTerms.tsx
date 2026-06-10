@@ -412,12 +412,13 @@ interface ConexsolTermsProps {
 }
 
 export default function ConexsolTerms({ onAccept, onDecline }: ConexsolTermsProps) {
-  const [openSections, setOpenSections] = useState<Record<number, boolean>>({ 0: true });
+  // All sections expanded by default so the agreement reads as one continuous
+  // document. Each section is still collapsible for readers who want to skim.
+  const [openSections, setOpenSections] = useState<Record<number, boolean>>(
+    () => Object.fromEntries(SECTIONS.map((_, i) => [i, true])),
+  );
   const [checked, setChecked] = useState(false);
   const [accepted, setAccepted] = useState(false);
-
-  const uniqueOpened = Object.keys(openSections).length;
-  const progress = Math.min(100, Math.round((uniqueOpened / SECTIONS.length) * 100));
 
   function toggleSection(i: number) {
     setOpenSections((prev) => {
@@ -459,8 +460,6 @@ export default function ConexsolTerms({ onAccept, onDecline }: ConexsolTermsProp
     },
     headerTitle: { fontSize: 14, fontWeight: 600, color: "#111", margin: 0 },
     headerSub: { fontSize: 11, color: "#888", margin: "2px 0 0" },
-    progressTrack: { height: 3, background: "#eee" },
-    progressFill: { height: "100%", background: TEAL, transition: "width 0.3s", width: `${progress}%` },
     warnBanner: {
       margin: "12px 16px 0",
       padding: "8px 10px",
@@ -469,45 +468,6 @@ export default function ConexsolTerms({ onAccept, onDecline }: ConexsolTermsProp
       fontSize: 12,
       color: GOLD_TEXT,
       lineHeight: 1.5,
-    },
-    toc: {
-      margin: "12px 16px 0",
-      border: "0.5px solid #e5e5e5",
-      borderRadius: 10,
-      overflow: "hidden",
-    },
-    tocHeader: {
-      padding: "7px 12px",
-      fontSize: 11,
-      fontWeight: 600,
-      color: "#888",
-      textTransform: "uppercase",
-      letterSpacing: "0.05em",
-      borderBottom: "0.5px solid #e5e5e5",
-      background: "#f8f8f8",
-    },
-    tocRow: {
-      display: "flex",
-      alignItems: "center",
-      gap: 8,
-      padding: "7px 12px",
-      fontSize: 12,
-      color: "#555",
-      borderBottom: "0.5px solid #e5e5e5",
-      cursor: "pointer",
-    },
-    tocNum: {
-      width: 20,
-      height: 20,
-      borderRadius: "50%",
-      background: TEAL,
-      color: "#fff",
-      fontSize: 10,
-      fontWeight: 600,
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      flexShrink: 0,
     },
     content: { margin: "0 16px" },
     section: {
@@ -576,7 +536,7 @@ export default function ConexsolTerms({ onAccept, onDecline }: ConexsolTermsProp
   } satisfies Record<string, React.CSSProperties>;
 
   return (
-    <div style={styles.wrapper}>
+    <div className="conexsol-terms" style={styles.wrapper}>
       {/* Header */}
       <div style={styles.header}>
         <div style={styles.logoMark}><SunIcon /></div>
@@ -586,30 +546,10 @@ export default function ConexsolTerms({ onAccept, onDecline }: ConexsolTermsProp
         </div>
       </div>
 
-      {/* Progress bar */}
-      <div style={styles.progressTrack}>
-        <div style={styles.progressFill} />
-      </div>
-
       {/* Warning banner */}
       <div style={styles.warnBanner}>
         Read this agreement carefully before accepting work orders through SolarOps.
         By accepting a work order you agree to be bound by these terms.
-      </div>
-
-      {/* Table of contents */}
-      <div style={styles.toc}>
-        <div style={styles.tocHeader}>Sections</div>
-        {SECTIONS.map((s, i) => (
-          <div
-            key={i}
-            style={{ ...styles.tocRow, borderBottom: i < SECTIONS.length - 1 ? "0.5px solid #e5e5e5" : "none" }}
-            onClick={() => toggleSection(i)}
-          >
-            <span style={styles.tocNum}>{i + 1}</span>
-            {s.title}
-          </div>
-        ))}
       </div>
 
       {/* Sections */}

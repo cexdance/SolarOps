@@ -66,3 +66,16 @@ img {
 .fixed {
   position: fixed;
 }
+
+/* Contractor Terms of Service body paragraphs.
+   The component styles bullet lists/labels inline but tags running paragraphs
+   with .bt; style them here so prose matches the rest of the document. */
+.conexsol-terms .bt {
+  font-size: 12px;
+  color: #555;
+  line-height: 1.65;
+  margin: 8px 0 4px;
+}
+.conexsol-terms .bt:first-child {
+  margin-top: 0;
+}
