@@ -6,7 +6,7 @@ import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Loader2, AlertTriangle, MapPin, ExternalLink, Pencil } from 'lucide-react';
-import { validateAddress } from '../../lib/addressValidator';
+import { geocodeAddress } from '../../lib/addressValidator';
 
 interface Props {
   address?: string;
@@ -59,10 +59,9 @@ const SiteMapView: React.FC<Props> = ({ address, city, state, zip, label, onEdit
     const cached = loadCache()[key];
     if (cached) { setCoord(cached); setStatus('idle'); return; }
     setStatus('loading');
-    validateAddress({ address, city, state, zip })
-      .then(r => {
-        if (r.isValid && r.normalized?.lat != null && r.normalized?.lon != null) {
-          const c: Coord = { lat: r.normalized.lat!, lon: r.normalized.lon! };
+    geocodeAddress({ address, city, state, zip })
+      .then(c => {
+        if (c) {
           const cache = loadCache();
           cache[key] = c;
           saveCache(cache);

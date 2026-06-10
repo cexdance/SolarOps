@@ -180,6 +180,57 @@ export async function validateAddress(input: ValidatedAddress['input']): Promise
 }
 
 /**
+ * Geocode an address to a coordinate, tolerant of imperfect data.
+ *
+ * 1) Tries the full street address, dropping any city/state/ZIP that is already
+ *    embedded in the street string (avoids duplicated queries like
+ *    "6024 ACORN CIR, LABELLE, FL 33935, LABELLE, FL 33935").
+ * 2) If the house-level lookup returns nothing (rural addresses are frequently
+ *    absent from OpenStreetMap), falls back to the city/ZIP centroid so the
+ *    stop still plots approximately instead of showing "not located".
+ *
+ * Returns null only when even the city/ZIP cannot be resolved.
+ */
+export async function geocodeAddress(
+  p: { address?: string; city?: string; state?: string; zip?: string }
+): Promise<{ lat: number; lon: number } | null> {
+  const tryOne = async (input: ValidatedAddress['input']): Promise<{ lat: number; lon: number } | null> => {
+    const r = await validateAddress(input);
+    const lat = r.normalized?.lat, lon = r.normalized?.lon;
+    return (typeof lat === 'number' && typeof lon === 'number') ? { lat, lon } : null;
+  };
+
+  const addr = (p.address || '').trim();
+  const lc = addr.toLowerCase();
+  const cityDup = !!p.city && lc.includes(p.city.toLowerCase());
+  const zipDup = !!p.zip && addr.includes(p.zip);
+
+  // 1) Full street address (de-duplicated).
+  if (addr) {
+    const primary = await tryOne({
+      address: addr,
+      city: cityDup ? undefined : p.city || undefined,
+      state: p.state || undefined,
+      zip: zipDup ? undefined : p.zip || undefined,
+    });
+    if (primary) return primary;
+  }
+
+  // 2) City / ZIP centroid fallback. Require a city or a state so we never send a
+  //    bare ZIP - "33935" alone geocodes to Spain, "FL 33935" / "LABELLE, FL" do not.
+  if (p.city || p.state) {
+    const fallback = await tryOne({
+      city: p.city || undefined,
+      state: p.state || undefined,
+      zip: p.zip || undefined,
+    });
+    if (fallback) return fallback;
+  }
+
+  return null;
+}
+
+/**
  * Validate multiple addresses in parallel (with rate limiting)
  * Processes in batches to respect Nominatim's 1 req/sec limit
  */

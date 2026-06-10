@@ -22,7 +22,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Sparkles, MapPin, Loader2, AlertTriangle, Filter, CheckSquare } from 'lucide-react';
 import { ViewJob, fullAddress } from './jobViewTypes';
-import { validateAddress } from '../../lib/addressValidator';
+import { geocodeAddress } from '../../lib/addressValidator';
 
 interface JobMapViewProps {
   jobs: ViewJob[];
@@ -137,11 +137,10 @@ const JobMapView: React.FC<JobMapViewProps> = ({ jobs, onOpen, selectable = true
         if (cancelled) return;
         const key = fullAddress(j).toLowerCase();
         try {
-          const r = await validateAddress({ address: j.address, city: j.city, state: j.state, zip: j.zip });
-          const lat = r.normalized?.lat, lon = r.normalized?.lon;
-          if (typeof lat === 'number' && typeof lon === 'number') {
-            cache[key] = { lat, lon };
-            resolved[j.id] = { lat, lon };
+          const coord = await geocodeAddress({ address: j.address, city: j.city, state: j.state, zip: j.zip });
+          if (coord) {
+            cache[key] = coord;
+            resolved[j.id] = coord;
             if (!cancelled) setCoords({ ...resolved });
           } else { fails++; }
         } catch { fails++; }
