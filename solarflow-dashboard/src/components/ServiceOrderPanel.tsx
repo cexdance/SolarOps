@@ -3069,6 +3069,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                 state={customer?.state}
                 zip={customer?.zip}
                 label={siteName}
+                onEditAddress={onViewCustomer && siteId ? () => onViewCustomer(siteId) : undefined}
               />
             </div>
           )}

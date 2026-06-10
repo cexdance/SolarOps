@@ -5,7 +5,7 @@ import React, { useEffect, useState } from 'react';
 import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { Loader2, AlertTriangle, MapPin, ExternalLink } from 'lucide-react';
+import { Loader2, AlertTriangle, MapPin, ExternalLink, UserPen } from 'lucide-react';
 import { validateAddress } from '../../lib/addressValidator';
 
 interface Props {
@@ -14,6 +14,9 @@ interface Props {
   state?: string;
   zip?: string;
   label?: string;
+  /** When provided, the no/invalid-address state offers a shortcut to edit the
+   *  customer record (so dispatch can fix the address without leaving the flow). */
+  onEditAddress?: () => void;
 }
 
 interface Coord { lat: number; lon: number }
@@ -46,7 +49,7 @@ const Center: React.FC<{ coord: Coord }> = ({ coord }) => {
   return null;
 };
 
-const SiteMapView: React.FC<Props> = ({ address, city, state, zip, label }) => {
+const SiteMapView: React.FC<Props> = ({ address, city, state, zip, label, onEditAddress }) => {
   const [coord, setCoord] = useState<Coord | null>(null);
   const [status, setStatus] = useState<'idle' | 'loading' | 'error'>('idle');
   const key = cacheKey(address, city, state, zip);
@@ -92,17 +95,29 @@ const SiteMapView: React.FC<Props> = ({ address, city, state, zip, label }) => {
         <p className="text-sm text-center px-4">
           {fullAddr ? `Could not locate: ${fullAddr}` : 'No address on this Service Order.'}
         </p>
-        {fullAddr && (
-          <a
-            href={mapsUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="flex items-center gap-1.5 text-xs text-orange-500 hover:text-orange-600 font-medium"
-          >
-            <ExternalLink className="w-3.5 h-3.5" />
-            Search in Google Maps
-          </a>
-        )}
+        <div className="flex flex-col items-center gap-2">
+          {onEditAddress && (
+            <button
+              type="button"
+              onClick={onEditAddress}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-orange-500 hover:bg-orange-600 text-white text-xs font-semibold transition-colors cursor-pointer"
+            >
+              <UserPen className="w-3.5 h-3.5" />
+              {fullAddr ? 'Edit address in customer card' : 'Add address in customer card'}
+            </button>
+          )}
+          {fullAddr && (
+            <a
+              href={mapsUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center gap-1.5 text-xs text-orange-500 hover:text-orange-600 font-medium"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              Search in Google Maps
+            </a>
+          )}
+        </div>
       </div>
     );
   }
