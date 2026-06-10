@@ -1414,6 +1414,7 @@ function App() {
     // 'quote_approved' (ServiceOrderPanel.tsx:651), so simply assigning a
     // contractor + saving left the contractor side empty.
     if (updatedJob.contractorId) {
+      const mirrorCust = data.customers.find(c => c.id === updatedJob.customerId);
       const alreadyMirrored = contractorJobs.some(cj => cj.sourceJobId === updatedJob.id);
       if (!alreadyMirrored) {
         const mirror: ContractorJob = {
@@ -1422,10 +1423,10 @@ function App() {
           contractorId: updatedJob.contractorId,
           customerId: updatedJob.customerId,
           customerName: updatedJob.clientName ?? '',
-          customerPhone: '',
-          customerEmail: undefined,
-          address: updatedJob.siteAddress ?? '',
-          city: '', state: 'FL', zip: '',
+          customerPhone: mirrorCust?.phone ?? '',
+          customerEmail: mirrorCust?.email,
+          address: mirrorCust?.address || updatedJob.siteAddress || '',
+          city: mirrorCust?.city ?? '', state: mirrorCust?.state ?? 'FL', zip: mirrorCust?.zip ?? '',
           latitude: 0, longitude: 0,
           serviceType: updatedJob.serviceType,
           description: updatedJob.notes || updatedJob.title || `Work Order ${updatedJob.woNumber ?? updatedJob.id}`,
@@ -1464,6 +1465,10 @@ function App() {
         const nextCj = contractorJobs.map(cj => cj.sourceJobId === updatedJob.id
           ? { ...cj,
               contractorId: updatedJob.contractorId!,
+              address: mirrorCust?.address || updatedJob.siteAddress || cj.address,
+              city:    mirrorCust?.city ?? cj.city,
+              state:   mirrorCust?.state ?? cj.state,
+              zip:     mirrorCust?.zip ?? cj.zip,
               scheduledDate: updatedJob.scheduledDate,
               scheduledTime: updatedJob.scheduledTime,
               serviceType: updatedJob.serviceType,
@@ -1557,14 +1562,50 @@ function App() {
     logChange('customer.update', 'customer', updatedCustomer.id, updatedCustomer,
       data.currentUser?.email ?? 'unknown');
 
+    // When the address changes, cascade it to the customer's jobs (job.siteAddress
+    // is what toContractorJobView projects into the contractor WO) and to any
+    // already-dispatched contractor work orders, which otherwise hold a stale
+    // snapshot taken at dispatch time.
+    const prevCust = data.customers.find(c => c.id === updatedCustomer.id);
+    const addrChanged = !!prevCust && (
+      prevCust.address !== updatedCustomer.address ||
+      prevCust.city !== updatedCustomer.city ||
+      prevCust.state !== updatedCustomer.state ||
+      prevCust.zip !== updatedCustomer.zip
+    );
+    const fullAddr = [
+      updatedCustomer.address,
+      updatedCustomer.city,
+      [updatedCustomer.state, updatedCustomer.zip].filter(Boolean).join(' '),
+    ].filter(Boolean).join(', ');
+
     setData(prev => {
       const next = {
         ...prev,
         customers: prev.customers.map((c) => (c.id === updatedCustomer.id ? updatedCustomer : c)),
+        jobs: addrChanged
+          ? prev.jobs.map(j => j.customerId === updatedCustomer.id ? { ...j, siteAddress: fullAddr } : j)
+          : prev.jobs,
       };
       saveData(next);
       return next;
     });
+
+    if (addrChanged) {
+      setContractorJobs(prev => {
+        const nextCj = prev.map(cj => cj.customerId === updatedCustomer.id
+          ? {
+              ...cj,
+              address: updatedCustomer.address || cj.address,
+              city:    updatedCustomer.city ?? cj.city,
+              state:   updatedCustomer.state ?? cj.state,
+              zip:     updatedCustomer.zip ?? cj.zip,
+            }
+          : cj);
+        saveContractorJobs(nextCj);
+        return nextCj;
+      });
+    }
   };
 
   const handleDeleteCustomer = (customerId: string) => {
