@@ -109,6 +109,21 @@ export async function listPhotosForJob(jobId: string): Promise<PhotoRow[]> {
   return reqToPromise(idx.getAll(jobId));
 }
 
+/**
+ * Delete the local IDB row(s) for a job whose uploaded Storage URL matches.
+ * Without this a deleted photo is re-added by the retry sweep (which re-reads
+ * IDB), so a delete never sticks. Returns the number of rows removed.
+ */
+export async function deletePhotoForJobByUrl(jobId: string, url: string): Promise<number> {
+  if (!url) return 0;
+  const rows = await listPhotosForJob(jobId);
+  const targets = rows.filter(r => r.supabaseUrl === url);
+  if (targets.length === 0) return 0;
+  const store = await tx('readwrite');
+  await Promise.all(targets.map(r => reqToPromise(store.delete(r.id))));
+  return targets.length;
+}
+
 export async function flushPendingMirrors(): Promise<{ ok: number; failed: number }> {
   const store = await tx('readonly');
   const idx = store.index('uploadStatus');

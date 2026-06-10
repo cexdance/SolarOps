@@ -1150,17 +1150,27 @@ function App() {
         const adminJob = prev.jobs.find(j => j.id === updatedJob.sourceJobId);
         if (!adminJob) return prev;
 
-        // Merge contractor photos into admin woPhotos (deduplicate by effective URL)
-        // After Phase 1, photos from contractor have storageUrl set (not dataUrl).
+        // Reconcile contractor photos into admin woPhotos. The contractor's photo
+        // set is authoritative (every ContractorJob carries the full set via
+        // toContractorJobView's union, so it only shrinks on an explicit delete).
+        // Previously this MERGED (added only), so a contractor-deleted photo was
+        // never removed from woPhotos and reappeared in the view = "delete not
+        // working". Now we drop existing admin photos no longer in the
+        // contractor's set, then add any new ones.
         const existingWoPhotos = adminJob.woPhotos ?? [];
         const effectiveUrl = (p: import('./types').WOPhoto) => p.storageUrl || p.dataUrl || '';
-        const existingUrls = new Set(existingWoPhotos.map(effectiveUrl).filter(Boolean));
+        const contractorUrlSet = new Set(
+          Object.values(updatedJob.photos ?? {}).flat()
+            .filter((u): u is string => !!u && !u.startsWith('data:')),
+        );
+        const keptExisting = existingWoPhotos.filter(p => contractorUrlSet.has(effectiveUrl(p)));
+        const keptUrls = new Set(keptExisting.map(effectiveUrl).filter(Boolean));
         const newPhotos = contractorPhotosToWoPhotos(updatedJob.photos)
           .filter(p => {
             const url = effectiveUrl(p);
-            return url && !existingUrls.has(url);
+            return url && !keptUrls.has(url);
           });
-        const mergedPhotos = [...existingWoPhotos, ...newPhotos];
+        const mergedPhotos = [...keptExisting, ...newPhotos];
 
         // Build the updated admin job with all mirrored fields
         const statusFields = ['en_route', 'in_progress', 'completed'].includes(updatedJob.status)
@@ -1178,7 +1188,9 @@ function App() {
           ...adminJob,
           ...statusFields,
           // Field-side data mirror
-          woPhotos: mergedPhotos.length > 0 ? mergedPhotos : adminJob.woPhotos,
+          // Use the reconciled set directly (not gated on length) so deleting the
+          // last contractor photo actually clears it on the admin side too.
+          woPhotos: mergedPhotos,
           serviceReport: updatedJob.operationalNotes ?? updatedJob.completionNotes ?? adminJob.serviceReport,
           serviceStatus: updatedJob.serviceStatus ?? adminJob.serviceStatus,
           requiresFollowUp: updatedJob.requiresFollowUp ?? adminJob.requiresFollowUp,
