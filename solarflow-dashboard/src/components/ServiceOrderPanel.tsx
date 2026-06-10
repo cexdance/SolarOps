@@ -555,7 +555,9 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
   // Contractor assignment
   const [assignedContractorId, setAssignedContractorId] = useState(job?.contractorId ?? '');
   const [contractorPayRate, setContractorPayRate] = useState<number>(job?.contractorPayRate ?? 125);
-  const [contractorPayUnit, setContractorPayUnit] = useState<'hour' | 'flat'>(job?.contractorPayUnit ?? 'flat');
+  // Pay rate/unit are derived from the service rate (see PowerCare toggle + service
+  // select); the manual inputs were removed from the form, so the unit is read-only here.
+  const [contractorPayUnit] = useState<'hour' | 'flat'>(job?.contractorPayUnit ?? 'flat');
 
   // Serial number tracking (inverter / optimizer swaps)
   const [sowOldSN, setSowOldSN] = useState(job?.oldSerialNumber ?? '');
@@ -1806,34 +1808,44 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                 )}
               </div>
 
-              {/* Labor Hours + Parts Cost + PowerCare */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-slate-500 mb-1">Labor Hours</label>
-                  <input
-                    type="number"
-                    min={0}
-                    step={0.5}
-                    value={laborHours}
-                    onChange={e => setLaborHours(parseFloat(e.target.value) || 0)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
-                  />
+              {/* Job sizing: labor, parts & PowerCare coverage */}
+              <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4 space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500 mb-1">Labor Hours</label>
+                    <input
+                      type="number"
+                      min={0}
+                      step={0.5}
+                      value={laborHours}
+                      onChange={e => setLaborHours(parseFloat(e.target.value) || 0)}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500 mb-1">Parts Cost</label>
+                    <input
+                      type="number"
+                      min={0}
+                      step={0.01}
+                      value={partsCostDirect}
+                      onChange={e => setPartsCostDirect(parseFloat(e.target.value) || 0)}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-400"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-500 mb-1">Parts Cost ($)</label>
-                  <input
-                    type="number"
-                    min={0}
-                    step={0.01}
-                    value={partsCostDirect}
-                    onChange={e => setPartsCostDirect(parseFloat(e.target.value) || 0)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
-                  />
-                </div>
-                <div className="flex items-end pb-2">
-                  <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer select-none">
+
+                {/* PowerCare coverage toggle */}
+                <label className="flex items-center justify-between gap-3 cursor-pointer select-none border-t border-slate-200/80 pt-3">
+                  <span className="flex items-center gap-2 min-w-0">
+                    <ShieldCheck className={`w-4 h-4 flex-shrink-0 ${isPowercare ? 'text-orange-500' : 'text-slate-400'}`} />
+                    <span className="text-sm font-medium text-slate-700">PowerCare Client</span>
+                    <span className="text-xs text-slate-400 truncate">SolarEdge-covered service</span>
+                  </span>
+                  <span className="relative inline-flex flex-shrink-0">
                     <input
                       type="checkbox"
+                      className="peer sr-only"
                       checked={isPowercare}
                       onChange={e => {
                         const next = e.target.checked;
@@ -1850,38 +1862,11 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                           if (clientRate) setQuoteAmount(clientRate);
                         }
                       }}
-                      className="w-4 h-4 rounded border-slate-300 accent-orange-500"
                     />
-                    <span className="font-medium text-xs">PowerCare Client</span>
-                  </label>
-                </div>
-              </div>
-
-              {/* Contractor Pay */}
-              <div className="grid grid-cols-3 gap-3">
-                <div className="col-span-3 sm:col-span-1" />
-                <div>
-                  <label className="block text-xs font-medium text-slate-500 mb-1">Pay Rate ($)</label>
-                  <input
-                    type="number"
-                    min={0}
-                    step={5}
-                    value={contractorPayRate}
-                    onChange={e => setContractorPayRate(parseFloat(e.target.value) || 0)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-500 mb-1">Pay Unit</label>
-                  <select
-                    value={contractorPayUnit}
-                    onChange={e => setContractorPayUnit(e.target.value as 'hour' | 'flat')}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 cursor-pointer"
-                  >
-                    <option value="hour">Per Hour</option>
-                    <option value="flat">Flat Rate</option>
-                  </select>
-                </div>
+                    <span className="w-9 h-5 rounded-full bg-slate-300 peer-checked:bg-orange-500 transition-colors" />
+                    <span className="absolute left-0.5 top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform peer-checked:translate-x-4" />
+                  </span>
+                </label>
               </div>
 
               {assignedContractor && (
