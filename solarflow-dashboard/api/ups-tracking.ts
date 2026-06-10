@@ -10,7 +10,7 @@
  * Mock implementation for MVP — can be upgraded to real UPS API later
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { requireUser } from './_auth';
+import { requireUser } from './_auth.js';
 
 export interface UPSTrackingResponse {
   status: 'pending' | 'delivered' | 'error';

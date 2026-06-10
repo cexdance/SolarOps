@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { requireUser } from './_auth';
+import { requireUser } from './_auth.js';
 
 // Proxy for all Xero API calls — strips /api/xero-api prefix and forwards to api.xero.com
 export default async function handler(req: VercelRequest, res: VercelResponse) {

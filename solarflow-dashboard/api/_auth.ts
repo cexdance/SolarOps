@@ -8,7 +8,7 @@
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient, type SupabaseClient, type User } from '@supabase/supabase-js';
-import { env } from './_env';
+import { env } from './_env.js';
 
 const SUPABASE_URL = env('SUPABASE_URL') || 'https://cjmhfagkkayelcsprbai.supabase.co';
 const SERVICE_ROLE_KEY = env('SUPABASE_SERVICE_ROLE_KEY') || '';

@@ -14,8 +14,8 @@
  * staff member is ever silently dropped from the panel.
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { requireUser } from './_auth';
-import { env } from './_env';
+import { requireUser } from './_auth.js';
+import { env } from './_env.js';
 
 const SUPABASE_URL = env('SUPABASE_URL') || 'https://cjmhfagkkayelcsprbai.supabase.co';
 

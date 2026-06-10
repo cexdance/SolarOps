@@ -14,7 +14,7 @@
  * The legacy VITE_-prefixed names are still read as a fallback for transition.
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { requireUser } from './_auth';
+import { requireUser } from './_auth.js';
 
 const TRELLO_BASE = 'https://api.trello.com/1';
 

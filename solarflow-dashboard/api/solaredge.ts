@@ -12,7 +12,7 @@
  *   - /sites/list: 6 hours               — rarely changes
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { requireUser } from './_auth';
+import { requireUser } from './_auth.js';
 
 const SOLAREDGE_BASE = 'https://monitoringapi.solaredge.com';
 
