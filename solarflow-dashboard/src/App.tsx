@@ -2262,6 +2262,7 @@ function App() {
             currentUserRole={currentUser?.role}
             customers={data.customers}
             onAddCustomer={handleCreateCustomer}
+            onCreateStandaloneRma={handleCreateStandaloneRma}
           />
         );
 

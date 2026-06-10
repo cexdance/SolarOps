@@ -13,13 +13,15 @@ import {
 import { loadCRMData, saveCRMData, addLead, CRMData } from '../lib/crmStore';
 import { fetchTrelloCard, extractContactInfo } from '../lib/trelloImporter';
 import { loadData, saveData } from '../lib/dataStore';
-import { Lead, LeadStatus, LeadSource, Job, Customer, CRMAttachment } from '../types';
+import { Lead, LeadStatus, LeadSource, Job, Customer, CRMAttachment, RMAEntry } from '../types';
 
 interface LeadLobbyProps {
   currentUserId: string;
   currentUserRole?: string;
   customers?: Customer[];
   onAddCustomer?: (customer: Partial<Customer>) => void;
+  /** Create a standalone RMA (no work order) from a converted PowerCare lead. */
+  onCreateStandaloneRma?: (entry: RMAEntry) => void;
 }
 
 const salesReps = [
@@ -132,11 +134,16 @@ interface ParsedRow {
   zip: string;
   notes: string;
   caseNumber: string;
+  rmaNumber: string;
   tracking: string;
   tracking2: string;
   shipDate: string;
   eta: string;
   pod: string;
+  oldPart: string;
+  oldSerial: string;
+  shippedPart: string;
+  shippedSerial: string;
 }
 
 /** Convert an Excel serial date (e.g. 46001.45) or ISO string to YYYY-MM-DD */
@@ -208,7 +215,7 @@ function parseSolarEdgeEmail(text: string): Partial<AddFormData> & { addressNote
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserRole, customers = [], onAddCustomer }) => {
+export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserRole, customers = [], onAddCustomer, onCreateStandaloneRma }) => {
   const [crmData, setCrmData] = useState<CRMData>(() => loadCRMData());
   const [syncState, setSyncState] = useState<'idle' | 'syncing' | 'ok' | 'error'>('idle');
   const [viewMode, setViewMode] = useState<'list' | 'kanban'>('kanban');
@@ -587,11 +594,16 @@ export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserRole, customers
             r['Subject'] ? String(r['Subject']) : '',
           ].filter(Boolean).join('\n'),
           caseNumber: String(r['Case Number'] ?? ''),
+          rmaNumber:  String(r['RMA Number'] ?? '').replace(/^N\/A$/i, ''),
           tracking:   String(r['Shipping Tracking Number'] ?? ''),
           tracking2:  String(r['Shipping Tracking Number2'] ?? ''),
           shipDate:   parseExcelDate(r['Actual Ship Date']),
           eta:        parseExcelDate(r['Shipping ETA']),
           pod:        parseExcelDate(r['Shipping Proof of Delivery']),
+          oldPart:      String(r['Part Number (old)'] ?? '').replace(/^N\/A$/i, ''),
+          oldSerial:    String(r['Serial Number (old)'] ?? '').replace(/^N\/A$/i, ''),
+          shippedPart:  String(r['Shipped PN'] ?? '').replace(/^N\/A$/i, ''),
+          shippedSerial:String(r['Shipped SN'] ?? '').replace(/^N\/A$/i, ''),
         } as ParsedRow;
       }).filter(r => r.firstName || r.phone);
 
@@ -618,6 +630,12 @@ export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserRole, customers
           if (row.shipDate && (!existing.shipDate || row.shipDate < existing.shipDate)) existing.shipDate = row.shipDate;
           if (row.eta && row.eta > (existing.eta ?? '')) existing.eta = row.eta;
           if (row.pod && row.pod > (existing.pod ?? '')) existing.pod = row.pod;
+          // Keep first non-empty RMA / part / serial info
+          if (row.rmaNumber && !existing.rmaNumber.includes(row.rmaNumber)) existing.rmaNumber = [existing.rmaNumber, row.rmaNumber].filter(Boolean).join(', ');
+          if (row.oldPart && !existing.oldPart) existing.oldPart = row.oldPart;
+          if (row.oldSerial && !existing.oldSerial) existing.oldSerial = row.oldSerial;
+          if (row.shippedPart && !existing.shippedPart) existing.shippedPart = row.shippedPart;
+          if (row.shippedSerial && !existing.shippedSerial) existing.shippedSerial = row.shippedSerial;
         } else {
           grouped.set(key, { ...row });
         }
@@ -651,6 +669,11 @@ export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserRole, customers
         powercareShipDate:    row.shipDate || undefined,
         powercareEta:         row.eta || undefined,
         powercarePod:         row.pod || undefined,
+        powercareRmaNumber:     row.rmaNumber || undefined,
+        powercareOldPart:       row.oldPart || undefined,
+        powercareOldSerial:     row.oldSerial || undefined,
+        powercareShippedPart:   row.shippedPart || undefined,
+        powercareShippedSerial: row.shippedSerial || undefined,
       });
     }
     save(data);
@@ -709,9 +732,29 @@ export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserRole, customers
     });
   };
 
+  // Build a human-readable PowerCare shipment / part block from a lead so the
+  // inverter / part serial numbers survive the conversion into the customer's notes.
+  const buildShipmentNote = (lead: Lead): string => {
+    if (!lead.isPowercare) return '';
+    const lines: string[] = [];
+    if (lead.powercareCaseNumber)    lines.push(`PowerCare Case #: ${lead.powercareCaseNumber}`);
+    if (lead.powercareRmaNumber)     lines.push(`RMA #: ${lead.powercareRmaNumber}`);
+    if (lead.powercareOldPart || lead.powercareOldSerial)
+      lines.push(`Failed part: ${[lead.powercareOldPart, lead.powercareOldSerial].filter(Boolean).join(' / SN ')}`);
+    if (lead.powercareShippedPart || lead.powercareShippedSerial)
+      lines.push(`Replacement shipped: ${[lead.powercareShippedPart, lead.powercareShippedSerial].filter(Boolean).join(' / SN ')}`);
+    if (lead.powercareTracking)      lines.push(`Tracking: ${lead.powercareTracking}`);
+    if (lead.powercareShipDate)      lines.push(`Shipped: ${lead.powercareShipDate}`);
+    if (lead.powercareEta)           lines.push(`ETA: ${lead.powercareEta}`);
+    if (lead.powercarePod)           lines.push(`Delivered: ${lead.powercarePod}`);
+    return lines.length ? `── PowerCare Shipment ──\n${lines.join('\n')}` : '';
+  };
+
   const handleConvertToCustomer = (lead: Lead, siteId: string) => {
     const now = new Date().toISOString();
     const trimmedId = siteId.trim() || undefined;
+    const shipmentNote = buildShipmentNote(lead);
+    const notes = [lead.notes || '', shipmentNote].filter(Boolean).join('\n\n');
     const newCustomer: Partial<Customer> = {
       id:              `cust-${Date.now()}`,
       name:            `${lead.firstName} ${lead.lastName}`.trim(),
@@ -724,14 +767,45 @@ export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserRole, customers
       state:           lead.state || 'FL',
       zip:             lead.zip || '',
       type:            'residential',
-      notes:           lead.notes || '',
+      notes,
       isPowerCare:     lead.isPowercare ?? false,
+      powerCareCaseNumber:     lead.powercareCaseNumber,
+      powerCareTrackingNumber: lead.powercareTracking,
+      powerCareShipDate:       lead.powercareShipDate,
+      powerCareETA:            lead.powercareEta,
+      powercarePOD:            lead.powercarePod,
       clientId:        trimmedId,
       solarEdgeSiteId: trimmedId,
       createdAt:       now,
     };
     // Use App-level callback so React state updates immediately (reflects in Customers view)
     onAddCustomer?.(newCustomer);
+
+    // PowerCare leads carry an RMA: create a standalone RMA so the part swap is
+    // tracked from day one (red "No work order" flag until a WO links it).
+    if (lead.isPowercare && (lead.powercareCaseNumber || lead.powercareRmaNumber) && onCreateStandaloneRma) {
+      const partDesc = [
+        lead.powercareOldPart || lead.powercareOldSerial
+          ? `Failed: ${[lead.powercareOldPart, lead.powercareOldSerial].filter(Boolean).join(' / SN ')}`
+          : '',
+        lead.powercareShippedPart || lead.powercareShippedSerial
+          ? `Replacement: ${[lead.powercareShippedPart, lead.powercareShippedSerial].filter(Boolean).join(' / SN ')}`
+          : '',
+      ].filter(Boolean).join(' | ') || 'PowerCare part replacement';
+      onCreateStandaloneRma({
+        id:              `rma-${Date.now()}`,
+        manufacturer:    'SolarEdge',
+        partDescription: partDesc,
+        rmaNumber:       lead.powercareRmaNumber || '',
+        caseNumber:      lead.powercareCaseNumber,
+        status:          'pending',
+        rmaStatus:       'processes',
+        createdAt:       now,
+        createdBy:       `Lead conversion: ${lead.firstName} ${lead.lastName}`.trim(),
+        updatedAt:       now,
+      });
+    }
+
     // Mark lead closed_won (removes from board)
     save({
       ...crmData,
@@ -740,7 +814,8 @@ export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserRole, customers
       ),
     });
     setSelectedLeadId(null);
-    setImportStatus(`${lead.firstName} ${lead.lastName} converted to customer ✓`);
+    const rmaMsg = lead.isPowercare && (lead.powercareCaseNumber || lead.powercareRmaNumber) ? ' + RMA created' : '';
+    setImportStatus(`${lead.firstName} ${lead.lastName} converted to customer${rmaMsg} ✓`);
     setTimeout(() => setImportStatus(''), 4000);
   };
 

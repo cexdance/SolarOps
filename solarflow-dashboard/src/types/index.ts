@@ -569,6 +569,11 @@ export interface Lead {
   powercareShipDate?: string;   // ISO date string
   powercareEta?: string;         // ISO date string
   powercarePod?: string;         // ISO date string (proof of delivery)
+  powercareRmaNumber?: string;       // manufacturer RMA # (if issued)
+  powercareOldPart?: string;         // failed part number
+  powercareOldSerial?: string;       // failed part serial (inverter/optimizer)
+  powercareShippedPart?: string;     // replacement part number shipped
+  powercareShippedSerial?: string;   // replacement part serial shipped
 }
 
 export interface LeadActivity {
