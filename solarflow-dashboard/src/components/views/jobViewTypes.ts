@@ -26,6 +26,8 @@ export interface ViewJob {
   pay?: number;
   /** Optional short badge, e.g. the work/service order number. */
   badge?: string;
+  /** Optional client identifier, e.g. US-15435. */
+  clientNumber?: string;
 }
 
 /** A board column definition: a status bucket plus its display label/accent. */

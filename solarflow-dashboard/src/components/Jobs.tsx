@@ -398,6 +398,7 @@ export const Jobs: React.FC<JobsProps> = ({
         scheduledDate: job.scheduledDate,
         serviceType: String(job.serviceType),
         badge: job.woNumber,
+        clientNumber: c?.clientId || '',
       } satisfies ViewJob;
     });
   }, [filteredJobs, customers]);

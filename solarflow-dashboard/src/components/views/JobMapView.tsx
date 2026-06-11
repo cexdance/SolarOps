@@ -327,13 +327,36 @@ const JobMapView: React.FC<JobMapViewProps> = ({ jobs, onOpen, selectable = true
                     onClick={() => onOpen(job.id)}
                     className="min-w-0 flex-1 text-left cursor-pointer"
                   >
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="w-5 h-5 rounded-full bg-slate-900 text-white text-[10px] font-bold flex items-center justify-center flex-shrink-0">{i + 1}</span>
+                      {job.clientNumber && <span className="text-xs font-semibold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded flex-shrink-0">{job.clientNumber}</span>}
                       <span className="text-sm font-semibold text-slate-900 truncate">{job.title}</span>
                     </div>
-                    <p className="text-xs text-slate-500 flex items-center gap-1 truncate mt-0.5">
+                    <p className="text-xs text-slate-500 flex items-center gap-1.5 flex-wrap mt-0.5">
                       {hasCoord ? <MapPin className="w-3 h-3 flex-shrink-0" /> : <AlertTriangle className="w-3 h-3 flex-shrink-0 text-amber-500" />}
-                      {job.city}{job.state ? `, ${job.state}` : ''} · {job.statusLabel}
+                      <span className="truncate">{job.city}{job.state ? `, ${job.state}` : ''}</span>
+                      <span>·</span>
+                      <span>{job.statusLabel}</span>
+                      {job.priority && job.priority !== 'normal' && (
+                        <>
+                          <span>·</span>
+                          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded whitespace-nowrap ${
+                            job.priority === 'critical' ? 'bg-red-100 text-red-700' :
+                            job.priority === 'high' ? 'bg-amber-100 text-amber-700' :
+                            'bg-blue-100 text-blue-700'
+                          }`}>
+                            {job.priority}
+                          </span>
+                        </>
+                      )}
+                      {job.serviceType && (
+                        <>
+                          <span>·</span>
+                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-teal-100 text-teal-700 whitespace-nowrap">
+                            {job.serviceType}
+                          </span>
+                        </>
+                      )}
                     </p>
                   </button>
                   <span className="text-[10px] text-slate-400 flex-shrink-0">{job.scheduledTime ?? ''}</span>
