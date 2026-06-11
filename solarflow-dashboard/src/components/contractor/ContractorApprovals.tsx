@@ -5,7 +5,7 @@ import {
   User, Building, Shield, CheckCircle, XCircle, Clock, FileText,
   Mail, Phone, MapPin, AlertCircle, ChevronRight, DollarSign, X,
   Plus, Trash2, Pencil, Save, Wrench, ReceiptText,
-  LayoutGrid, List as ListIcon, Calendar,
+  LayoutGrid, List as ListIcon, Calendar, Eye,
 } from 'lucide-react';
 import { Contractor, ContractorStatus, ContractorJob } from '../../types/contractor';
 import { ContractorInvite } from './ContractorInvite';
@@ -17,6 +17,8 @@ interface ContractorApprovalsProps {
   onUpdateStatus: (contractorId: string, status: ContractorStatus, reason?: string) => void;
   onUpdateContractor?: (contractor: Contractor) => void;
   onDeleteContractor?: (contractorId: string) => void;
+  /** Enter the contractor portal as this contractor (admin impersonation). */
+  onViewAs?: (contractor: Contractor) => void;
   adminName?: string;
   adminEmail?: string;
 }
@@ -40,6 +42,7 @@ export const ContractorApprovals: React.FC<ContractorApprovalsProps> = ({
   onUpdateStatus,
   onUpdateContractor,
   onDeleteContractor,
+  onViewAs,
   adminName = 'Admin',
   adminEmail = 'operations@conexsol.us',
 }) => {
@@ -246,6 +249,16 @@ export const ContractorApprovals: React.FC<ContractorApprovalsProps> = ({
               <div className="flex items-center gap-2 shrink-0">
                 {!showEditMode && (
                   <>
+                    {onViewAs && selected.status === 'approved' && (
+                      <button
+                        onClick={() => onViewAs(selected)}
+                        title="Open the contractor portal as this contractor"
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-emerald-300 border border-emerald-800/60 rounded-lg hover:bg-emerald-900/30 transition-colors cursor-pointer"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                        View as
+                      </button>
+                    )}
                     <button
                       onClick={() => openEdit(selected)}
                       className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-300 border border-slate-700 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"

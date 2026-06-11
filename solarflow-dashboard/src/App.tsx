@@ -51,6 +51,7 @@ import { Contractor, ContractorStatus, ContractorJob } from './types/contractor'
 import { addInteraction, loadCustomers, loadInteractions, saveInteractions } from './lib/customerStore';
 import { validateAddress, normalizeStreetOrder } from './lib/addressValidator';
 import { useUnreadBadge } from './hooks/useUnreadBadge';
+import { Eye, X } from 'lucide-react';
 
 // ── Web Push helpers ──────────────────────────────────────────────────────────
 
@@ -668,6 +669,11 @@ function App() {
   });
   const [mustChangePassword, setMustChangePassword] = useState(false);
   const [currentContractor, setCurrentContractor] = useState<Contractor | null>(null);
+  // Admin "View as contractor" impersonation. When true, the staff session stays
+  // authenticated underneath; we render the contractor portal with a banner and an
+  // Exit that returns to admin WITHOUT signing out. Intentionally not persisted to
+  // sessionStorage, so a refresh drops back to the admin view.
+  const [isImpersonating, setIsImpersonating] = useState(false);
   const [showRegister, setShowRegister] = useState(false);
   const [showResetPassword, setShowResetPassword] = useState(
     () => window.location.pathname === '/reset-password'
@@ -1067,6 +1073,23 @@ function App() {
     const next = contractors.filter(c => c.id !== contractorId);
     setContractors(next);
     saveContractors(next);
+  };
+
+  // Admin enters the contractor portal as this contractor (read of their data).
+  // No sessionStorage write and no Supabase contractor session: the staff session
+  // remains active so Exit returns straight to admin.
+  const handleViewAsContractor = (contractor: Contractor) => {
+    setCurrentContractor(contractor);
+    setIsContractorMode(true);
+    setIsImpersonating(true);
+    window.scrollTo(0, 0);
+  };
+
+  const handleExitImpersonation = () => {
+    setIsImpersonating(false);
+    setIsContractorMode(false);
+    setCurrentContractor(null);
+    setCurrentView('contractors');
   };
 
   const handleContractorJobUpdate = (incomingJob: ContractorJob) => {
@@ -2241,7 +2264,7 @@ function App() {
 
   // Contractor mode
   if (isContractorMode && currentContractor) {
-    if (currentContractor.status === 'pending') {
+    if (currentContractor.status === 'pending' && !isImpersonating) {
       return (
         <PendingApprovalScreen
           contractor={currentContractor}
@@ -2251,18 +2274,37 @@ function App() {
     }
 
     return (
-      <ContractorDashboard
-        contractorName={currentContractor.contactName}
-        contractorId={currentContractor.id}
-        contractor={currentContractor}
-        jobs={pickupJobsForContractor(currentContractor.id, data.jobs).map(j => toContractorJobView(j, contractorJobs.find(cj => cj.sourceJobId === j.id), data.customers.find(c => c.id === j.customerId)))}
-        onLogout={handleLogout}
-        onUpdateJob={handleContractorJobUpdate}
-        onUpdateContractor={(updated) => {
-          setContractors(prev => prev.map(c => c.id === updated.id ? updated : c));
-          setCurrentContractor(updated);
-        }}
-      />
+      <>
+        {isImpersonating && (
+          <div className="sticky top-0 z-[3000] flex items-center justify-between gap-3 px-4 py-2 bg-amber-500 text-amber-950 text-sm font-semibold shadow-md">
+            <span className="flex items-center gap-2 min-w-0">
+              <Eye className="w-4 h-4 shrink-0" />
+              <span className="truncate">
+                Viewing as {currentContractor.contactName} ({currentContractor.businessName}) — read-only preview of their portal
+              </span>
+            </span>
+            <button
+              onClick={handleExitImpersonation}
+              className="flex items-center gap-1.5 px-3 py-1 bg-amber-950 text-white rounded-lg text-xs font-bold hover:bg-amber-900 transition-colors cursor-pointer shrink-0"
+            >
+              <X className="w-3.5 h-3.5" />
+              Exit preview
+            </button>
+          </div>
+        )}
+        <ContractorDashboard
+          contractorName={currentContractor.contactName}
+          contractorId={currentContractor.id}
+          contractor={currentContractor}
+          jobs={pickupJobsForContractor(currentContractor.id, data.jobs).map(j => toContractorJobView(j, contractorJobs.find(cj => cj.sourceJobId === j.id), data.customers.find(c => c.id === j.customerId)))}
+          onLogout={isImpersonating ? handleExitImpersonation : handleLogout}
+          onUpdateJob={isImpersonating ? () => {} : handleContractorJobUpdate}
+          onUpdateContractor={isImpersonating ? () => {} : (updated) => {
+            setContractors(prev => prev.map(c => c.id === updated.id ? updated : c));
+            setCurrentContractor(updated);
+          }}
+        />
+      </>
     );
   }
 
@@ -2298,15 +2340,17 @@ function App() {
     // Approvals, contractor-Billing) all read THIS instead of the raw store, so
     // they can no longer diverge from what the admin board shows.
     const contractorJobsView: ContractorJob[] = (() => {
-      const linkedIds = new Set<string>();
+      const allJobIds = new Set(data.jobs.map(j => j.id));
       const projected = data.jobs
         .filter(j => j.contractorId)
-        .map(j => {
-          linkedIds.add(j.id);
-          return toContractorJobView(j, contractorJobs.find(cj => cj.sourceJobId === j.id), data.customers.find(c => c.id === j.customerId));
-        });
-      const orphans = contractorJobs.filter(cj => !cj.sourceJobId || !linkedIds.has(cj.sourceJobId));
-      return [...projected, ...orphans];
+        .map(j => toContractorJobView(j, contractorJobs.find(cj => cj.sourceJobId === j.id), data.customers.find(c => c.id === j.customerId)));
+      // Keep ONLY contractorJobs that never had an admin Job (no sourceJobId at all).
+      // A row whose sourceJobId no longer resolves to a live Job is STALE - the admin
+      // order was deleted or re-imported with a new id - so it must NOT surface as an
+      // active work order. Those stale rows were why the contractor's WO tab showed
+      // more jobs than the Service Orders window (single source of truth = data.jobs).
+      const trueOrphans = contractorJobs.filter(cj => !cj.sourceJobId && !allJobIds.has(cj.id));
+      return [...projected, ...trueOrphans];
     })();
 
     switch (currentView) {
@@ -2357,6 +2401,7 @@ function App() {
             onUpdateStatus={handleContractorStatusUpdate}
             onUpdateContractor={handleContractorUpdate}
             onDeleteContractor={handleContractorDelete}
+            onViewAs={handleViewAsContractor}
             adminName={currentUser?.name ?? 'Admin'}
             adminEmail={currentUser?.email ?? 'operations@conexsol.us'}
           />
