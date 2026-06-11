@@ -42,12 +42,14 @@ export function generateServiceOrderNumber(): string {
   return `SO-${yymm}-${seq}`;
 }
 
-// Statuses that mean the work has been dispatched to the contractor, so it
-// appears in their portal. A job assigned to a contractor but still at
-// draft/quote_sent is NOT yet visible to them - it must reach the assigned stage
-// (or beyond) first. The admin advances it via the Service Order / WO panel.
+// Statuses the contractor sees in their portal: only ACTIVE work. A job assigned
+// to a contractor but still at draft/quote_sent is NOT yet visible (it must reach
+// the assigned stage first, advanced by the admin via the Service Order / WO
+// panel). Finished/billing states (invoiced, paid) are deliberately EXCLUDED -
+// once a job is invoiced the contractor's work is done and admin billing is not
+// their concern, so it drops out of their active list.
 const CONTRACTOR_VISIBLE_STATUSES: Set<string> = new Set([
-  'assigned', 'scheduled', 'in_progress', 'completed', 'invoiced', 'paid',
+  'assigned', 'scheduled', 'in_progress', 'completed',
 ]);
 
 /**
