@@ -3,7 +3,7 @@
 // View routing lives in src/components/AppRouter.tsx
 // Sync side-effects live in src/hooks/useSyncEngine.ts
 // Version-poll side-effect lives in src/hooks/useVersionPoll.ts
-import { useState, useEffect, useRef, useMemo, lazy, Suspense } from 'react';
+import { useState, useEffect, useRef, useMemo, lazy, Suspense, startTransition } from 'react';
 import { useVersionPoll } from './hooks/useVersionPoll';
 import { useSyncEngine }  from './hooks/useSyncEngine';
 import { BUILD_ID } from './lib/versionConfig';
@@ -51,6 +51,7 @@ import { Contractor, ContractorStatus, ContractorJob } from './types/contractor'
 import { addInteraction, loadCustomers, loadInteractions, saveInteractions } from './lib/customerStore';
 import { validateAddress, normalizeStreetOrder } from './lib/addressValidator';
 import { useUnreadBadge } from './hooks/useUnreadBadge';
+import { resolveSessionRoute, isContractorAccount } from './lib/authRouting';
 import { Eye, X } from 'lucide-react';
 
 // ── Web Push helpers ──────────────────────────────────────────────────────────
@@ -150,6 +151,14 @@ const LoginScreen: React.FC<{
     }
 
     const meta = supaUser.user_metadata ?? {};
+    // CRITICAL ACCESS CONTROL: contractors must NEVER enter the staff app. If a
+    // contractor-role account authenticates on the staff screen, reject it and
+    // point them at the Contractor login (which routes to the contractor portal).
+    if (isContractorAccount(meta)) {
+      await supabase.auth.signOut();
+      setError('This is the staff portal. Please use the Contractor login.');
+      return;
+    }
     const user: User = {
       id: supaUser.id,
       name: meta['name'] ?? supaUser.email ?? 'Staff',
@@ -853,6 +862,26 @@ function App() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
         const meta = session.user.user_metadata ?? {};
+        // CRITICAL ACCESS CONTROL: role is the source of truth. A pure contractor
+        // (role === 'contractor') must NEVER be set up as staff, even when the
+        // fragile sessionStorage contractor flag is gone (mobile Safari drops it
+        // on tab reopen). Route the durable Supabase session straight to the
+        // contractor portal, or sign out if no approved contractor record matches.
+        if (isContractorAccount(meta)) {
+          const decision = resolveSessionRoute(meta, session.user.email ?? '', loadContractors());
+          if (decision.route === 'contractor') {
+            const linked = loadContractors().find(c => c.id === decision.contractorId) ?? null;
+            sessionStorage.setItem('solarflow_contractor_mode', 'true');
+            sessionStorage.setItem('solarflow_contractor_id', decision.contractorId);
+            setCurrentContractor(linked);
+            setIsContractorMode(true);
+            setIsAuthenticated(true);
+          } else {
+            // Contractor token but no approved record on this device, deny access.
+            supabase.auth.signOut();
+          }
+          return;
+        }
         const user: User = {
           id: session.user.id,
           name: meta['name'] ?? session.user.email ?? 'Staff',
@@ -1079,9 +1108,14 @@ function App() {
   // No sessionStorage write and no Supabase contractor session: the staff session
   // remains active so Exit returns straight to admin.
   const handleViewAsContractor = (contractor: Contractor) => {
-    setCurrentContractor(contractor);
-    setIsContractorMode(true);
-    setIsImpersonating(true);
+    // Switching to the (lazy-loaded) contractor portal swaps out the visible admin
+    // UI. Wrap in startTransition so React tolerates the Suspense fallback during a
+    // discrete click instead of throwing (React #426).
+    startTransition(() => {
+      setCurrentContractor(contractor);
+      setIsContractorMode(true);
+      setIsImpersonating(true);
+    });
     window.scrollTo(0, 0);
   };
 
@@ -2274,7 +2308,7 @@ function App() {
     }
 
     return (
-      <>
+      <Suspense fallback={<div className="min-h-screen bg-slate-50 flex items-center justify-center"><div className="w-8 h-8 border-4 border-orange-400 border-t-transparent rounded-full animate-spin" /></div>}>
         {isImpersonating && (
           <div className="sticky top-0 z-[3000] flex items-center justify-between gap-3 px-4 py-2 bg-amber-500 text-amber-950 text-sm font-semibold shadow-md">
             <span className="flex items-center gap-2 min-w-0">
@@ -2304,7 +2338,32 @@ function App() {
             setCurrentContractor(updated);
           }}
         />
-      </>
+      </Suspense>
+    );
+  }
+
+  // CRITICAL ACCESS CONTROL (defense in depth): a contractor-role user must never
+  // reach the staff app. If we somehow have an authenticated contractor session
+  // that did not resolve to contractor mode above (e.g. a transient race before
+  // the contractor record loaded), block the staff UI entirely instead of leaking
+  // admin screens. The session-restore + login guards should prevent ever getting
+  // here, this is the last line of defense.
+  if ((data.currentUser?.role as string | undefined) === 'contractor') {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-6 text-center bg-slate-50">
+        <div className="max-w-sm">
+          <h2 className="text-lg font-semibold text-slate-900 mb-2">Loading your portal…</h2>
+          <p className="text-sm text-slate-600 mb-4">
+            This account is a contractor account and does not have access to the staff workspace.
+          </p>
+          <button
+            onClick={handleLogout}
+            className="px-4 py-2 bg-orange-500 text-white rounded-lg text-sm font-medium cursor-pointer"
+          >
+            Back to login
+          </button>
+        </div>
+      </div>
     );
   }
 
