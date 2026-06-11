@@ -42,10 +42,13 @@ export function generateServiceOrderNumber(): string {
   return `SO-${yymm}-${seq}`;
 }
 
-// Statuses that should stay hidden from the contractor even when they are the
-// assigned contractor (the order was shelved). Everything else they are assigned
-// to is theirs to see.
-const CONTRACTOR_HIDDEN_STATUSES: Set<string> = new Set(['archived', 'cancelled']);
+// Statuses that mean the work has been dispatched to the contractor, so it
+// appears in their portal. A job assigned to a contractor but still at
+// draft/quote_sent is NOT yet visible to them - it must reach the assigned stage
+// (or beyond) first. The admin advances it via the Service Order / WO panel.
+const CONTRACTOR_VISIBLE_STATUSES: Set<string> = new Set([
+  'assigned', 'scheduled', 'in_progress', 'completed', 'invoiced', 'paid',
+]);
 
 /**
  * Pick the admin Jobs that belong to a contractor.
@@ -53,17 +56,10 @@ const CONTRACTOR_HIDDEN_STATUSES: Set<string> = new Set(['archived', 'cancelled'
  * the job has been dispatched (not just drafted/quoted).
  */
 export function pickupJobsForContractor(contractorId: string, jobs: Job[]): Job[] {
-  return jobs.filter(j => {
-    if (j.contractorId !== contractorId) return false;
-    if (j.status === 'archived') return false;
-    const st = j.woStatus ?? j.status;
-    // A job whose contractorId is set is the contractor's, full stop - the admin
-    // assigned them. Hide only shelved orders (archived/cancelled). Previously this
-    // required an already-dispatched status (assigned/scheduled/...), so a job left
-    // at draft/quote_sent after assignment was invisible to the contractor even
-    // though it showed in Service Orders - that was the source/their portal gap.
-    return !CONTRACTOR_HIDDEN_STATUSES.has(st);
-  });
+  return jobs.filter(j =>
+    j.contractorId === contractorId &&
+    CONTRACTOR_VISIBLE_STATUSES.has(j.woStatus ?? j.status)
+  );
 }
 
 // Map admin WOStatus → contractor-side JobStatusContractor
