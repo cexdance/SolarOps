@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { Customer } from '../types';
 import { isFloridaSite } from '../lib/solarEdgeSiteFilter';
+import { normalizeStreetOrder } from '../lib/addressValidator';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -80,7 +81,13 @@ async function fetchAllSites(apiKey?: string): Promise<LiveSite[]> {
 
 function fmtAddress(site: LiveSite): string {
   const l = site.location;
-  return [l.address, l.city, 'FL', l.zip].filter(Boolean).join(', ');
+  return [siteAddress(site), l.city, 'FL', l.zip].filter(Boolean).join(', ');
+}
+
+// SolarEdge returns location.address in European order (street name, then house
+// number). Normalize to US order before it touches any customer record or diff.
+function siteAddress(site: LiveSite): string {
+  return normalizeStreetOrder(site.location.address || '');
 }
 
 function siteToName(raw: string): string {
@@ -123,8 +130,9 @@ function buildDiff(sites: LiveSite[], customers: Customer[]): DiffItem[] {
       const changes: FieldChange[] = [];
       if (existing.name !== liveName && liveName)
         changes.push({ field: 'Name', from: existing.name, to: liveName });
-      if (existing.address !== site.location.address && site.location.address)
-        changes.push({ field: 'Address', from: existing.address, to: site.location.address });
+      const liveAddress = siteAddress(site);
+      if (existing.address !== liveAddress && liveAddress)
+        changes.push({ field: 'Address', from: existing.address, to: liveAddress });
       if (existing.city !== liveCity && liveCity)
         changes.push({ field: 'City', from: existing.city, to: liveCity });
       if (existing.zip !== (site.location.zip || '') && site.location.zip)

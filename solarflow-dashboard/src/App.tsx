@@ -49,7 +49,7 @@ import { isFloridaSite, isAllowedCustomer } from './lib/solarEdgeSiteFilter';
 import { getDeletedCustomerIds, markJobDeleted } from './lib/dataStore';
 import { Contractor, ContractorStatus, ContractorJob } from './types/contractor';
 import { addInteraction, loadCustomers, loadInteractions, saveInteractions } from './lib/customerStore';
-import { validateAddress } from './lib/addressValidator';
+import { validateAddress, normalizeStreetOrder } from './lib/addressValidator';
 import { useUnreadBadge } from './hooks/useUnreadBadge';
 
 // ── Web Push helpers ──────────────────────────────────────────────────────────
@@ -1991,22 +1991,25 @@ function App() {
       const site = (item.type === 'new' || item.type === 'updated') ? item.site : undefined;
       if (!site) continue;
       const loc = (site.location ?? {}) as { address?: string; city?: string; zip?: string; state?: string };
+      // SolarEdge sends street name before house number; fix the order before
+      // validating so Nominatim can resolve it and the fallback stays correct.
+      const usOrderAddress = normalizeStreetOrder(loc.address || '');
       let validated: ValidatedLoc = {
-        address: loc.address || '',
+        address: usOrderAddress,
         city: loc.city || '',
         state: loc.state || 'FL',
         zip: loc.zip || '',
       };
       if (loc.address || loc.city || loc.state || loc.zip) {
         const validation = await validateAddress({
-          address: loc.address,
+          address: usOrderAddress || undefined,
           city: loc.city,
           state: loc.state,
           zip: loc.zip,
         });
         if (validation.isValid && validation.normalized) {
           validated = {
-            address: validation.normalized.address || loc.address || '',
+            address: validation.normalized.address || usOrderAddress,
             city: validation.normalized.city || loc.city || '',
             state: validation.normalized.state || loc.state || 'FL',
             zip: validation.normalized.zip || loc.zip || '',
@@ -2031,7 +2034,7 @@ function App() {
 
           // Address was validated up front (see validatedMap); fall back to raw loc.
           const validatedAddress = validatedMap.get(item) ?? {
-            address: loc.address || '',
+            address: normalizeStreetOrder(loc.address || ''),
             city: loc.city || '',
             state: loc.state || 'FL',
             zip: loc.zip || '',

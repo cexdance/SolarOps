@@ -45,3 +45,4 @@ extracted_package/
 *.zip
 .aider*
 .vercel
+address-audit/

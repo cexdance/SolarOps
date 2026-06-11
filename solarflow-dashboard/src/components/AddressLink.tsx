@@ -3,6 +3,7 @@
 // Usage (string): <AddressLink fullAddress="123 Main St, Miami, FL 33101" />
 import React from 'react';
 import { MapPin, ExternalLink } from 'lucide-react';
+import { normalizeStreetOrder, stripEmbeddedCityStateZip } from '../lib/addressValidator';
 
 interface Props {
   // Pass either individual parts OR a single string
@@ -18,9 +19,14 @@ interface Props {
 }
 
 function buildAddress(props: Props): string {
-  if (props.fullAddress) return props.fullAddress.trim();
+  if (props.fullAddress) return normalizeStreetOrder(props.fullAddress.trim());
+  // Some records carry city/state/zip inside the address string AND in separate
+  // fields; strip the embedded copy so the Maps query is not doubled.
+  const street = props.address
+    ? normalizeStreetOrder(stripEmbeddedCityStateZip(props.address, props))
+    : props.address;
   const parts = [
-    props.address,
+    street,
     props.city,
     props.state && props.zip ? `${props.state} ${props.zip}` : props.state || props.zip,
   ].filter(Boolean);
@@ -62,10 +68,14 @@ export const AddressLink: React.FC<Props> = (props) => {
       <MapPin className={`w-4 h-4 mt-0.5 shrink-0 text-slate-400 group-hover:text-orange-500 ${iconClassName}`} />
       <span className="text-sm leading-snug">
         {props.fullAddress ? (
-          <span>{props.fullAddress}</span>
+          <span>{normalizeStreetOrder(props.fullAddress.trim())}</span>
         ) : (
           <>
-            {props.address && <span className="block">{props.address}</span>}
+            {props.address && (
+              <span className="block">
+                {normalizeStreetOrder(stripEmbeddedCityStateZip(props.address, props))}
+              </span>
+            )}
             {(props.city || props.state || props.zip) && (
               <span className="block text-slate-500">
                 {[props.city, props.state && props.zip

@@ -57,7 +57,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       `?key=${API_KEY}&token=${API_TOKEN}` +
       `&fields=name,desc,due,shortUrl,labels` +
       `&attachments=true&attachment_fields=all` +
-      `&actions=commentCard&actions_limit=50`;
+      // checklists + custom fields often hold the phone number and address;
+      // actions unfiltered so desc edits (updateCard) are mined too, not just comments
+      `&checklists=all` +
+      `&customFieldItems=true` +
+      `&actions=commentCard,updateCard&actions_limit=1000`;
 
     let upstream: Response;
     try {

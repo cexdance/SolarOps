@@ -298,6 +298,55 @@ export function normalizeAddressComponents(input: ValidatedAddress['input']): {
   };
 }
 
+// Trailing tokens that are unit designators, not house numbers. "Maple Grove LOT 10"
+// must stay as written; reordering it produces a non-address.
+const UNIT_SUFFIX = /\b(lot|unit|apt|apartment|suite|ste|bldg|building|trlr|trailer|#)\.?$/i;
+
+/**
+ * Fix SolarEdge-style street order: "Northwest 72nd Street 7499" -> "7499 Northwest 72nd Street".
+ * The SolarEdge monitoring API returns location.address with the house number after the
+ * street name (European order), which breaks Google Maps lookups.
+ *
+ * Conservative by design. Reorders only when the street segment starts with a letter,
+ * ends in a 1-6 digit number, the name part has at least two words (skips "Calle 2",
+ * "LOT 10"), and the name part does not end in a unit designator.
+ * Safe to call on already-correct US addresses: they start with a digit and pass through.
+ */
+export function normalizeStreetOrder(address: string): string {
+  if (!address) return address;
+  const parts = address.split(',');
+  const street = (parts[0] ?? '').trim();
+  const match = street.match(/^([A-Za-z].*\S)\s+(\d{1,6})$/);
+  if (!match) return address;
+  const namePart = match[1] ?? '';
+  if (namePart.trim().split(/\s+/).length < 2) return address;
+  if (UNIT_SUFFIX.test(namePart)) return address;
+  parts[0] = `${match[2]} ${namePart}`;
+  return parts.join(',');
+}
+
+/**
+ * Strip a city/state/zip suffix that is embedded in the street address string when the
+ * same values are also held in separate fields, so they do not render or geocode twice.
+ * "330 Beulah Rd, Winter Garden, FL 34787" + city "Winter Garden" -> "330 Beulah Rd".
+ */
+export function stripEmbeddedCityStateZip(
+  address: string,
+  p: { city?: string; state?: string; zip?: string }
+): string {
+  if (!address) return address;
+  let out = address.trim();
+  const cut = (needle?: string) => {
+    if (!needle) return;
+    const idx = out.toLowerCase().indexOf(`, ${needle.toLowerCase()}`);
+    if (idx > 0) out = out.slice(0, idx).trim();
+  };
+  cut(p.city);
+  cut(p.state);
+  if (p.zip) out = out.replace(new RegExp(`,?\\s*${p.zip.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`), '').trim();
+  return out.replace(/,\s*$/, '') || address.trim();
+}
+
 /**
  * Format address for display/storage
  */

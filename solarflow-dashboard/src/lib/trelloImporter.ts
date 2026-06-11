@@ -40,6 +40,16 @@ export interface TrelloAction {
   };
 }
 
+export interface TrelloChecklist {
+  name: string;
+  items: string[];
+}
+
+export interface TrelloCustomFieldItem {
+  // Raw value text: text, number, or date field rendered as string
+  value: string;
+}
+
 export interface TrelloCardData {
   name: string;
   desc: string;
@@ -48,6 +58,8 @@ export interface TrelloCardData {
   labels: string[];
   attachments: TrelloAttachment[];
   comments: TrelloComment[];
+  checklists: TrelloChecklist[];
+  customFieldItems: TrelloCustomFieldItem[];
   // All actions (comments, description changes, list moves, etc.)
   actions: TrelloAction[];
 }
@@ -114,20 +126,36 @@ export async function fetchTrelloCard(urlOrId: string): Promise<TrelloCardData> 
       })(),
     })),
     comments,
+    checklists: (d.checklists ?? []).map((cl: { name?: string; checkItems?: { name?: string }[] }) => ({
+      name: cl.name ?? '',
+      items: (cl.checkItems ?? []).map((it) => it.name ?? '').filter(Boolean),
+    })),
+    customFieldItems: (d.customFieldItems ?? [])
+      .map((cf: { value?: { text?: string; number?: string | number; date?: string } }) => {
+        const v = cf.value;
+        const value = v?.text ?? (v?.number != null ? String(v.number) : '') ?? v?.date ?? '';
+        return { value: String(value || '') };
+      })
+      .filter((cf: TrelloCustomFieldItem) => cf.value),
     actions: allActions,
   };
 }
 
 // ── Parse contact info from multiple sources ────────────────────────────────────
 
-const PHONE_REGEX = /\b(\d{10}|\d{3}[.\-]?\d{3}[.\-]?\d{4}|\(\d{3}\)\s*\d{3}[.\-]?\d{4})\b/;
+// Matches 305-878-6934, 305.878.6934, 305 878 6934, (305) 878 6934, 3058786934,
+// and any of those with a +1 / 1 prefix.
+const PHONE_REGEX = /(?:\+?1[\s.\-]?)?(?:\(\d{3}\)|\d{3})[\s.\-]?\d{3}[\s.\-]?\d{4}\b/;
 const EMAIL_REGEX = /\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b/;
 
 function extractFromText(text: string): { phone: string; email: string } {
   const phoneMatch = text.match(PHONE_REGEX);
   const emailMatch = text.match(EMAIL_REGEX);
+  let phone = phoneMatch ? phoneMatch[0].replace(/\D/g, '') : '';
+  if (phone.length === 11 && phone.startsWith('1')) phone = phone.slice(1);
+  if (phone.length !== 10) phone = '';
   return {
-    phone: phoneMatch ? phoneMatch[0].replace(/\D/g, '') : '',
+    phone,
     email: emailMatch ? emailMatch[0] : '',
   };
 }
@@ -154,6 +182,21 @@ export function extractContactInfo(card: TrelloCardData): { phone: string; email
       if (phone && !bestPhone) bestPhone = phone;
       if (email && !bestEmail) bestEmail = email;
     }
+  }
+
+  // 2b. Card name, custom fields, checklists, attachment names. Phone numbers
+  // frequently live in a custom field or a checklist item rather than the desc.
+  const directTexts: string[] = [
+    card.name,
+    ...card.customFieldItems.map(cf => cf.value),
+    ...card.checklists.flatMap(cl => [cl.name, ...cl.items]),
+    ...card.attachments.map(a => a.name),
+  ];
+  for (const t of directTexts) {
+    if (!t) continue;
+    const { phone, email } = extractFromText(t);
+    if (phone && !bestPhone) bestPhone = phone;
+    if (email && !bestEmail) bestEmail = email;
   }
 
   // 3. All other actions (description edits, checklist items, custom fields, etc.)
