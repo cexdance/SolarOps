@@ -12,6 +12,7 @@ import {
 import SiteMapView from './views/SiteMapView';
 import { Job, WOStatus, WOLineItem, WOPhoto, WOServiceStatus, WO_TO_JOB_STATUS, RMAEntry, AuditEntry } from '../types';
 import { updateClientStatus } from '../lib/siteProfileStore';
+import { normalizeStreetOrder } from '../lib/addressValidator';
 import { QuotePreviewModal } from './QuotePreviewModal';
 import { Contractor, ContractorJob, JobPriority, ServiceRate } from '../types/contractor';
 import { loadServiceRates } from '../lib/contractorStore';
@@ -330,6 +331,13 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
 }) => {
   const isNew = !job;
   const serviceRates: ServiceRate[] = loadServiceRates();
+
+  // Normalize siteAddress: fix SolarEdge European street order (street then number)
+  // so it displays correctly in the UI and links to Google Maps accurately.
+  const normalizedSiteAddress = useMemo(() => {
+    if (!siteAddress) return '';
+    return normalizeStreetOrder(siteAddress);
+  }, [siteAddress]);
 
   // Core form state
   const [woStatus, setWoStatus] = useState<WOStatus>(job?.woStatus ?? 'draft');
@@ -714,7 +722,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
       customerName: siteName,
       customerPhone: customer?.phone ?? '',
       customerEmail: customer?.email,
-      address: siteAddress ?? customer?.address ?? '',
+      address: normalizedSiteAddress ?? customer?.address ?? '',
       city: customer?.city ?? '', state: customer?.state ?? 'FL', zip: customer?.zip ?? '',
       latitude: 0, longitude: 0,
       serviceType: serviceType,
@@ -1217,7 +1225,6 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
       discountType: discountType || undefined,
       solarEdgeSiteId: siteId,
       solarEdgeClientId: clientId,
-      siteAddress,
       clientName: siteName,
       contractorId: assignedContractorId || undefined,
       contractorPayRate,
@@ -1369,8 +1376,8 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
             ) : (
               <p className="text-white font-semibold text-lg leading-snug truncate">{siteName}</p>
             )}
-            {siteAddress && (
-              <p className="text-slate-400 text-sm mt-0.5 truncate">{siteAddress}</p>
+            {normalizedSiteAddress && (
+              <p className="text-slate-400 text-sm mt-0.5 truncate">{normalizedSiteAddress}</p>
             )}
           </div>
 
@@ -2015,7 +2022,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                   <span className="text-slate-500">Site ID</span>
                   <span className="font-mono text-slate-800">{siteId}</span>
                   <span className="text-slate-500">Address</span>
-                  <span className="text-slate-800">{siteAddress ?? '-'}</span>
+                  <span className="text-slate-800">{normalizedSiteAddress ?? '-'}</span>
                 </div>
               </div>
             </div>
@@ -3049,7 +3056,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
           {activeTab === 'map' && (
             <div className="flex flex-col" style={{ minHeight: 400 }}>
               <SiteMapView
-                address={customer?.address || siteAddress}
+                address={customer?.address || normalizedSiteAddress}
                 city={customer?.city}
                 state={customer?.state}
                 zip={customer?.zip}
@@ -3252,7 +3259,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                       ) : (
                         <p className="text-lg font-bold truncate">{siteName || customer?.name || 'Unknown Client'}</p>
                       )}
-                      {siteAddress && <p className="text-sm text-slate-300 mt-1">{siteAddress}</p>}
+                      {normalizedSiteAddress && <p className="text-sm text-slate-300 mt-1">{normalizedSiteAddress}</p>}
                       {customer?.phone && <p className="text-xs text-slate-400 mt-1">{customer.phone}</p>}
                     </div>
                     <div className="text-right shrink-0">
@@ -3533,7 +3540,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
         <QuotePreviewModal
           customerName={customer?.name ?? siteName}
           customerEmail={customer?.email ?? ''}
-          address={siteAddress}
+          address={normalizedSiteAddress}
           woNumber={serviceOrderNo(job?.woNumber ?? generateServiceOrderNumber())}
           jobId={job?.id ?? `wo-${Date.now()}`}
           lineItems={lineItems.map(li => ({
@@ -3623,7 +3630,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
         <SowDistributionModal
           job={{ ...job, serviceReport, nextSteps, completionNotes: job.completionNotes, woPhotos }}
           siteName={siteName}
-          siteAddress={siteAddress}
+          siteAddress={normalizedSiteAddress}
           customer={customer}
           contractors={contractors}
           technicians={technicians}
