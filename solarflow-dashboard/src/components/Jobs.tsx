@@ -10,7 +10,14 @@ import {
   startOfWeek, endOfWeek, startOfMonth, endOfMonth, subMonths,
 } from 'date-fns';
 import { WorkOrderCalendar } from './WorkOrderCalendar';
+import JobMapView from './views/JobMapView';
+import { ViewJob, ViewJobPriority } from './views/jobViewTypes';
 import { Job, Customer, User as UserType, JobStatus, UrgencyLevel, ServiceType, WO_TO_JOB_STATUS, WOStatus } from '../types';
+
+// Map UrgencyLevel onto the shared map-view priority palette.
+const MAP_PRIORITY: Record<UrgencyLevel, ViewJobPriority> = {
+  critical: 'critical', high: 'high', medium: 'normal', low: 'low',
+};
 
 // The board groups by `status`, but RMA/imported service orders often carry a stale
 // or undefined `status` while their real pipeline state lives in `woStatus`.
@@ -310,13 +317,13 @@ export const Jobs: React.FC<JobsProps> = ({
   const [filterPeriod, setFilterPeriod] = useState<PeriodFilter>('all');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
-  const [viewMode, setViewMode] = useState<'list' | 'kanban' | 'calendar'>(() => {
-    const saved = localStorage.getItem('solarops_jobs_view') as 'list' | 'kanban' | 'calendar' | null;
-    if (saved === 'kanban' || saved === 'list' || saved === 'calendar') return saved;
+  const [viewMode, setViewMode] = useState<'list' | 'kanban' | 'calendar' | 'map'>(() => {
+    const saved = localStorage.getItem('solarops_jobs_view') as 'list' | 'kanban' | 'calendar' | 'map' | null;
+    if (saved === 'kanban' || saved === 'list' || saved === 'calendar' || saved === 'map') return saved;
     return isMobile ? 'list' : 'kanban';
   });
 
-  const handleViewMode = (mode: 'list' | 'kanban' | 'calendar') => {
+  const handleViewMode = (mode: 'list' | 'kanban' | 'calendar' | 'map') => {
     setViewMode(mode);
     localStorage.setItem('solarops_jobs_view', mode);
   };
@@ -374,6 +381,27 @@ export const Jobs: React.FC<JobsProps> = ({
     return matchesSearch && matchesStatus && matchesPeriod && notArchived;
   }), [jobs, customers, searchQuery, filterStatus, periodRange, showArchived]);
 
+  // Adapt the filtered jobs to the shared map-view shape. The map geocodes each
+  // address (cached) and plots colored pins; JobMapView owns its own status filter.
+  const mapJobs = useMemo<ViewJob[]>(() => {
+    const custById = new Map(customers.map(c => [c.id, c]));
+    return filteredJobs.map(job => {
+      const c = custById.get(job.customerId);
+      const status = String(boardStatus(job));
+      return {
+        id: job.id,
+        title: c?.name ?? job.woNumber ?? 'Service order',
+        address: c?.address ?? '', city: c?.city ?? '', state: c?.state ?? '', zip: c?.zip ?? '',
+        status,
+        statusLabel: status.replace(/_/g, ' ').replace(/\b\w/g, ch => ch.toUpperCase()),
+        priority: MAP_PRIORITY[job.priority ?? 'medium'] ?? 'normal',
+        scheduledDate: job.scheduledDate,
+        serviceType: String(job.serviceType),
+        badge: job.woNumber,
+      } satisfies ViewJob;
+    });
+  }, [filteredJobs, customers]);
+
   const handleDragStart = (e: React.DragEvent, jobId: string) => {
     e.dataTransfer.setData('jobId', jobId);
     e.dataTransfer.effectAllowed = 'move';
@@ -424,6 +452,13 @@ export const Jobs: React.FC<JobsProps> = ({
             className={`px-3 py-2.5 flex items-center justify-center ${viewMode === 'calendar' ? 'bg-slate-800 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}
           >
             <Calendar className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => handleViewMode('map')}
+            title="Map"
+            className={`px-3 py-2.5 flex items-center justify-center ${viewMode === 'map' ? 'bg-slate-800 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}
+          >
+            <MapPin className="w-4 h-4" />
           </button>
         </div>
         <div className="flex gap-2 flex-wrap">
@@ -553,6 +588,12 @@ export const Jobs: React.FC<JobsProps> = ({
           isMobile={isMobile}
           onJobClick={handleCardClick}
         />
+      )}
+
+      {viewMode === 'map' && (
+        <div className="flex flex-col rounded-xl border border-slate-200 overflow-hidden bg-white h-[calc(100vh-280px)] min-h-[420px]">
+          <JobMapView jobs={mapJobs} onOpen={handleCardClick} />
+        </div>
       )}
 
       {/* Step 1: Customer Picker */}
