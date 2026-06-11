@@ -1187,6 +1187,10 @@ function App() {
         const updatedAdminJob = {
           ...adminJob,
           ...statusFields,
+          // Preserve the contractor's granular live status so the staff board can
+          // tell "on route" (en_route) apart from "in progress" (both map to
+          // in_progress in the coarse status above).
+          contractorJobStatus: updatedJob.status ?? adminJob.contractorJobStatus,
           // Field-side data mirror
           // Use the reconciled set directly (not gated on length) so deleting the
           // last contractor photo actually clears it on the admin side too.
@@ -2201,7 +2205,14 @@ function App() {
         isContractor={isContractorMode}
         onDone={async (newPassword) => {
           if (isContractorMode && currentContractor) {
-            // Update contractor password in Neon via store
+            // Change the real Supabase auth password (contractor login uses
+            // signInWithPassword). Without this the forced change was cosmetic:
+            // the record updated but the auth password stayed the default.
+            await supabase.auth.updateUser({
+              password: newPassword,
+              data: { mustChangePassword: false },
+            });
+            // Mirror the cleared flag into the contractor record/store too.
             const { dbGet, dbSet } = await import('./lib/db');
             const contractors = (await dbGet('solarflow_contractors') as Contractor[] | null) ?? [];
             const updated = contractors.map((c: Contractor) =>

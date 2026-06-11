@@ -59,6 +59,19 @@ function badgeLabel(job: Job): string {
 }
 import { ServiceOrderPanel } from './ServiceOrderPanel';
 
+// Contractor workload buckets for the per-contractor filter summary. Uses the raw
+// `contractorJobStatus` (mirrored from the contractor portal) so "on route"
+// (en_route) reads apart from "in progress"; falls back to the coarse board status
+// for jobs the contractor hasn't touched yet (just assigned).
+type ContractorBucket = 'assigned' | 'on_route' | 'in_progress' | 'completed';
+function contractorBucket(job: Job): ContractorBucket {
+  const raw = job.contractorJobStatus;
+  if (raw === 'completed' || boardStatus(job) === 'completed') return 'completed';
+  if (raw === 'en_route') return 'on_route';
+  if (raw === 'in_progress' || raw === 'documentation' || boardStatus(job) === 'in_progress') return 'in_progress';
+  return 'assigned';
+}
+
 // ─── Standalone sub-components (defined outside Jobs to prevent remount on parent re-render) ───
 
 const serviceTypes: { value: ServiceType; label: string; color: string }[] = [
@@ -312,6 +325,7 @@ export const Jobs: React.FC<JobsProps> = ({
   const [editingCreatedJob, setEditingCreatedJob] = useState<Job | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<JobStatus | 'all'>('all');
+  const [filterContractor, setFilterContractor] = useState<string>('all');
   const [showArchived, setShowArchived] = useState(false);
   type PeriodFilter = 'all' | 'this_week' | 'this_month' | 'last_month' | 'custom';
   const [filterPeriod, setFilterPeriod] = useState<PeriodFilter>('all');
@@ -363,6 +377,7 @@ export const Jobs: React.FC<JobsProps> = ({
       customer?.address.toLowerCase().includes(searchQuery.toLowerCase()) ||
       job.notes.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStatus = filterStatus === 'all' || boardStatus(job) === filterStatus;
+    const matchesContractor = filterContractor === 'all' || job.contractorId === filterContractor;
     // Period filter, uses scheduledDate or createdAt
     let matchesPeriod = true;
     if (periodRange) {
@@ -378,8 +393,28 @@ export const Jobs: React.FC<JobsProps> = ({
     const isArchived = job.status === 'archived';
     const notArchived = !isArchived || showArchived;
 
-    return matchesSearch && matchesStatus && matchesPeriod && notArchived;
-  }), [jobs, customers, searchQuery, filterStatus, periodRange, showArchived]);
+    return matchesSearch && matchesStatus && matchesContractor && matchesPeriod && notArchived;
+  }), [jobs, customers, searchQuery, filterStatus, filterContractor, periodRange, showArchived]);
+
+  // Per-contractor workload summary (Assigned / On Route / In Progress / Completed).
+  // Computed across ALL of the selected contractor's non-archived jobs, independent of
+  // the status filter, so the admin always sees the full live picture for that person.
+  const contractorSummary = useMemo(() => {
+    if (filterContractor === 'all') return null;
+    const counts: Record<ContractorBucket, number> = { assigned: 0, on_route: 0, in_progress: 0, completed: 0 };
+    for (const job of jobs) {
+      if (job.contractorId !== filterContractor) continue;
+      if (job.status === 'archived') continue;
+      counts[contractorBucket(job)] += 1;
+    }
+    return counts;
+  }, [jobs, filterContractor]);
+
+  const selectedContractorName = useMemo(() => {
+    if (filterContractor === 'all') return '';
+    const c = contractors.find(c => c.id === filterContractor);
+    return c?.businessName || c?.contactName || 'Contractor';
+  }, [contractors, filterContractor]);
 
   // Adapt the filtered jobs to the shared map-view shape. The map geocodes each
   // address (cached) and plots colored pins; JobMapView owns its own status filter.
@@ -476,6 +511,22 @@ export const Jobs: React.FC<JobsProps> = ({
             <option value="invoiced">Invoiced</option>
             <option value="paid">Paid</option>
           </select>
+          {contractors.length > 0 && (
+            <select
+              value={filterContractor}
+              onChange={(e) => setFilterContractor(e.target.value)}
+              className="px-4 py-2.5 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 text-sm max-w-[200px]"
+            >
+              <option value="all">All Contractors</option>
+              {contractors
+                .filter((c) => c.status === 'approved')
+                .map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.businessName || c.contactName}
+                  </option>
+                ))}
+            </select>
+          )}
           <select
             value={filterPeriod}
             onChange={(e) => setFilterPeriod(e.target.value as PeriodFilter)}
@@ -527,6 +578,29 @@ export const Jobs: React.FC<JobsProps> = ({
           />
         </div>
       </div>
+
+      {/* Per-contractor workload summary */}
+      {contractorSummary && (
+        <div className="flex flex-wrap items-center gap-3 mb-6 p-3 rounded-xl border border-slate-200 bg-slate-50">
+          <div className="flex items-center gap-1.5 pr-3 mr-1 border-r border-slate-200">
+            <User className="w-4 h-4 text-orange-500" />
+            <span className="text-sm font-semibold text-slate-900">{selectedContractorName}</span>
+          </div>
+          {([
+            { key: 'assigned',    label: 'Assigned',    cls: 'bg-slate-100 text-slate-700' },
+            { key: 'on_route',    label: 'On Route',    cls: 'bg-blue-100 text-blue-700' },
+            { key: 'in_progress', label: 'In Progress', cls: 'bg-amber-100 text-amber-700' },
+            { key: 'completed',   label: 'Completed',   cls: 'bg-green-100 text-green-700' },
+          ] as const).map(({ key, label, cls }) => (
+            <div key={key} className="flex items-center gap-1.5">
+              <span className={`inline-flex items-center justify-center min-w-[1.5rem] h-6 px-1.5 rounded-full text-xs font-bold ${cls}`}>
+                {contractorSummary[key]}
+              </span>
+              <span className="text-xs font-medium text-slate-600">{label}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Kanban View */}
       {viewMode === 'kanban' && (

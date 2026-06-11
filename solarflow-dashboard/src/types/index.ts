@@ -233,6 +233,11 @@ export interface Job {
   contractorPayRate?: number;
   contractorPayUnit?: 'hour' | 'flat';
   contractorSentAt?: string;
+  /** Raw live status from the contractor portal (assigned | en_route | in_progress |
+   *  documentation | completed | ...). Mirrored from ContractorJob so the staff board
+   *  can distinguish "on route" from "in progress", which both collapse to in_progress
+   *  in the coarse `status`. */
+  contractorJobStatus?: string;
   // Parts & labor line items (richer than flat laborHours/partsCost)
   lineItems?: WOLineItem[];
   // Photos (structured, replaces flat string[] for WO-panel jobs)
@@ -308,7 +313,7 @@ export interface Job {
   assignedAt?: string;
 }
 
-export type RMAStatus = 'processes' | 'eligible' | 'not_eligible' | 'submitted' | 'paid';
+export type RMAStatus = 'processes' | 'eligible' | 'not_eligible' | 'submitted' | 'shipped' | 'paid';
 
 export interface RMAEntry {
   id: string;

@@ -70,6 +70,37 @@ import { uploadCustomerFilesPartial, StoredCustomerFile, CustomerFileUpload } fr
 import { fireMentionNotifications, parseMentionEmails } from './ui/MentionTextarea';
 import { toast } from 'sonner';
 
+// Downscale + recompress an image File to a JPEG dataURL so full-res phone
+// photos (often 10-30MB, over the 20MB Storage cap) shrink before upload.
+// Non-images and anything that fails to decode pass through as their raw dataURL.
+async function compressImageFile(file: File, maxDim = 1600, quality = 0.82): Promise<string> {
+  const rawDataUrl = await new Promise<string>((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result as string);
+    r.onerror = () => reject(r.error ?? new Error('read failed'));
+    r.readAsDataURL(file);
+  });
+  if (!file.type.startsWith('image/')) return rawDataUrl;
+  try {
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('decode failed'));
+      img.onload = () => {
+        const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.src = rawDataUrl;
+    });
+    return dataUrl;
+  } catch {
+    return rawDataUrl; // fall back to the original if compression fails
+  }
+}
+
 // Client Status Badge Component
 const getStatusColor = (status: ClientStatus): string => {
   const colors: Record<ClientStatus, string> = {
@@ -3163,6 +3194,30 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
   const [undoStack, setUndoStack] = useState<Array<{ action: 'delete' | 'edit'; entry: Activity; previousText?: string }>>([]);
   const [showEmojiPicker, setShowEmojiPicker] = useState<string | null>(null);
 
+  // Notes composer: inline photo/camera input. Mobile browsers can't paste an
+  // image into a textarea, so without this there was no way to attach a photo to
+  // a note from a phone (the prior "Add Files" button only switched tabs).
+  const noteImageInputRef = useRef<HTMLInputElement>(null);
+  const handleNoteImageFiles = async (fileList: FileList | null) => {
+    if (!fileList || fileList.length === 0) return;
+    for (const file of Array.from(fileList)) {
+      try {
+        const isImg = file.type.startsWith('image/');
+        const dataUrl = await compressImageFile(file);
+        setPastedFiles(prev => [...prev, {
+          id: `note-img-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          name: isImg ? file.name.replace(/\.[^.]+$/, '') + '.jpg' : (file.name || `file-${Date.now()}`),
+          dataUrl,
+          mimeType: isImg ? 'image/jpeg' : (file.type || 'application/octet-stream'),
+          size: Math.round(dataUrl.length * 0.75),
+        }]);
+      } catch {
+        toast.error(`Could not attach ${file.name || 'photo'}`);
+      }
+    }
+    toast.success('Photo attached, tap "Save Note" to upload');
+  };
+
   // Files tab, "+ Upload Files" upload (previously a dead button with no handler)
   const filesInputRef = useRef<HTMLInputElement>(null);
   const [uploadingFiles, setUploadingFiles] = useState(false);
@@ -3170,21 +3225,20 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
     if (!fileList || fileList.length === 0) return;
     setUploadingFiles(true);
     try {
-      // uploadCustomerFilesPartial expects CustomerFileUpload[] (name+dataUrl+meta),
-      // so read each File to a base64 dataURL first.
+      // uploadCustomerFilesPartial expects CustomerFileUpload[] (name+dataUrl+meta).
+      // Compress images first so full-res phone photos don't blow the 20MB cap.
       const toUpload: CustomerFileUpload[] = await Promise.all(
-        Array.from(fileList).map(async (file) => ({
-          id: `cf-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-          name: file.name,
-          dataUrl: await new Promise<string>((resolve, reject) => {
-            const r = new FileReader();
-            r.onload = () => resolve(r.result as string);
-            r.onerror = () => reject(r.error ?? new Error('read failed'));
-            r.readAsDataURL(file);
-          }),
-          mimeType: file.type || 'application/octet-stream',
-          size: file.size,
-        })),
+        Array.from(fileList).map(async (file) => {
+          const isImg = file.type.startsWith('image/');
+          const dataUrl = await compressImageFile(file);
+          return {
+            id: `cf-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            name: isImg ? file.name.replace(/\.[^.]+$/, '') + '.jpg' : file.name,
+            dataUrl,
+            mimeType: isImg ? 'image/jpeg' : (file.type || 'application/octet-stream'),
+            size: Math.round(dataUrl.length * 0.75),
+          };
+        }),
       );
       const { uploaded, failed } = await uploadCustomerFilesPartial(toUpload, customer.id);
       if (uploaded.length > 0) {
@@ -3827,14 +3881,32 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                     <Edit className="w-4 h-4 text-orange-500" />
                     Notes
                   </h3>
-                  <button
-                    onClick={() => setActiveTab('files')}
-                    title="Add files & photos"
-                    className="flex items-center gap-1 text-xs text-slate-500 hover:text-orange-500 transition-colors cursor-pointer"
-                  >
-                    <Paperclip className="w-4 h-4" />
-                    Add Files
-                  </button>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => noteImageInputRef.current?.click()}
+                      title="Add a photo from your camera or gallery"
+                      className="flex items-center gap-1 text-xs text-slate-500 hover:text-orange-500 transition-colors cursor-pointer"
+                    >
+                      <ImageIcon className="w-4 h-4" />
+                      Add Photo
+                    </button>
+                    <button
+                      onClick={() => setActiveTab('files')}
+                      title="Add files & photos"
+                      className="flex items-center gap-1 text-xs text-slate-500 hover:text-orange-500 transition-colors cursor-pointer"
+                    >
+                      <Paperclip className="w-4 h-4" />
+                      Add Files
+                    </button>
+                  </div>
+                  <input
+                    ref={noteImageInputRef}
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => { handleNoteImageFiles(e.target.files); e.target.value = ''; }}
+                  />
                 </div>
                 <div className="relative">
                   <textarea

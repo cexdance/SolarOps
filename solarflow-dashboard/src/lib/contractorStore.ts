@@ -389,12 +389,14 @@ const demoContractors: Contractor[] = [
   },
   {
     id: 'contractor-4',
-    email: 'jmendez@ingengroup.com',
+    email: 'j.mendez@ingenieriageneral.com',
+    altEmails: ['jmendez@ingengroup.com'],
     role: 'contractor',
     status: 'approved',
+    mustChangePassword: true,
     createdAt: new Date().toISOString(),
 
-    businessName: 'Ingen Group',
+    businessName: 'Ingeniería General',
     businessType: 'llc',
     ein: '',
     streetAddress: '',
@@ -562,7 +564,8 @@ export const initializeContractorData = (): void => {
         // Migrate stale name/business data to current seed values
         const needsMigration =
           c.businessName === "Mike's Solar Services" || c.contactName === 'Mike Johnson' ||
-          c.businessName === 'Conexsol' || c.businessName === 'MPower Marketing, LLC';
+          c.businessName === 'Conexsol' || c.businessName === 'MPower Marketing, LLC' ||
+          c.businessName === 'Ingen Group';
         return {
           ...c,
           email: demo.email,

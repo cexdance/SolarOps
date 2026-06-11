@@ -34,8 +34,14 @@ export async function uploadCustomerFile(
   file: CustomerFileUpload,
   customerId: string
 ): Promise<StoredCustomerFile> {
-  // Auth precheck, avoids cryptic 403 from Storage when session expired
-  const { data: { session } } = await supabase.auth.getSession();
+  // Auth precheck, avoids cryptic 403 from Storage when session expired.
+  // Mobile webviews drop the in-memory session often, so try a silent refresh
+  // before giving up - this was the top cause of field uploads failing.
+  let { data: { session } } = await supabase.auth.getSession();
+  if (!session) {
+    const { data: refreshed } = await supabase.auth.refreshSession();
+    session = refreshed.session;
+  }
   if (!session) {
     throw new Error('Session expired, please re-login to upload files.');
   }

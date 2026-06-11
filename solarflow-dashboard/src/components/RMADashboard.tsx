@@ -35,6 +35,7 @@ const COLUMNS: Array<{ id: RMAStatus; label: string; color: string; bgCard: stri
   { id: 'eligible',     label: 'Eligible',     color: 'text-blue-700',   bgCard: 'bg-blue-50',   dotColor: 'bg-blue-400',   bg: 'bg-blue-50/60' },
   { id: 'not_eligible', label: 'Not Eligible', color: 'text-slate-500',  bgCard: 'bg-slate-50',  dotColor: 'bg-slate-400',  bg: 'bg-slate-50/60' },
   { id: 'submitted',    label: 'Submitted',    color: 'text-purple-700', bgCard: 'bg-purple-50', dotColor: 'bg-purple-400', bg: 'bg-purple-50/60' },
+  { id: 'shipped',      label: 'Shipped',      color: 'text-indigo-700', bgCard: 'bg-indigo-50', dotColor: 'bg-indigo-400', bg: 'bg-indigo-50/60' },
   { id: 'paid',         label: 'Paid',         color: 'text-green-700',  bgCard: 'bg-green-50',  dotColor: 'bg-green-400',  bg: 'bg-green-50/60' },
 ];
 
@@ -279,7 +280,7 @@ export function RMADashboard({
                       onChange={ev => onUpdateStandaloneRma?.({ ...e, status: ev.target.value as RMAEntry['status'] })}
                       className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white capitalize"
                     >
-                      {['pending', 'submitted', 'approved', 'received', 'paid'].map(s => <option key={s} value={s}>{s}</option>)}
+                      {['pending', 'submitted', 'approved', 'received', 'shipped', 'paid'].map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
                     {!e.linkedJobId && jobs.length > 0 && (
                       <select
