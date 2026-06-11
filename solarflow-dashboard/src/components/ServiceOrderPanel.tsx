@@ -7,7 +7,7 @@ import {
   CheckCircle, Clock, AlertTriangle, DollarSign, Wrench,
   Camera, ClipboardList, Package, ZapOff, Zap,
   ShieldCheck, Banknote, TrendingUp, TrendingDown, Users,
-  RotateCcw, History, Loader2, FolderOpen, MapPin,
+  RotateCcw, History, Loader2, FolderOpen, MapPin, ExternalLink,
 } from 'lucide-react';
 import SiteMapView from './views/SiteMapView';
 import { Job, WOStatus, WOLineItem, WOPhoto, WOServiceStatus, WO_TO_JOB_STATUS, RMAEntry, AuditEntry } from '../types';
@@ -338,6 +338,10 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
     if (!siteAddress) return '';
     return normalizeStreetOrder(siteAddress);
   }, [siteAddress]);
+
+  // SolarEdge site id for the header "Monitoring" link (customer record first,
+  // then the job's stored id). Absent → no monitoring badge.
+  const seSiteId = customer?.solarEdgeSiteId || job?.solarEdgeSiteId || '';
 
   // Core form state
   const [woStatus, setWoStatus] = useState<WOStatus>(job?.woStatus ?? 'draft');
@@ -1377,7 +1381,40 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
               <p className="text-white font-semibold text-lg leading-snug truncate">{siteName}</p>
             )}
             {normalizedSiteAddress && (
-              <p className="text-slate-400 text-sm mt-0.5 truncate">{normalizedSiteAddress}</p>
+              <a
+                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(normalizedSiteAddress)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                title={`Open in Google Maps: ${normalizedSiteAddress}`}
+                className="group inline-flex items-center gap-1 max-w-full text-slate-400 hover:text-orange-300 text-sm mt-0.5 transition-colors"
+              >
+                <MapPin className="w-3.5 h-3.5 shrink-0 text-slate-500 group-hover:text-orange-300 transition-colors" />
+                <span className="truncate">{normalizedSiteAddress}</span>
+                <ExternalLink className="w-3 h-3 shrink-0 opacity-0 group-hover:opacity-60 transition-opacity" />
+              </a>
+            )}
+            {(seSiteId || serviceType) && (
+              <div className="flex items-center gap-2 flex-wrap mt-2">
+                {seSiteId && (
+                  <a
+                    href={`https://monitoring.solaredge.com/solaredge-web/p/site/${seSiteId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title="Open SolarEdge monitoring"
+                    className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-500/20 text-blue-300 hover:bg-blue-500/30 hover:text-blue-200 text-xs font-medium rounded transition-colors"
+                  >
+                    <Zap className="w-3 h-3" />
+                    Monitoring
+                    <ExternalLink className="w-3 h-3 opacity-70" />
+                  </a>
+                )}
+                {serviceType && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-700 text-slate-200 text-xs font-medium rounded">
+                    <Wrench className="w-3 h-3 text-slate-400" />
+                    {serviceType}
+                  </span>
+                )}
+              </div>
             )}
           </div>
 
