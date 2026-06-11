@@ -17,6 +17,7 @@ import { Job, Customer, LeadSource, LeadStatus } from '../types';
 import { loadCRMData, saveCRMData, addLead, CRMData } from '../lib/crmStore';
 import { loadTodos, saveTodos, TodoItem } from '../lib/todoStore';
 import { MentionsWidget } from './MentionsWidget';
+import { AddressCleanupWidget } from './AddressCleanupWidget';
 import { Lead } from '../types';
 import { Contractor } from '../types/contractor';
 
@@ -33,7 +34,8 @@ type WidgetType =
   | 'lead-pipeline'
   | 'single-lead'
   | 'todo-list'
-  | 'mentions';
+  | 'mentions'
+  | 'address-cleanup';
 
 interface WidgetConfig {
   type: WidgetType;
@@ -159,6 +161,14 @@ const WIDGET_CATALOG: WidgetCatalogEntry[] = [
     icon: AtSign,
     colorClass: 'text-orange-600',
     bgClass: 'bg-orange-50',
+  },
+  {
+    type: 'address-cleanup',
+    label: 'Address Cleanup',
+    description: 'Shared checklist of conflicting customer addresses to verify and fix',
+    icon: MapPin,
+    colorClass: 'text-emerald-600',
+    bgClass: 'bg-emerald-50',
   },
 ];
 
@@ -1548,6 +1558,7 @@ const WidgetSlot: React.FC<{
         {config.type === 'single-lead'            && config.leadId       && <SingleLeadWidget leadId={config.leadId} />}
         {config.type === 'todo-list'              && <TodoListWidget userId={currentUserId} customers={customers} onViewCustomer={onViewCustomer} />}
         {config.type === 'mentions'               && <MentionsWidget userId={currentUserId} users={users} onOpenCustomer={onViewCustomer} onOpenWorkOrder={(jobId) => onViewChange?.('jobDetail', jobId)} />}
+        {config.type === 'address-cleanup'        && <AddressCleanupWidget userName={users.find(u => u.id === currentUserId)?.name || 'Unknown'} onViewCustomer={onViewCustomer} />}
       </WidgetErrorBoundary>
     </div>
   );

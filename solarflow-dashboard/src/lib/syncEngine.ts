@@ -41,6 +41,7 @@ export const KV_SYNC_KEYS = [
   'solarflow_contractors',
   'solarflow_service_rates',
   'solarflow_crm_data',
+  'solarops_address_cleanup',
 ] as const;
 type KVSyncKey = typeof KV_SYNC_KEYS[number];
 
@@ -221,6 +222,27 @@ export function mergeContractorJobs(localArr: unknown, remoteArr: unknown): CJob
     }
   }
   return result;
+}
+
+type CleanupItemLike = { id: string; updatedAt?: string; [k: string]: unknown };
+
+/**
+ * Per-item merge for the shared address-cleanup checklist
+ * ('solarops_address_cleanup'). Merge by item id, newer updatedAt wins; items
+ * present on only one side are kept, so a freshly seeded local list and an
+ * older remote list combine instead of one wiping the other.
+ */
+export function mergeAddressCleanupItems(localArr: unknown, remoteArr: unknown): CleanupItemLike[] {
+  const local: CleanupItemLike[]  = Array.isArray(localArr)  ? (localArr  as CleanupItemLike[]) : [];
+  const remote: CleanupItemLike[] = Array.isArray(remoteArr) ? (remoteArr as CleanupItemLike[]) : [];
+  const byId = new Map<string, CleanupItemLike>();
+  for (const i of local) if (i?.id) byId.set(i.id, i);
+  for (const r of remote) {
+    if (!r?.id) continue;
+    const l = byId.get(r.id);
+    if (!l || (r.updatedAt ?? '') >= (l.updatedAt ?? '')) byId.set(r.id, r);
+  }
+  return Array.from(byId.values());
 }
 
 /** Fetch the current remote contractor_jobs blob (raw, un-sanitized) for merge. */
@@ -537,6 +559,18 @@ export async function pullFromSupabase(): Promise<Partial<AppState> | null> {
               let local: unknown = null;
               try { local = prev ? JSON.parse(prev) : null; } catch { local = null; }
               const merged = mergeContractorJobs(local, row.value);
+              const next = JSON.stringify(merged);
+              if (prev !== next) {
+                localStorage.setItem(row.key, next);
+                changedKVKeys.push(row.key);
+              }
+            } else if (row.key === 'solarops_address_cleanup') {
+              // Shared checklist: merge per item by updatedAt so two users
+              // checking different items concurrently never stomp each other.
+              const prev = localStorage.getItem(row.key);
+              let local: unknown = null;
+              try { local = prev ? JSON.parse(prev) : null; } catch { local = null; }
+              const merged = mergeAddressCleanupItems(local, row.value);
               const next = JSON.stringify(merged);
               if (prev !== next) {
                 localStorage.setItem(row.key, next);
