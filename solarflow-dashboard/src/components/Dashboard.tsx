@@ -15,7 +15,9 @@ import { loadTodos, saveTodos, TodoItem } from '../lib/todoStore';
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type Period = 'week' | 'month' | 'quarter';
-type MetricKey = 'quotes_sent' | 'invoices_sent' | 'payments_received' | 'profitability' | 'cost_of_service';
+type MetricKey =
+  | 'quotes_sent' | 'invoices_sent'
+  | 'quotes_to_send' | 'quotes_pending_approval' | 'quotes_to_invoice' | 'invoices_pending_payment';
 
 interface DashConfig {
   period: Period;
@@ -26,17 +28,29 @@ interface DashConfig {
 
 // ── Persistence ───────────────────────────────────────────────────────────────
 
-const CONFIG_KEY = (uid: string) => `solarops_dash_v1_${uid}`;
+// v2: quote-pipeline metrics replaced the financial trio (payments/profitability/
+// cost of service); bumping the key resets everyone to the new default once.
+const CONFIG_KEY = (uid: string) => `solarops_dash_v2_${uid}`;
 
+// Quote pipeline backlog: the four stages Daniel works through until quoting/
+// invoicing moves to a Xero-connected agent.
 const DEFAULT_CONFIG: DashConfig = {
   period: 'month',
-  metrics: ['quotes_sent', 'invoices_sent', 'payments_received', 'profitability'],
+  metrics: ['quotes_to_send', 'quotes_pending_approval', 'quotes_to_invoice', 'invoices_pending_payment'],
 };
 
 const loadConfig = (uid: string): DashConfig => {
   try {
     const r = localStorage.getItem(CONFIG_KEY(uid));
-    if (r) return { ...DEFAULT_CONFIG, ...JSON.parse(r) };
+    if (r) {
+      const cfg = { ...DEFAULT_CONFIG, ...JSON.parse(r) } as DashConfig;
+      // Sanitize: stored configs may reference retired metrics (payments_received,
+      // profitability, cost_of_service). Swap those slots back to the default.
+      cfg.metrics = cfg.metrics.map((m, i) =>
+        (m in METRIC_META ? m : DEFAULT_CONFIG.metrics[i]) as MetricKey
+      ) as DashConfig['metrics'];
+      return cfg;
+    }
   } catch (e) { console.error('[Dashboard] loadConfig failed', e); }
   return DEFAULT_CONFIG;
 };
@@ -48,11 +62,12 @@ const saveConfig = (uid: string, cfg: DashConfig) => {
 // ── Metric metadata ───────────────────────────────────────────────────────────
 
 const METRIC_META: Record<MetricKey, { label: string; Icon: React.FC<{ className?: string }>; bg: string; fg: string }> = {
-  quotes_sent:       { label: 'Quotes Sent',       Icon: FileText,    bg: 'bg-blue-50',    fg: 'text-blue-600' },
-  invoices_sent:     { label: 'Invoices Sent',      Icon: Receipt,     bg: 'bg-purple-50',  fg: 'text-purple-600' },
-  payments_received: { label: 'Payments Received',  Icon: CreditCard,  bg: 'bg-green-50',   fg: 'text-green-600' },
-  profitability:     { label: 'Profitability',      Icon: TrendingUp,  bg: 'bg-emerald-50', fg: 'text-emerald-600' },
-  cost_of_service:   { label: 'Cost of Service',    Icon: TrendingDown, bg: 'bg-red-50',    fg: 'text-red-600' },
+  quotes_to_send:           { label: 'Quotes to Send',           Icon: FileText,   bg: 'bg-blue-50',    fg: 'text-blue-600' },
+  quotes_pending_approval:  { label: 'Quotes Pending Approval',  Icon: Clock,      bg: 'bg-amber-50',   fg: 'text-amber-600' },
+  quotes_to_invoice:        { label: 'Quotes to Invoice',        Icon: Receipt,    bg: 'bg-purple-50',  fg: 'text-purple-600' },
+  invoices_pending_payment: { label: 'Invoices Pending Payment', Icon: CreditCard, bg: 'bg-emerald-50', fg: 'text-emerald-600' },
+  quotes_sent:              { label: 'Quotes Sent',              Icon: TrendingUp, bg: 'bg-slate-50',   fg: 'text-slate-600' },
+  invoices_sent:            { label: 'Invoices Sent',            Icon: TrendingDown, bg: 'bg-slate-50', fg: 'text-slate-600' },
 };
 const ALL_METRICS = Object.keys(METRIC_META) as MetricKey[];
 const PERIOD_LABELS: Record<Period, string> = { week: 'This Week', month: 'This Month', quarter: 'This Quarter' };
@@ -90,28 +105,31 @@ const fmtMoney = (n: number) => formatMoneyCompact(n);
 
 interface MetricResult { primary: string; secondary: string; isNegative?: boolean }
 
+// The pipeline stage a job sits at for quoting purposes. woStatus is the precise
+// pipeline; the coarse status is the fallback for jobs that never opened the WO panel.
+const quoteStage = (j: Job): string => j.woStatus ?? j.status;
+
 const computeMetrics = (jobs: Job[], period: Period): Record<MetricKey, MetricResult> => {
   const { start, end } = getRange(period);
+  const active = jobs.filter(j => j.status !== 'archived');
   const qJobs = jobs.filter(j => inRange(j.quoteSentAt ?? j.scheduledDate, start, end) && j.quoteAmount != null);
-  const qAmt  = qJobs.reduce((s, j) => s + (j.quoteAmount ?? 0), 0);
   const iJobs = jobs.filter(j => ['invoiced', 'paid'].includes(j.status) && inRange(j.completedAt ?? j.scheduledDate, start, end));
   const iAmt  = iJobs.reduce((s, j) => s + j.totalAmount, 0);
-  const pJobs = jobs.filter(j => j.status === 'paid' && inRange(j.completedAt ?? j.scheduledDate, start, end));
-  const pAmt  = pJobs.reduce((s, j) => s + j.totalAmount, 0);
-  const periodJobs = jobs.filter(j => inRange(j.scheduledDate, start, end));
-  const cCost = periodJobs.reduce((s, j) => {
-    if (!j.contractorPayRate) return s;
-    return s + (j.contractorPayUnit === 'flat' ? j.contractorPayRate : j.contractorPayRate * (j.laborHours || 0));
-  }, 0);
-  const cos   = cCost + periodJobs.reduce((s, j) => s + (j.partsCost || 0), 0);
-  const profit = pAmt - cos;
-  const margin = pAmt > 0 ? (profit / pAmt) * 100 : 0;
+  // Backlog counts (point-in-time, not period-bound): the quote pipeline Daniel
+  // works through. draft/new = quote not sent yet; quote_sent/contact_client =
+  // with the client; completed = work done, needs a Xero invoice; invoiced =
+  // waiting on payment.
+  const toSend    = active.filter(j => ['draft', 'new'].includes(quoteStage(j)));
+  const pendingOk = active.filter(j => ['quote_sent', 'contact_client'].includes(quoteStage(j)));
+  const toInvoice = active.filter(j => quoteStage(j) === 'completed');
+  const pendPay   = active.filter(j => quoteStage(j) === 'invoiced');
   return {
-    quotes_sent:       { primary: qJobs.length.toString(), secondary: fmtMoney(qAmt) },
-    invoices_sent:     { primary: fmtMoney(iAmt), secondary: `${iJobs.length} invoice${iJobs.length !== 1 ? 's' : ''}` },
-    payments_received: { primary: fmtMoney(pAmt), secondary: `${pJobs.length} payment${pJobs.length !== 1 ? 's' : ''}` },
-    profitability:     { primary: fmtMoney(profit), secondary: `${margin.toFixed(0)}% margin`, isNegative: profit < 0 },
-    cost_of_service:   { primary: fmtMoney(cos), secondary: `Contractor + parts · ${periodJobs.length} jobs` },
+    quotes_to_send:           { primary: toSend.length.toString(),    secondary: 'draft service orders' },
+    quotes_pending_approval:  { primary: pendingOk.length.toString(), secondary: 'awaiting client confirmation' },
+    quotes_to_invoice:        { primary: toInvoice.length.toString(), secondary: 'completed, not invoiced' },
+    invoices_pending_payment: { primary: pendPay.length.toString(),   secondary: 'invoiced, unpaid' },
+    quotes_sent:              { primary: qJobs.length.toString(), secondary: PERIOD_LABELS[period] },
+    invoices_sent:            { primary: fmtMoney(iAmt), secondary: `${iJobs.length} invoice${iJobs.length !== 1 ? 's' : ''}` },
   };
 };
 
@@ -135,7 +153,7 @@ interface DashboardProps {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export const Dashboard: React.FC<DashboardProps> = ({
-  jobs, customers, users, currentUser, onViewChange, onViewCustomer, onJobClick, onUpdateJob, isMobile,
+  jobs, customers, currentUser, onViewChange, onViewCustomer, onJobClick, onUpdateJob, isMobile,
   notifications = [], isConnected = true,
 }) => {
   const uid = currentUser?.id ?? 'default';
@@ -238,6 +256,17 @@ export const Dashboard: React.FC<DashboardProps> = ({
   // Static data
   const pendingPaymentJobs = jobs.filter(j => j.status === 'completed' || j.status === 'invoiced');
   const unbilledJobs = jobs.filter(j => j.status === 'completed');
+  // SOs sitting with the client (quote sent / contact client), oldest first, so
+  // Daniel can chase confirmations from the dashboard.
+  const pendingConfirmJobs = jobs
+    .filter(j => j.status !== 'archived' && ['quote_sent', 'contact_client'].includes(j.woStatus ?? j.status))
+    .sort((a, b) => (a.quoteSentAt ?? a.scheduledDate ?? '').localeCompare(b.quoteSentAt ?? b.scheduledDate ?? ''));
+  // Short date for list rows: "6/9" style, blank when missing.
+  const fmtShortDate = (d?: string) => {
+    if (!d) return '';
+    const [y, m, day] = d.split('T')[0]!.split('-');
+    return y && m && day ? `${Number(m)}/${Number(day)}` : '';
+  };
 
   const jobsByStatus = {
     new:         jobs.filter(j => j.status === 'new').length,
@@ -249,7 +278,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
   };
 
   const getCustomer    = (id: string) => customers.find(c => c.id === id);
-  const getTechnician  = (id: string) => users.find(u => u.id === id);
 
   const metrics = computeMetrics(jobs, config.period);
 
@@ -261,12 +289,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
     }
   };
 
-  const statusColors: Record<string, string> = {
-    new: 'bg-blue-100 text-blue-700',
-    assigned: 'bg-slate-100 text-slate-700',
-    in_progress: 'bg-amber-100 text-amber-700',
-    completed: 'bg-green-100 text-green-700',
-  };
   const statusDotColors: Record<string, string> = {
     new: 'bg-blue-500', assigned: 'bg-slate-400', in_progress: 'bg-amber-500',
     completed: 'bg-green-500', invoiced: 'bg-purple-500', paid: 'bg-emerald-600',
@@ -353,8 +375,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
         {canSeeFinancials(currentUser) && (
         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 flex flex-col">
           <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
-            <h2 className="font-semibold text-slate-900 text-sm">Performance</h2>
-            <span className="text-xs text-slate-400">{PERIOD_LABELS[config.period]}</span>
+            <h2 className="font-semibold text-slate-900 text-sm">Quote Pipeline</h2>
+            <span className="text-xs text-slate-400">Live backlog</span>
           </div>
           <div className="p-3 grid grid-cols-2 gap-3 flex-1">
             {config.metrics.map((key, idx) => {
@@ -397,6 +419,47 @@ export const Dashboard: React.FC<DashboardProps> = ({
               );
             })}
           </div>
+
+          {/* SOs awaiting client confirmation: quote sent / contact client */}
+          <div className="border-t border-slate-100">
+            <div className="px-4 py-2 flex items-center justify-between">
+              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Pending Client Confirmation</p>
+              <span className="text-xs font-semibold text-amber-600">{pendingConfirmJobs.length}</span>
+            </div>
+            {pendingConfirmJobs.length === 0 ? (
+              <p className="px-4 pb-3 text-xs text-slate-400">Nothing waiting on clients</p>
+            ) : (
+              <div className="max-h-36 overflow-y-auto divide-y divide-slate-50">
+                {pendingConfirmJobs.map(job => {
+                  const customer = getCustomer(job.customerId);
+                  return (
+                    <div
+                      key={job.id}
+                      className="px-4 py-1.5 flex items-center justify-between gap-2 hover:bg-slate-50 transition-colors cursor-pointer"
+                      onClick={() => onJobClick ? onJobClick(job.id) : customer && handleViewCustomer(customer.id)}
+                    >
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        {(customer?.clientId || job.solarEdgeClientId) && (
+                          <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded shrink-0">
+                            {customer?.clientId || job.solarEdgeClientId}
+                          </span>
+                        )}
+                        <span className="text-xs font-medium text-slate-800 truncate">{customer?.name ?? job.clientName}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className="text-[10px] text-slate-400">{fmtShortDate(job.quoteSentAt)}</span>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                          (job.woStatus ?? job.status) === 'contact_client' ? 'bg-orange-100 text-orange-700' : 'bg-amber-100 text-amber-700'
+                        }`}>
+                          {(job.woStatus ?? job.status) === 'contact_client' ? 'contact client' : 'quote sent'}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
         )}
 
@@ -422,29 +485,46 @@ export const Dashboard: React.FC<DashboardProps> = ({
               <div className="divide-y divide-slate-50">
                 {pendingPaymentJobs.slice(0, 5).map(job => {
                   const customer = getCustomer(job.customerId);
-                  const tech = getTechnician(job.technicianId);
+                  const payBadge: Record<string, string> = {
+                    completed: 'bg-green-100 text-green-700',
+                    invoiced:  'bg-purple-100 text-purple-700',
+                    paid:      'bg-emerald-100 text-emerald-700',
+                  };
+                  const clientNo = customer?.clientId || job.solarEdgeClientId;
                   return (
                     <div
                       key={job.id}
                       className="px-4 py-3 hover:bg-slate-50 transition-colors cursor-pointer group"
                       onClick={() => onJobClick ? onJobClick(job.id) : customer && handleViewCustomer(customer.id)}
                     >
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-sm font-medium text-slate-900 truncate">{customer?.name}</span>
-                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full shrink-0 ${statusColors[job.status] || 'bg-slate-100 text-slate-600'}`}>
-                              {job.status.replace('_', ' ')}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-2 mt-0.5">
-                            <span className="text-xs text-slate-400">
-                              <Clock className="w-3 h-3 inline mr-0.5" />{job.scheduledTime}
-                            </span>
-                            {tech && <span className="text-xs text-slate-400 truncate">· {tech.name}</span>}
-                          </div>
+                      {/* Top line: client no + name left, status badge pinned top-right */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          {clientNo && (
+                            <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded shrink-0">{clientNo}</span>
+                          )}
+                          <span className="text-sm font-medium text-slate-900 truncate">{customer?.name ?? job.clientName}</span>
                         </div>
-                        <span className="text-sm font-semibold text-slate-700 shrink-0">{formatMoney(job.totalAmount, { decimals: 0 })}</span>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0 w-[76px] text-center ${payBadge[job.status] || 'bg-slate-100 text-slate-600'}`}>
+                          {job.status.replace('_', ' ')}
+                        </span>
+                      </div>
+                      {/* Second line: service type + lifecycle dates */}
+                      <div className="flex items-center gap-2 mt-1 flex-wrap">
+                        {job.serviceType && (
+                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-teal-100 text-teal-700 whitespace-nowrap">
+                            {String(job.serviceType)}
+                          </span>
+                        )}
+                        {job.completedAt && (
+                          <span className="text-[11px] text-slate-500">Completed <span className="font-semibold text-slate-700">{fmtShortDate(job.completedAt)}</span></span>
+                        )}
+                        {job.invoicedAt && (
+                          <span className="text-[11px] text-slate-500">· Invoiced <span className="font-semibold text-slate-700">{fmtShortDate(job.invoicedAt)}</span></span>
+                        )}
+                        {job.clientPaymentDueAt && (
+                          <span className="text-[11px] text-slate-500">· Due <span className="font-semibold text-red-600">{fmtShortDate(job.clientPaymentDueAt)}</span></span>
+                        )}
                       </div>
                     </div>
                   );
