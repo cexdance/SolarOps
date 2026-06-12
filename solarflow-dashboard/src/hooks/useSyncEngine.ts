@@ -62,6 +62,11 @@ export function useSyncEngine({
       });
     };
 
+    // Pull immediately on mount: the sync engine's push gate stays closed until
+    // the first successful pull, so an early pull both hydrates this device and
+    // unblocks its outgoing sync as soon as possible.
+    syncCycle();
+
     const interval = setInterval(syncCycle, 5 * 60_000);
     const onFocus  = () => syncCycle();
     const onOnline = () => {

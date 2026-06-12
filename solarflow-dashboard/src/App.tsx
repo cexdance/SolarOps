@@ -748,24 +748,21 @@ function App() {
           jobs: autoArchiveCompletedJobs(merged.jobs),
         };
         setData(prev => {
-          // Only update if remote actually added records or archiving changed state
-          if (
-            withArchived.customers.length !== prev.customers.length ||
-            withArchived.jobs.length     !== prev.jobs.length
-          ) {
-            // Defensive photo merge: keep whichever copy has more photos so a startup
-            // sync (reading localStorage which may have stale photo count) doesn't
-            // overwrite photos that are already in React state from a recent upload.
-            const safeMergedJobs = withArchived.jobs.map((j: import('./types').Job) => {
-              const prevJ = prev.jobs.find(p => p.id === j.id);
-              if (!prevJ) return j;
-              const incoming = j.woPhotos ?? [];
-              const existing  = prevJ.woPhotos ?? [];
-              return incoming.length >= existing.length ? j : { ...j, woPhotos: existing };
-            });
-            return { ...withArchived, jobs: safeMergedJobs };
-          }
-          return prev;
+          // ALWAYS adopt the merged state. The previous length-only comparison
+          // skipped adoption when record CONTENT changed but counts matched, so
+          // React state kept stale records that the next edit then pushed back
+          // out, regressing other devices' changes (notes, addresses, renames).
+          // Defensive photo merge: keep whichever copy has more photos so a startup
+          // sync (reading localStorage which may have stale photo count) doesn't
+          // overwrite photos that are already in React state from a recent upload.
+          const safeMergedJobs = withArchived.jobs.map((j: import('./types').Job) => {
+            const prevJ = prev.jobs.find(p => p.id === j.id);
+            if (!prevJ) return j;
+            const incoming = j.woPhotos ?? [];
+            const existing  = prevJ.woPhotos ?? [];
+            return incoming.length >= existing.length ? j : { ...j, woPhotos: existing };
+          });
+          return { ...withArchived, jobs: safeMergedJobs };
         });
       })
       .catch((err) => {
@@ -1624,7 +1621,14 @@ function App() {
     // address (street name before house number). Devices holding stale data
     // re-push the whole record on unrelated edits, which is how corrected
     // addresses regressed; normalizing here self-heals on every save.
-    const updatedCustomer = { ...rawCustomer, address: normalizeStreetOrder(rawCustomer.address || '') };
+    // Stamp updatedAt at EDIT time: the sync stale-write guard compares it
+    // against the server copy, so a genuine user edit must carry a fresh time
+    // to win, while untouched stale records keep their old stamp and lose.
+    const updatedCustomer = {
+      ...rawCustomer,
+      address: normalizeStreetOrder(rawCustomer.address || ''),
+      updatedAt: new Date().toISOString(),
+    };
     logChange('customer.update', 'customer', updatedCustomer.id, updatedCustomer,
       data.currentUser?.email ?? 'unknown');
 

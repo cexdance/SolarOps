@@ -329,6 +329,69 @@ function markClean(key: string, value: unknown): void {
   _lastPushed.set(key, JSON.stringify(value));
 }
 
+// ── Session push gate ─────────────────────────────────────────────────────────
+// INCIDENT 2026-06-12: a session that loaded stale/seed local data pushed ALL
+// of it before its first successful pull (the in-memory dirty map starts empty,
+// so every record counted as dirty). 269 customer rows were blind-upserted as
+// seed skeletons, wiping notes/files/emails server-side, and the push-time
+// updatedAt stamp made them win every later LWW merge on every device.
+// Rule: a session may not PUSH until it has successfully PULLED once.
+
+let _pulledThisSession = false;
+
+/** Marks the session as having completed a successful remote pull. Exposed for tests. */
+export function markSessionPulled(value = true): void {
+  _pulledThisSession = value;
+}
+export function hasSessionPulled(): boolean {
+  return _pulledThisSession;
+}
+
+// ── Stale-write guard ─────────────────────────────────────────────────────────
+// Before upserting per-record rows, compare each row's local value.updatedAt to
+// the server's. Drop rows where the SERVER copy is strictly newer: those are
+// stale local copies (a device that hasn't pulled recently), and pushing them
+// would overwrite fresher data written by other devices. New rows (no server
+// copy) always pass. Fails CLOSED: if the check query fails, nothing is pushed
+// (the outbox retries later).
+
+async function dropStaleRows(
+  rows: Array<{ key: string; value: unknown }>,
+): Promise<Array<{ key: string; value: unknown }>> {
+  if (rows.length === 0) return rows;
+  const serverTimes = new Map<string, string>();
+  const keys = rows.map(r => r.key);
+  for (let i = 0; i < keys.length; i += 200) {
+    const { data, error } = await supabase
+      .from('app_data')
+      .select('key, updatedAt:value->>updatedAt')
+      .in('key', keys.slice(i, i + 200));
+    if (error) throw new Error(`stale-guard check failed: ${error.message}`);
+    for (const row of (data ?? []) as Array<{ key: string; updatedAt: string | null }>) {
+      if (row.updatedAt) serverTimes.set(row.key, row.updatedAt);
+    }
+  }
+  const kept: Array<{ key: string; value: unknown }> = [];
+  let dropped = 0;
+  for (const r of rows) {
+    const server = serverTimes.get(r.key);
+    const local  = (r.value as { updatedAt?: string } | null)?.updatedAt;
+    if (server && local && server > local) {
+      // Server copy is newer: stale local record, do not overwrite. Mark this
+      // exact content clean so it stops counting as dirty; any real local edit
+      // changes the content and re-arms the dirty check.
+      markClean(r.key, r.value);
+      dropped++;
+      continue;
+    }
+    kept.push(r);
+  }
+  if (dropped > 0) {
+    console.warn(`[SyncEngine] stale-write guard dropped ${dropped} record(s), server copies are newer`);
+  }
+  return kept;
+}
+
 // ── Full AppState push (Phase 2, dirty-only) ───────────────────────────────
 
 /**
@@ -346,13 +409,26 @@ export async function pushToSupabase(state: AppState): Promise<void> {
       return;
     }
 
+    // ── Session push gate ────────────────────────────────────────────────────
+    // Never push before this session has pulled once. A pre-pull session holds
+    // whatever localStorage had (possibly seed/stale data) and the dirty map is
+    // empty, so a push here would blind-upsert EVERY record. Mark pending so
+    // the outbox retries after the startup pull completes.
+    if (!_pulledThisSession) {
+      console.warn('[SyncEngine] push blocked: no successful pull yet this session (prevents mass-overwrite from stale local data)');
+      markPushPending('initial-pull-pending');
+      return;
+    }
+
     const deletedIds = Array.from(getDeletedCustomerIds());
 
     // ── Dirty customers only ─────────────────────────────────────────────────
-    const dirtyCustomerRows = state.customers
-      .filter(c => !deletedIds.includes(c.id))
-      .filter(c => isDirty(`${PREFIX.customer}${c.id}`, c))
-      .map(c => ({ key: `${PREFIX.customer}${c.id}`, value: c }));
+    const dirtyCustomerRows = await dropStaleRows(
+      state.customers
+        .filter(c => !deletedIds.includes(c.id))
+        .filter(c => isDirty(`${PREFIX.customer}${c.id}`, c))
+        .map(c => ({ key: `${PREFIX.customer}${c.id}`, value: c })),
+    );
 
     if (dirtyCustomerRows.length > 0) {
       await pushRows(dirtyCustomerRows);
@@ -360,9 +436,11 @@ export async function pushToSupabase(state: AppState): Promise<void> {
     }
 
     // ── Dirty jobs only ──────────────────────────────────────────────────────
-    const dirtyJobRows = state.jobs
-      .filter(j => isDirty(`${PREFIX.job}${j.id}`, j))
-      .map(j => ({ key: `${PREFIX.job}${j.id}`, value: j }));
+    const dirtyJobRows = await dropStaleRows(
+      state.jobs
+        .filter(j => isDirty(`${PREFIX.job}${j.id}`, j))
+        .map(j => ({ key: `${PREFIX.job}${j.id}`, value: j })),
+    );
 
     const failedJobs: Array<{ key: string; error: string }> = [];
     for (const row of dirtyJobRows) {
@@ -608,6 +686,9 @@ export async function pullFromSupabase(): Promise<Partial<AppState> | null> {
     if (jobs.length > 0)       result.jobs            = jobs;
     if (remoteSEConfig?.apiKey) result.solarEdgeConfig = remoteSEConfig;
     if (Array.isArray(remoteStandaloneRmas)) result.standaloneRmas = remoteStandaloneRmas;
+
+    // Pull succeeded: this session is now allowed to push (see session push gate).
+    markSessionPulled();
     return result;
   } catch (err) {
     console.warn('[SyncEngine] pullFromSupabase error:', err);
