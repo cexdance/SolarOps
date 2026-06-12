@@ -135,6 +135,15 @@ describe('stale-write guard', () => {
     expect(pushedKeys).toContain('customer:c-new');
   });
 
+  it('drops UNSTAMPED local rows when the server copy is stamped (seed data must never win)', async () => {
+    mock.serverRows = [{ key: 'customer:c1', updatedAt: '2026-06-12T01:00:00Z' }];
+    const seed = makeCustomer('c1', '');
+    delete (seed as Partial<Customer>).updatedAt;
+    await pushToSupabase(makeState([seed]));
+    const pushedKeys = mock.upserts.flat().map(r => r.key);
+    expect(pushedKeys).not.toContain('customer:c1');
+  });
+
   it('a dropped stale row stays dropped until its content changes again', async () => {
     mock.serverRows = [{ key: 'customer:c1', updatedAt: '2026-06-12T14:00:00Z' }];
     const stale = makeCustomer('c1', '2026-06-12T01:00:00Z');

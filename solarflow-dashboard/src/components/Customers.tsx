@@ -3194,6 +3194,23 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
   const [undoStack, setUndoStack] = useState<Array<{ action: 'delete' | 'edit'; entry: Activity; previousText?: string }>>([]);
   const [showEmojiPicker, setShowEmojiPicker] = useState<string | null>(null);
 
+  // Centralized client timeline: the customer's own notes PLUS every comment
+  // made on this customer's Service Orders, so all client info reads in one
+  // place. SO-sourced entries carry their SO number and render read-only here
+  // (they are edited from the SO panel, where they live).
+  const combinedActivity = React.useMemo(() => {
+    const own = (customer.activityHistory ?? []).map(a => ({ activity: a, so: '', jobId: '' }));
+    const fromSOs = jobs
+      .filter(j => j.customerId === customer.id)
+      .flatMap(j => (j.activityHistory ?? []).map(a => ({
+        activity: a,
+        so: j.woNumber ? serviceOrderNo(j.woNumber) : 'SO',
+        jobId: j.id,
+      })));
+    return [...own, ...fromSOs].sort((x, y) =>
+      (y.activity.timestamp || '').localeCompare(x.activity.timestamp || ''));
+  }, [customer.activityHistory, customer.id, jobs]);
+
   // Notes composer: inline photo/camera input. Mobile browsers can't paste an
   // image into a textarea, so without this there was no way to attach a photo to
   // a note from a phone (the prior "Add Files" button only switched tabs).
@@ -4292,29 +4309,36 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                     </button>
                   )}
                 </div>
-                {(customer.activityHistory && customer.activityHistory.length > 0) ? (
+                {combinedActivity.length > 0 ? (
                   <div className="space-y-1">
-                    {customer.activityHistory.map((activity) => (
-                      <div key={activity.id} className="border-l-2 border-orange-200 pl-3 py-2 group relative">
-                        {/* Header row: name · datetime + action icons */}
+                    {combinedActivity.map(({ activity, so, jobId }) => (
+                      <div key={`${jobId || 'cust'}-${activity.id}`} className={`border-l-2 pl-3 py-2 group relative ${so ? 'border-purple-200' : 'border-orange-200'}`}>
+                        {/* Header row: name · datetime (+ SO badge) + action icons */}
                         <div className="flex items-center justify-between gap-2 mb-1">
-                          <span className="text-xs font-semibold text-slate-700">
+                          <span className="text-xs font-semibold text-slate-700 flex items-center flex-wrap gap-x-1">
                             {activity.userName || formatActivityType(activity.type)}
-                            <span className="font-normal text-slate-400 ml-1">·</span>
-                            <span className="font-normal text-slate-400 ml-1">
+                            <span className="font-normal text-slate-400">·</span>
+                            <span className="font-normal text-slate-400">
                               {new Date(activity.timestamp).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
                             </span>
+                            {so && (
+                              <span className="text-[10px] font-bold bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded">
+                                {so}
+                              </span>
+                            )}
                           </span>
                           {/* Action icons, revealed on hover */}
                           <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 relative">
-                            <button
-                              onClick={() => setShowEmojiPicker(showEmojiPicker === activity.id ? null : activity.id)}
-                              className="p-1 rounded hover:bg-slate-200 text-slate-400 hover:text-yellow-500"
-                              title="Add reaction"
-                            >
-                              <Smile className="w-3.5 h-3.5" />
-                            </button>
-                            {activity.type === 'note_added' && (
+                            {!jobId && (
+                              <button
+                                onClick={() => setShowEmojiPicker(showEmojiPicker === activity.id ? null : activity.id)}
+                                className="p-1 rounded hover:bg-slate-200 text-slate-400 hover:text-yellow-500"
+                                title="Add reaction"
+                              >
+                                <Smile className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                            {activity.type === 'note_added' && !jobId && (
                               <>
                                 <button
                                   onClick={() => { setEditingActivityId(activity.id); setEditingActivityText(activity.description); }}

@@ -376,10 +376,13 @@ async function dropStaleRows(
   for (const r of rows) {
     const server = serverTimes.get(r.key);
     const local  = (r.value as { updatedAt?: string } | null)?.updatedAt;
-    if (server && local && server > local) {
-      // Server copy is newer: stale local record, do not overwrite. Mark this
-      // exact content clean so it stops counting as dirty; any real local edit
-      // changes the content and re-arms the dirty check.
+    // Drop when the server copy is strictly newer, OR when the server has an
+    // edit time and the local copy has none: a stamped server row is real synced
+    // data, an unstamped local row is seed/fallback data and must never win.
+    if (server && (!local || server > local)) {
+      // Stale local record, do not overwrite. Mark this exact content clean so
+      // it stops counting as dirty; any real local edit changes the content and
+      // re-arms the dirty check.
       markClean(r.key, r.value);
       dropped++;
       continue;
@@ -710,6 +713,12 @@ function recordTime(r: { updatedAt?: string; createdAt?: string }): string {
   return r.updatedAt ?? r.createdAt ?? '';
 }
 function remoteWins(remote: { updatedAt?: string; createdAt?: string }, local: { updatedAt?: string; createdAt?: string }): boolean {
+  // A synced record always carries updatedAt (stamped at push). A local record
+  // WITHOUT one is unsynced seed/fallback data whose createdAt is generated at
+  // load time (= now), which must never beat a real remote edit time. So when
+  // exactly one side has updatedAt, that side wins outright.
+  if (remote.updatedAt && !local.updatedAt) return true;
+  if (!remote.updatedAt && local.updatedAt) return false;
   return recordTime(remote) >= recordTime(local);
 }
 
@@ -724,6 +733,53 @@ function remoteWins(remote: { updatedAt?: string; createdAt?: string }, local: {
  *     may not come back and must not be dropped as a ghost).
  *   - Records in the tombstone list are always filtered.
  */
+// ── Append-only array union ───────────────────────────────────────────────────
+// Activity feeds (customer.activityHistory, job.activityHistory) and customer
+// files are append-mostly: entries are added, never edited. LWW on the whole
+// record let one stale side WIPE the other's entries (2026-06-12 incident
+// destroyed SO comments and customer notes). Union by entry id so a merge can
+// only ever ADD.
+
+function unionById<T extends { id?: string; timestamp?: string; createdAt?: string }>(
+  a: T[] | undefined,
+  b: T[] | undefined,
+  order: 'asc' | 'desc',
+): T[] | undefined {
+  const aa = a ?? [];
+  const bb = b ?? [];
+  if (aa.length === 0 && bb.length === 0) return a ?? b;
+  const seen = new Map<string, T>();
+  for (const e of [...aa, ...bb]) {
+    const key = e.id ?? `${e.timestamp ?? e.createdAt ?? ''}|${JSON.stringify(e).slice(0, 80)}`;
+    if (!seen.has(key)) seen.set(key, e);
+  }
+  const t = (e: T) => e.timestamp ?? e.createdAt ?? '';
+  return Array.from(seen.values()).sort((x, y) =>
+    order === 'asc' ? t(x).localeCompare(t(y)) : t(y).localeCompare(t(x)));
+}
+
+/** Merge a customer pair: LWW winner + union of activity history and files. */
+export function mergeCustomerPair(winner: Customer, loser: Customer): Customer {
+  return {
+    ...winner,
+    // activityHistory is rendered newest-first; files newest-first as well.
+    activityHistory: unionById(winner.activityHistory, loser.activityHistory, 'desc'),
+    files: unionById(winner.files, loser.files, 'desc'),
+  };
+}
+
+/** Merge a job pair: LWW winner + union of activities, photo-count heuristic. */
+export function mergeJobPair(winner: Job, loser: Job): Job {
+  const winnerPhotos = winner.woPhotos ?? [];
+  const loserPhotos  = loser.woPhotos  ?? [];
+  return {
+    ...winner,
+    // SO comments / team conversation feed, appended chronologically.
+    activityHistory: unionById(winner.activityHistory, loser.activityHistory, 'asc'),
+    woPhotos: winnerPhotos.length >= loserPhotos.length ? winnerPhotos : loserPhotos,
+  };
+}
+
 export function mergeRemote(local: AppState, remote: Partial<AppState>): AppState {
   const deletedIds    = getDeletedCustomerIds();
   const deletedJobIds = getDeletedJobIds();
@@ -734,12 +790,15 @@ export function mergeRemote(local: AppState, remote: Partial<AppState>): AppStat
     const localMap  = new Map(local.customers.map(c => [c.id, c]));
     const remoteMap = new Map(remote.customers.map(c => [c.id, c]));
 
-    // Merge by ID. On conflict, keep whichever record is newer (LWW). Keep
-    // local-only records, real deletions are handled by the tombstone filter.
+    // Merge by ID. On conflict, keep whichever record is newer (LWW), but UNION
+    // the append-only containers (activityHistory, files) so a stale side can
+    // never wipe notes/files the other side holds. Keep local-only records,
+    // real deletions are handled by the tombstone filter.
     const merged = new Map(localMap);
     for (const [id, rc] of remoteMap) {
       const lc = localMap.get(id);
-      merged.set(id, !lc || remoteWins(rc, lc) ? rc : lc);
+      if (!lc) { merged.set(id, rc); continue; }
+      merged.set(id, remoteWins(rc, lc) ? mergeCustomerPair(rc, lc) : mergeCustomerPair(lc, rc));
     }
 
     customers = Array.from(merged.values()).filter(c => !deletedIds.has(c.id));
@@ -760,16 +819,11 @@ export function mergeRemote(local: AppState, remote: Partial<AppState>): AppStat
     for (const [id, remoteJ] of remoteMap) {
       const localJ = localMap.get(id);
       if (!localJ) { merged.set(id, remoteJ); continue; }
-      // Last-writer-wins on updatedAt, but always keep whichever copy has more
-      // photos, prevents a stale remote pull (race with an in-flight push) from
-      // wiping locally-uploaded photos regardless of which record wins on time.
-      const winner = remoteWins(remoteJ, localJ) ? remoteJ : localJ;
-      const remotePhotos = remoteJ.woPhotos ?? [];
-      const localPhotos  = localJ.woPhotos  ?? [];
-      merged.set(id, {
-        ...winner,
-        woPhotos: remotePhotos.length >= localPhotos.length ? remotePhotos : localPhotos,
-      });
+      // Last-writer-wins on updatedAt, but union the activity feed (comments)
+      // and keep whichever copy has more photos, so a stale remote pull (race
+      // with an in-flight push) can wipe neither comments nor photos.
+      const winner = remoteWins(remoteJ, localJ);
+      merged.set(id, winner ? mergeJobPair(remoteJ, localJ) : mergeJobPair(localJ, remoteJ));
     }
 
     // Same ghost-purge removal as customers above. Jobs are deleted only via

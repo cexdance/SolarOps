@@ -1,6 +1,6 @@
 import { useEffect, type MutableRefObject } from 'react';
 import { drainOutbox, resetOutboxAttempts } from '../lib/outbox';
-import { pullAndMerge, subscribeToChanges } from '../lib/syncEngine';
+import { pullAndMerge, subscribeToChanges, mergeCustomerPair, mergeJobPair } from '../lib/syncEngine';
 import { loadContractors, loadServiceRates, loadContractorJobs } from '../lib/contractorStore';
 import type { AppState, Customer, Job } from '../types';
 import type { Contractor, ContractorJob } from '../types/contractor';
@@ -103,7 +103,9 @@ export function useSyncEngine({
           return {
             ...prev,
             customers: exists
-              ? prev.customers.map(c => c.id === customer.id ? customer : c)
+              // Union activity history + files with the local copy so a remote
+              // record missing entries can never wipe them from this device.
+              ? prev.customers.map(c => c.id === customer.id ? mergeCustomerPair(customer, c) : c)
               : [...prev.customers, customer],
           };
         });
@@ -115,7 +117,8 @@ export function useSyncEngine({
           return {
             ...prev,
             jobs: exists
-              ? prev.jobs.map(j => j.id === job.id ? job : j)
+              // Union the comment feed (and photo heuristic) with the local copy.
+              ? prev.jobs.map(j => j.id === job.id ? mergeJobPair(job, j) : j)
               : [...prev.jobs, job],
           };
         });
