@@ -278,6 +278,9 @@ export interface Job {
   invoicedAt?: string;
   clientPaymentDueAt?: string;         // invoicedAt + 14 days
   clientPaidAt?: string;
+  /** Set when contractor pay + expenses for this SO are covered (last billing
+   *  kanban column). Job stays status 'paid'; this only closes the money loop. */
+  costsCoveredAt?: string;
   lateFee1AppliedAt?: string;          // 14 days after invoicedAt
   lateFee1Amount?: number;
   lateFee2AppliedAt?: string;          // 21 days after invoicedAt

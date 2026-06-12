@@ -11,8 +11,10 @@ import {
   List as ListIcon,
   Calendar,
   Printer,
+  ChevronRight,
 } from 'lucide-react';
 import { Job, Customer, User as UserType } from '../types';
+import { serviceOrderNo } from '../lib/woHelpers';
 import { notifyAdminForInvoice } from '../lib/quoteService';
 import { formatMoney } from '../lib/money';
 import { WorkOrderCalendar } from './WorkOrderCalendar';
@@ -74,13 +76,8 @@ export const Billing: React.FC<BillingProps> = ({
     });
 
   const unbilledJobs = jobs.filter((j) => j.status === 'completed');
-  const unbilledTotal = unbilledJobs.reduce((sum, j) => sum + j.totalAmount, 0);
-
   const invoicedJobs = jobs.filter((j) => j.status === 'invoiced');
-  const invoicedTotal = invoicedJobs.reduce((sum, j) => sum + j.totalAmount, 0);
-
   const paidJobs = jobs.filter((j) => j.status === 'paid');
-  const paidTotal = paidJobs.reduce((sum, j) => sum + j.totalAmount, 0);
 
   const getCustomer = (customerId: string) => customers.find((c) => c.id === customerId);
 
@@ -116,6 +113,49 @@ export const Billing: React.FC<BillingProps> = ({
     return 'unbilled';
   };
 
+  // ── Billing pipeline (kanban) ───────────────────────────────────────────────
+  // Pending Completion → Ready to Invoice → Invoiced → Paid → Costs Covered.
+  // PowerCare SOs bill to SolarEdge through Conexsol USA; their cards get an
+  // orange hue so Daniel spots them at a glance.
+  type BillingCol = 'pending' | 'to_invoice' | 'invoiced' | 'paid' | 'costs_covered';
+
+  const getBillingColumn = (job: Job): BillingCol => {
+    if (job.status === 'paid') return job.costsCoveredAt ? 'costs_covered' : 'paid';
+    if (job.status === 'invoiced') return 'invoiced';
+    if (job.status === 'completed') return 'to_invoice';
+    return 'pending';
+  };
+
+  const [draggedId, setDraggedId] = useState<string | null>(null);
+  const [dragOverCol, setDragOverCol] = useState<BillingCol | null>(null);
+
+  const moveToColumn = (jobId: string, col: BillingCol) => {
+    const job = jobs.find(j => j.id === jobId);
+    if (!job || getBillingColumn(job) === col) return;
+    const now = new Date().toISOString();
+    let patch: Partial<Job>;
+    switch (col) {
+      case 'pending':
+        patch = { status: 'in_progress', woStatus: 'in_progress', costsCoveredAt: undefined };
+        break;
+      case 'to_invoice':
+        patch = { status: 'completed', woStatus: 'completed', completedAt: job.completedAt ?? now, costsCoveredAt: undefined };
+        break;
+      case 'invoiced':
+        patch = { status: 'invoiced', woStatus: 'invoiced', invoicedAt: job.invoicedAt ?? now, costsCoveredAt: undefined };
+        break;
+      case 'paid':
+        patch = { status: 'paid', woStatus: 'paid', clientPaidAt: job.clientPaidAt ?? now, costsCoveredAt: undefined };
+        break;
+      case 'costs_covered':
+        patch = { status: 'paid', woStatus: 'paid', clientPaidAt: job.clientPaidAt ?? now, costsCoveredAt: job.costsCoveredAt ?? now };
+        break;
+    }
+    onUpdateJob({ ...job, ...patch });
+  };
+
+  const fmtDate = (d?: string) => (d ? new Date(d).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' }) : '');
+
   const getDaysSinceCompleted = (completedAt?: string) => {
     if (!completedAt) return 0;
     const completed = new Date(completedAt);
@@ -140,62 +180,27 @@ export const Billing: React.FC<BillingProps> = ({
         </button>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <div className="bg-slate-100 border border-slate-200 rounded-xl p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <DollarSign className="w-5 h-5 text-slate-600" />
-            <span className="text-sm font-medium text-slate-800">Total</span>
-          </div>
-          <p className="text-2xl font-bold text-slate-900">{formatMoney(jobs.reduce((sum, j) => sum + j.totalAmount, 0), { decimals: 0 })}</p>
-          <p className="text-xs text-slate-600">{jobs.length} jobs</p>
-        </div>
-
-        <div className="bg-red-50 border border-red-200 rounded-xl p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <AlertTriangle className="w-5 h-5 text-red-600" />
-            <span className="text-sm font-medium text-red-800">Unbilled</span>
-          </div>
-          <p className="text-2xl font-bold text-red-900">{formatMoney(unbilledTotal, { decimals: 0 })}</p>
-          <p className="text-xs text-red-600">{unbilledJobs.length} jobs</p>
-        </div>
-
-        <div className="bg-purple-50 border border-purple-200 rounded-xl p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <Clock className="w-5 h-5 text-purple-600" />
-            <span className="text-sm font-medium text-purple-800">Invoiced</span>
-          </div>
-          <p className="text-2xl font-bold text-purple-900">{formatMoney(invoicedTotal, { decimals: 0 })}</p>
-          <p className="text-xs text-purple-600">{invoicedJobs.length} jobs</p>
-        </div>
-
-        <div className="bg-green-50 border border-green-200 rounded-xl p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <CheckCircle className="w-5 h-5 text-green-600" />
-            <span className="text-sm font-medium text-green-800">Paid</span>
-          </div>
-          <p className="text-2xl font-bold text-green-900">{formatMoney(paidTotal, { decimals: 0 })}</p>
-          <p className="text-xs text-green-600">{paidJobs.length} jobs</p>
-        </div>
-      </div>
-
-      {/* Unbilled Alert */}
+      {/* Unbilled Alert: clicking it jumps to the unbilled jobs list */}
       {unbilledJobs.length > 0 && (
-        <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6">
+        <button
+          onClick={() => { setFilter('unbilled'); handleViewMode('list'); }}
+          className="w-full text-left bg-red-50 border border-red-200 rounded-xl p-4 mb-6 hover:bg-red-100/70 transition-colors cursor-pointer"
+        >
           <div className="flex items-center gap-3">
             <div className="p-2 bg-red-100 rounded-lg animate-pulse">
               <AlertTriangle className="w-6 h-6 text-red-600" />
             </div>
-            <div>
+            <div className="flex-1">
               <p className="font-bold text-red-900">
                 ACTION REQUIRED: {unbilledJobs.length} unbilled job{unbilledJobs.length > 1 ? 's' : ''}
               </p>
               <p className="text-sm text-red-700">
-                {formatMoney(unbilledTotal, { decimals: 0 })} in unbilled revenue needs immediate attention
+                Completed work with no invoice yet. Click to review the list.
               </p>
             </div>
+            <ChevronRight className="w-5 h-5 text-red-400 shrink-0" />
           </div>
-        </div>
+        </button>
       )}
 
       {/* Filters */}
@@ -248,43 +253,85 @@ export const Billing: React.FC<BillingProps> = ({
         </div>
       </div>
 
-      {/* Kanban View */}
+      {/* Kanban View: the billing pipeline. Drag a card to advance it. */}
       {viewMode === 'kanban' && (
         <div className="flex gap-4 overflow-x-auto pb-4">
           {([
-            { key: 'unbilled' as const, label: 'Unbilled', count: unbilledJobs.length, total: unbilledTotal, headerCls: 'bg-red-50 border-red-200 text-red-700' },
-            { key: 'invoiced' as const, label: 'Invoiced', count: invoicedJobs.length, total: invoicedTotal, headerCls: 'bg-purple-50 border-purple-200 text-purple-700' },
-            { key: 'paid'    as const, label: 'Paid',     count: paidJobs.length,     total: paidTotal,     headerCls: 'bg-green-50 border-green-200 text-green-700' },
+            { key: 'pending'       as BillingCol, label: 'Pending Completion', sub: 'Waiting on contractor',        headerCls: 'bg-slate-100 border-slate-200 text-slate-700' },
+            { key: 'to_invoice'    as BillingCol, label: 'Ready to Invoice',   sub: 'Create and send in Xero',      headerCls: 'bg-red-50 border-red-200 text-red-700' },
+            { key: 'invoiced'      as BillingCol, label: 'Invoiced',           sub: 'Awaiting payment',             headerCls: 'bg-purple-50 border-purple-200 text-purple-700' },
+            { key: 'paid'          as BillingCol, label: 'Paid',               sub: 'Client / SolarEdge paid',      headerCls: 'bg-green-50 border-green-200 text-green-700' },
+            { key: 'costs_covered' as BillingCol, label: 'Costs Covered',      sub: 'Contractor + expenses settled', headerCls: 'bg-emerald-50 border-emerald-200 text-emerald-700' },
           ]).map(col => {
-            const colJobs = filteredJobs.filter(j => getJobBillingStatus(j) === col.key);
+            const colJobs = filteredJobs.filter(j => j.status !== 'archived' && getBillingColumn(j) === col.key);
             return (
-              <div key={col.key} className="flex-1 min-w-[280px]">
-                <div className={`flex items-center justify-between px-3 py-2 rounded-lg border mb-3 ${col.headerCls}`}>
-                  <span className="font-semibold text-sm">{col.label}</span>
-                  <span className="text-xs font-medium">{col.count} · {formatMoney(col.total, { decimals: 0 })}</span>
+              <div
+                key={col.key}
+                className={`flex-1 min-w-[260px] rounded-xl transition-colors ${dragOverCol === col.key ? 'bg-orange-50 ring-2 ring-orange-300' : ''}`}
+                onDragOver={e => { e.preventDefault(); setDragOverCol(col.key); }}
+                onDragLeave={() => setDragOverCol(prev => (prev === col.key ? null : prev))}
+                onDrop={e => {
+                  e.preventDefault();
+                  setDragOverCol(null);
+                  if (draggedId) moveToColumn(draggedId, col.key);
+                  setDraggedId(null);
+                }}
+              >
+                <div className={`px-3 py-2 rounded-lg border mb-3 ${col.headerCls}`}>
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-sm">{col.label}</span>
+                    <span className="text-xs font-bold">{colJobs.length}</span>
+                  </div>
+                  <p className="text-[10px] opacity-70 mt-0.5">{col.sub}</p>
                 </div>
-                <div className="space-y-3">
+                <div className="space-y-3 min-h-[80px]">
                   {colJobs.length === 0 ? (
                     <div className="text-center py-8 text-slate-400 text-sm border-2 border-dashed border-slate-200 rounded-xl">
-                      No {col.label.toLowerCase()} jobs
+                      Empty
                     </div>
                   ) : colJobs.map(job => {
                     const customer = getCustomer(job.customerId);
-                    const billingStatus = getJobBillingStatus(job);
                     return (
-                      <div key={job.id} className="bg-white rounded-xl border border-slate-200 p-3 hover:shadow-md transition-shadow">
-                        <div className="flex items-start justify-between mb-2">
-                          <div className="min-w-0">
-                            {customer?.clientId && (
-                              <p className="text-[10px] text-slate-400 font-medium leading-tight mb-0.5">{customer.clientId}</p>
-                            )}
-                            <p className="font-semibold text-slate-900 text-sm leading-tight truncate">{customer?.name}</p>
-                          </div>
-                          <p className="font-bold text-slate-900 text-sm ml-2 shrink-0">{formatMoney(job.totalAmount, { decimals: 0 })}</p>
+                      <div
+                        key={job.id}
+                        draggable
+                        onDragStart={() => setDraggedId(job.id)}
+                        onDragEnd={() => { setDraggedId(null); setDragOverCol(null); }}
+                        className={`rounded-xl border p-3 hover:shadow-md transition-all cursor-grab select-none ${
+                          job.isPowercare ? 'bg-orange-50/70 border-orange-200' : 'bg-white border-slate-200'
+                        } ${draggedId === job.id ? 'opacity-40 scale-95' : ''}`}
+                      >
+                        <div className="flex items-center gap-1.5 mb-0.5">
+                          {customer?.clientId && (
+                            <span className="text-[10px] text-slate-400 font-medium leading-tight">{customer.clientId}</span>
+                          )}
+                          {job.isPowercare && (
+                            <span className="text-[9px] font-bold uppercase tracking-wide bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded-full">PowerCare</span>
+                          )}
+                          {job.woNumber && (
+                            <span className="text-[10px] text-slate-400 ml-auto shrink-0">{serviceOrderNo(job.woNumber)}</span>
+                          )}
                         </div>
-                        <p className="text-xs text-slate-500 mb-3">{job.serviceType}</p>
+                        <p className="font-semibold text-slate-900 text-sm leading-tight truncate">{customer?.name}</p>
+                        <div className="flex items-center gap-1.5 flex-wrap mt-1 mb-2">
+                          {job.serviceType && (
+                            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-teal-100 text-teal-700 whitespace-nowrap">{String(job.serviceType)}</span>
+                          )}
+                          {job.completedAt && col.key !== 'pending' && (
+                            <span className="text-[10px] text-slate-500">Done {fmtDate(job.completedAt)}</span>
+                          )}
+                          {job.invoicedAt && ['invoiced', 'paid', 'costs_covered'].includes(col.key) && (
+                            <span className="text-[10px] text-slate-500">· Inv {fmtDate(job.invoicedAt)}</span>
+                          )}
+                          {job.clientPaidAt && ['paid', 'costs_covered'].includes(col.key) && (
+                            <span className="text-[10px] text-slate-500">· Paid {fmtDate(job.clientPaidAt)}</span>
+                          )}
+                        </div>
                         <div className="flex gap-2">
-                          {billingStatus === 'unbilled' && (
+                          {col.key === 'pending' && (
+                            <span className="text-[11px] text-slate-400">In the field · moves here when contractor completes</span>
+                          )}
+                          {col.key === 'to_invoice' && (
                             <>
                               <button
                                 onClick={() => handleRequestInvoice(job)}
@@ -293,20 +340,28 @@ export const Billing: React.FC<BillingProps> = ({
                               >
                                 <Send className="w-3 h-3" /> Notify Daniel
                               </button>
-                              <button onClick={() => handleMarkPaid(job)} className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-50 cursor-pointer">Paid</button>
+                              <button onClick={() => moveToColumn(job.id, 'invoiced')} className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-50 cursor-pointer">Invoiced</button>
                             </>
                           )}
-                          {billingStatus === 'invoiced' && (
+                          {col.key === 'invoiced' && (
                             <>
                               <span className="flex-1 flex items-center justify-center gap-1 py-1.5 bg-purple-100 text-purple-700 rounded-lg text-xs font-medium">
                                 <Clock className="w-3 h-3" /> Awaiting Payment
                               </span>
-                              <button onClick={() => handleMarkPaid(job)} className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 cursor-pointer">Paid</button>
+                              <button onClick={() => moveToColumn(job.id, 'paid')} className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 cursor-pointer">Paid</button>
                             </>
                           )}
-                          {billingStatus === 'paid' && (
-                            <div className="flex items-center gap-1 text-green-600 text-xs font-medium">
-                              <CheckCircle className="w-4 h-4" /> Payment Received
+                          {col.key === 'paid' && (
+                            <button
+                              onClick={() => moveToColumn(job.id, 'costs_covered')}
+                              className="flex-1 flex items-center justify-center gap-1 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-medium hover:bg-emerald-700 cursor-pointer"
+                            >
+                              <CheckCircle className="w-3 h-3" /> Cover Contractor & Expenses
+                            </button>
+                          )}
+                          {col.key === 'costs_covered' && (
+                            <div className="flex items-center gap-1 text-emerald-600 text-xs font-medium">
+                              <CheckCircle className="w-4 h-4" /> Closed out {fmtDate(job.costsCoveredAt)}
                             </div>
                           )}
                         </div>
@@ -363,14 +418,20 @@ export const Billing: React.FC<BillingProps> = ({
               <div
                 key={job.id}
                 className={`
-                  bg-white rounded-xl border p-4
-                  ${billingStatus === 'unbilled' && daysOld > 2 ? 'border-red-300 bg-red-50' : 'border-slate-200'}
+                  rounded-xl border p-4
+                  ${billingStatus === 'unbilled' && daysOld > 2 ? 'border-red-300 bg-red-50'
+                    : job.isPowercare ? 'bg-orange-50/70 border-orange-200' : 'bg-white border-slate-200'}
                 `}
               >
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
-                    {customer?.clientId && (
-                      <p className="text-[10px] text-slate-400 font-medium leading-tight mb-0.5">{customer.clientId}</p>
+                    {(customer?.clientId || job.isPowercare) && (
+                      <p className="text-[10px] text-slate-400 font-medium leading-tight mb-0.5 flex items-center gap-1.5">
+                        {customer?.clientId}
+                        {job.isPowercare && (
+                          <span className="text-[9px] font-bold uppercase tracking-wide bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded-full">PowerCare</span>
+                        )}
+                      </p>
                     )}
                     <div className="flex items-center gap-2 mb-1">
                       <h3 className="font-semibold text-slate-900">{customer?.name}</h3>

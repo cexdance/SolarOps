@@ -148,7 +148,9 @@ const JobCard: React.FC<JobCardProps> = ({ job, customer, contractorName, isDrag
     onDragStart={e => onDragStart(e, job.id)}
     onDragEnd={onDragEnd}
     onClick={handleCardClick}
-    className={`bg-white rounded-xl border border-slate-200 p-4 hover:shadow-md transition-all ${isDragging ? 'cursor-grabbing opacity-40 scale-95' : 'cursor-pointer hover:border-orange-300'} select-none`}
+    className={`rounded-xl border p-4 hover:shadow-md transition-all ${
+      job.isPowercare ? 'bg-orange-50/70 border-orange-200' : 'bg-white border-slate-200'
+    } ${isDragging ? 'cursor-grabbing opacity-40 scale-95' : 'cursor-pointer hover:border-orange-300'} select-none`}
   >
     <div className="flex items-start justify-between mb-3">
       <div className="flex-1 min-w-0">
