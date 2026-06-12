@@ -47,32 +47,52 @@ const PRIORITY_LEGEND: Array<{ label: string; hex: string }> = [
   { label: 'Low',      hex: PRIORITY_HEX['low'] ?? '#facc15' },
 ];
 
-// Service type → pin glyph so the map reads at a glance. Order matters:
-// "Optimizer / Microinverter Change" contains "inverter", so optimizer wins.
-type ServiceKind = 'inverter' | 'site_visit' | 'optimizer' | 'other';
+// Service type → pin glyph so the map reads at a glance. Order matters: the
+// first match wins, so more specific kinds are checked before broader ones
+// ("Inverter Change with initial site visit" must read as inverter, not site
+// visit; "Site visit - Roof/Home Run Inspection" must read as roof).
+type ServiceKind = 'optimizer' | 'inverter' | 'battery' | 'roof' | 'inspection' | 'site_visit' | 'other';
 function serviceKind(serviceType?: string): ServiceKind {
   const s = (serviceType ?? '').toLowerCase();
   if (s.includes('optimizer') || s.includes('microinverter')) return 'optimizer';
-  if (s.includes('inverter')) return 'inverter';
-  if (s.includes('site visit') || s.includes('site_visit') || s.includes('inspection')) return 'site_visit';
+  if (s.includes('battery')) return 'battery';
+  if (s.includes('roof') || s.includes('home run') || s.includes('reroof')) return 'roof';
+  if (s.includes('inverter') || s.includes('commission')) return 'inverter';
+  if (s.includes('inspection') || s.includes('quick review') || s.includes('simple')) return 'inspection';
+  if (s.includes('site visit') || s.includes('site_visit') || s.includes('communication') || s.includes('transfer') || s.includes('site')) return 'site_visit';
   return 'other';
 }
 
-// White inline-SVG glyphs (lucide paths) drawn inside the colored pin disc.
+// White inline-SVG glyphs drawn inside the colored pin disc. Styled to echo the
+// reference set (power optimizer, inverter, roof, clipboard, multimeter) while
+// keeping our flat white-stroke look.
 const GLYPH_SVG: Record<ServiceKind, string> = {
-  inverter:  '<path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/>',                                  // zap
-  site_visit:'<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>',                    // search
-  optimizer: '<path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M2 14h4M10 8h4M18 16h4"/>', // sliders
-  other:     '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>', // wrench
+  // Power optimizer: TO-220-style component, body + leg nub + three legs.
+  optimizer:  '<rect x="7" y="3.5" width="10" height="9" rx="1.2"/><path d="M12 3.5V2"/><path d="M9.5 12.5v7.5M12 12.5v7.5M14.5 12.5v7.5"/>',
+  // Inverter: enclosure with the DC→AC diagonal and a small sine wave.
+  inverter:   '<rect x="3.5" y="3.5" width="17" height="17" rx="2.2"/><path d="M18.5 5.5 5.5 18.5"/><path d="M5.5 15.4c1 0 1-1.8 2-1.8s1 1.8 2 1.8"/>',
+  // Battery storage.
+  battery:    '<rect x="2.5" y="7.5" width="15" height="9" rx="2"/><path d="M20.5 11v2"/><path d="M6 11v2M9.5 11v2"/>',
+  // Roof visit: house with a small hammer.
+  roof:       '<path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10.2V20h13V10.2"/><path d="M13.2 8.6h3.4v2.4h-3.4z"/><path d="M14.9 11 11 15.2"/>',
+  // Inspection: clipboard with a checklist.
+  inspection: '<rect x="6" y="4.5" width="12" height="15.5" rx="2"/><rect x="9" y="2.8" width="6" height="3" rx="1"/><path d="M9.5 10.2h5M9.5 13.6h5M9.5 17h3"/>',
+  // Site visit / communications: a multimeter (dial + two probe leads).
+  site_visit: '<rect x="3" y="4.5" width="11" height="13" rx="2"/><circle cx="8.5" cy="9.5" r="1.9"/><path d="M7.6 14.4h1.8"/><path d="M15 8.2l4.6 2.2M15 12l4.6 2.2"/>',
+  // Generic service: wrench.
+  other:      '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
 };
 const SERVICE_LEGEND: Array<{ kind: ServiceKind; label: string }> = [
-  { kind: 'inverter',   label: 'Inverter Change' },
+  { kind: 'optimizer',  label: 'Optimizer' },
+  { kind: 'inverter',   label: 'Inverter' },
+  { kind: 'battery',    label: 'Battery' },
+  { kind: 'roof',       label: 'Roof Visit' },
+  { kind: 'inspection', label: 'Inspection' },
   { kind: 'site_visit', label: 'Site Visit' },
-  { kind: 'optimizer',  label: 'Optimizer Change' },
-  { kind: 'other',      label: 'Other Service' },
+  { kind: 'other',      label: 'Other' },
 ];
 function glyphSvg(kind: ServiceKind, px: number, stroke = '#fff'): string {
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${px}" height="${px}" viewBox="0 0 24 24" fill="none" stroke="${stroke}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">${GLYPH_SVG[kind]}</svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${px}" height="${px}" viewBox="0 0 24 24" fill="none" stroke="${stroke}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">${GLYPH_SVG[kind]}</svg>`;
 }
 
 // A status counts as "inactive" (hidden under the Active filter) when it reads
@@ -335,8 +355,9 @@ const JobMapView: React.FC<JobMapViewProps> = ({ jobs, onOpen, selectable = true
           </MapContainer>
 
           {/* Legend: priority colors + service glyphs */}
-          <div className="absolute bottom-3 left-3 z-[1000] bg-white/95 rounded-lg shadow px-2.5 py-2 space-y-1">
-            <div className="flex items-center gap-2">
+          <div className="absolute bottom-3 left-3 z-[1000] bg-white/95 rounded-lg shadow px-2.5 py-2 max-w-[220px]">
+            <p className="text-[9px] font-semibold uppercase tracking-wide text-slate-400 mb-1">Priority</p>
+            <div className="flex items-center gap-x-2 gap-y-1 flex-wrap">
               {PRIORITY_LEGEND.map(p => (
                 <span key={p.label} className="flex items-center gap-1 text-[10px] text-slate-600">
                   <span className="w-2.5 h-2.5 rounded-full inline-block border border-white shadow-sm" style={{ background: p.hex }} />
@@ -344,7 +365,8 @@ const JobMapView: React.FC<JobMapViewProps> = ({ jobs, onOpen, selectable = true
                 </span>
               ))}
             </div>
-            <div className="flex items-center gap-2">
+            <p className="text-[9px] font-semibold uppercase tracking-wide text-slate-400 mb-1 mt-2">Service</p>
+            <div className="grid grid-cols-2 gap-x-2 gap-y-1">
               {SERVICE_LEGEND.map(s => (
                 <span key={s.kind} className="flex items-center gap-1 text-[10px] text-slate-600">
                   <span
