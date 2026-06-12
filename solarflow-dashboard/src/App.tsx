@@ -49,7 +49,7 @@ import { isFloridaSite, isAllowedCustomer } from './lib/solarEdgeSiteFilter';
 import { getDeletedCustomerIds, markJobDeleted } from './lib/dataStore';
 import { Contractor, ContractorStatus, ContractorJob } from './types/contractor';
 import { addInteraction, loadCustomers, loadInteractions, saveInteractions } from './lib/customerStore';
-import { validateAddress, normalizeStreetOrder } from './lib/addressValidator';
+import { validateAddress, normalizeStreetOrder, sameStreetAddress } from './lib/addressValidator';
 import { useUnreadBadge } from './hooks/useUnreadBadge';
 import { resolveSessionRoute, isContractorAccount } from './lib/authRouting';
 import { Eye, X } from 'lucide-react';
@@ -1590,7 +1590,7 @@ function App() {
       lastName: customer.lastName,
       email: customer.email || '',
       phone: customer.phone || '',
-      address: customer.address || '',
+      address: normalizeStreetOrder(customer.address || ''),
       city: customer.city || '',
       state: customer.state || 'FL',
       zip: customer.zip || '',
@@ -1619,7 +1619,12 @@ function App() {
     });
   };
 
-  const handleUpdateCustomer = (updatedCustomer: Customer) => {
+  const handleUpdateCustomer = (rawCustomer: Customer) => {
+    // Write-path guard: no customer save may persist a SolarEdge European-order
+    // address (street name before house number). Devices holding stale data
+    // re-push the whole record on unrelated edits, which is how corrected
+    // addresses regressed; normalizing here self-heals on every save.
+    const updatedCustomer = { ...rawCustomer, address: normalizeStreetOrder(rawCustomer.address || '') };
     logChange('customer.update', 'customer', updatedCustomer.id, updatedCustomer,
       data.currentUser?.email ?? 'unknown');
 
@@ -1883,7 +1888,8 @@ function App() {
         lastName: '',
         email: '',
         phone: '',
-        address: s.location?.address || '',
+        // SolarEdge sends street name before house number; never store raw.
+        address: normalizeStreetOrder(s.location?.address || ''),
         city: s.location?.city || '',
         state: s.location?.state || 'FL',
         zip: s.location?.zip || '',
@@ -1997,7 +2003,8 @@ function App() {
       id: `cust-se-${s.id}-${Date.now()}`,
       name: s.name || `SolarEdge Site ${s.id}`,
       firstName: '', lastName: '', email: '', phone: '',
-      address: s.location?.address || '',
+      // SolarEdge sends street name before house number; never store raw.
+      address: normalizeStreetOrder(s.location?.address || ''),
       city:    s.location?.city    || '',
       state:   s.location?.state   || 'FL',
       zip:     s.location?.zip     || '',
@@ -2161,9 +2168,27 @@ function App() {
             const updates: Partial<Customer> = {};
             for (const ch of item.changes!) {
               if (ch.field === 'Name')    updates.name    = ch.to;
-              if (ch.field === 'Address') updates.address = validatedUpdateAddress.address;
+              if (ch.field === 'Address') {
+                // Validated CRM address PREVAILS: never let a SolarEdge import
+                // overwrite an address that is the same street in a different
+                // format (order/abbreviations). Only genuinely different
+                // addresses get applied - and that overwrite is always logged.
+                if (!sameStreetAddress(c.address || '', validatedUpdateAddress.address)) {
+                  updates.address = validatedUpdateAddress.address;
+                }
+              }
               if (ch.field === 'City')    updates.city    = validatedUpdateAddress.city;
               if (ch.field === 'ZIP')     updates.zip     = validatedUpdateAddress.zip;
+            }
+            // Audit every field the import actually changes, so address
+            // regressions are traceable to their source.
+            for (const [field, to] of Object.entries(updates)) {
+              const from = c[field as keyof Customer];
+              if (from !== to) {
+                logChange('customer.import_update', 'customer', c.id, {
+                  source: 'solaredge-import', field, from, to,
+                }, prev.currentUser?.email ?? 'unknown');
+              }
             }
             return { ...c, ...updates };
           });

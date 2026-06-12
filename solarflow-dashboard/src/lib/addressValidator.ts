@@ -376,3 +376,34 @@ export function getAddressCacheStats(): { size: number; keys: string[] } {
     keys: Array.from(geocodeCache.keys()),
   };
 }
+// ── Canonical street comparison ───────────────────────────────────────────────
+// Two address lines are "the same street" when, after fixing SolarEdge's
+// European order and normalizing common suffix/directional abbreviations, the
+// tokens match. Used at SolarEdge ingress so an already-validated CRM address
+// PREVAILS over a cosmetic variant of itself (e.g. "Beulah Road 1330" vs
+// "1330 Beulah Rd") instead of being overwritten on every import.
+const TOKEN_CANON: Record<string, string> = {
+  street: 'st', road: 'rd', avenue: 'ave', av: 'ave', drive: 'dr', lane: 'ln',
+  court: 'ct', circle: 'cir', boulevard: 'blvd', highway: 'hwy', place: 'pl',
+  terrace: 'ter', trail: 'trl', parkway: 'pkwy', square: 'sq', point: 'pt',
+  county: 'cr', north: 'n', south: 's', east: 'e', west: 'w',
+  northeast: 'ne', northwest: 'nw', southeast: 'se', southwest: 'sw',
+};
+
+export function canonicalStreet(address: string): string {
+  return normalizeStreetOrder(address || '')
+    .split(',')[0]!
+    .toLowerCase()
+    .replace(/[.,#]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean)
+    .map(t => TOKEN_CANON[t] ?? t)
+    .join(' ');
+}
+
+/** True when both lines refer to the same street address (order/abbreviation insensitive). */
+export function sameStreetAddress(a: string, b: string): boolean {
+  const ca = canonicalStreet(a);
+  const cb = canonicalStreet(b);
+  return !!ca && ca === cb;
+}

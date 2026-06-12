@@ -46,3 +46,27 @@ describe('stripEmbeddedCityStateZip', () => {
       .toBe('12 Winter Garden Way');
   });
 });
+
+import { sameStreetAddress, canonicalStreet } from '../lib/addressValidator';
+
+describe('sameStreetAddress (validated CRM address prevails at SolarEdge ingress)', () => {
+  it('matches reversed SolarEdge order against corrected CRM address', () => {
+    expect(sameStreetAddress('1330 Beulah Rd', 'Beulah Road 1330')).toBe(true);
+    expect(sameStreetAddress('124 Creekside Way', 'Creekside Way 124')).toBe(true);
+  });
+  it('matches suffix and directional abbreviations', () => {
+    expect(sameStreetAddress('7910 Southwest 8th Court', '7910 SW 8th Ct')).toBe(true);
+    expect(sameStreetAddress('2653 Riverport Drive North', '2653 Riverport Dr N')).toBe(true);
+  });
+  it('ignores trailing city/state on either side', () => {
+    expect(sameStreetAddress('1330 Beulah Rd, Winter Garden, FL', 'Beulah Road 1330')).toBe(true);
+  });
+  it('rejects genuinely different addresses', () => {
+    expect(sameStreetAddress('330 Beulah Rd', '1330 Beulah Rd')).toBe(false);
+    expect(sameStreetAddress('18312 County Rd 33', 'Riverport Drive North 2653')).toBe(false);
+    expect(sameStreetAddress('', '1330 Beulah Rd')).toBe(false);
+  });
+  it('canonicalStreet normalizes consistently', () => {
+    expect(canonicalStreet('Beulah Road 1330')).toBe(canonicalStreet('1330 Beulah Rd'));
+  });
+});

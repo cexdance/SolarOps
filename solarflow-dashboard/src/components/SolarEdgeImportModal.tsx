@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { Customer } from '../types';
 import { isFloridaSite } from '../lib/solarEdgeSiteFilter';
-import { normalizeStreetOrder } from '../lib/addressValidator';
+import { normalizeStreetOrder, sameStreetAddress } from '../lib/addressValidator';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -130,8 +130,11 @@ function buildDiff(sites: LiveSite[], customers: Customer[]): DiffItem[] {
       const changes: FieldChange[] = [];
       if (existing.name !== liveName && liveName)
         changes.push({ field: 'Name', from: existing.name, to: liveName });
+      // Validated CRM address PREVAILS: only propose an address change when the
+      // live SolarEdge address is genuinely a different street, not a cosmetic
+      // variant (order/abbreviations) of what the CRM already holds.
       const liveAddress = siteAddress(site);
-      if (existing.address !== liveAddress && liveAddress)
+      if (liveAddress && existing.address !== liveAddress && !sameStreetAddress(existing.address || '', liveAddress))
         changes.push({ field: 'Address', from: existing.address, to: liveAddress });
       if (existing.city !== liveCity && liveCity)
         changes.push({ field: 'City', from: existing.city, to: liveCity });

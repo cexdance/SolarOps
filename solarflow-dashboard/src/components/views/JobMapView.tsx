@@ -36,9 +36,44 @@ interface JobMapViewProps {
 interface Coord { lat: number; lon: number }
 
 const COORD_CACHE_KEY = 'solarops_geocode_cache';
+// Priority → pin color. Red = top priority, yellow = lowest, warm ramp between.
 const PRIORITY_HEX: Record<string, string> = {
-  critical: '#ef4444', high: '#f59e0b', normal: '#3b82f6', low: '#94a3b8',
+  critical: '#dc2626', high: '#f97316', normal: '#f59e0b', low: '#facc15',
 };
+const PRIORITY_LEGEND: Array<{ label: string; hex: string }> = [
+  { label: 'Critical', hex: PRIORITY_HEX['critical'] ?? '#dc2626' },
+  { label: 'High',     hex: PRIORITY_HEX['high'] ?? '#f97316' },
+  { label: 'Medium',   hex: PRIORITY_HEX['normal'] ?? '#f59e0b' },
+  { label: 'Low',      hex: PRIORITY_HEX['low'] ?? '#facc15' },
+];
+
+// Service type → pin glyph so the map reads at a glance. Order matters:
+// "Optimizer / Microinverter Change" contains "inverter", so optimizer wins.
+type ServiceKind = 'inverter' | 'site_visit' | 'optimizer' | 'other';
+function serviceKind(serviceType?: string): ServiceKind {
+  const s = (serviceType ?? '').toLowerCase();
+  if (s.includes('optimizer') || s.includes('microinverter')) return 'optimizer';
+  if (s.includes('inverter')) return 'inverter';
+  if (s.includes('site visit') || s.includes('site_visit') || s.includes('inspection')) return 'site_visit';
+  return 'other';
+}
+
+// White inline-SVG glyphs (lucide paths) drawn inside the colored pin disc.
+const GLYPH_SVG: Record<ServiceKind, string> = {
+  inverter:  '<path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/>',                                  // zap
+  site_visit:'<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>',                    // search
+  optimizer: '<path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M2 14h4M10 8h4M18 16h4"/>', // sliders
+  other:     '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>', // wrench
+};
+const SERVICE_LEGEND: Array<{ kind: ServiceKind; label: string }> = [
+  { kind: 'inverter',   label: 'Inverter Change' },
+  { kind: 'site_visit', label: 'Site Visit' },
+  { kind: 'optimizer',  label: 'Optimizer Change' },
+  { kind: 'other',      label: 'Other Service' },
+];
+function glyphSvg(kind: ServiceKind, px: number, stroke = '#fff'): string {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${px}" height="${px}" viewBox="0 0 24 24" fill="none" stroke="${stroke}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">${GLYPH_SVG[kind]}</svg>`;
+}
 
 // A status counts as "inactive" (hidden under the Active filter) when it reads
 // as a terminal state. Matched loosely so it works for both the contractor
@@ -55,21 +90,38 @@ function saveCoordCache(cache: Record<string, Coord>) {
   try { localStorage.setItem(COORD_CACHE_KEY, JSON.stringify(cache)); } catch { /* quota - ignore */ }
 }
 
-// Colored teardrop pin. Selected pins get an emerald ring; the highlighted pin
-// grows and gets a dark border. Never depends on Leaflet's (bundler-broken)
-// default marker images.
-function pinIcon(hex: string, opts: { selected: boolean; highlighted: boolean }): L.DivIcon {
-  const size = opts.highlighted ? 26 : 18;
+// Colored disc pin with a white service-type glyph inside. Color = priority,
+// glyph = service kind, so the map reads at a glance. Selected pins get an
+// emerald ring; the highlighted pin grows and gets a dark border. Never depends
+// on Leaflet's (bundler-broken) default marker images.
+function pinIcon(hex: string, kind: ServiceKind, opts: { selected: boolean; highlighted: boolean }): L.DivIcon {
+  const size = opts.highlighted ? 34 : 26;
+  const glyph = Math.round(size * 0.58);
   const border = opts.highlighted ? '3px solid #0f172a' : '2px solid #fff';
   const ring = opts.selected ? 'box-shadow:0 0 0 3px #10b981, 0 1px 3px rgba(0,0,0,.4);' : 'box-shadow:0 1px 3px rgba(0,0,0,.4);';
   return L.divIcon({
     className: 'solarops-pin',
-    html: `<div style="background:${hex};width:${size}px;height:${size}px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);border:${border};${ring}"></div>`,
+    html: `<div style="background:${hex};width:${size}px;height:${size}px;border-radius:50%;border:${border};${ring}display:flex;align-items:center;justify-content:center;">${glyphSvg(kind, glyph)}</div>`,
     iconSize: [size, size],
-    iconAnchor: [size / 2, size],
-    popupAnchor: [0, -size + 2],
+    iconAnchor: [size / 2, size / 2],
+    popupAnchor: [0, -size / 2 - 2],
   });
 }
+
+// Leaflet sizes its tile grid once at mount. On mobile the container often
+// mounts at 0 height (flex layout settles late), leaving the map a blank gray
+// box. Re-measure on any container resize and once shortly after mount.
+const InvalidateOnResize: React.FC = () => {
+  const map = useMap();
+  useEffect(() => {
+    const el = map.getContainer();
+    const ro = new ResizeObserver(() => map.invalidateSize());
+    ro.observe(el);
+    const t = setTimeout(() => map.invalidateSize(), 350);
+    return () => { ro.disconnect(); clearTimeout(t); };
+  }, [map]);
+  return null;
+};
 
 // Fit the map to the given pins. Keyed on a stable signature so it only refits
 // when the visible set changes - not on every hover/selection.
@@ -233,6 +285,7 @@ const JobMapView: React.FC<JobMapViewProps> = ({ jobs, onOpen, selectable = true
           <MapContainer center={[27.6648, -81.5158]} zoom={6} className="h-full w-full" style={{ background: '#e8eef0' }}>
             <TileLayer attribution='&copy; OpenStreetMap contributors' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
             <FitBounds points={points} sig={boundsSig} />
+            <InvalidateOnResize />
             {visibleJobs.map(job => {
               const c = coords[job.id];
               if (!c) return null;
@@ -240,14 +293,32 @@ const JobMapView: React.FC<JobMapViewProps> = ({ jobs, onOpen, selectable = true
                 <Marker
                   key={job.id}
                   position={[c.lat, c.lon]}
-                  icon={pinIcon(PRIORITY_HEX[job.priority] ?? '#3b82f6', { selected: selected.has(job.id), highlighted: highlightId === job.id })}
+                  icon={pinIcon(PRIORITY_HEX[job.priority] ?? '#f59e0b', serviceKind(job.serviceType), { selected: selected.has(job.id), highlighted: highlightId === job.id })}
                   eventHandlers={{ click: () => focusFromPin(job.id) }}
                 >
                   <Popup>
                     <div className="text-sm">
-                      <p className="font-semibold text-slate-900">{job.title}</p>
-                      <p className="text-xs text-slate-500">{fullAddress(job)}</p>
-                      <p className="text-xs mt-1"><span className="font-semibold">{job.statusLabel}</span>{job.serviceType ? ` - ${job.serviceType}` : ''}</p>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {job.clientNumber && (
+                          <span className="text-[10px] font-bold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">{job.clientNumber}</span>
+                        )}
+                        <p className="font-semibold text-slate-900 !m-0">{job.title}</p>
+                      </div>
+                      <p className="text-xs text-slate-500 !mt-1 !mb-0">{fullAddress(job)}</p>
+                      <div className="flex items-center gap-1.5 flex-wrap mt-1.5">
+                        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-900 text-white whitespace-nowrap">{job.statusLabel}</span>
+                        {job.priority && (
+                          <span
+                            className="text-[10px] font-semibold px-1.5 py-0.5 rounded text-white whitespace-nowrap capitalize"
+                            style={{ background: PRIORITY_HEX[job.priority] ?? '#f59e0b' }}
+                          >
+                            {job.priority === 'normal' ? 'medium' : job.priority}
+                          </span>
+                        )}
+                        {job.serviceType && (
+                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-teal-100 text-teal-700 whitespace-nowrap">{job.serviceType}</span>
+                        )}
+                      </div>
                       <div className="flex items-center gap-3 mt-1.5">
                         <button onClick={() => onOpen(job.id)} className="text-xs font-semibold text-orange-600 hover:underline cursor-pointer">Open</button>
                         {selectable && (
@@ -262,6 +333,29 @@ const JobMapView: React.FC<JobMapViewProps> = ({ jobs, onOpen, selectable = true
               );
             })}
           </MapContainer>
+
+          {/* Legend: priority colors + service glyphs */}
+          <div className="absolute bottom-3 left-3 z-[1000] bg-white/95 rounded-lg shadow px-2.5 py-2 space-y-1">
+            <div className="flex items-center gap-2">
+              {PRIORITY_LEGEND.map(p => (
+                <span key={p.label} className="flex items-center gap-1 text-[10px] text-slate-600">
+                  <span className="w-2.5 h-2.5 rounded-full inline-block border border-white shadow-sm" style={{ background: p.hex }} />
+                  {p.label}
+                </span>
+              ))}
+            </div>
+            <div className="flex items-center gap-2">
+              {SERVICE_LEGEND.map(s => (
+                <span key={s.kind} className="flex items-center gap-1 text-[10px] text-slate-600">
+                  <span
+                    className="w-3.5 h-3.5 rounded-full bg-slate-500 inline-flex items-center justify-center flex-shrink-0"
+                    dangerouslySetInnerHTML={{ __html: glyphSvg(s.kind, 9) }}
+                  />
+                  {s.label}
+                </span>
+              ))}
+            </div>
+          </div>
 
           {(geocoding || failed > 0) && (
             <div className="absolute top-3 left-3 z-[1000] bg-white/95 rounded-lg shadow px-3 py-1.5 text-xs flex items-center gap-2">
