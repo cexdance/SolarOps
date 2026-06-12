@@ -1444,14 +1444,29 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
             {WO_STAGES.map((stage, idx) => {
               const done    = idx < stageIdx;
               const current = idx === stageIdx;
+              // Completed stages are clickable to step the SO BACK to that
+              // stage (e.g. a quote sent by mistake returns to Draft). Forward
+              // movement stays gated through the workflow action button so its
+              // side effects (notify, dispatch, dates) are never skipped.
+              const goBack = () => {
+                if (!done) return;
+                setWoStatus(stage.key);
+                setTimeout(() => handleSaveRef.current(stage.key, true), 0);
+              };
               return (
                 <React.Fragment key={stage.key}>
                   <div className="flex flex-col items-center gap-1 flex-1 min-w-0">
-                    <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 transition-colors ${
-                      done    ? 'bg-emerald-500' :
-                      current ? 'bg-orange-500 ring-2 ring-orange-300' :
-                                'bg-slate-600'
-                    }`}>
+                    <button
+                      type="button"
+                      onClick={goBack}
+                      disabled={!done}
+                      title={done ? `Go back to ${stage.label}` : undefined}
+                      className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 transition-all ${
+                        done    ? 'bg-emerald-500 cursor-pointer hover:ring-2 hover:ring-emerald-300 hover:scale-110' :
+                        current ? 'bg-orange-500 ring-2 ring-orange-300' :
+                                  'bg-slate-600'
+                      }`}
+                    >
                       {done ? (
                         <CheckCircle className="w-3.5 h-3.5 text-white" />
                       ) : (
@@ -1459,7 +1474,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                           {idx + 1}
                         </span>
                       )}
-                    </div>
+                    </button>
                     <span className={`text-[9px] text-center leading-tight truncate w-full text-center ${
                       done    ? 'text-emerald-400' :
                       current ? 'text-orange-300 font-semibold' :
