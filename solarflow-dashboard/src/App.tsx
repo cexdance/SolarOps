@@ -789,7 +789,7 @@ function App() {
   // ── Sync: poll + realtime + remote-update handler (extracted to hook) ────
   // skipContractorPersist guards against re-pushing data we just pulled from remote
   const skipContractorPersist = useRef(false);
-  useSyncEngine({ setData, setContractors, setServiceRates, setContractorJobs, skipContractorPersist });
+  const { syncNow } = useSyncEngine({ setData, setContractors, setServiceRates, setContractorJobs, skipContractorPersist });
 
   // ── Version poll (extracted to hook) ─────────────────────────────────────
   const { state: versionState, remoteVersion, checkNow: checkForUpdate } = useVersionPoll();
@@ -1275,6 +1275,13 @@ function App() {
           contractorPaymentStatus: updatedJob.paymentStatus ?? adminJob.contractorPaymentStatus,
           contractorTotalPay: updatedJob.contractorTotalPay ?? adminJob.contractorTotalPay,
           assignedAt: updatedJob.assignedAt ?? adminJob.assignedAt,
+          // On Hold mirrors the contractor's parked state. It is an orthogonal flag
+          // (the underlying woStatus stage is preserved above), so a held order drops
+          // out of the active queue on both sides until resumed.
+          onHold: updatedJob.status === 'on_hold',
+          onHoldAt: updatedJob.status === 'on_hold'
+            ? (adminJob.onHoldAt || new Date().toISOString())
+            : undefined,
         };
 
         const next = {
@@ -2366,6 +2373,7 @@ function App() {
             setContractors(prev => prev.map(c => c.id === updated.id ? updated : c));
             setCurrentContractor(updated);
           }}
+          onSync={syncNow}
         />
       </Suspense>
     );

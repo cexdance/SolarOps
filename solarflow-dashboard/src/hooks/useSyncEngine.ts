@@ -1,4 +1,4 @@
-import { useEffect, type MutableRefObject } from 'react';
+import { useCallback, useEffect, type MutableRefObject } from 'react';
 import { drainOutbox, resetOutboxAttempts } from '../lib/outbox';
 import { pullAndMerge, subscribeToChanges, mergeCustomerPair, mergeJobPair } from '../lib/syncEngine';
 import { loadContractors, loadServiceRates, loadContractorJobs } from '../lib/contractorStore';
@@ -19,16 +19,15 @@ export function useSyncEngine({
   setServiceRates,
   setContractorJobs,
   skipContractorPersist,
-}: SyncEngineOptions): void {
+}: SyncEngineOptions): { syncNow: () => Promise<void> } {
 
-  // ── 30s sync poll: drain outbox then pull remote ─────────────────────────
-  useEffect(() => {
-    let mounted = true;
-
-    const syncCycle = async () => {
+  // Drain the outbox then pull + merge remote. Exposed as `syncNow` so a manual
+  // "Sync / update" control (e.g. the contractor header button) can refresh the
+  // data in place without a full page reload.
+  const syncNow = useCallback(async () => {
       await drainOutbox();
       const merged = await pullAndMerge();
-      if (!mounted || !merged) return;
+      if (!merged) return;
 
       setData(prev => {
         const customersChanged =
@@ -60,30 +59,30 @@ export function useSyncEngine({
           : prev.jobs;
         return { ...prev, ...merged, jobs: safeMergedJobs };
       });
-    };
+  }, [setData]);
 
+  // ── Sync poll: drain outbox then pull remote ─────────────────────────────
+  useEffect(() => {
     // Pull immediately on mount: the sync engine's push gate stays closed until
     // the first successful pull, so an early pull both hydrates this device and
     // unblocks its outgoing sync as soon as possible.
-    syncCycle();
+    syncNow();
 
-    const interval = setInterval(syncCycle, 5 * 60_000);
-    const onFocus  = () => syncCycle();
+    const interval = setInterval(syncNow, 5 * 60_000);
+    const onFocus  = () => syncNow();
     const onOnline = () => {
       // Reset the attempt counter so a deadlocked outbox retries on reconnect
       resetOutboxAttempts();
-      syncCycle();
+      syncNow();
     };
     window.addEventListener('focus',  onFocus);
     window.addEventListener('online', onOnline);
     return () => {
-      mounted = false;
       clearInterval(interval);
       window.removeEventListener('focus',  onFocus);
       window.removeEventListener('online', onOnline);
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [syncNow]);
 
   // ── Realtime: instant cross-device push (<1s) ─────────────────────────────
   // Defer until auth session is confirmed to avoid pre-auth CHANNEL_ERROR storm
@@ -180,6 +179,8 @@ export function useSyncEngine({
     window.addEventListener('solarflow-remote-update', onRemoteUpdate as EventListener);
     return () => window.removeEventListener('solarflow-remote-update', onRemoteUpdate as EventListener);
   }, []);
+
+  return { syncNow };
 }
 
 /**

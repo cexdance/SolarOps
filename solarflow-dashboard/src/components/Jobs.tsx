@@ -3,7 +3,7 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { formatMoney } from '../lib/money';
 import {
   Plus, Search, Calendar, MapPin, User, Clock, X, Wrench, Zap, LayoutGrid, List as ListIcon,
-  Power, Cpu, ClipboardCheck,
+  Power, Cpu, ClipboardCheck, PauseCircle, PlayCircle,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import {
@@ -132,9 +132,10 @@ interface JobCardProps {
   onDragStart: (e: React.DragEvent, jobId: string) => void;
   onDragEnd: () => void;
   onClick: (jobId: string) => void;
+  onToggleHold?: (job: Job) => void;
 }
 
-const JobCard: React.FC<JobCardProps> = ({ job, customer, contractorName, isDragging, onDragStart, onDragEnd, onClick }) => {
+const JobCard: React.FC<JobCardProps> = ({ job, customer, contractorName, isDragging, onDragStart, onDragEnd, onClick, onToggleHold }) => {
   const handleCardClick = (_e: React.MouseEvent) => {
     // Only trigger click if not dragging and no drag is in progress
     if (!isDragging) {
@@ -161,6 +162,11 @@ const JobCard: React.FC<JobCardProps> = ({ job, customer, contractorName, isDrag
         </p>
       </div>
       <div className="flex flex-col items-end gap-1 ml-2 shrink-0">
+        {job.onHold && (
+          <span className="text-[10px] px-2 py-0.5 rounded-full border bg-slate-200 text-slate-600 border-slate-300 font-semibold uppercase tracking-wide">
+            On Hold
+          </span>
+        )}
         <span className={`text-xs px-2 py-1 rounded-full border ${statusColors[boardStatus(job)]}`}>
           {badgeLabel(job)}
         </span>
@@ -199,7 +205,26 @@ const JobCard: React.FC<JobCardProps> = ({ job, customer, contractorName, isDrag
         <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{job.scheduledDate?.split('T')[0] ?? job.scheduledDate}</span>
         <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{job.scheduledTime}</span>
       </div>
-      <span className="font-semibold text-slate-900">{formatMoney(job.totalAmount, { decimals: 0 })}</span>
+      <div className="flex items-center gap-2">
+        {onToggleHold && (
+          job.onHold ? (
+            <button
+              onClick={(e) => { e.stopPropagation(); onToggleHold(job); }}
+              className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100"
+            >
+              <PlayCircle className="w-3.5 h-3.5" /> Resume
+            </button>
+          ) : (
+            <button
+              onClick={(e) => { e.stopPropagation(); onToggleHold(job); }}
+              className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold text-slate-500 bg-slate-100 hover:bg-slate-200"
+            >
+              <PauseCircle className="w-3.5 h-3.5" /> Hold
+            </button>
+          )
+        )}
+        <span className="font-semibold text-slate-900">{formatMoney(job.totalAmount, { decimals: 0 })}</span>
+      </div>
     </div>
   </div>
   );
@@ -218,6 +243,7 @@ interface KanbanColumnProps {
   onDragStart: (e: React.DragEvent, jobId: string) => void;
   onDragEnd: () => void;
   onCardClick: (jobId: string) => void;
+  onToggleHold: (job: Job) => void;
 }
 
 const colColors: Record<JobStatus, string> = {
@@ -232,7 +258,7 @@ const colColors: Record<JobStatus, string> = {
 
 const KanbanColumn: React.FC<KanbanColumnProps> = ({
   status, title, columnJobs, allJobs, draggedJobId,
-  customers, users, contractors, onUpdateJob, onDragStart, onDragEnd, onCardClick,
+  customers, users, contractors, onUpdateJob, onDragStart, onDragEnd, onCardClick, onToggleHold,
 }) => {
   const [isOver, setIsOver] = useState(false);
 
@@ -282,6 +308,7 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({
             onDragStart={onDragStart}
             onDragEnd={onDragEnd}
             onClick={onCardClick}
+            onToggleHold={onToggleHold}
           />
         ))}
         {columnJobs.length === 0 && (
@@ -329,6 +356,7 @@ export const Jobs: React.FC<JobsProps> = ({
   const [filterStatus, setFilterStatus] = useState<JobStatus | 'all'>('all');
   const [filterContractor, setFilterContractor] = useState<string>('all');
   const [showArchived, setShowArchived] = useState(false);
+  const [showOnHold, setShowOnHold] = useState(false);
   type PeriodFilter = 'all' | 'this_week' | 'this_month' | 'last_month' | 'custom';
   const [filterPeriod, setFilterPeriod] = useState<PeriodFilter>('all');
   const [customFrom, setCustomFrom] = useState('');
@@ -370,6 +398,7 @@ export const Jobs: React.FC<JobsProps> = ({
   }, [filterPeriod, customFrom, customTo]);
 
   const archivedCount = useMemo(() => jobs.filter(j => j.status === 'archived' && !showArchived).length, [jobs, showArchived]);
+  const onHoldCount = useMemo(() => jobs.filter(j => j.onHold && j.status !== 'archived').length, [jobs]);
 
   const filteredJobs = useMemo(() => jobs.filter((job) => {
     const customer = customers.find((c) => c.id === job.customerId);
@@ -394,9 +423,12 @@ export const Jobs: React.FC<JobsProps> = ({
     // Filter out archived jobs unless toggle is enabled
     const isArchived = job.status === 'archived';
     const notArchived = !isArchived || showArchived;
+    // Held orders are parked: hidden from the queue unless "Show On Hold" is on
+    // (or the admin is explicitly viewing only held orders).
+    const notHeld = !job.onHold || showOnHold;
 
-    return matchesSearch && matchesStatus && matchesContractor && matchesPeriod && notArchived;
-  }), [jobs, customers, searchQuery, filterStatus, filterContractor, periodRange, showArchived]);
+    return matchesSearch && matchesStatus && matchesContractor && matchesPeriod && notArchived && notHeld;
+  }), [jobs, customers, searchQuery, filterStatus, filterContractor, periodRange, showArchived, showOnHold]);
 
   // Per-contractor workload summary (Assigned / On Route / In Progress / Completed).
   // Computed across ALL of the selected contractor's non-archived jobs, independent of
@@ -447,6 +479,16 @@ export const Jobs: React.FC<JobsProps> = ({
   };
 
   const handleCardClick = (jobId: string) => onViewChange('jobDetail', jobId);
+
+  // Park / un-park a service order. Hold drops it out of the active queue on both
+  // the admin board and the contractor portal; the underlying woStatus is kept so
+  // Resume returns it to its place in the pipeline.
+  const handleToggleHold = (job: Job) =>
+    onUpdateJob({
+      ...job,
+      onHold: !job.onHold,
+      onHoldAt: !job.onHold ? new Date().toISOString() : undefined,
+    });
 
   return (
     <div className="p-4 md:p-6 pb-24 md:pb-6">
@@ -568,6 +610,17 @@ export const Jobs: React.FC<JobsProps> = ({
               Show Archived {archivedCount > 0 && `(${archivedCount})`}
             </span>
           </label>
+          <label className="flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 hover:bg-slate-50 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={showOnHold}
+              onChange={(e) => setShowOnHold(e.target.checked)}
+              className="w-4 h-4 accent-orange-600"
+            />
+            <span className="text-sm font-medium text-slate-700">
+              Show On Hold {onHoldCount > 0 && `(${onHoldCount})`}
+            </span>
+          </label>
         </div>
         <div className="flex-1 relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
@@ -625,6 +678,7 @@ export const Jobs: React.FC<JobsProps> = ({
               onDragStart={handleDragStart}
               onDragEnd={() => setDraggedJobId(null)}
               onCardClick={handleCardClick}
+              onToggleHold={handleToggleHold}
             />
           ))}
         </div>
@@ -644,6 +698,7 @@ export const Jobs: React.FC<JobsProps> = ({
               onDragStart={handleDragStart}
               onDragEnd={() => setDraggedJobId(null)}
               onClick={handleCardClick}
+              onToggleHold={handleToggleHold}
             />
           ))}
           {filteredJobs.length === 0 && (

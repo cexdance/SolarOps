@@ -134,7 +134,9 @@ export function toContractorJobView(job: Job, existingCj?: ContractorJob, custom
     serviceType: job.serviceType,
     description: job.notes || job.title || '',
     priority: job.urgency === 'critical' ? 'critical' : job.urgency === 'high' ? 'high' : job.urgency === 'medium' ? 'normal' : 'low',
-    status: STATUS_MAP[job.woStatus ?? job.status] ?? 'assigned',
+    // A held order surfaces to the contractor as 'on_hold' (parked) regardless of
+    // its underlying pipeline stage, which is preserved in job.woStatus.
+    status: job.onHold ? 'on_hold' : (STATUS_MAP[job.woStatus ?? job.status] ?? 'assigned'),
     isRecurringClient: !!job.isRecurringClient,
     urgency: job.urgency ?? 'medium',
     isPowercare: !!job.isPowercare,

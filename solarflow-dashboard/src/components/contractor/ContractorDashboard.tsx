@@ -5,6 +5,7 @@ import { formatMoney } from '../../lib/money';
 import {
   Wrench, MapPin, Clock, LogOut, X, ChevronRight, Filter,
   List as ListIcon, LayoutGrid, CalendarDays, Map as MapIcon, RefreshCw,
+  PauseCircle, PlayCircle,
 } from 'lucide-react';
 import { APP_VERSION } from '../../lib/versionConfig';
 import { Contractor, ContractorJob, JobPriority, JobStatusContractor } from '../../types/contractor';
@@ -29,6 +30,8 @@ interface ContractorDashboardProps {
   onLogout: () => void;
   onUpdateJob: (job: ContractorJob) => void;
   onUpdateContractor?: (c: Contractor) => void;
+  /** Pull the latest data from the server (no page reload). */
+  onSync?: () => Promise<void> | void;
 }
 
 // ─── Priority badge ────────────────────────────────────────────────────────────
@@ -50,6 +53,7 @@ export const ContractorDashboard: React.FC<ContractorDashboardProps> = ({
   onLogout,
   onUpdateJob,
   onUpdateContractor,
+  onSync,
 }) => {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [view, setView]                 = useState<'list' | 'board' | 'calendar' | 'map'>('list');
@@ -59,10 +63,21 @@ export const ContractorDashboard: React.FC<ContractorDashboardProps> = ({
   const [timeframe]                     = useState<'day' | 'week' | 'month' | 'ytd'>('ytd');
   const [syncing, setSyncing]           = useState(false);
 
-  // Force-refresh: pull the newest deploy + re-run the on-mount sync pull.
-  const handleSync = () => {
+  // Pull the latest list from the server IN PLACE (no page reload). A full
+  // reload was hanging iOS Safari (had to be force-closed) and did not reliably
+  // refresh the queue; an in-app pull updates the list and always stops the
+  // spinner. Guarded so a stuck network can never leave it spinning forever.
+  const handleSync = async () => {
+    if (syncing) return;
     setSyncing(true);
-    setTimeout(() => window.location.reload(), 150);
+    try {
+      await Promise.race([
+        Promise.resolve(onSync?.()),
+        new Promise(res => setTimeout(res, 8000)),
+      ]);
+    } finally {
+      setSyncing(false);
+    }
   };
 
   // Terms acceptance is also remembered per-device in localStorage, keyed by
@@ -98,14 +113,29 @@ export const ContractorDashboard: React.FC<ContractorDashboardProps> = ({
     return false;
   };
 
-  const filteredJobs = statusFilter === 'all' ? jobs : jobs.filter(j =>
-    j.status === statusFilter || (statusFilter === 'in_progress' && j.status === 'documentation')
-  );
-  const todaysJobs     = jobs.filter(j => j.scheduledDate === today);
-  const routeJobs      = jobs.filter(j => j.status === 'en_route');
-  const frameJobs      = jobs.filter(j => inTimeframe(j.scheduledDate ?? j.completedAt));
+  // Held orders are parked: they stay reachable under the "On Hold" filter but are
+  // kept OUT of the active queue and stats so they do not clutter the list.
+  const activeJobs = jobs.filter(j => j.status !== 'on_hold');
+  const heldJobs   = jobs.filter(j => j.status === 'on_hold');
+
+  const filteredJobs =
+    statusFilter === 'on_hold' ? heldJobs :
+    statusFilter === 'all'     ? activeJobs :
+    activeJobs.filter(j =>
+      j.status === statusFilter || (statusFilter === 'in_progress' && j.status === 'documentation')
+    );
+  const todaysJobs     = activeJobs.filter(j => j.scheduledDate === today);
+  const routeJobs      = activeJobs.filter(j => j.status === 'en_route');
+  const frameJobs      = activeJobs.filter(j => inTimeframe(j.scheduledDate ?? j.completedAt));
   const frameCompleted = frameJobs.filter(j => j.status === 'completed');
   const totalEarned    = frameCompleted.reduce((s, j) => s + (j.contractorTotalPay ?? 0), 0);
+
+  // Hold / resume. Holding parks the order; resuming returns it to the queue as
+  // 'assigned' (its underlying stage is preserved admin-side via job.woStatus).
+  const toggleHold = (job: ContractorJob, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    onUpdateJob({ ...job, status: job.status === 'on_hold' ? 'assigned' : 'on_hold' });
+  };
 
   // ── Upsell lead creation ─────────────────────────────────────────────────────
   const handleUpsellLead = (job: ContractorJob, notes: string) => {
@@ -186,9 +216,24 @@ export const ContractorDashboard: React.FC<ContractorDashboardProps> = ({
             <span>{job.serviceType}</span>
           </div>
         </div>
-        <div className="text-right flex-shrink-0">
+        <div className="text-right flex-shrink-0 flex flex-col items-end">
           <p className="text-base font-bold text-emerald-700">{formatMoney(job.contractorTotalPay ?? 0, { decimals: 0 })}</p>
-          <ChevronRight className="w-4 h-4 text-slate-400 mt-1 ml-auto" />
+          {job.status === 'on_hold' ? (
+            <button
+              onClick={(e) => toggleHold(job, e)}
+              className="mt-1.5 flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 cursor-pointer"
+            >
+              <PlayCircle className="w-3.5 h-3.5" /> Resume
+            </button>
+          ) : (
+            <button
+              onClick={(e) => toggleHold(job, e)}
+              className="mt-1.5 flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold text-slate-500 bg-slate-100 hover:bg-slate-200 cursor-pointer"
+            >
+              <PauseCircle className="w-3.5 h-3.5" /> Hold
+            </button>
+          )}
+          <ChevronRight className="w-4 h-4 text-slate-400 mt-1" />
         </div>
       </div>
     </div>
@@ -411,9 +456,10 @@ export const ContractorDashboard: React.FC<ContractorDashboardProps> = ({
         <div className="bg-white border-b border-slate-200 px-3 py-1.5 flex items-center gap-1.5 flex-shrink-0 overflow-x-auto">
           <Filter className="w-4 h-4 text-slate-400 flex-shrink-0" />
           {statusChips.map(({ id, label }) => {
-            const count = id === 'all'
-              ? jobs.length
-              : jobs.filter(j => j.status === id || (id === 'in_progress' && j.status === 'documentation')).length;
+            const count =
+              id === 'all'     ? activeJobs.length :
+              id === 'on_hold' ? heldJobs.length :
+              activeJobs.filter(j => j.status === id || (id === 'in_progress' && j.status === 'documentation')).length;
             return (
               <button
                 key={id}

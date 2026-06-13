@@ -220,6 +220,12 @@ export interface Job {
   date?: string;
   // ── Work Order Panel extended fields ──────────────────────────────────
   woStatus?: WOStatus;
+  // On Hold is an orthogonal flag, NOT a status value: it parks an order so it
+  // drops out of the active queue on both the admin and contractor side without
+  // losing its underlying woStatus/stage. Clearing it (resume) restores the
+  // order to its prior place in the pipeline.
+  onHold?: boolean;
+  onHoldAt?: string;
   woNumber?: string;                        // e.g. WO-2603-00042
   solarEdgeSiteId?: string;
   solarEdgeClientId?: string;               // US-15XXX
