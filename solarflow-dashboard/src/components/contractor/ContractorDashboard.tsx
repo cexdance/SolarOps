@@ -4,8 +4,9 @@ import React, { useState, useEffect } from 'react';
 import { formatMoney } from '../../lib/money';
 import {
   Wrench, MapPin, Clock, LogOut, X, ChevronRight, Filter,
-  List as ListIcon, LayoutGrid, CalendarDays, Map as MapIcon,
+  List as ListIcon, LayoutGrid, CalendarDays, Map as MapIcon, RefreshCw,
 } from 'lucide-react';
+import { APP_VERSION } from '../../lib/versionConfig';
 import { Contractor, ContractorJob, JobPriority, JobStatusContractor } from '../../types/contractor';
 import { Lead } from '../../types';
 import ConexSolTerms from './ConexSolTerms';
@@ -55,7 +56,14 @@ export const ContractorDashboard: React.FC<ContractorDashboardProps> = ({
   const [openJob, setOpenJob]           = useState<ContractorJob | null>(null);
   const [xpData, setXpData]             = useState<ContractorXpData>(() => loadXpData(contractorId));
   const [showBadges, setShowBadges]     = useState(false);
-  const [timeframe, setTimeframe]       = useState<'day' | 'week' | 'month' | 'ytd'>('day');
+  const [timeframe]                     = useState<'day' | 'week' | 'month' | 'ytd'>('ytd');
+  const [syncing, setSyncing]           = useState(false);
+
+  // Force-refresh: pull the newest deploy + re-run the on-mount sync pull.
+  const handleSync = () => {
+    setSyncing(true);
+    setTimeout(() => window.location.reload(), 150);
+  };
 
   // Terms acceptance is also remembered per-device in localStorage, keyed by
   // contractor id + version. The contractor record carries `termsAcceptedAt`,
@@ -71,13 +79,6 @@ export const ContractorDashboard: React.FC<ContractorDashboardProps> = ({
 
   // Refresh XP data whenever jobs change (e.g. job just completed)
   useEffect(() => { setXpData(loadXpData(contractorId)); }, [contractorId, jobs]);
-
-  const timeframeOptions: { id: 'day' | 'week' | 'month' | 'ytd'; label: string }[] = [
-    { id: 'day',   label: 'DAY'   },
-    { id: 'week',  label: 'Week'  },
-    { id: 'month', label: 'Month' },
-    { id: 'ytd',   label: 'YTD'   },
-  ];
 
   // Computed stats
   const today = new Date().toISOString().split('T')[0];
@@ -265,20 +266,19 @@ export const ContractorDashboard: React.FC<ContractorDashboardProps> = ({
             <h1 className="text-base font-bold leading-tight">{contractorName}</h1>
           </div>
           <div className="flex items-center gap-2">
-            {/* Timeframe */}
-            <div className="flex gap-0.5 bg-slate-800 rounded-lg p-1">
-              {timeframeOptions.map(({ id, label }) => (
-                <button
-                  key={id}
-                  onClick={() => setTimeframe(id)}
-                  className={`px-2 py-1 rounded-md text-[11px] font-semibold transition-colors cursor-pointer ${
-                    timeframe === id ? 'bg-orange-500 text-white' : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
+            {/* App version badge */}
+            <span className="px-2 py-1 rounded-md bg-slate-800 text-[11px] font-semibold text-slate-300 tabular-nums">
+              {APP_VERSION}
+            </span>
+            {/* Sync / update */}
+            <button
+              onClick={handleSync}
+              disabled={syncing}
+              title="Sync & update to the latest version"
+              className="p-2 hover:bg-slate-800 rounded-lg cursor-pointer disabled:opacity-60 disabled:cursor-default"
+            >
+              <RefreshCw className={`w-5 h-5 ${syncing ? 'animate-spin' : ''}`} />
+            </button>
             <button onClick={onLogout} className="p-2 hover:bg-slate-800 rounded-lg cursor-pointer">
               <LogOut className="w-5 h-5" />
             </button>
