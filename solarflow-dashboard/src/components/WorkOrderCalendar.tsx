@@ -4,7 +4,7 @@ import {
   subWeeks, subMonths, startOfMonth, endOfMonth, eachDayOfInterval,
   isSameDay, isSameMonth, isToday, isValid,
 } from 'date-fns';
-import { ChevronLeft, ChevronRight, CalendarDays } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CalendarDays, User, Clock } from 'lucide-react';
 import { Job, Customer, User as UserType, JobStatus } from '../types';
 import type { Contractor } from '../types/contractor';
 
@@ -57,33 +57,61 @@ function getJobsForDay(jobs: Job[], day: Date): Job[] {
 
 // ── Job Card (planner style) ──────────────────────────────────────────────────
 
+// Format the scheduled time as an hour window. With a known labor duration we
+// show "08:00 - 10:00"; otherwise just the start time.
+function formatHourWindow(time: string | undefined, laborHours: number | undefined): string {
+  if (!time) return '';
+  const m = /^(\d{1,2}):(\d{2})/.exec(time);
+  if (!m) return time;
+  const hrs = laborHours && laborHours > 0 ? laborHours : 0;
+  if (!hrs) return time;
+  const startMin = Number(m[1]) * 60 + Number(m[2]);
+  const endMin = startMin + Math.round(hrs * 60);
+  const hh = String(Math.floor((endMin % 1440) / 60)).padStart(2, '0');
+  const mm = String(endMin % 60).padStart(2, '0');
+  return `${time.slice(0, 5)} - ${hh}:${mm}`;
+}
+
 const PlannerJobCard: React.FC<{
   job: Job;
   customer?: Customer;
+  contractorName?: string;
   onClick: (jobId: string) => void;
   dimmed?: boolean;
-}> = ({ job, customer, onClick, dimmed }) => {
+}> = ({ job, customer, contractorName, onClick, dimmed }) => {
   const colorClass = statusColors[job.status] ?? 'bg-slate-100 text-slate-700 border-slate-200';
   const name = customer?.name ?? job.clientName ?? `WO ${job.id.slice(0, 6)}`;
-  const time = job.scheduledTime ?? '';
   const serviceLabel = job.serviceType
     ? job.serviceType.charAt(0).toUpperCase() + job.serviceType.slice(1)
     : '';
+  const hourWindow = formatHourWindow(job.scheduledTime, job.laborHours);
 
   return (
     <button
       onClick={() => onClick(job.id)}
       className={`w-full text-left rounded border px-2 py-1.5 mb-1 transition-opacity ${colorClass} ${dimmed ? 'opacity-40' : 'hover:opacity-80'}`}
     >
-      {customer?.clientId && (
-        <p className="text-[9px] font-semibold opacity-60 leading-tight mb-0.5 truncate">{customer.clientId}</p>
-      )}
-      {time && (
-        <p className="text-[9px] font-semibold opacity-60 leading-tight mb-0.5">{time}</p>
-      )}
-      <p className="text-[11px] font-semibold leading-tight truncate">{name}</p>
+      {/* Line 1: US-15xxx + customer name */}
+      <p className="text-[11px] font-semibold leading-tight truncate">
+        {customer?.clientId && <span className="opacity-60">{customer.clientId} </span>}
+        {name}
+      </p>
+      {/* Line 2: visit type */}
       {serviceLabel && (
-        <p className="text-[9px] opacity-60 leading-tight truncate">{serviceLabel}</p>
+        <p className="text-[9px] opacity-70 leading-tight truncate">{serviceLabel}</p>
+      )}
+      {/* Line 3: contractor assigned */}
+      <p className="text-[9px] leading-tight truncate flex items-center gap-1">
+        <User className="w-2.5 h-2.5 flex-shrink-0 opacity-60" />
+        <span className={contractorName ? 'opacity-80' : 'opacity-50 italic'}>
+          {contractorName || 'Unassigned'}
+        </span>
+      </p>
+      {/* Line 4: hour window */}
+      {hourWindow && (
+        <p className="text-[9px] font-semibold opacity-60 leading-tight flex items-center gap-1">
+          <Clock className="w-2.5 h-2.5 flex-shrink-0" />{hourWindow}
+        </p>
       )}
     </button>
   );
@@ -97,8 +125,9 @@ const PlannerDayColumn: React.FC<{
   customers: Customer[];
   isCurrentMonth: boolean;
   onJobClick: (jobId: string) => void;
+  resolveContractor: (job: Job) => string;
   isLastColumn?: boolean;
-}> = ({ day, jobs, customers, isCurrentMonth, onJobClick, isLastColumn }) => {
+}> = ({ day, jobs, customers, isCurrentMonth, onJobClick, resolveContractor, isLastColumn }) => {
   const today = isToday(day);
 
   return (
@@ -129,6 +158,7 @@ const PlannerDayColumn: React.FC<{
               key={job.id}
               job={job}
               customer={customers.find(c => c.id === job.customerId)}
+              contractorName={resolveContractor(job)}
               onClick={onJobClick}
               dimmed={!isCurrentMonth}
             />
@@ -147,7 +177,8 @@ const WeekPlanner: React.FC<{
   customers: Customer[];
   focusMonth: Date;
   onJobClick: (jobId: string) => void;
-}> = ({ days, jobs, customers, focusMonth, onJobClick }) => (
+  resolveContractor: (job: Job) => string;
+}> = ({ days, jobs, customers, focusMonth, onJobClick, resolveContractor }) => (
   <div className="overflow-x-auto rounded-lg border border-slate-200">
     <div className="flex min-w-[700px]">
       {days.map((day, i) => (
@@ -157,6 +188,7 @@ const WeekPlanner: React.FC<{
           jobs={getJobsForDay(jobs, day)}
           customers={customers}
           isCurrentMonth={isSameMonth(day, focusMonth)}
+          resolveContractor={resolveContractor}
           onJobClick={onJobClick}
           isLastColumn={i === days.length - 1}
         />
@@ -173,7 +205,8 @@ const TwoWeekPlanner: React.FC<{
   customers: Customer[];
   focusMonth: Date;
   onJobClick: (jobId: string) => void;
-}> = ({ weekStart, jobs, customers, focusMonth, onJobClick }) => {
+  resolveContractor: (job: Job) => string;
+}> = ({ weekStart, jobs, customers, focusMonth, onJobClick, resolveContractor }) => {
   const week1 = eachDayOfInterval({ start: weekStart, end: addDays(weekStart, 6) });
   const week2 = eachDayOfInterval({ start: addDays(weekStart, 7), end: addDays(weekStart, 13) });
 
@@ -187,6 +220,7 @@ const TwoWeekPlanner: React.FC<{
           customers={customers}
           isCurrentMonth={isSameMonth(day, focusMonth)}
           onJobClick={onJobClick}
+          resolveContractor={resolveContractor}
           isLastColumn={i === 6}
         />
       ))}
@@ -210,7 +244,8 @@ const MonthDayCell: React.FC<{
   customers: Customer[];
   isCurrentMonth: boolean;
   onJobClick: (jobId: string) => void;
-}> = ({ day, jobs, customers, isCurrentMonth, onJobClick }) => {
+  resolveContractor: (job: Job) => string;
+}> = ({ day, jobs, customers, isCurrentMonth, onJobClick, resolveContractor }) => {
   const [showAll, setShowAll] = useState(false);
   const visible = jobs.slice(0, 3);
   const overflow = jobs.length - 3;
@@ -234,6 +269,7 @@ const MonthDayCell: React.FC<{
             key={job.id}
             job={job}
             customer={customers.find(c => c.id === job.customerId)}
+            contractorName={resolveContractor(job)}
             onClick={onJobClick}
             dimmed={!isCurrentMonth}
           />
@@ -251,6 +287,7 @@ const MonthDayCell: React.FC<{
             key={job.id}
             job={job}
             customer={customers.find(c => c.id === job.customerId)}
+            contractorName={resolveContractor(job)}
             onClick={onJobClick}
             dimmed={!isCurrentMonth}
           />
@@ -265,7 +302,8 @@ const MonthGrid: React.FC<{
   jobs: Job[];
   customers: Customer[];
   onJobClick: (jobId: string) => void;
-}> = ({ focusDate, jobs, customers, onJobClick }) => {
+  resolveContractor: (job: Job) => string;
+}> = ({ focusDate, jobs, customers, onJobClick, resolveContractor }) => {
   const monthStart = startOfMonth(focusDate);
   const monthEnd = endOfMonth(focusDate);
   const gridStart = getWeekStart(monthStart);
@@ -293,6 +331,7 @@ const MonthGrid: React.FC<{
             customers={customers}
             isCurrentMonth={isSameMonth(day, monthStart)}
             onJobClick={onJobClick}
+            resolveContractor={resolveContractor}
           />
         ))}
       </div>
@@ -348,12 +387,24 @@ interface WorkOrderCalendarProps {
 export const WorkOrderCalendar: React.FC<WorkOrderCalendarProps> = ({
   jobs,
   customers,
+  contractors = [],
   onJobClick,
 }) => {
   const [calendarView, setCalendarView] = useState<CalendarViewMode>(() => {
     const saved = localStorage.getItem(CALENDAR_VIEW_KEY) as CalendarViewMode | null;
     return saved ?? 'week';
   });
+
+  // Resolve the contractor assigned to a job for display on each card.
+  const contractorById = React.useMemo(
+    () => new Map(contractors.map(c => [c.id, c])),
+    [contractors],
+  );
+  const resolveContractor = useCallback((job: Job): string => {
+    if (!job.contractorId) return '';
+    const c = contractorById.get(job.contractorId);
+    return c?.businessName || c?.contactName || '';
+  }, [contractorById]);
 
   const [focusDate, setFocusDate] = useState(() => getWeekStart(new Date()));
 
@@ -447,7 +498,7 @@ export const WorkOrderCalendar: React.FC<WorkOrderCalendarProps> = ({
 
       {/* Calendar body */}
       {calendarView === 'month' ? (
-        <MonthGrid focusDate={focusDate} jobs={scheduledJobs} customers={customers} onJobClick={onJobClick} />
+        <MonthGrid focusDate={focusDate} jobs={scheduledJobs} customers={customers} onJobClick={onJobClick} resolveContractor={resolveContractor} />
       ) : calendarView === '2week' ? (
         <TwoWeekPlanner
           weekStart={weekStart}
@@ -455,6 +506,7 @@ export const WorkOrderCalendar: React.FC<WorkOrderCalendarProps> = ({
           customers={customers}
           focusMonth={focusDate}
           onJobClick={onJobClick}
+          resolveContractor={resolveContractor}
         />
       ) : (
         <WeekPlanner
@@ -463,6 +515,7 @@ export const WorkOrderCalendar: React.FC<WorkOrderCalendarProps> = ({
           customers={customers}
           focusMonth={focusDate}
           onJobClick={onJobClick}
+          resolveContractor={resolveContractor}
         />
       )}
 
