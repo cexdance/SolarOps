@@ -1200,6 +1200,10 @@ function App() {
         return out;
       };
 
+      // Captured from the reconciled (post-delete) photo set inside the updater
+      // below, so the fire-and-forget migration reads the FRESH list instead of a
+      // stale render-closure `data.jobs` (which could re-add a just-deleted photo).
+      let reconciledWoPhotos: import('./types').WOPhoto[] = [];
       setData(prev => {
         const adminJob = prev.jobs.find(j => j.id === updatedJob.sourceJobId);
         if (!adminJob) return prev;
@@ -1225,6 +1229,7 @@ function App() {
             return url && !keptUrls.has(url);
           });
         const mergedPhotos = [...keptExisting, ...newPhotos];
+        reconciledWoPhotos = mergedPhotos;
 
         // Build the updated admin job with all mirrored fields
         const statusFields = ['en_route', 'in_progress', 'completed'].includes(updatedJob.status)
@@ -1240,6 +1245,11 @@ function App() {
 
         const updatedAdminJob = {
           ...adminJob,
+          // Stamp the admin-side mirror too (CB-3): the ContractorJob is stamped
+          // above, but the Job row that pushes to Supabase needs its own fresh
+          // updatedAt or a stale prior edit time can win the LWW merge and stomp
+          // this contractor update on another device.
+          updatedAt: new Date().toISOString(),
           ...statusFields,
           // Preserve the contractor's granular live status so the staff board can
           // tell "on route" (en_route) apart from "in progress" (both map to
@@ -1311,8 +1321,8 @@ function App() {
       const sourceJobId = updatedJob.sourceJobId;
       void (async () => {
         try {
-          const adminJob = data.jobs.find(j => j.id === sourceJobId);
-          const woPhotos = adminJob?.woPhotos ?? [];
+          // Use the freshly reconciled set, NOT a stale render-closure read.
+          const woPhotos = reconciledWoPhotos;
           if (woPhotos.length === 0) return;
           const migrated = await migrateWoPhotos(sourceJobId!, woPhotos);
           // If any new photoStoreId rewrites happened, persist them.
@@ -2373,7 +2383,7 @@ function App() {
             setContractors(prev => prev.map(c => c.id === updated.id ? updated : c));
             setCurrentContractor(updated);
           }}
-          onSync={syncNow}
+          onSync={isImpersonating ? undefined : syncNow}
         />
       </Suspense>
     );

@@ -534,7 +534,11 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
       const photoId = `ph-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
       pendingUploads.current.add(photoId);
       try {
-        const blob = dataUrlToBlob(afterPhoto) ?? await (await fetch(afterPhoto)).blob();
+        // Never fetch() a data: URL - iOS WKWebView blocks it and throws. Decode
+        // data: URLs locally; only fetch genuine remote/blob URLs.
+        const blob = dataUrlToBlob(afterPhoto)
+          ?? (afterPhoto.startsWith('data:') ? null : await (await fetch(afterPhoto)).blob());
+        if (!blob) throw new Error('after photo unreadable');
         const result = await uploadPhotoToStorage(blob, job.id, photoId);
         pendingUploads.current.delete(photoId);
         resolvedAfterUrl = result.url ?? afterPhoto; // fall back to dataUrl on failure
@@ -786,7 +790,7 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
         </div>
       </header>
 
-      <div className="p-4 pb-32 space-y-4 max-w-xl mx-auto">
+      <div className="p-4 pb-[calc(8rem+env(safe-area-inset-bottom))] space-y-4 max-w-xl mx-auto">
 
         {/* Service Order review: links the WO to its SO, scope of work, dates,
             status, location, photos and notes in one read-only place. */}

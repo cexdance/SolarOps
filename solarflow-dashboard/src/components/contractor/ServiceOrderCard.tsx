@@ -31,7 +31,11 @@ function fmtDate(d?: string): string {
 
 const ServiceOrderCard: React.FC<{ job: ContractorJob }> = ({ job }) => {
   const [sowOpen, setSowOpen] = useState(false);
-  const allPhotos = Object.values(job.photos ?? {}).flat().filter(Boolean) as string[];
+  // Exclude base64 data: URLs - opening one in a new tab (the gallery links to
+  // each photo with target="_blank") crashes iOS Safari on large images. Only
+  // uploaded Storage URLs are linkable; un-migrated local photos are skipped here.
+  const allPhotos = (Object.values(job.photos ?? {}).flat() as string[])
+    .filter(u => !!u && !u.startsWith('data:'));
   const location = [job.address, job.city, job.state, job.zip].filter(Boolean).join(', ');
   const notes = [job.notes, job.operationalNotes, job.completionNotes].filter(Boolean);
   const scope = job.scopeItems ?? [];
