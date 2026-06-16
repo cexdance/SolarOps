@@ -697,7 +697,7 @@ export const Jobs: React.FC<JobsProps> = ({
           orthogonal flag, so held orders are pulled out of their status column). */}
       {viewMode === 'kanban' && (
         <div className="flex gap-4 overflow-x-auto pb-4">
-          {(['new', 'on_hold', 'assigned', 'in_progress', 'completed', 'invoiced', 'paid'] as const).map(col => (
+          {(['on_hold', 'new', 'assigned', 'in_progress', 'completed', 'invoiced', 'paid'] as const).map(col => (
             <KanbanColumn
               key={col}
               status={col}
