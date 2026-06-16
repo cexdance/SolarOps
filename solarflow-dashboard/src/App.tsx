@@ -37,7 +37,7 @@ import { syncFromDB } from './lib/db';
 import { loadData, saveData } from './lib/dataStore';
 import { migrateWoPhotos } from './lib/photoStore';
 import { pickupJobsForContractor, toContractorJobView, serviceOrderNo, photoUrlStem } from './lib/woHelpers';
-import { fireMentionNotifications } from './components/ui/MentionTextarea';
+import { fireMentionNotifications, sendCustomerAppointmentEmail } from './components/ui/MentionTextarea';
 import { logChange, logJobChange, flushChangeLog } from './lib/changeLog';
 import { autoArchiveCompletedJobs } from './lib/jobService';
 import { fetchMyNotifications, markNotificationReadRemote, markAllNotificationsReadRemote, startNotificationPolling, stopNotificationPolling, subscribeToNotifications, unsubscribeFromNotifications } from './lib/notifications';
@@ -1471,11 +1471,14 @@ function App() {
 
     // Record the client confirmation as an outbound CRM interaction when the CRM
     // customer can be resolved (staff session). Best-effort - a contractor session
-    // has no CRM store, so guard with try/catch and skip silently.
+    // has no CRM store, so guard with try/catch and skip silently. Also resolve
+    // the customer's email so we can send the live confirmation.
+    let clientEmail = cjob.customerEmail?.trim() || '';
     try {
       const crmCustomers = loadCustomers();
       const crmMatch = crmCustomers.find(c => c.id === adminJob.customerId);
       if (crmMatch) {
+        if (!clientEmail) clientEmail = crmMatch.email?.trim() || '';
         const interactions = loadInteractions();
         saveInteractions(addInteraction(
           interactions, crmMatch.id, 'note',
@@ -1486,6 +1489,19 @@ function App() {
       }
     } catch (e) {
       console.error('[schedule] CRM interaction log skipped', e);
+    }
+
+    // Live client confirmation email (Resend via /api/notify, from
+    // solar.ops@conexsol.us). Best-effort, non-blocking; no-op without an email.
+    if (clientEmail) {
+      void sendCustomerAppointmentEmail({
+        customerEmail: clientEmail,
+        customerName: cjob.customerName,
+        when,
+        orderNo: serviceOrderNo(adminJob.woNumber),
+        contractorName,
+      }).then(ok => { if (!ok) console.warn('[schedule] client email not sent'); })
+        .catch(e => console.error('[schedule] client email failed', e));
     }
 
     logChange('job.contractor_schedule_confirmed', 'job', updated.id,

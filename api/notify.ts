@@ -50,6 +50,78 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   });
   if (!verifyRes.ok) return res.status(401).json({ error: 'Unauthorized' });
 
+  // ── Customer appointment confirmation email ────────────────────────────────
+  // Distinct from the staff @mention flow: emails the CLIENT directly (no
+  // Supabase user lookup) when a contractor schedules/confirms a service date.
+  if ((req.body as Record<string, unknown>)?.action === 'customer-appointment') {
+    const { customerEmail, customerName: cName, when, orderNo, contractorName } =
+      (req.body ?? {}) as Record<string, string>;
+    const to = String(customerEmail ?? '').trim();
+    if (!to || !/.+@.+\..+/.test(to)) return res.status(400).json({ error: 'valid customerEmail required' });
+    if (!RESEND_API_KEY) return res.status(200).json({ sent: 0, skipped: 'no RESEND_API_KEY' });
+
+    const safe = (v: unknown) => String(v ?? '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const r = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from: 'SolarOps <solar.ops@conexsol.us>',
+        reply_to: 'solar.ops@conexsol.us',
+        to,
+        subject: `Your solar service is scheduled${when ? ` for ${safe(when)}` : ''}`,
+        html: `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;padding:32px 16px">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.08)">
+        <tr>
+          <td style="background:linear-gradient(135deg,#f97316,#ea580c);padding:28px 32px">
+            <div style="font-size:22px;font-weight:700;color:#fff">Conexsol Solar Service</div>
+            <div style="font-size:13px;color:rgba(255,255,255,.85);margin-top:4px">Your appointment is confirmed</div>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:32px">
+            <p style="margin:0 0 8px;font-size:16px;color:#1e293b">Hi ${safe(cName) || 'there'},</p>
+            <p style="margin:0 0 24px;font-size:14px;color:#64748b;line-height:1.6">
+              Good news, your solar service visit has been scheduled. A technician will be on site at the time below.
+            </p>
+            <div style="background:#f8fafc;border-left:3px solid #f97316;border-radius:0 8px 8px 0;padding:16px 20px;margin-bottom:24px">
+              <p style="margin:0 0 6px;font-size:13px;color:#94a3b8;text-transform:uppercase;letter-spacing:.04em">Scheduled for</p>
+              <p style="margin:0;font-size:18px;font-weight:700;color:#1e293b">${safe(when) || 'To be confirmed'}</p>
+              ${orderNo ? `<p style="margin:8px 0 0;font-size:13px;color:#64748b">Service order ${safe(orderNo)}</p>` : ''}
+            </div>
+            <p style="margin:0;font-size:14px;color:#64748b;line-height:1.6">
+              If this time does not work, just reply to this email and our office will help reschedule.
+            </p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:20px 32px;border-top:1px solid #f1f5f9">
+            <p style="margin:0;font-size:12px;color:#94a3b8">
+              Conexsol${contractorName ? ` &bull; Technician: ${safe(contractorName)}` : ''}. This confirmation was sent automatically.
+            </p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`,
+      }),
+    }).catch((err: unknown) => { console.warn('[notify] customer email failed', err); return null; });
+
+    if (!r || !r.ok) {
+      const detail = r ? await r.text().catch(() => '') : 'fetch failed';
+      console.error('[notify] customer email error:', detail);
+      return res.status(502).json({ error: 'email send failed' });
+    }
+    return res.status(200).json({ sent: 1 });
+  }
+
   const { mentionedUserIds, notifierName, customerName, customerId, message } = (req.body ?? {}) as Record<string, unknown>;
   if (!Array.isArray(mentionedUserIds) || mentionedUserIds.length === 0) {
     return res.status(400).json({ error: 'mentionedUserIds required' });

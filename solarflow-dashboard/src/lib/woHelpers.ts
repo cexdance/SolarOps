@@ -159,6 +159,7 @@ export function toContractorJobView(job: Job, existingCj?: ContractorJob, custom
     customerId: job.customerId,
     customerName: job.clientName || customer?.name || '',
     customerPhone: customer?.phone ?? '',
+    customerEmail: customer?.email ?? '',
     // Address resolves LIVE from the customer record so an address edit on the
     // customer is reflected on the contractor WO immediately. Falls back to the
     // job's siteAddress snapshot (a full string) when no customer is linked.

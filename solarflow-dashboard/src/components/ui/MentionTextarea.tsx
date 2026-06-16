@@ -246,3 +246,33 @@ export async function fireMentionNotifications(opts: {
     // non-blocking
   }
 }
+
+/**
+ * Email an appointment confirmation directly to the customer via /api/notify
+ * (action: 'customer-appointment'). Non-blocking, returns true on a 2xx send.
+ */
+export async function sendCustomerAppointmentEmail(opts: {
+  customerEmail: string;
+  customerName: string;
+  when: string;
+  orderNo?: string;
+  contractorName?: string;
+}): Promise<boolean> {
+  if (!opts.customerEmail || !/.+@.+\..+/.test(opts.customerEmail)) return false;
+  try {
+    const { supabase } = await import('../../lib/supabase');
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) return false;
+    const res = await fetch('/api/notify', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ action: 'customer-appointment', ...opts }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
