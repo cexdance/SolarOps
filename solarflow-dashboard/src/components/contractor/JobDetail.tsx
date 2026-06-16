@@ -17,7 +17,7 @@ import {
 } from '../../lib/contractorGamification';
 import { compressImageToDataUrl } from '../../lib/photoCompress';
 import { uploadPhotoToStorage } from '../../lib/photoStorage';
-import { appendPhoto, getPhoto, flushPendingMirrors, listPhotosForJob, dataUrlToBlob, deletePhotoForJobByUrl } from '../../lib/photoStore';
+import { appendPhoto, flushPendingMirrors, listPhotosForJob, dataUrlToBlob, deletePhotoForJobByUrl } from '../../lib/photoStore';
 import { logChange } from '../../lib/changeLog';
 import ServiceOrderCard from './ServiceOrderCard';
 
@@ -455,30 +455,20 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
         });
       }
 
-      // 3. Sweep any residual in-session base64 not yet in IDB (edge case:
-      //    photos captured before this code was deployed).
-      for (const [cat, urls] of Object.entries(photos)) {
-        for (const u of (urls ?? [])) {
-          if (typeof u !== 'string' || !u.startsWith('data:')) continue;
-          try {
-            const blob = dataUrlToBlob(u);
-            if (!blob) continue;
-            const row = await appendPhoto({ jobId: job.id, category: cat as PhotoCategory, blob });
-            await new Promise(r => setTimeout(r, 1500));
-            const done = await getPhoto(row.id);
-            if (done?.supabaseUrl) {
-              setPhotos(prev => ({
-                ...prev,
-                [cat]: (prev[cat as PhotoCategory] ?? []).map(p => p === u ? done.supabaseUrl! : p),
-              }));
-            }
-          } catch { /* leave base64; next retry will attempt */ }
-        }
-      }
+      // NOTE: a former "step 3" re-uploaded any lingering base64 by calling
+      // appendPhoto again - creating a NEW IDB row/id for an image addPhoto had
+      // already stored. Run more than once (mount + online + photo change) it
+      // produced 2-3 byte-identical copies of the same photo under different ids
+      // (the "pictures appear three times" bug). addPhoto is IDB-first, so every
+      // captured photo already has a row that steps 1-2 upload + swap; the sweep
+      // was redundant and is removed. Any truly orphan legacy base64 stays
+      // displayable in state and uploads via the IDB path on the next capture.
     } finally {
       retryInFlight.current = false;
     }
-  }, [photos, job.id]);
+  // `photos` is no longer read here (the base64 sweep was removed), so depend
+  // only on job.id - this also stops the effect re-subscribing on every capture.
+  }, [job.id]);
 
   // On mount: restore any IDB-uploaded photos that were stripped from localStorage
   // (base64 is never written to localStorage, so an uploaded photo's https:// URL
@@ -502,6 +492,52 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
         });
       } catch { /* IDB unavailable (SSR / incognito restricted), skip */ }
     })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [job.id]);
+
+  // One-time self-heal for EXISTING content-duplicates: photos that the old
+  // retry-sweep bug uploaded twice are byte-identical but live under different
+  // ids/urls, so filename de-dup can't collapse them. On open, within each
+  // category, HEAD-fetch sizes for the uploaded photos and drop any whose
+  // (category + byte size) was already seen, keeping the first. Cheap (HEAD only,
+  // and only when a category has 2+ uploaded photos), runs once per job, and
+  // persists the cleaned set so the admin side is fixed too.
+  const contentDedupedRef = useRef(false);
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      if (contentDedupedRef.current || !navigator.onLine) return;
+      const cats = Object.entries(photos) as [PhotoCategory, string[]][];
+      const next = { ...photos };
+      let changed = false;
+      for (const [cat, urls] of cats) {
+        const httpUrls = (urls ?? []).filter(u => typeof u === 'string' && u.startsWith('http'));
+        if (httpUrls.length < 2) continue;
+        const sizeByUrl = new Map<string, number>();
+        await Promise.all(httpUrls.map(async u => {
+          try {
+            const r = await fetch(u, { method: 'HEAD' });
+            sizeByUrl.set(u, Number(r.headers.get('content-length')) || 0);
+          } catch { sizeByUrl.set(u, 0); }
+        }));
+        const seenSizes = new Set<number>();
+        const kept: string[] = [];
+        for (const u of (urls ?? [])) {
+          if (typeof u !== 'string' || !u.startsWith('http')) { kept.push(u); continue; }
+          const size = sizeByUrl.get(u) ?? 0;
+          if (size > 0 && seenSizes.has(size)) { changed = true; continue; } // drop content-dup
+          if (size > 0) seenSizes.add(size);
+          kept.push(u);
+        }
+        next[cat] = kept;
+      }
+      if (changed && !cancelled) {
+        contentDedupedRef.current = true;
+        setPhotos(next);
+        try { onUpdateJob({ ...job, photos: next }); } catch { /* never block the view */ }
+      }
+    })();
+    return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [job.id]);
 
