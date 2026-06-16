@@ -231,7 +231,7 @@ const JobCard: React.FC<JobCardProps> = ({ job, customer, contractorName, isDrag
 };
 
 interface KanbanColumnProps {
-  status: JobStatus;
+  status: JobStatus | 'on_hold';
   title: string;
   columnJobs: Job[];
   allJobs: Job[];
@@ -246,8 +246,9 @@ interface KanbanColumnProps {
   onToggleHold: (job: Job) => void;
 }
 
-const colColors: Record<JobStatus, string> = {
+const colColors: Record<JobStatus | 'on_hold', string> = {
   new: 'bg-blue-50 border-blue-200',
+  on_hold: 'bg-slate-100 border-slate-300',
   assigned: 'bg-slate-50 border-slate-200',
   in_progress: 'bg-amber-50 border-amber-200',
   completed: 'bg-green-50 border-green-200',
@@ -273,13 +274,21 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({
     const jobId = e.dataTransfer.getData('jobId');
     if (!jobId) return;
     const job = allJobs.find(j => j.id === jobId);
-    if (job && boardStatus(job) !== status) {
+    if (!job) return;
+    // Drop on the On Hold column = park the order (keep its underlying stage).
+    if (status === 'on_hold') {
+      if (!job.onHold) onUpdateJob({ ...job, onHold: true, onHoldAt: new Date().toISOString() });
+      return;
+    }
+    // Drop on a status column = un-park (if held) and/or move stage.
+    const needsStatus = boardStatus(job) !== status;
+    if (job.onHold || needsStatus) {
       // Keep the fine-grained woStatus if it already maps to the target column;
       // otherwise move it to a representative woStatus so the coarse `status` and
       // the pipeline `woStatus` stay consistent (no more invoiced-vs-quote drift).
       const keepWo = job.woStatus && WO_TO_JOB_STATUS[job.woStatus as WOStatus] === status;
-      const woStatus = keepWo ? job.woStatus : COLUMN_TO_WOSTATUS[status];
-      onUpdateJob({ ...job, status, woStatus });
+      const woStatus = needsStatus ? (keepWo ? job.woStatus : COLUMN_TO_WOSTATUS[status]) : job.woStatus;
+      onUpdateJob({ ...job, status, woStatus, onHold: false, onHoldAt: undefined });
     }
   };
 
@@ -353,7 +362,7 @@ export const Jobs: React.FC<JobsProps> = ({
   const [createCustomer, setCreateCustomer] = useState<Customer | null>(null);
   const [editingCreatedJob, setEditingCreatedJob] = useState<Job | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterStatus, setFilterStatus] = useState<JobStatus | 'all'>('all');
+  const [filterStatus, setFilterStatus] = useState<JobStatus | 'all' | 'on_hold'>('all');
   const [filterContractor, setFilterContractor] = useState<string>('all');
   const [showArchived, setShowArchived] = useState(false);
   const [showOnHold, setShowOnHold] = useState(false);
@@ -407,7 +416,10 @@ export const Jobs: React.FC<JobsProps> = ({
       customer?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       customer?.address.toLowerCase().includes(searchQuery.toLowerCase()) ||
       job.notes.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus = filterStatus === 'all' || boardStatus(job) === filterStatus;
+    const matchesStatus =
+      filterStatus === 'all' ? true :
+      filterStatus === 'on_hold' ? !!job.onHold :
+      boardStatus(job) === filterStatus;
     const matchesContractor = filterContractor === 'all' || job.contractorId === filterContractor;
     // Period filter, uses scheduledDate or createdAt
     let matchesPeriod = true;
@@ -423,12 +435,32 @@ export const Jobs: React.FC<JobsProps> = ({
     // Filter out archived jobs unless toggle is enabled
     const isArchived = job.status === 'archived';
     const notArchived = !isArchived || showArchived;
-    // Held orders are parked: hidden from the queue unless "Show On Hold" is on
-    // (or the admin is explicitly viewing only held orders).
-    const notHeld = !job.onHold || showOnHold;
+    // Held orders are parked: hidden from the queue unless "Show On Hold" is on or
+    // the admin is explicitly filtering to On Hold.
+    const notHeld = !job.onHold || showOnHold || filterStatus === 'on_hold';
 
     return matchesSearch && matchesStatus && matchesContractor && matchesPeriod && notArchived && notHeld;
   }), [jobs, customers, searchQuery, filterStatus, filterContractor, periodRange, showArchived, showOnHold]);
+
+  // Held orders for the kanban "On Hold" column - always shown there (independent of
+  // the Show On Hold toggle and status filter), matching the search/contractor/period
+  // filters. Hold is an orthogonal flag, so these are pulled out of their status column.
+  const boardHeldJobs = useMemo(() => jobs.filter((job) => {
+    if (!job.onHold || job.status === 'archived') return false;
+    const customer = customers.find((c) => c.id === job.customerId);
+    const matchesSearch =
+      !searchQuery ||
+      customer?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      customer?.address.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      job.notes.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesContractor = filterContractor === 'all' || job.contractorId === filterContractor;
+    let matchesPeriod = true;
+    if (periodRange) {
+      const dateStr = job.scheduledDate || job.createdAt;
+      matchesPeriod = dateStr ? (() => { const d = new Date(dateStr.split('T')[0]); return d >= periodRange.start && d <= periodRange.end; })() : false;
+    }
+    return matchesSearch && matchesContractor && matchesPeriod;
+  }), [jobs, customers, searchQuery, filterContractor, periodRange]);
 
   // Per-contractor workload summary (Assigned / On Route / In Progress / Completed).
   // Computed across ALL of the selected contractor's non-archived jobs, independent of
@@ -544,7 +576,7 @@ export const Jobs: React.FC<JobsProps> = ({
         <div className="flex gap-2 flex-wrap">
           <select
             value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value as JobStatus | 'all')}
+            onChange={(e) => setFilterStatus(e.target.value as JobStatus | 'all' | 'on_hold')}
             className="px-4 py-2.5 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 text-sm"
           >
             <option value="all">All Status</option>
@@ -554,6 +586,7 @@ export const Jobs: React.FC<JobsProps> = ({
             <option value="completed">Completed</option>
             <option value="invoiced">Invoiced</option>
             <option value="paid">Paid</option>
+            <option value="on_hold">On Hold</option>
           </select>
           {contractors.length > 0 && (
             <select
@@ -657,18 +690,20 @@ export const Jobs: React.FC<JobsProps> = ({
         </div>
       )}
 
-      {/* Kanban View */}
+      {/* Kanban View. 'On Hold' is a dedicated column right of New (hold is an
+          orthogonal flag, so held orders are pulled out of their status column). */}
       {viewMode === 'kanban' && (
         <div className="flex gap-4 overflow-x-auto pb-4">
-          {BOARD_COLUMN_STATUSES.map(status => (
+          {(['new', 'on_hold', 'assigned', 'in_progress', 'completed', 'invoiced', 'paid'] as const).map(col => (
             <KanbanColumn
-              key={status}
-              status={status}
-              title={status.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+              key={col}
+              status={col}
+              title={col === 'on_hold' ? 'On Hold' : col.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
               // Group by the EFFECTIVE board status (derives from woStatus when the
               // raw status is stale/undefined) so RMA/imported service orders land in
-              // the right column WITHOUT needing a manual save, and none vanish.
-              columnJobs={filteredJobs.filter(j => boardStatus(j) === status)}
+              // the right column WITHOUT needing a manual save, and none vanish. Held
+              // jobs go ONLY in the On Hold column, never their status column.
+              columnJobs={col === 'on_hold' ? boardHeldJobs : filteredJobs.filter(j => !j.onHold && boardStatus(j) === col)}
               allJobs={jobs}
               draggedJobId={draggedJobId}
               customers={customers}
