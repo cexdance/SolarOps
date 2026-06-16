@@ -52,6 +52,23 @@ export function isKVSyncKey(key: string): key is KVSyncKey {
 // localStorage key that tracks when we last successfully pulled
 const LAST_SYNC_KEY = 'solarops_last_record_sync';
 
+// Bump this whenever the cursor semantics change to force ONE full resync on every
+// device. Devices that ran the old client-clock cursor may hold a stale FUTURE
+// `since` that incrementally skips records forever (a contractor never receiving a
+// just-assigned job); resetting the cursor once makes the next pull full and
+// recovers all missed rows. After that, the server-time cursor keeps it correct.
+const SYNC_CURSOR_VERSION = '2';
+const SYNC_CURSOR_VERSION_KEY = 'solarops_sync_cursor_v';
+
+function ensureCursorVersion(): void {
+  try {
+    if (localStorage.getItem(SYNC_CURSOR_VERSION_KEY) !== SYNC_CURSOR_VERSION) {
+      localStorage.removeItem(LAST_SYNC_KEY); // force a full pull once
+      localStorage.setItem(SYNC_CURSOR_VERSION_KEY, SYNC_CURSOR_VERSION);
+    }
+  } catch { /* localStorage unavailable, fall through to a normal pull */ }
+}
+
 function getLastSync(): string | null {
   return localStorage.getItem(LAST_SYNC_KEY);
 }
@@ -507,7 +524,11 @@ export async function pushToSupabase(state: AppState): Promise<void> {
     }
 
     clearPendingPush();
-    setLastSync(now);
+    // Do NOT advance the read cursor here. A push must not touch `lastSync`: the
+    // outbox drains right before the pull, so setting the cursor to client-now made
+    // the very next pull skip every other device's recent server writes (the cause of
+    // contractors never receiving freshly-assigned jobs). Re-pulling our own just-
+    // pushed rows once is harmless (idempotent merge); the pull owns the cursor.
     window.dispatchEvent(new CustomEvent('supabase-sync-success'));
   } catch (err) {
     console.warn('[SyncEngine] pushToSupabase error:', err);
@@ -569,8 +590,8 @@ export async function pullFromSupabase(): Promise<Partial<AppState> | null> {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return null;
 
+    ensureCursorVersion(); // one-time full resync to recover any stale future cursor
     const since = getLastSync();
-    const now   = new Date().toISOString();
 
     // ── Per-record pull (Phase 2) ─────────────────────────────────────────────
     const [customers, jobs] = await Promise.all([
@@ -678,7 +699,23 @@ export async function pullFromSupabase(): Promise<Partial<AppState> | null> {
       }));
     }
 
-    setLastSync(now);
+    // Advance the incremental cursor using SERVER timestamps (the values pullPrefix
+    // stamped from app_data.updated_at), NOT the client clock. A device whose clock
+    // runs ahead of the DB would otherwise store a future `since` and PERMANENTLY
+    // skip every record the server wrote in that skew window - the "contractor keeps
+    // refreshing but never sees the job just assigned to them" bug. Rewind a small
+    // safety buffer so rows committed during this pull are re-checked next time, and
+    // keep the prior cursor (don't jump to client-now) when nothing new came back.
+    const serverTimes = [...customers, ...jobs]
+      .map(v => (v as { updatedAt?: string }).updatedAt)
+      .filter((t): t is string => !!t)
+      .sort();
+    const maxServerTs = serverTimes.length ? serverTimes[serverTimes.length - 1] : null;
+    if (maxServerTs) {
+      const SYNC_SAFETY_MS = 5000;
+      setLastSync(new Date(new Date(maxServerTs).getTime() - SYNC_SAFETY_MS).toISOString());
+    }
+    // If nothing new returned, leave `since` untouched (never advance to client-now).
 
     // Extract solarEdgeConfig from kvData if present
     const remoteSEConfig = kvData?.find(r => r.key === 'solarEdgeConfig')?.value as AppState['solarEdgeConfig'] | undefined;
