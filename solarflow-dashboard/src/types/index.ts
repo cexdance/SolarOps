@@ -226,9 +226,13 @@ export interface Job {
   // order to its prior place in the pipeline.
   onHold?: boolean;
   onHoldAt?: string;
-  // Set when a contractor proposes their own service date/time from the portal
-  // (which pings the office to confirm with the client). Display/audit only.
+  // Set when a contractor proposes their own service date/time from the portal.
+  // The proposal now auto-confirms the appointment (see scheduleConfirmedAt).
   contractorScheduleProposedAt?: string;
+  // Set when a proposed service date is auto-confirmed (the contractor's date
+  // becomes the booked appointment, the client is notified, no manual office
+  // confirmation step). Display/audit only.
+  scheduleConfirmedAt?: string;
   woNumber?: string;                        // e.g. WO-2603-00042
   solarEdgeSiteId?: string;
   solarEdgeClientId?: string;               // US-15XXX

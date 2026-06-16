@@ -846,15 +846,15 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
             status, location, photos and notes in one read-only place. */}
         <ServiceOrderCard job={job} />
 
-        {/* ── Propose service date/time (pings the office to confirm w/ client) ── */}
+        {/* ── Schedule service date/time (auto-confirms the appointment) ── */}
         {onProposeSchedule && !isCompleted && (
           <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-3">
             <div className="flex items-center gap-2">
               <CalendarClock className="w-4 h-4 text-orange-500" />
-              <h2 className="font-bold text-slate-900 text-sm">Propose service date</h2>
+              <h2 className="font-bold text-slate-900 text-sm">Schedule service date</h2>
             </div>
             <p className="text-xs text-slate-500 -mt-1">
-              Set when you plan to service this call. The office (Cruz &amp; Cesar) is notified to confirm with the client.
+              Set when you will service this call. The date is auto-confirmed, the client is notified, and the office (Cruz &amp; Cesar) is kept in the loop.
             </p>
             <div className="flex gap-2">
               <label className="flex-1">
@@ -886,8 +886,8 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
               className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold text-white bg-orange-500 hover:bg-orange-600 disabled:bg-emerald-600 disabled:cursor-default transition-colors"
             >
               {proposeSent
-                ? <><Check className="w-4 h-4" /> Office notified</>
-                : <><Send className="w-4 h-4" /> Notify office</>}
+                ? <><Check className="w-4 h-4" /> Scheduled &amp; client notified</>
+                : <><Send className="w-4 h-4" /> Confirm &amp; schedule</>}
             </button>
           </div>
         )}

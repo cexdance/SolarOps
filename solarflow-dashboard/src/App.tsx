@@ -1398,10 +1398,35 @@ function App() {
     const when = `${dateISO}${time ? ` at ${time}` : ''}`;
     const nowIso = new Date().toISOString();
 
-    const note: Activity = {
+    // ── Auto-confirm: the contractor's proposed date becomes the booked
+    // appointment with no manual office step. If the order is still at a
+    // pre-dispatch stage, advance it to the scheduled/assigned stage so the
+    // confirmed date locks it into the pipeline (mirror of the assign auto-dispatch).
+    const PRE_DISPATCH_WO = new Set(['draft', 'quote_sent', 'contact_client', 'quote_approved']);
+    const needsAdvance = !adminJob.woStatus || PRE_DISPATCH_WO.has(adminJob.woStatus) || adminJob.status === 'new';
+    const advanced = needsAdvance
+      ? { woStatus: 'scheduled' as WOStatus, status: 'assigned' as JobStatus,
+          contractorSentAt: adminJob.contractorSentAt ?? nowIso }
+      : {};
+
+    // Client-facing confirmation, logged on the order activity feed (this surfaces
+    // on the customer card Activity tab). Records that the appointment was
+    // auto-confirmed with the client.
+    const clientNote: Activity = {
       id: `activity-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       type: 'note_added',
-      description: `${contractorName} proposed servicing this call on ${when}. @cesar @cruz please contact the client to confirm.`,
+      description: `Appointment auto-confirmed with ${cjob.customerName} for ${when} (scheduled by ${contractorName}). Client notified of the confirmed date.`,
+      timestamp: nowIso,
+      userId: cjob.contractorId,
+      userName: contractorName,
+    };
+
+    // Office FYI (no action required) - mentions still fire the bell so the office
+    // is aware, but the client no longer needs a manual confirmation call.
+    const officeNote: Activity = {
+      id: `activity-${Date.now() + 1}-${Math.random().toString(36).slice(2, 6)}`,
+      type: 'note_added',
+      description: `${contractorName} scheduled this call for ${when}. Auto-confirmed and client notified. @cesar @cruz FYI, no action needed.`,
       timestamp: nowIso,
       userId: cjob.contractorId,
       userName: contractorName,
@@ -1415,8 +1440,8 @@ function App() {
       id: `notif-${Date.now()}-${uid}-${Math.random().toString(36).slice(2, 6)}`,
       userId: uid,
       type: 'mention' as const,
-      title: 'Contractor proposed a service date',
-      message: `${contractorName} proposed servicing ${serviceOrderNo(adminJob.woNumber)} ${cjob.customerName} on ${when}. Please contact the client to confirm.`,
+      title: 'Job auto-scheduled',
+      message: `${serviceOrderNo(adminJob.woNumber)} ${cjob.customerName} was auto-confirmed for ${when} by ${contractorName}. Client notified, no action needed.`,
       relatedJobId: adminJob.id,
       relatedContractorId: cjob.contractorId,
       read: false,
@@ -1425,11 +1450,13 @@ function App() {
 
     const updated: Job = {
       ...adminJob,
+      ...advanced,
       scheduledDate: dateISO,
       scheduledTime: time,
       contractorScheduleProposedAt: nowIso,
+      scheduleConfirmedAt: nowIso,
       updatedAt: nowIso,
-      activityHistory: [...(adminJob.activityHistory ?? []), note],
+      activityHistory: [...(adminJob.activityHistory ?? []), clientNote, officeNote],
     };
 
     setData(prev => {
@@ -1441,8 +1468,29 @@ function App() {
       saveData(next);
       return next;
     });
-    logChange('job.contractor_schedule_proposed', 'job', updated.id,
-      { scheduledDate: dateISO, scheduledTime: time, recipients: recipientIds }, currentContractor?.contactName ?? cjob.contractorId);
+
+    // Record the client confirmation as an outbound CRM interaction when the CRM
+    // customer can be resolved (staff session). Best-effort - a contractor session
+    // has no CRM store, so guard with try/catch and skip silently.
+    try {
+      const crmCustomers = loadCustomers();
+      const crmMatch = crmCustomers.find(c => c.id === adminJob.customerId);
+      if (crmMatch) {
+        const interactions = loadInteractions();
+        saveInteractions(addInteraction(
+          interactions, crmMatch.id, 'note',
+          `Service appointment auto-confirmed for ${when} (${serviceOrderNo(adminJob.woNumber)}, scheduled by ${contractorName}).`,
+          cjob.contractorId, contractorName,
+          { subject: 'Appointment confirmed', direction: 'outbound' },
+        ));
+      }
+    } catch (e) {
+      console.error('[schedule] CRM interaction log skipped', e);
+    }
+
+    logChange('job.contractor_schedule_confirmed', 'job', updated.id,
+      { scheduledDate: dateISO, scheduledTime: time, autoConfirmed: true, advanced: needsAdvance, recipients: recipientIds },
+      currentContractor?.contactName ?? cjob.contractorId);
 
     // Best-effort: also add to the staff @mention inbox / fire /api/notify (prod).
     void fireMentionNotifications({
@@ -1451,7 +1499,7 @@ function App() {
       context: `${serviceOrderNo(adminJob.woNumber)} ${cjob.customerName}`,
       contextId: adminJob.id,
       contextType: 'workOrder',
-      message: `${contractorName} proposed servicing ${cjob.customerName} on ${when}. Please contact the client to confirm.`,
+      message: `${cjob.customerName} auto-confirmed for ${when}. Client notified, no action needed.`,
     }).catch(e => console.error('[schedule] mention notify failed', e));
   };
 
