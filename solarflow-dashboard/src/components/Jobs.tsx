@@ -288,7 +288,10 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({
       // the pipeline `woStatus` stay consistent (no more invoiced-vs-quote drift).
       const keepWo = job.woStatus && WO_TO_JOB_STATUS[job.woStatus as WOStatus] === status;
       const woStatus = needsStatus ? (keepWo ? job.woStatus : COLUMN_TO_WOSTATUS[status]) : job.woStatus;
-      onUpdateJob({ ...job, status, woStatus, onHold: false, onHoldAt: undefined });
+      // Stamp completedAt when moving INTO Completed so a completed WO always carries
+      // a completion date (drives the billing lifecycle); preserve an existing one.
+      const completedAt = status === 'completed' ? (job.completedAt || new Date().toISOString()) : job.completedAt;
+      onUpdateJob({ ...job, status, woStatus, completedAt, onHold: false, onHoldAt: undefined });
     }
   };
 
