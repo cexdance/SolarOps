@@ -1544,7 +1544,26 @@ function App() {
     }
   };
 
-  const handleUpdateJob = (updatedJob: Job, role: 'admin' | 'contractor' | 'technician' = 'admin') => {
+  const handleUpdateJob = (incomingJob: Job, role: 'admin' | 'contractor' | 'technician' = 'admin') => {
+    // Auto-dispatch: when an admin assigns a contractor to a job that is still at a
+    // pre-dispatch stage (draft/new/quote_sent/contact_client/quote_approved), advance
+    // it to the Assigned stage (woStatus 'scheduled' -> JobStatus 'assigned') so the
+    // contractor sees it IMMEDIATELY. Previously assigning only set contractorId and
+    // the admin had to separately advance the job, so newly-assigned jobs stayed
+    // invisible to the contractor (the "Jaime can't see Alfonso" bug). Only fires on a
+    // NEW assignment (contractor changed) so it never re-advances an intentional edit.
+    const PRE_DISPATCH_WO = new Set(['draft', 'quote_sent', 'contact_client', 'quote_approved']);
+    const prevForAssign = data.jobs.find(j => j.id === incomingJob.id);
+    const newlyAssigned = !!incomingJob.contractorId && incomingJob.contractorId !== prevForAssign?.contractorId;
+    const isPreDispatch = !incomingJob.woStatus || PRE_DISPATCH_WO.has(incomingJob.woStatus) || incomingJob.status === 'new';
+    const updatedJob: Job = {
+      ...((newlyAssigned && isPreDispatch && role === 'admin')
+        ? { ...incomingJob, woStatus: 'scheduled' as WOStatus, status: 'assigned' as JobStatus, contractorSentAt: incomingJob.contractorSentAt ?? new Date().toISOString() }
+        : incomingJob),
+      // Stamp the LWW key on every admin edit so the change reliably wins the merge
+      // and propagates to other devices (e.g. the assigned contractor's portal).
+      updatedAt: new Date().toISOString(),
+    };
     const newActivity = {
       id: `activity-${Date.now()}`,
       type: 'job_updated' as const,
