@@ -7,7 +7,7 @@ import {
   ClipboardList, ChevronDown, Calendar, CheckCircle2, MapPin, FileText, Image as ImageIcon,
 } from 'lucide-react';
 import { ContractorJob, JobStatusContractor } from '../../types/contractor';
-import { serviceOrderNo } from '../../lib/woHelpers';
+import { serviceOrderNo, dedupePhotoUrls } from '../../lib/woHelpers';
 
 const STATUS_STYLE: Record<JobStatusContractor, string> = {
   assigned:      'bg-slate-100 text-slate-600',
@@ -34,8 +34,9 @@ const ServiceOrderCard: React.FC<{ job: ContractorJob }> = ({ job }) => {
   // Exclude base64 data: URLs - opening one in a new tab (the gallery links to
   // each photo with target="_blank") crashes iOS Safari on large images. Only
   // uploaded Storage URLs are linkable; un-migrated local photos are skipped here.
-  const allPhotos = (Object.values(job.photos ?? {}).flat() as string[])
-    .filter(u => !!u && !u.startsWith('data:'));
+  const allPhotos = dedupePhotoUrls(
+    (Object.values(job.photos ?? {}).flat() as string[]).filter(u => !!u && !u.startsWith('data:')),
+  );
   const location = [job.address, job.city, job.state, job.zip].filter(Boolean).join(', ');
   const notes = [job.notes, job.operationalNotes, job.completionNotes].filter(Boolean);
   const scope = job.scopeItems ?? [];

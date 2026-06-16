@@ -34,6 +34,35 @@ export function workOrderNo(n?: string): string {
   return bare ? `WO-${bare}` : '';
 }
 
+/**
+ * Stable identity for a photo URL, used to de-duplicate the same image that was
+ * uploaded to two slightly different storage keys (e.g. `.../id.jpg` vs
+ * `.../category/id.jpeg`). Returns the last path segment without its extension or
+ * query string, so both variants collapse to the same `ph-…`/`cp-…` stem.
+ */
+export function photoUrlStem(url: string): string {
+  if (!url) return url;
+  if (url.startsWith('data:')) return url; // base64 previews are their own identity
+  const noQuery = url.split('?')[0];
+  const seg = noQuery.substring(noQuery.lastIndexOf('/') + 1);
+  const dot = seg.lastIndexOf('.');
+  return dot > 0 ? seg.slice(0, dot) : seg;
+}
+
+/** De-dupe a list of photo URLs by stem, preserving first-seen order. */
+export function dedupePhotoUrls(urls: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const u of urls) {
+    if (!u) continue;
+    const key = photoUrlStem(u);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(u);
+  }
+  return out;
+}
+
 /** Generate a fresh Service Order number (SO-YYMM-NNNNN). */
 export function generateServiceOrderNumber(): string {
   const now = new Date();
@@ -108,6 +137,11 @@ export function toContractorJobView(job: Job, existingCj?: ContractorJob, custom
       }
       photos[cat] = existing;
     }
+  }
+  // Collapse the same image uploaded under two storage keys (.jpg vs
+  // .../category/.jpeg) so it never renders two/three times.
+  for (const cat of Object.keys(photos) as PhotoCategory[]) {
+    photos[cat] = dedupePhotoUrls(photos[cat]);
   }
 
   return {

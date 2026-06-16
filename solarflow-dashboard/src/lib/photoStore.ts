@@ -19,12 +19,9 @@
  *  - Storage gives a public/signed URL that any device can fetch on
  *    demand without re-replicating the bytes through every sync.
  */
-import { supabase } from './supabase';
-
 const DB_NAME    = 'solarops_photos';
 const DB_VERSION = 1;
 const STORE      = 'rows';
-const BUCKET     = 'customer-files'; // aligned with photoStorage.ts, was 'wo-photos'
 
 export interface PhotoRow {
   id:           string;
@@ -227,36 +224,30 @@ async function mirrorRow(id: string): Promise<{ ok: boolean; error?: string }> {
   if (!row) return { ok: false, error: 'row not found' };
   if (row.uploadStatus === 'uploaded') return { ok: true };
 
-  // Path layout: <jobId>/<category>/<photoId>.<ext>
-  const ext  = row.contentType.split('/')[1] || 'jpg';
-  const path = `${row.jobId}/${row.category}/${row.id}.${ext}`;
-
-  try {
-    const { error } = await supabase.storage
-      .from(BUCKET)
-      .upload(path, row.blob, {
-        contentType: row.contentType,
-        upsert: true,
-      });
-    if (error) throw error;
-    const { data: pub } = supabase.storage.from(BUCKET).getPublicUrl(path);
+  // Upload through the SAME canonical uploader as the in-editor direct upload
+  // (addPhoto) so both paths write the IDENTICAL storage key (wo-photos/<jobId>/
+  // <id>.<ext>, upsert). Previously this used a different key
+  // (<jobId>/<category>/<id>.jpeg), so the same blob produced TWO public URLs and
+  // the same photo appeared two/three times. Same key = idempotent = one URL.
+  const { uploadPhotoToStorage } = await import('./photoStorage');
+  const result = await uploadPhotoToStorage(row.blob, row.jobId, row.id);
+  if (result.url) {
     const updated: PhotoRow = {
       ...row,
       uploadStatus: 'uploaded',
-      supabaseUrl: pub.publicUrl,
+      supabaseUrl: result.url,
       lastError: undefined,
     };
     const store = await tx('readwrite');
     await reqToPromise(store.put(updated));
     return { ok: true };
-  } catch (e) {
-    const updated: PhotoRow = {
-      ...row,
-      uploadStatus: 'failed',
-      lastError: e instanceof Error ? e.message : String(e),
-    };
-    const store = await tx('readwrite');
-    await reqToPromise(store.put(updated));
-    return { ok: false, error: updated.lastError };
   }
+  const updated: PhotoRow = {
+    ...row,
+    uploadStatus: 'failed',
+    lastError: result.error ?? 'upload failed',
+  };
+  const store = await tx('readwrite');
+  await reqToPromise(store.put(updated));
+  return { ok: false, error: updated.lastError };
 }

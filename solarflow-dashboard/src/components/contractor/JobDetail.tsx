@@ -368,6 +368,7 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
     // saveContractorJobs strips base64 before setItem so localStorage stays small.
     setPhotos(prev => ({ ...prev, [category]: [...(prev[category] ?? []), dataUrl] }));
 
+    let pendingId: string | undefined;
     try {
       // Use atob-based conversion, iOS Safari cannot fetch() a data: URL.
       const blob = dataUrlToBlob(dataUrl);
@@ -376,6 +377,7 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
       // IDB-FIRST: persist blob in IndexedDB for offline durability BEFORE upload.
       // This guarantees the photo survives app close, quota events, or a network drop.
       const row = await appendPhoto({ jobId: job.id, category, blob });
+      pendingId = row.id;
       pendingUploads.current.add(row.id);
 
       // DIRECT UPLOAD: also attempt Supabase immediately (same as original CB-2 fix)
@@ -396,6 +398,10 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
         setUploadError('Photo saved offline, will upload when connected.');
       }
     } catch (err) {
+      // Clear THIS photo's pending marker so a failed upload can never strand the
+      // completion gate ("Complete" silently blocked forever). The blob is durable
+      // in IDB and the retry sweep will upload it later.
+      if (pendingId) pendingUploads.current.delete(pendingId);
       const msg = err instanceof Error ? err.message : String(err);
       setUploadError(`Photo capture failed: ${msg}`);
     }
@@ -556,10 +562,13 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
       }
     }
 
-    // Gate: block completion if other photos are still uploading
+    // Do NOT hard-block completion on in-flight uploads. Every photo is durably
+    // stored in IndexedDB the moment it is captured and the retry sweep + auto-save
+    // mirror finish the upload in the background, so blocking here only stranded
+    // completions (a stuck/slow upload meant "Complete" silently did nothing). Just
+    // surface a non-fatal note and proceed.
     if (pendingUploads.current.size > 0) {
-      setUploadError(`Wait, ${pendingUploads.current.size} photo${pendingUploads.current.size > 1 ? 's' : ''} still uploading. Please try again in a moment.`);
-      return;
+      setUploadError(`Completing now. ${pendingUploads.current.size} photo${pendingUploads.current.size > 1 ? 's are' : ' is'} still finishing upload in the background.`);
     }
 
     const updatedPhotos = resolvedAfterUrl

@@ -36,7 +36,7 @@ import { canSeeFinancials, isFinancialView } from './lib/access';
 import { syncFromDB } from './lib/db';
 import { loadData, saveData } from './lib/dataStore';
 import { migrateWoPhotos } from './lib/photoStore';
-import { pickupJobsForContractor, toContractorJobView, serviceOrderNo } from './lib/woHelpers';
+import { pickupJobsForContractor, toContractorJobView, serviceOrderNo, photoUrlStem } from './lib/woHelpers';
 import { fireMentionNotifications } from './components/ui/MentionTextarea';
 import { logChange, logJobChange, flushChangeLog } from './lib/changeLog';
 import { autoArchiveCompletedJobs } from './lib/jobService';
@@ -1229,7 +1229,15 @@ function App() {
             const url = effectiveUrl(p);
             return url && !keptUrls.has(url);
           });
-        const mergedPhotos = [...keptExisting, ...newPhotos];
+        // De-dupe by photo stem so the same image saved under two storage keys
+        // (.jpg vs .../category/.jpeg) collapses to one stored woPhoto.
+        const seenStems = new Set<string>();
+        const mergedPhotos = [...keptExisting, ...newPhotos].filter(p => {
+          const stem = photoUrlStem(effectiveUrl(p));
+          if (!stem || seenStems.has(stem)) return false;
+          seenStems.add(stem);
+          return true;
+        });
         reconciledWoPhotos = mergedPhotos;
 
         // Build the updated admin job with all mirrored fields
