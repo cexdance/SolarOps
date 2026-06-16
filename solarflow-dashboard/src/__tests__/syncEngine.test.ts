@@ -12,8 +12,19 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { mergeRemote, PREFIX, isKVSyncKey, KV_SYNC_KEYS } from '../lib/syncEngine';
-import type { AppState, Customer, Job } from '../types';
+import { mergeRemote, mergeWoPhotos, PREFIX, isKVSyncKey, KV_SYNC_KEYS } from '../lib/syncEngine';
+import type { AppState, Customer, Job, WOPhoto } from '../types';
+
+function makePhoto(overrides: Partial<WOPhoto> = {}): WOPhoto {
+  return {
+    id: `p-${Math.random().toString(36).slice(2, 8)}`,
+    category: 'after',
+    name: 'photo.jpg',
+    dataUrl: '',
+    createdAt: '2024-01-01T00:00:00Z',
+    ...overrides,
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Factories
@@ -190,39 +201,54 @@ describe('mergeRemote, tombstone filtering', () => {
 // mergeRemote: photo preservation (race condition guard)
 // ---------------------------------------------------------------------------
 
+describe('mergeWoPhotos (M1: deletions stick, in-flight uploads survive)', () => {
+  it('drops an UPLOADED photo the newer winner no longer has (deletion sticks)', () => {
+    const a = makePhoto({ id: 'a', storageUrl: 'https://s/a.jpg' });
+    const b = makePhoto({ id: 'b', storageUrl: 'https://s/b.jpg' });
+    // winner (newer) deleted b; loser still has both, both uploaded.
+    const merged = mergeWoPhotos([a], [a, b]);
+    expect(merged.map(p => p.id)).toEqual(['a']); // b stays deleted
+  });
+
+  it('KEEPS a loser-only photo that is still in flight (no storageUrl)', () => {
+    const a = makePhoto({ id: 'a', storageUrl: 'https://s/a.jpg' });
+    const fresh = makePhoto({ id: 'fresh', dataUrl: 'data:image/jpeg;base64,xxx' }); // not yet uploaded
+    const merged = mergeWoPhotos([a], [a, fresh]);
+    expect(merged.map(p => p.id).sort()).toEqual(['a', 'fresh']);
+  });
+
+  it('does not duplicate a photo present on both sides (same storageUrl)', () => {
+    const a1 = makePhoto({ id: 'a1', storageUrl: 'https://s/a.jpg' });
+    const a2 = makePhoto({ id: 'a2', storageUrl: 'https://s/a.jpg' }); // same effective URL
+    const merged = mergeWoPhotos([a1], [a2]);
+    expect(merged).toHaveLength(1);
+  });
+
+  it('handles empty arrays', () => {
+    expect(mergeWoPhotos([], [])).toEqual([]);
+  });
+});
+
 describe('mergeRemote, photo preservation', () => {
-  it('keeps local photos when local has more than remote (stale pull race)', () => {
-    const localPhotos  = ['photo1.jpg', 'photo2.jpg', 'photo3.jpg'];
-    const remotePhotos = ['photo1.jpg'];
+  it('a contractor-deleted uploaded photo does not resurrect from a stale local set', () => {
+    const a = makePhoto({ id: 'a', storageUrl: 'https://s/a.jpg' });
+    const b = makePhoto({ id: 'b', storageUrl: 'https://s/b.jpg' });
+    // Local still holds the older 2-photo set; remote is NEWER and dropped b.
+    const local  = makeState({ jobs: [makeJob({ id: 'j1', updatedAt: '2024-01-01T00:00:00Z', woPhotos: [a, b] })] });
+    const remote = { jobs:          [makeJob({ id: 'j1', updatedAt: '2024-06-01T00:00:00Z', woPhotos: [a] })] };
 
-    const local  = makeState({ jobs: [makeJob({ id: 'j1', woPhotos: localPhotos  as any })] });
-    const remote = { jobs:          [makeJob({ id: 'j1', woPhotos: remotePhotos as any })] };
-
-    const result = mergeRemote(local, remote);
-    const job = result.jobs.find(j => j.id === 'j1');
-    expect(job?.woPhotos).toEqual(localPhotos);
+    const job = mergeRemote(local, remote).jobs.find(j => j.id === 'j1');
+    expect(job?.woPhotos?.map(p => p.id)).toEqual(['a']);
   });
 
-  it('uses remote photos when remote has more (another device uploaded)', () => {
-    const localPhotos  = ['photo1.jpg'];
-    const remotePhotos = ['photo1.jpg', 'photo2.jpg', 'photo3.jpg'];
+  it('keeps a local in-flight photo when a pull races an upload', () => {
+    const a = makePhoto({ id: 'a', storageUrl: 'https://s/a.jpg' });
+    const fresh = makePhoto({ id: 'fresh', dataUrl: 'data:image/jpeg;base64,xxx' });
+    const local  = makeState({ jobs: [makeJob({ id: 'j1', updatedAt: '2024-01-01T00:00:00Z', woPhotos: [a, fresh] })] });
+    const remote = { jobs:          [makeJob({ id: 'j1', updatedAt: '2024-06-01T00:00:00Z', woPhotos: [a] })] };
 
-    const local  = makeState({ jobs: [makeJob({ id: 'j1', woPhotos: localPhotos  as any })] });
-    const remote = { jobs:          [makeJob({ id: 'j1', woPhotos: remotePhotos as any })] };
-
-    const result = mergeRemote(local, remote);
-    const job = result.jobs.find(j => j.id === 'j1');
-    expect(job?.woPhotos).toEqual(remotePhotos);
-  });
-
-  it('treats undefined woPhotos as empty array for comparison', () => {
-    const local  = makeState({ jobs: [makeJob({ id: 'j1' })] });
-    const remote = { jobs:          [makeJob({ id: 'j1', woPhotos: ['p.jpg'] as any })] };
-
-    const result = mergeRemote(local, remote);
-    const job = result.jobs.find(j => j.id === 'j1');
-    // Remote has 1 photo, local has 0 (undefined), remote should win
-    expect(job?.woPhotos).toEqual(['p.jpg']);
+    const job = mergeRemote(local, remote).jobs.find(j => j.id === 'j1');
+    expect(job?.woPhotos?.map(p => p.id).sort()).toEqual(['a', 'fresh']);
   });
 });
 

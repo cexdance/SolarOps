@@ -36,14 +36,15 @@ import { canSeeFinancials, isFinancialView } from './lib/access';
 import { syncFromDB } from './lib/db';
 import { loadData, saveData } from './lib/dataStore';
 import { migrateWoPhotos } from './lib/photoStore';
-import { pickupJobsForContractor, toContractorJobView } from './lib/woHelpers';
+import { pickupJobsForContractor, toContractorJobView, serviceOrderNo } from './lib/woHelpers';
+import { fireMentionNotifications } from './components/ui/MentionTextarea';
 import { logChange, logJobChange, flushChangeLog } from './lib/changeLog';
 import { autoArchiveCompletedJobs } from './lib/jobService';
 import { fetchMyNotifications, markNotificationReadRemote, markAllNotificationsReadRemote, startNotificationPolling, stopNotificationPolling, subscribeToNotifications, unsubscribeFromNotifications } from './lib/notifications';
 import { processBillingTimers } from './lib/billingService';
 import { loadContractors, saveContractors, loadServiceRates, saveServiceRates, loadContractorJobs, saveContractorJobs, initializeContractorData, findInviteByToken } from './lib/contractorStore';
 import { ContractorInvite as ContractorInviteType } from './types/contractor';
-import { AppState, Job, Customer, User, AppNotification, SolarEdgeExtraSite, RMAEntry, WOStatus, JobStatus } from './types';
+import { AppState, Job, Customer, User, AppNotification, SolarEdgeExtraSite, RMAEntry, WOStatus, JobStatus, Activity } from './types';
 import { FL_SITES } from './lib/solarEdgeSites';
 import { isFloridaSite, isAllowedCustomer } from './lib/solarEdgeSiteFilter';
 import { getDeletedCustomerIds, markJobDeleted } from './lib/dataStore';
@@ -1367,6 +1368,85 @@ function App() {
     }
   };
 
+  // Contractor proposes their own service date/time from the portal. This writes
+  // the schedule onto the Service Order, drops a visible @mention note into the
+  // SO team conversation, and pings the office (Cruz + Cesar) so they can contact
+  // the client to confirm. (Client contact is manual for now; to be automated.)
+  const handleContractorProposeSchedule = (cjob: ContractorJob, dateISO: string, time: string) => {
+    const adminJob = data.jobs.find(j => j.id === (cjob.sourceJobId ?? cjob.id));
+    if (!adminJob || !dateISO) return;
+
+    // Office recipients = Cesar + Cruz (cruxfernndez). A real contractor session
+    // cannot load the staff user list (/api/users is staff-only), so resolve from
+    // data.users when present but ALWAYS include the known fallback IDs so the bell
+    // still fires from a contractor device. Cesar = user-1 (Daniel=user-3,
+    // Anthony=user-4 per billingService ADMIN_USER_IDS).
+    const OFFICE_FALLBACK_IDS = ['user-1']; // Cesar Jurado
+    const matchedIds = data.users
+      .filter(u => /\bcesar\b|\bcruz\b|cruxfernndez/i.test(`${u.name} ${u.username ?? ''}`))
+      .map(u => u.id);
+    const recipientIds = Array.from(new Set([...matchedIds, ...OFFICE_FALLBACK_IDS]));
+    const contractorName = currentContractor?.contactName || currentContractor?.businessName || 'The contractor';
+    const when = `${dateISO}${time ? ` at ${time}` : ''}`;
+    const nowIso = new Date().toISOString();
+
+    const note: Activity = {
+      id: `activity-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      type: 'note_added',
+      description: `${contractorName} proposed servicing this call on ${when}. @cesar @cruz please contact the client to confirm.`,
+      timestamp: nowIso,
+      userId: cjob.contractorId,
+      userName: contractorName,
+      mentions: recipientIds,
+    };
+
+    // Synced in-app bell notification (AppNotification) for each office recipient -
+    // this is the same path the contractor-completed alert uses, so it reaches the
+    // staff bell across devices without depending on the staff user list.
+    const newNotifs: AppNotification[] = recipientIds.map(uid => ({
+      id: `notif-${Date.now()}-${uid}-${Math.random().toString(36).slice(2, 6)}`,
+      userId: uid,
+      type: 'mention' as const,
+      title: 'Contractor proposed a service date',
+      message: `${contractorName} proposed servicing ${serviceOrderNo(adminJob.woNumber)} ${cjob.customerName} on ${when}. Please contact the client to confirm.`,
+      relatedJobId: adminJob.id,
+      relatedContractorId: cjob.contractorId,
+      read: false,
+      createdAt: nowIso,
+    }));
+
+    const updated: Job = {
+      ...adminJob,
+      scheduledDate: dateISO,
+      scheduledTime: time,
+      contractorScheduleProposedAt: nowIso,
+      updatedAt: nowIso,
+      activityHistory: [...(adminJob.activityHistory ?? []), note],
+    };
+
+    setData(prev => {
+      const next = {
+        ...prev,
+        jobs: prev.jobs.map(j => (j.id === updated.id ? updated : j)),
+        notifications: [...(prev.notifications || []), ...newNotifs],
+      };
+      saveData(next);
+      return next;
+    });
+    logChange('job.contractor_schedule_proposed', 'job', updated.id,
+      { scheduledDate: dateISO, scheduledTime: time, recipients: recipientIds }, currentContractor?.contactName ?? cjob.contractorId);
+
+    // Best-effort: also add to the staff @mention inbox / fire /api/notify (prod).
+    void fireMentionNotifications({
+      mentionedUserIds: recipientIds,
+      notifierName: contractorName,
+      context: `${serviceOrderNo(adminJob.woNumber)} ${cjob.customerName}`,
+      contextId: adminJob.id,
+      contextType: 'workOrder',
+      message: `${contractorName} proposed servicing ${cjob.customerName} on ${when}. Please contact the client to confirm.`,
+    }).catch(e => console.error('[schedule] mention notify failed', e));
+  };
+
   // Handlers
   const handleCreateJob = (job: Partial<Job>): Job => {
     const newJob: Job = {
@@ -2384,6 +2464,7 @@ function App() {
             setCurrentContractor(updated);
           }}
           onSync={isImpersonating ? undefined : syncNow}
+          onProposeSchedule={isImpersonating ? undefined : handleContractorProposeSchedule}
         />
       </Suspense>
     );
@@ -2804,6 +2885,8 @@ function App() {
                 setContractors(prev => prev.map(c => c.id === updated.id ? updated : c));
                 setLinkedContractor(updated);
               }}
+              onSync={syncNow}
+              onProposeSchedule={handleContractorProposeSchedule}
             />
           );
         }

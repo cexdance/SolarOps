@@ -1,6 +1,6 @@
 import { useCallback, useEffect, type MutableRefObject } from 'react';
 import { drainOutbox, resetOutboxAttempts } from '../lib/outbox';
-import { pullAndMerge, subscribeToChanges, mergeCustomerPair, mergeJobPair } from '../lib/syncEngine';
+import { pullAndMerge, subscribeToChanges, mergeCustomerPair, mergeJobPair, mergeWoPhotos } from '../lib/syncEngine';
 import { loadContractors, loadServiceRates, loadContractorJobs } from '../lib/contractorStore';
 import type { AppState, Customer, Job } from '../types';
 import type { Contractor, ContractorJob } from '../types/contractor';
@@ -41,19 +41,17 @@ export function useSyncEngine({
             j.id !== prev.jobs[i]?.id || JSON.stringify(j) !== JSON.stringify(prev.jobs[i])
           );
         if (!customersChanged && !jobsChanged) return prev;
-        // Merge jobs defensively: if remote has a job without woPhotos but local has them,
-        // keep the local photos. This prevents a stale Supabase pull (race with an in-flight
-        // pushToSupabase) from wiping photos that are already in React state.
+        // Merge jobs defensively. `merged.jobs` is the LWW-resolved remote set, so
+        // it is authoritative for which photos exist (a delete on the newer side
+        // must stick), but a local photo still uploading (no storageUrl) is kept so
+        // a pull racing an in-flight upload cannot wipe it. See mergeWoPhotos (M1).
         const safeMergedJobs = merged.jobs
           ? merged.jobs.map((remoteJ: Job) => {
               const localJ = prev.jobs.find(j => j.id === remoteJ.id);
               if (!localJ) return remoteJ;
-              // Prefer whichever has more photos (local upload may be ahead of remote)
-              const remotePhotos = remoteJ.woPhotos ?? [];
-              const localPhotos  = localJ.woPhotos  ?? [];
               return {
                 ...remoteJ,
-                woPhotos: remotePhotos.length >= localPhotos.length ? remotePhotos : localPhotos,
+                woPhotos: mergeWoPhotos(remoteJ.woPhotos ?? [], localJ.woPhotos ?? []),
               };
             })
           : prev.jobs;

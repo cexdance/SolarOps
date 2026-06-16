@@ -24,7 +24,7 @@
 import { supabase } from './supabase';
 import { markPushPending, clearPendingPush, isRowPoisoned, incRowFailure, clearRowPoison } from './outbox';
 import { isAllowedCustomer } from './solarEdgeSiteFilter';
-import type { AppState, Customer, Job } from '../types';
+import type { AppState, Customer, Job, WOPhoto } from '../types';
 import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 
 // ── Key constants ─────────────────────────────────────────────────────────────
@@ -768,15 +768,37 @@ export function mergeCustomerPair(winner: Customer, loser: Customer): Customer {
   };
 }
 
-/** Merge a job pair: LWW winner + union of activities, photo-count heuristic. */
+/**
+ * Merge two woPhoto lists so DELETIONS stick without dropping IN-FLIGHT uploads.
+ *
+ * The LWW `winner` is authoritative for what photos exist: if a photo the loser
+ * still has is absent from the (newer) winner, it was deleted and must NOT come
+ * back. The one exception is a loser photo that has not finished uploading yet
+ * (no `storageUrl`) - that is a fresh local capture the winner simply has not
+ * seen, so we keep it. This replaces the old "keep whichever side has more
+ * photos" count heuristic, which resurrected a contractor-deleted photo whenever
+ * another device still held the older, larger set (M1).
+ */
+export function mergeWoPhotos(winnerPhotos: WOPhoto[], loserPhotos: WOPhoto[]): WOPhoto[] {
+  const eff = (p: WOPhoto) => p.storageUrl || p.dataUrl || p.id;
+  const have = new Set(winnerPhotos.map(eff));
+  const merged = [...winnerPhotos];
+  for (const p of loserPhotos) {
+    if (have.has(eff(p))) continue;
+    // Loser-only photo: keep it ONLY if it is not yet uploaded (still in flight).
+    // An uploaded photo (has storageUrl) absent from the newer winner = deleted.
+    if (!p.storageUrl) merged.push(p);
+  }
+  return merged;
+}
+
+/** Merge a job pair: LWW winner + union of activities, upload-aware photo merge. */
 export function mergeJobPair(winner: Job, loser: Job): Job {
-  const winnerPhotos = winner.woPhotos ?? [];
-  const loserPhotos  = loser.woPhotos  ?? [];
   return {
     ...winner,
     // SO comments / team conversation feed, appended chronologically.
     activityHistory: unionById(winner.activityHistory, loser.activityHistory, 'asc'),
-    woPhotos: winnerPhotos.length >= loserPhotos.length ? winnerPhotos : loserPhotos,
+    woPhotos: mergeWoPhotos(winner.woPhotos ?? [], loser.woPhotos ?? []),
   };
 }
 

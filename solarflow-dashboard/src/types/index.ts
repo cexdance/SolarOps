@@ -226,6 +226,9 @@ export interface Job {
   // order to its prior place in the pipeline.
   onHold?: boolean;
   onHoldAt?: string;
+  // Set when a contractor proposes their own service date/time from the portal
+  // (which pings the office to confirm with the client). Display/audit only.
+  contractorScheduleProposedAt?: string;
   woNumber?: string;                        // e.g. WO-2603-00042
   solarEdgeSiteId?: string;
   solarEdgeClientId?: string;               // US-15XXX

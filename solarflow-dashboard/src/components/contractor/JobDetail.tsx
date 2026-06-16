@@ -8,7 +8,7 @@ import {
   Trash2, Wrench, Zap, DollarSign,
   Star, Navigation, ShieldAlert, Image as ImageIcon, Check,
   Cloud, CloudRain, Sun, Wind, Sparkles, ChevronDown, ChevronUp,
-  HardHat,
+  HardHat, CalendarClock, Send,
 } from 'lucide-react';
 import { ContractorJob, ServiceStatus, PhotoCategory, JobPart } from '../../types/contractor';
 import {
@@ -28,6 +28,7 @@ interface JobDetailProps {
   onUpdateJob: (updatedJob: ContractorJob) => void;
   onXpEarned?: () => void;
   onUpsellLead?: (job: ContractorJob, notes: string) => void;
+  onProposeSchedule?: (job: ContractorJob, dateISO: string, time: string) => void;
   currentWeather?: string;
 }
 
@@ -191,8 +192,12 @@ const AfterPhotoSheet: React.FC<{
 };
 
 // ─── Main Component ────────────────────────────────────────────────────────────
-export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack, onUpdateJob, onXpEarned, onUpsellLead, currentWeather }) => {
+export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack, onUpdateJob, onXpEarned, onUpsellLead, onProposeSchedule, currentWeather }) => {
   const isCompleted = job.status === 'completed';
+  // Contractor-proposed service date/time (pings the office to confirm w/ client).
+  const [proposeDate, setProposeDate] = useState(job.scheduledDate ?? '');
+  const [proposeTime, setProposeTime] = useState(job.scheduledTime ?? '');
+  const [proposeSent, setProposeSent] = useState(false);
   const [phase, setPhase] = useState<CallPhase>(
     isCompleted ? 'completed' : (job.status === 'in_progress' || job.status === 'documentation') ? 'active' : 'pre_start'
   );
@@ -795,6 +800,52 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
         {/* Service Order review: links the WO to its SO, scope of work, dates,
             status, location, photos and notes in one read-only place. */}
         <ServiceOrderCard job={job} />
+
+        {/* ── Propose service date/time (pings the office to confirm w/ client) ── */}
+        {onProposeSchedule && !isCompleted && (
+          <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <CalendarClock className="w-4 h-4 text-orange-500" />
+              <h2 className="font-bold text-slate-900 text-sm">Propose service date</h2>
+            </div>
+            <p className="text-xs text-slate-500 -mt-1">
+              Set when you plan to service this call. The office (Cruz &amp; Cesar) is notified to confirm with the client.
+            </p>
+            <div className="flex gap-2">
+              <label className="flex-1">
+                <span className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Date</span>
+                <input
+                  type="date"
+                  value={proposeDate}
+                  onChange={e => { setProposeDate(e.target.value); setProposeSent(false); }}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                />
+              </label>
+              <label className="flex-1">
+                <span className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Est. time</span>
+                <input
+                  type="time"
+                  value={proposeTime}
+                  onChange={e => { setProposeTime(e.target.value); setProposeSent(false); }}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                />
+              </label>
+            </div>
+            <button
+              onClick={() => {
+                if (!proposeDate) return;
+                onProposeSchedule(job, proposeDate, proposeTime);
+                setProposeSent(true);
+              }}
+              disabled={!proposeDate || proposeSent}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold text-white bg-orange-500 hover:bg-orange-600 disabled:bg-emerald-600 disabled:cursor-default transition-colors"
+            >
+              {proposeSent
+                ? <><Check className="w-4 h-4" /> Office notified</>
+                : <><Send className="w-4 h-4" /> Notify office</>}
+            </button>
+          </div>
+        )}
 
         {/* ── PRE-START: Customer info + Start Call CTA ────────────────────── */}
         {phase === 'pre_start' && (

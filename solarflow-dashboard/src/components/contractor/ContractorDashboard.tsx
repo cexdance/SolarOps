@@ -32,6 +32,8 @@ interface ContractorDashboardProps {
   onUpdateContractor?: (c: Contractor) => void;
   /** Pull the latest data from the server (no page reload). */
   onSync?: () => Promise<void> | void;
+  /** Contractor proposes a service date/time -> pings the office to confirm. */
+  onProposeSchedule?: (job: ContractorJob, dateISO: string, time: string) => void;
 }
 
 // ─── Priority badge ────────────────────────────────────────────────────────────
@@ -54,6 +56,7 @@ export const ContractorDashboard: React.FC<ContractorDashboardProps> = ({
   onUpdateJob,
   onUpdateContractor,
   onSync,
+  onProposeSchedule,
 }) => {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [view, setView]                 = useState<'list' | 'board' | 'calendar' | 'map'>('list');
@@ -180,6 +183,7 @@ export const ContractorDashboard: React.FC<ContractorDashboardProps> = ({
         onUpdateJob={(updated) => { onUpdateJob(updated); setOpenJob(updated); }}
         onXpEarned={() => setXpData(loadXpData(contractorId))}
         onUpsellLead={handleUpsellLead}
+        onProposeSchedule={onProposeSchedule}
         currentWeather="sunny"
       />
     );
