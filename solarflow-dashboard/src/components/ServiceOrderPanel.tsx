@@ -1367,6 +1367,19 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                 </span>
               )}
               <WOStatusBadge status={woStatus} />
+              {seSiteId && (
+                <a
+                  href={`https://monitoring.solaredge.com/solaredge-web/p/site/${seSiteId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="Open SolarEdge monitoring"
+                  className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-500/20 text-blue-300 hover:bg-blue-500/30 hover:text-blue-200 text-xs font-medium rounded transition-colors"
+                >
+                  <Zap className="w-3 h-3" />
+                  Monitoring
+                  <ExternalLink className="w-3 h-3 opacity-70" />
+                </a>
+              )}
             </div>
             {onViewCustomer && siteId ? (
               <button
@@ -1393,27 +1406,13 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                 <ExternalLink className="w-3 h-3 shrink-0 opacity-0 group-hover:opacity-60 transition-opacity" />
               </a>
             )}
-            {(seSiteId || serviceType) && (
+            {/* Monitoring badge moved up into the top header row (next to status). */}
+            {serviceType && (
               <div className="flex items-center gap-2 flex-wrap mt-2">
-                {seSiteId && (
-                  <a
-                    href={`https://monitoring.solaredge.com/solaredge-web/p/site/${seSiteId}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    title="Open SolarEdge monitoring"
-                    className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-500/20 text-blue-300 hover:bg-blue-500/30 hover:text-blue-200 text-xs font-medium rounded transition-colors"
-                  >
-                    <Zap className="w-3 h-3" />
-                    Monitoring
-                    <ExternalLink className="w-3 h-3 opacity-70" />
-                  </a>
-                )}
-                {serviceType && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-700 text-slate-200 text-xs font-medium rounded">
-                    <Wrench className="w-3 h-3 text-slate-400" />
-                    {serviceType}
-                  </span>
-                )}
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-700 text-slate-200 text-xs font-medium rounded">
+                  <Wrench className="w-3 h-3 text-slate-400" />
+                  {serviceType}
+                </span>
               </div>
             )}
           </div>
