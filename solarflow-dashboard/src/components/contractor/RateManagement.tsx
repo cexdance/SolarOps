@@ -118,15 +118,6 @@ export const RateManagement: React.FC<RateManagementProps> = ({ rates, onSaveRat
     onSaveRates(updated);
   };
 
-  // Persist the No-Layout surcharge percent for a single rate without entering
-  // full edit mode (same lightweight pattern as the active toggle).
-  const handleUpdateNoLayoutPct = (id: string, pct: number) => {
-    const updated = rates.map((r) =>
-      r.id === id ? { ...r, noLayoutSurchargePct: pct > 0 ? pct : undefined } : r
-    );
-    onSaveRates(updated);
-  };
-
   return (
     <div className="p-4 md:p-6 pb-24 md:pb-6">
       {/* Header */}
@@ -441,27 +432,6 @@ export const RateManagement: React.FC<RateManagementProps> = ({ rates, onSaveRat
                               <div className="flex justify-between">
                                 <span className="text-slate-500">Recurring:</span>
                                 <span className="font-medium text-green-600">{formatMoney(rate.clientRateRecurring || 0, { decimals: 0 })}</span>
-                              </div>
-                              <div className="flex justify-between items-center border-t pt-1">
-                                <span className="text-slate-500 flex items-center gap-1">
-                                  No Layout
-                                  <span className="inline-flex items-center">
-                                    <span className="text-slate-400">+</span>
-                                    <input
-                                      type="number"
-                                      min={0}
-                                      value={rate.noLayoutSurchargePct ?? 0}
-                                      onChange={(e) => handleUpdateNoLayoutPct(rate.id, parseFloat(e.target.value) || 0)}
-                                      className="w-12 px-1 py-0.5 mx-0.5 text-xs border border-slate-200 rounded text-right"
-                                    />
-                                    <span className="text-slate-400">%</span>
-                                  </span>
-                                </span>
-                                <span className="font-medium text-amber-600">
-                                  {rate.noLayoutSurchargePct
-                                    ? formatMoney((rate.clientRateStandard || 0) * (1 + rate.noLayoutSurchargePct / 100), { decimals: 0 })
-                                    : '-'}
-                                </span>
                               </div>
                             </div>
                           </div>

@@ -418,11 +418,12 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
     critterPanels: 20,
     emergencyDispatch: false,
     detachedArray: false,
+    noLayout: false,
   });
 
   const optimizerTotal = useMemo(() => {
     const { optimizerCount, steepRoof, buildingHeight3Plus, specialtyRoof,
-            critterGuard, critterPanels, emergencyDispatch } = optCalc;
+            critterGuard, critterPanels, emergencyDispatch, noLayout } = optCalc;
     // Base labour
     const base = optimizerCount <= 4
       ? 450
@@ -433,6 +434,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
     if (buildingHeight3Plus) surcharge += 0.15;
     if (specialtyRoof > 0) surcharge += specialtyRoof / 100;
     if (emergencyDispatch) surcharge += 0.25;
+    if (noLayout) surcharge += 0.15;
     const labour = Math.round(base * surcharge);
     // Critter guard
     const critter = critterGuard
@@ -444,7 +446,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
   const applyOptimizerCalc = useCallback(() => {
     const { critter, surcharge, base } = optimizerTotal;
     const { optimizerCount, steepRoof, buildingHeight3Plus, specialtyRoof,
-            emergencyDispatch, critterGuard, critterPanels, detachedArray } = optCalc;
+            emergencyDispatch, critterGuard, critterPanels, detachedArray, noLayout } = optCalc;
     const surchargePct = Math.round((surcharge - 1) * 100);
     const addItems: WOLineItem[] = [];
 
@@ -461,6 +463,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
         buildingHeight3Plus && 'Height >3 Stories +15%',
         specialtyRoof > 0 && `Specialty Roof +${specialtyRoof}%`,
         emergencyDispatch && 'Emergency Dispatch +25%',
+        noLayout && 'No Layout +15%',
       ].filter(Boolean).join(' · ');
       const surchargeAmt = Math.round(base * (surcharge - 1));
       addItems.push({ id: `opt-sur-${Date.now()}`, type: 'labor', description: `Labor Surcharge +${surchargePct}% (${flags})`, quantity: 1, unitCost: surchargeAmt, totalCost: surchargeAmt });
@@ -2129,6 +2132,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                       { key: 'steepRoof', label: 'Steep Roof +20%' },
                       { key: 'buildingHeight3Plus', label: '>3 Stories +15%' },
                       { key: 'emergencyDispatch', label: 'Emergency Dispatch +25%' },
+                      { key: 'noLayout', label: 'No Layout +15%' },
                       { key: 'critterGuard', label: 'Critter Guard' },
                       { key: 'detachedArray', label: 'Detached Array (Custom)' },
                     ] as { key: keyof typeof optCalc; label: string }[]).map(({ key, label }) => (

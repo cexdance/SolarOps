@@ -209,10 +209,6 @@ export interface ServiceRate {
   // SolarEdge compensation (future feature)
   seCompensation?: number; // SE Compensation
 
-  // No-layout surcharge: percent added to the client rate when the site has no
-  // panel layout on file (extra field mapping work). e.g. 15 = +15%.
-  noLayoutSurchargePct?: number;
-
   // Internal service account expense (billed internally, not to client)
   isServiceAccount?: boolean;
 

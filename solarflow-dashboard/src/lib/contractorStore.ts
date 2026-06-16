@@ -134,7 +134,6 @@ const defaultServiceRates: ServiceRate[] = [
     powercareLaborCost: 120,
     powercareClientRate: 180,
     seCompensation: 125,
-    noLayoutSurchargePct: 15,
     active: true
   },
   {
