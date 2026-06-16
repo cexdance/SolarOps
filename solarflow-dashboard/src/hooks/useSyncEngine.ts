@@ -1,6 +1,6 @@
 import { useCallback, useEffect, type MutableRefObject } from 'react';
 import { drainOutbox, resetOutboxAttempts } from '../lib/outbox';
-import { pullAndMerge, subscribeToChanges, mergeCustomerPair, mergeJobPair, mergeWoPhotos } from '../lib/syncEngine';
+import { pullAndMerge, subscribeToChanges, mergeCustomerPair, mergeJobPair, mergeWoPhotos, resetSyncCursor } from '../lib/syncEngine';
 import { loadContractors, loadServiceRates, loadContractorJobs } from '../lib/contractorStore';
 import type { AppState, Customer, Job } from '../types';
 import type { Contractor, ContractorJob } from '../types/contractor';
@@ -19,7 +19,7 @@ export function useSyncEngine({
   setServiceRates,
   setContractorJobs,
   skipContractorPersist,
-}: SyncEngineOptions): { syncNow: () => Promise<void> } {
+}: SyncEngineOptions): { syncNow: () => Promise<void>; deepSync: () => Promise<void> } {
 
   // Drain the outbox then pull + merge remote. Exposed as `syncNow` so a manual
   // "Sync / update" control (e.g. the contractor header button) can refresh the
@@ -178,7 +178,14 @@ export function useSyncEngine({
     return () => window.removeEventListener('solarflow-remote-update', onRemoteUpdate as EventListener);
   }, []);
 
-  return { syncNow };
+  // deepSync clears the incremental cursor first, so the manual refresh button does a
+  // FULL reconcile and a user missing data can always force convergence on demand.
+  const deepSync = useCallback(async () => {
+    resetSyncCursor();
+    await syncNow();
+  }, [syncNow]);
+
+  return { syncNow, deepSync };
 }
 
 /**

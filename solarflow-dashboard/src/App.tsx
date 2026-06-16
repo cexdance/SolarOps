@@ -790,7 +790,7 @@ function App() {
   // ── Sync: poll + realtime + remote-update handler (extracted to hook) ────
   // skipContractorPersist guards against re-pushing data we just pulled from remote
   const skipContractorPersist = useRef(false);
-  const { syncNow } = useSyncEngine({ setData, setContractors, setServiceRates, setContractorJobs, skipContractorPersist });
+  const { deepSync } = useSyncEngine({ setData, setContractors, setServiceRates, setContractorJobs, skipContractorPersist });
 
   // ── Version poll (extracted to hook) ─────────────────────────────────────
   const { state: versionState, remoteVersion, checkNow: checkForUpdate } = useVersionPoll();
@@ -2490,7 +2490,7 @@ function App() {
             setContractors(prev => prev.map(c => c.id === updated.id ? updated : c));
             setCurrentContractor(updated);
           }}
-          onSync={isImpersonating ? undefined : syncNow}
+          onSync={isImpersonating ? undefined : deepSync}
           onProposeSchedule={isImpersonating ? undefined : handleContractorProposeSchedule}
         />
       </Suspense>
@@ -2912,7 +2912,7 @@ function App() {
                 setContractors(prev => prev.map(c => c.id === updated.id ? updated : c));
                 setLinkedContractor(updated);
               }}
-              onSync={syncNow}
+              onSync={deepSync}
               onProposeSchedule={handleContractorProposeSchedule}
             />
           );

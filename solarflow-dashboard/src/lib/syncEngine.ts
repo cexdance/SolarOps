@@ -77,6 +77,16 @@ function setLastSync(ts: string): void {
   localStorage.setItem(LAST_SYNC_KEY, ts);
 }
 
+/**
+ * Clear the incremental cursor so the NEXT pull is a full reconcile (fetches every
+ * record, not just rows changed since the cursor). Used by the manual "refresh"
+ * button so a user who is missing data can always force convergence on demand,
+ * independent of cursor drift.
+ */
+export function resetSyncCursor(): void {
+  try { localStorage.removeItem(LAST_SYNC_KEY); } catch { /* ignore */ }
+}
+
 // ── Tombstones ─────────────────────────────────────────────────────────────
 
 function getDeletedCustomerIds(): Set<string> {
