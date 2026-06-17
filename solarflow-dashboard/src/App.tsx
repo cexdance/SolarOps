@@ -1905,12 +1905,28 @@ function App() {
         resolvedFields,
       }, data.currentUser?.email ?? 'unknown');
     }
+    // Tombstone the secondary so sync drops its per-record `customer:{id}` row
+    // and never resurrects it on the next pull. Without this, the merged-away
+    // duplicate re-hydrates from Supabase and the merge "doesn't stick".
+    try {
+      const key = 'solarflow_deleted_customer_ids';
+      const deleted: string[] = JSON.parse(localStorage.getItem(key) || '[]');
+      if (!deleted.includes(secondaryId)) {
+        deleted.push(secondaryId);
+        localStorage.setItem(key, JSON.stringify(deleted));
+      }
+    } catch (e) { console.error('[App] failed to write merge tombstone', e); }
+
     setData(prev => {
       const primary = prev.customers.find(c => c.id === primaryId);
       const secondary = prev.customers.find(c => c.id === secondaryId);
       if (!primary || !secondary) return prev;
       const merged: Customer = {
         ...primary,
+        // Carry the secondary's name when the primary has none (e.g. a SolarEdge
+        // site record with a blank name absorbing a named lead).
+        firstName: primary.firstName?.trim() ? primary.firstName : secondary.firstName,
+        lastName:  primary.lastName?.trim()  ? primary.lastName  : secondary.lastName,
         email: resolvedFields?.email ?? (primary.email || secondary.email),
         phone: resolvedFields?.phone ?? (primary.phone || secondary.phone),
         address: resolvedFields?.address ?? (primary.address || secondary.address),
@@ -1923,12 +1939,18 @@ function App() {
         systemType: resolvedFields?.systemType ?? (primary.systemType || secondary.systemType),
         referralSource: resolvedFields?.referralSource ?? (primary.referralSource || secondary.referralSource),
         activityHistory: [...(primary.activityHistory || []), ...(secondary.activityHistory || [])],
+        // Stamp the LWW key so the merged record wins the next cross-device merge.
+        updatedAt: new Date().toISOString(),
       };
-      return {
+      const next = {
         ...prev,
         customers: prev.customers.filter(c => c.id !== secondaryId).map(c => c.id === primaryId ? merged : c),
         jobs: prev.jobs.map(j => j.customerId === secondaryId ? { ...j, customerId: primaryId } : j),
       };
+      // Persist - the previous version only updated React state, so the merge was
+      // lost on reload and never pushed to Supabase.
+      saveData(next);
+      return next;
     });
   };
 
