@@ -22,6 +22,8 @@ interface LeadLobbyProps {
   onAddCustomer?: (customer: Partial<Customer>) => void;
   /** Create a standalone RMA (no work order) from a converted PowerCare lead. */
   onCreateStandaloneRma?: (entry: RMAEntry) => void;
+  /** Navigate to a customer card (used when clicking a converted lead). */
+  onViewCustomer?: (customerId: string) => void;
 }
 
 const salesReps = [
@@ -215,7 +217,7 @@ function parseSolarEdgeEmail(text: string): Partial<AddFormData> & { addressNote
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserRole, customers = [], onAddCustomer, onCreateStandaloneRma }) => {
+export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserRole, customers = [], onAddCustomer, onCreateStandaloneRma, onViewCustomer }) => {
   const [crmData, setCrmData] = useState<CRMData>(() => loadCRMData());
   const [syncState, setSyncState] = useState<'idle' | 'syncing' | 'ok' | 'error'>('idle');
   const [viewMode, setViewMode] = useState<'list' | 'kanban'>('kanban');
@@ -755,8 +757,9 @@ export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserRole, customers
     const trimmedId = siteId.trim() || undefined;
     const shipmentNote = buildShipmentNote(lead);
     const notes = [lead.notes || '', shipmentNote].filter(Boolean).join('\n\n');
+    const newCustomerId = `cust-${Date.now()}`;
     const newCustomer: Partial<Customer> = {
-      id:              `cust-${Date.now()}`,
+      id:              newCustomerId,
       name:            `${lead.firstName} ${lead.lastName}`.trim(),
       firstName:       lead.firstName,
       lastName:        lead.lastName,
@@ -806,11 +809,19 @@ export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserRole, customers
       });
     }
 
-    // Mark lead closed_won (removes from board)
+    // Mark lead closed_won (removes from board) AND store conversion link
     save({
       ...crmData,
       leads: crmData.leads.map(l =>
-        l.id === lead.id ? { ...l, status: 'closed_won', updatedAt: now } : l
+        l.id === lead.id
+          ? {
+              ...l,
+              status: 'closed_won',
+              updatedAt: now,
+              convertedCustomerId: newCustomerId,
+              clientId: trimmedId,
+            }
+          : l
       ),
     });
     setSelectedLeadId(null);
@@ -927,11 +938,20 @@ export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserRole, customers
   const LeadCard: React.FC<{ lead: Lead; kanban?: boolean }> = ({ lead, kanban }) => {
     const col = getLeadCol(lead);
     const barColor = colBarColor[col] ?? 'bg-slate-300';
+    const isConverted = lead.status === 'closed_won';
+    const handleClick = (e: React.MouseEvent) => {
+      if (isConverted && lead.convertedCustomerId && onViewCustomer) {
+        e.stopPropagation();
+        onViewCustomer(lead.convertedCustomerId);
+      } else {
+        setSelectedLeadId(lead.id);
+      }
+    };
     return (
       <div
         draggable={kanban}
         onDragStart={kanban ? () => { draggedId.current = lead.id; } : undefined}
-        onClick={() => setSelectedLeadId(lead.id)}
+        onClick={handleClick}
         className={`relative overflow-hidden bg-white rounded-xl border ${
           kanban
             ? 'mb-2 cursor-grab active:cursor-grabbing hover:shadow-md p-3 pt-4'
@@ -939,7 +959,7 @@ export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserRole, customers
         } transition-all select-none ${
           selectedLeadId === lead.id
             ? kanban ? 'border-amber-400 ring-2 ring-amber-300 shadow-sm' : 'bg-orange-50 border-l-4 border-l-orange-500'
-            : 'border-slate-200 hover:border-slate-300'
+            : isConverted ? 'border-emerald-300 bg-emerald-50/30 hover:border-emerald-400 cursor-pointer' : 'border-slate-200 hover:border-slate-300'
         }`}
       >
         {kanban && <div className={`absolute top-0 left-0 right-0 h-[3px] ${barColor}`} />}
@@ -956,6 +976,21 @@ export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserRole, customers
         <p className="text-xs text-slate-400 truncate font-mono">{lead.phone}</p>
         {lead.monthlyBill && (
           <p className="text-xs text-emerald-600 font-semibold mt-1">{formatMoney(lead.monthlyBill, { decimals: 0 })}/mo</p>
+        )}
+        {isConverted && lead.clientId && (
+          <div className="mt-1.5 flex items-center gap-2">
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-mono font-medium shrink-0">
+              {lead.clientId}
+            </span>
+            {lead.convertedCustomerId && (
+              <span className="text-[10px] text-emerald-600 hover:underline cursor-pointer flex-shrink-0"
+                onClick={(e) => { e.stopPropagation(); if (onViewCustomer) onViewCustomer(lead.convertedCustomerId!); }}
+                title="Click to view customer card"
+              >
+                View customer →
+              </span>
+            )}
+          </div>
         )}
         {duplicateIndex[lead.id] && (
           <div className="mt-1.5 flex items-center gap-1.5 px-2 py-1 bg-amber-50 border border-amber-200 rounded-lg">

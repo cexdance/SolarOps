@@ -596,6 +596,10 @@ export interface Lead {
   powercareOldSerial?: string;       // failed part serial (inverter/optimizer)
   powercareShippedPart?: string;     // replacement part number shipped
   powercareShippedSerial?: string;   // replacement part serial shipped
+
+  // Conversion tracking
+  convertedCustomerId?: string; // Customer.id this lead was converted to
+  clientId?: string;            // US-1XXXX client number for display
 }
 
 export interface LeadActivity {

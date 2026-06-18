@@ -2662,6 +2662,7 @@ function App() {
             customers={data.customers}
             onAddCustomer={handleCreateCustomer}
             onCreateStandaloneRma={handleCreateStandaloneRma}
+            onViewCustomer={(customerId) => { setSelectedCustomerId(customerId); setCurrentView('customers'); }}
           />
         );
 
