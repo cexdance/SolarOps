@@ -218,6 +218,7 @@ export interface Job {
   description?: string;
   priority?: UrgencyLevel;
   date?: string;
+  clientId?: string; // US-1XXXX format
   // ── Work Order Panel extended fields ──────────────────────────────────
   woStatus?: WOStatus;
   // On Hold is an orthogonal flag, NOT a status value: it parks an order so it

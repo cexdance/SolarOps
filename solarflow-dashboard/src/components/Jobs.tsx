@@ -155,7 +155,14 @@ const JobCard: React.FC<JobCardProps> = ({ job, customer, contractorName, isDrag
   >
     <div className="flex items-start justify-between mb-3">
       <div className="flex-1 min-w-0">
-        <h3 className="font-semibold text-slate-900 truncate">{customer?.name}</h3>
+        <div className="flex items-center gap-2 flex-wrap">
+          <h3 className="font-semibold text-slate-900 truncate">{customer?.name}</h3>
+          {job.clientId && (
+            <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-mono font-medium shrink-0">
+              {job.clientId}
+            </span>
+          )}
+        </div>
         <p className="text-sm text-slate-500 flex items-center gap-1 mt-1 truncate">
           <MapPin className="w-3 h-3 shrink-0" />
           {customer?.address}, {customer?.city}

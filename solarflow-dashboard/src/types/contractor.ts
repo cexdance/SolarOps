@@ -236,6 +236,7 @@ export interface ContractorJob {
   scopeItems?: ScopeItem[]; // scope of work mirrored from the SO for review
   contractorId: string;
   customerId: string;
+  clientId?: string;     // US-1XXXX client number for display
   customerName: string;
   customerPhone: string;
   customerEmail?: string;

@@ -802,9 +802,16 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
               {phase === 'pre_start' ? job.serviceType : phase === 'active' ? 'WORK ORDER IN PROGRESS' : 'COMPLETED'}
             </p>
             <div className="flex items-center gap-2 flex-wrap">
-              <h1 className={`font-bold text-sm truncate ${phase === 'active' ? 'text-white' : 'text-slate-900'}`}>
-                {job.customerName}
-              </h1>
+              <div className="flex items-center gap-2">
+                <h1 className={`font-bold text-sm truncate ${phase === 'active' ? 'text-white' : 'text-slate-900'}`}>
+                  {job.customerName}
+                </h1>
+                {job.clientId && (
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-mono font-medium ${phase === 'active' ? 'bg-orange-900/30 text-orange-200' : 'bg-slate-100 text-slate-600'}`}>
+                    {job.clientId}
+                  </span>
+                )}
+              </div>
               {job.isNewInstall && (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-orange-100 text-orange-700 text-xs font-semibold rounded-full">
                   <HardHat className="w-3 h-3" /> New Install
@@ -898,7 +905,14 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
             {/* Customer card */}
             <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-3">
               <div className="flex items-center justify-between">
-                <h2 className="font-bold text-slate-900">{job.customerName}</h2>
+                <div className="flex items-center gap-2">
+                  <h2 className="font-bold text-slate-900">{job.customerName}</h2>
+                  {job.clientId && (
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-mono font-medium">
+                      {job.clientId}
+                    </span>
+                  )}
+                </div>
                 <span className={`text-xs px-2.5 py-1 rounded-full font-semibold border ${
                   job.status === 'en_route' ? 'bg-sky-50 text-sky-700 border-sky-200' : 'bg-slate-50 text-slate-600 border-slate-200'
                 }`}>

@@ -3,22 +3,21 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { serviceOrderNo } from '../lib/woHelpers';
 import { formatMoney } from '../lib/money';
-import {
-  Crosshair, AlertTriangle, Zap, Wrench, Plus, X, Sun,
+import { Crosshair, AlertTriangle, Zap, Wrench, Plus, X, Sun,
   Clock, MapPin, LayoutGrid, Search, ChevronRight, ChevronUp, ChevronDown,
   TrendingUp, UserCog, ClipboardList, User, Check, Inbox, Pencil,
   Phone, Mail, CheckSquare, Trash2, Calendar, GripVertical, AtSign,
-} from 'lucide-react';
+  RefreshCw } from 'lucide-react';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 import * as _recharts from 'recharts';
 const { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } = _recharts as any;
 import { FL_SITES, SolarEdgeSite } from '../lib/solarEdgeSites';
-import { Job, Customer, LeadSource, LeadStatus } from '../types';
+import { Job, Customer, LeadSource, LeadStatus, Lead } from '../types';
 import { loadCRMData, saveCRMData, addLead, CRMData } from '../lib/crmStore';
 import { loadTodos, saveTodos, TodoItem } from '../lib/todoStore';
 import { MentionsWidget } from './MentionsWidget';
 import { AddressCleanupWidget } from './AddressCleanupWidget';
-import { Lead } from '../types';
+import { DeepSyncMetricsWidget } from './DeepSyncMetricsWidget';
 import { Contractor } from '../types/contractor';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -35,7 +34,8 @@ type WidgetType =
   | 'single-lead'
   | 'todo-list'
   | 'mentions'
-  | 'address-cleanup';
+  | 'address-cleanup'
+  | 'deep-sync-metrics';
 
 interface WidgetConfig {
   type: WidgetType;
@@ -169,6 +169,14 @@ const WIDGET_CATALOG: WidgetCatalogEntry[] = [
     icon: MapPin,
     colorClass: 'text-emerald-600',
     bgClass: 'bg-emerald-50',
+  },
+  {
+    type: 'deep-sync-metrics',
+    label: 'Deep Sync Metrics',
+    description: 'Tracks contractor deepSync (full reconcile) usage — high usage = cursor drift',
+    icon: RefreshCw,
+    colorClass: 'text-amber-600',
+    bgClass: 'bg-amber-50',
   },
 ];
 
@@ -1559,6 +1567,7 @@ const WidgetSlot: React.FC<{
         {config.type === 'todo-list'              && <TodoListWidget userId={currentUserId} customers={customers} onViewCustomer={onViewCustomer} />}
         {config.type === 'mentions'               && <MentionsWidget userId={currentUserId} users={users} onOpenCustomer={onViewCustomer} onOpenWorkOrder={(jobId) => onViewChange?.('jobDetail', jobId)} />}
         {config.type === 'address-cleanup'        && <AddressCleanupWidget userName={users.find(u => u.id === currentUserId)?.name || 'Unknown'} onViewCustomer={onViewCustomer} />}
+        {config.type === 'deep-sync-metrics'      && <DeepSyncMetricsWidget userName={users.find(u => u.id === currentUserId)?.name || 'Unknown'} />}
       </WidgetErrorBoundary>
     </div>
   );

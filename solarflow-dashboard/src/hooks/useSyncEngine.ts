@@ -5,6 +5,43 @@ import { loadContractors, loadServiceRates, loadContractorJobs } from '../lib/co
 import type { AppState, Customer, Job } from '../types';
 import type { Contractor, ContractorJob } from '../types/contractor';
 
+const DEEP_SYNC_METRIC_KEY = 'solarops_deep_sync_metrics';
+
+export interface DeepSyncMetrics {
+  totalCalls: number;
+  lastCallAt: string | null;
+  callsBySession: number;
+  sessionStart: string;
+}
+
+function loadMetrics(): DeepSyncMetrics {
+  try {
+    const raw = localStorage.getItem(DEEP_SYNC_METRIC_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch { /* ignore */ }
+  return { totalCalls: 0, lastCallAt: null, callsBySession: 0, sessionStart: new Date().toISOString() };
+}
+
+function saveMetrics(m: DeepSyncMetrics): void {
+  try { localStorage.setItem(DEEP_SYNC_METRIC_KEY, JSON.stringify(m)); } catch { /* ignore */ }
+}
+
+function incrementDeepSyncMetric(): void {
+  const m = loadMetrics();
+  m.totalCalls += 1;
+  m.callsBySession += 1;
+  m.lastCallAt = new Date().toISOString();
+  saveMetrics(m);
+}
+
+export function getDeepSyncMetrics(): DeepSyncMetrics {
+  return loadMetrics();
+}
+
+export function resetDeepSyncMetrics(): void {
+  try { localStorage.removeItem(DEEP_SYNC_METRIC_KEY); } catch { /* ignore */ }
+}
+
 interface SyncEngineOptions {
   setData: React.Dispatch<React.SetStateAction<AppState>>;
   setContractors: React.Dispatch<React.SetStateAction<Contractor[]>>;
@@ -181,6 +218,7 @@ export function useSyncEngine({
   // deepSync clears the incremental cursor first, so the manual refresh button does a
   // FULL reconcile and a user missing data can always force convergence on demand.
   const deepSync = useCallback(async () => {
+    incrementDeepSyncMetric();
     resetSyncCursor();
     await syncNow();
   }, [syncNow]);

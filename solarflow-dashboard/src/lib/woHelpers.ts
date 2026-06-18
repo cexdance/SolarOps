@@ -148,6 +148,7 @@ export function toContractorJobView(job: Job, existingCj?: ContractorJob, custom
     id: existingCj?.id ?? `cj-view-${job.id}`,
     sourceJobId: job.id,
     woNumber: job.woNumber,
+    clientId: job.clientId,
     // Scope of work mirrored from the SO line items (description + qty only, no
     // costs) so the contractor can review the SOW from their WO card.
     scopeItems: (job.lineItems ?? []).map(li => ({
