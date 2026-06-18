@@ -32,6 +32,7 @@ import { Job, Customer } from '../types';
 import { SiteProfilePanel } from './SiteProfilePanel';
 import { Contractor, ContractorJob } from '../types/contractor';
 import { SolarEdgeImportModal, DiffItem } from './SolarEdgeImportModal';
+import { MentionUser } from './ui/MentionTextarea';
 
 type SortKey = keyof SolarEdgeSite;
 type SortDir = 'asc' | 'desc' | null;
@@ -88,12 +89,13 @@ interface Props {
   extraSites?: SolarEdgeExtraSite[];
   solarEdgeApiKey?: string;
   onImportApply?: (accepted: DiffItem[]) => void;
+  users: MentionUser[];
 }
 
 export const SolarEdgeMonitoring: React.FC<Props> = ({
   jobs, customers, contractors = [], onViewChange, onViewCustomer, currentUserName = 'Staff',
   currentUserRole, onCreateJob, onUpdateJob, onDispatchContractorJob, onUpdateSites, extraSites = [],
-  solarEdgeApiKey, onImportApply,
+  solarEdgeApiKey, onImportApply, users,
 }) => {
   const [showImportModal, setShowImportModal] = useState(false);
   // removedIds MUST be declared before ALL_SITES useMemo (deps array evaluates immediately)
@@ -809,6 +811,7 @@ export const SolarEdgeMonitoring: React.FC<Props> = ({
         onCreateJob={onCreateJob}
         onUpdateJob={onUpdateJob}
         onDispatchContractorJob={onDispatchContractorJob}
+        users={users}
       />
     )}
     {showImportModal && (

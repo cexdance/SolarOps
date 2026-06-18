@@ -2982,6 +2982,7 @@ function App() {
             extraSites={data.solarEdgeExtraSites ?? []}
             solarEdgeApiKey={data.solarEdgeConfig.apiKey || undefined}
             onImportApply={handleImportApply}
+            users={data.users.map(u => ({ id: u.id, name: u.name, username: u.username, email: u.email }))}
           />
         );
 

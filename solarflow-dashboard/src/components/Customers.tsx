@@ -5235,6 +5235,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
           onDispatch={onDispatch}
           contractors={contractors}
           technicians={users.filter(u => u.role === 'technician' || u.role === 'admin').map(u => ({ id: u.id, name: u.name }))}
+          users={users.map(u => ({ id: u.id, name: u.name, username: u.username, email: u.email }))}
           customer={customer}
         />
       )}
@@ -5259,6 +5260,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
           onDispatch={onDispatch}
           contractors={contractors}
           technicians={users.filter(u => u.role === 'technician' || u.role === 'admin').map(u => ({ id: u.id, name: u.name }))}
+          users={users.map(u => ({ id: u.id, name: u.name, username: u.username, email: u.email }))}
           customer={customer}
         />
       )}

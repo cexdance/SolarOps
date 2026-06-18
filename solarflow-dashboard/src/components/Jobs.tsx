@@ -794,6 +794,7 @@ export const Jobs: React.FC<JobsProps> = ({
           currentUserName={currentUser?.name}
           currentUserRole={currentUser?.role}
           customer={createCustomer}
+          users={users.map(u => ({ id: u.id, name: u.name, username: u.username, email: u.email }))}
           onClose={() => setCreateCustomer(null)}
           onSave={(jobData) => {
             const newJob = onCreateJob({ ...jobData, customerId: createCustomer.id });
@@ -815,6 +816,7 @@ export const Jobs: React.FC<JobsProps> = ({
           technicians={technicians.map(u => ({ id: u.id, name: u.name }))}
           currentUserName={currentUser?.name}
           currentUserRole={currentUser?.role}
+          users={users.map(u => ({ id: u.id, name: u.name, username: u.username, email: u.email }))}
           onClose={() => setEditingCreatedJob(null)}
           onSave={(jobData) => {
             const updated = { ...editingCreatedJob, ...jobData } as Job;

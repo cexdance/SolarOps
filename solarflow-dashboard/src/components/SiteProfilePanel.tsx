@@ -18,6 +18,7 @@ import { SolarEdgeSite } from '../lib/solarEdgeSites';
 import { Job, Customer } from '../types';
 import { ServiceOrderPanel } from './ServiceOrderPanel';
 import { Contractor, ContractorJob } from '../types/contractor';
+import { MentionUser } from './ui/MentionTextarea';
 
 // WO status display helpers (WOStatus-aware, falls back to JobStatus)
 const WO_STATUS_COLOR_FULL: Record<string, string> = {
@@ -288,11 +289,13 @@ interface Props {
   onCreateJob?: (job: Partial<Job>) => void;
   onUpdateJob?: (job: Job) => void;
   onDispatchContractorJob?: (job: ContractorJob) => void;
+  users: MentionUser[];
 }
 
 export const SiteProfilePanel: React.FC<Props> = ({
   site, jobs, customers, contractors = [], currentUserName, currentUserRole,
   onClose, onNavigateToJobs, onCreateJob, onUpdateJob, onDispatchContractorJob,
+  users,
 }) => {
   const [tab, setTab]               = useState<Tab>('overview');
   const [profile, setProfile]       = useState<SiteProfile>(() => getProfile(site.siteId));
@@ -780,6 +783,7 @@ export const SiteProfilePanel: React.FC<Props> = ({
           contractors={contractors}
           currentUserName={currentUserName}
           currentUserRole={currentUserRole}
+          users={users}
         />
       )}
     </>
