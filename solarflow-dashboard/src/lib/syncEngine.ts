@@ -57,7 +57,7 @@ const LAST_SYNC_KEY = 'solarops_last_record_sync';
 // `since` that incrementally skips records forever (a contractor never receiving a
 // just-assigned job); resetting the cursor once makes the next pull full and
 // recovers all missed rows. After that, the server-time cursor keeps it correct.
-const SYNC_CURSOR_VERSION = '2';
+const SYNC_CURSOR_VERSION = '3';
 const SYNC_CURSOR_VERSION_KEY = 'solarops_sync_cursor_v';
 
 function ensureCursorVersion(): void {
@@ -466,8 +466,14 @@ export async function pushToSupabase(state: AppState): Promise<void> {
     }
 
     // ── Dirty jobs only ──────────────────────────────────────────────────────
+    // Never re-push a tombstoned job. A stale browser still holding a deleted job
+    // in local state would otherwise recreate the server row (the deleted row has
+    // no server copy, so dropStaleRows waves it through as "new") - the resurrection
+    // that pushed the live count back up from 68 to 75 on 2026-06-21.
+    const deletedJobIdSet = getDeletedJobIds();
     const dirtyJobRows = await dropStaleRows(
       state.jobs
+        .filter(j => !deletedJobIdSet.has(j.id))
         .filter(j => isDirty(`${PREFIX.job}${j.id}`, j))
         .map(j => ({ key: `${PREFIX.job}${j.id}`, value: j })),
     );
@@ -500,6 +506,13 @@ export async function pushToSupabase(state: AppState): Promise<void> {
     const tombstoneKey = 'deleted_customer_ids';
     if (isDirty(tombstoneKey, deletedIds)) {
       metaRows.push({ key: tombstoneKey, value: deletedIds, updated_at: now });
+    }
+    // Job tombstones, so a delete on one device propagates to every device/user
+    // instead of staying local (the cause of divergent job totals across browsers).
+    const deletedJobIds = Array.from(getDeletedJobIds());
+    const jobTombstoneKey = 'deleted_job_ids';
+    if (isDirty(jobTombstoneKey, deletedJobIds)) {
+      metaRows.push({ key: jobTombstoneKey, value: deletedJobIds, updated_at: now });
     }
     const seConfigKey = 'solarEdgeConfig';
     if (isDirty(seConfigKey, state.solarEdgeConfig)) {
@@ -613,7 +626,7 @@ export async function pullFromSupabase(): Promise<Partial<AppState> | null> {
     const { data: kvData, error: kvError } = await supabase
       .from('app_data')
       .select('key, value')
-      .in('key', ['deleted_customer_ids', 'solarEdgeConfig', 'standaloneRmas', ...KV_SYNC_KEYS]);
+      .in('key', ['deleted_customer_ids', 'deleted_job_ids', 'solarEdgeConfig', 'standaloneRmas', ...KV_SYNC_KEYS]);
 
     if (kvError) {
       console.warn('[SyncEngine] pullFromSupabase KV data fetch error:', kvError.message);
@@ -629,6 +642,19 @@ export async function pullFromSupabase(): Promise<Partial<AppState> | null> {
             localStorage.setItem('solarflow_deleted_customer_ids', JSON.stringify(merged));
           } catch (err) {
             console.warn('[SyncEngine] Error updating deleted customer IDs:', err);
+          }
+        }
+        // Job tombstones: same UNION-into-local as customers. Without this, a job
+        // deleted on one device was never hidden on the others (deleted_job_ids
+        // lived only in that device's localStorage), so every browser re-pulled
+        // the still-present job:{id} row and showed a different total (76 vs 69).
+        if (row.key === 'deleted_job_ids' && Array.isArray(row.value)) {
+          try {
+            const local: string[] = JSON.parse(localStorage.getItem('solarflow_deleted_job_ids') || '[]');
+            const merged = Array.from(new Set([...local, ...row.value]));
+            localStorage.setItem('solarflow_deleted_job_ids', JSON.stringify(merged));
+          } catch (err) {
+            console.warn('[SyncEngine] Error updating deleted job IDs:', err);
           }
         }
         if (isKVSyncKey(row.key) && row.value != null) {
