@@ -115,31 +115,6 @@ const urgencyLabels: Record<UrgencyLevel, string> = {
   low: 'Low', medium: 'Medium', high: 'High', critical: 'Critical',
 };
 
-const STEP_MS = 3 * 24 * 60 * 60 * 1000; // priority bumps one level every 3 days
-
-// Every 3 days elapsed = one level up: 0 -> Low, 1 -> Medium, 2 -> High, 3+ -> Critical.
-function escalate(since: string | undefined, now: number): UrgencyLevel {
-  const steps = since ? Math.floor((now - new Date(since).getTime()) / STEP_MS) : 0;
-  return (['low', 'medium', 'high', 'critical'] as const)[Math.min(steps, 3)];
-}
-
-/**
- * Age-driven priority for a service order card. Default is Low and it bumps up
- * one level for every 3 days of age (Low -> Medium -> High -> Critical):
- *  - Open (not yet invoiced): counter off createdAt.
- *  - Invoiced: counter resets off invoicedAt.
- * Completed/paid/archived orders that aren't invoiced stay Low (no escalation).
- */
-export function derivedPriority(job: Job): UrgencyLevel {
-  const now = Date.now();
-  const stage = boardStatus(job);
-  if (stage === 'invoiced') return escalate(job.invoicedAt ?? job.completedAt ?? job.createdAt, now);
-  // No escalation once the order is finished (completed / paid / archived).
-  if (stage === 'completed' || stage === 'paid' || stage === 'archived') return 'low';
-  // Open order: escalate off how long it has been open.
-  return escalate(job.createdAt, now);
-}
-
 interface JobCardProps {
   job: Job;
   customer: Customer | undefined;
@@ -193,7 +168,7 @@ const JobCard: React.FC<JobCardProps> = ({ job, customer, contractorName, isDrag
           {badgeLabel(job)}
         </span>
         {(() => {
-          const p = derivedPriority(job);
+          const p = job.urgency ?? 'low';
           return (
             <span className={`text-[10px] px-1.5 py-0.5 rounded-full border ${urgencyColors[p]}`}>
               {urgencyLabels[p]}
