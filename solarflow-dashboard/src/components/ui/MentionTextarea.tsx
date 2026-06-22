@@ -17,6 +17,7 @@ interface Props {
   className?: string;
   disabled?: boolean;
   onPaste?: (e: React.ClipboardEvent<HTMLTextAreaElement>) => void;
+  onBlur?: () => void;
 }
 
 /** Textarea with live @mention dropdown.
@@ -34,6 +35,7 @@ export const MentionTextarea: React.FC<Props> = ({
   className = '',
   disabled,
   onPaste,
+  onBlur,
 }) => {
   const [query, setQuery]         = useState('');
   const [start, setStart]         = useState(-1);
@@ -148,7 +150,7 @@ export const MentionTextarea: React.FC<Props> = ({
         onChange={handleChange}
         onKeyDown={handleKeyDown}
         onPaste={onPaste}
-        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        onBlur={() => { setTimeout(() => setOpen(false), 150); onBlur?.(); }}
         rows={rows}
         placeholder={placeholder}
         disabled={disabled}

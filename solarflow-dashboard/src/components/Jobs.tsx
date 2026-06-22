@@ -12,7 +12,7 @@ import {
 import { WorkOrderCalendar } from './WorkOrderCalendar';
 import JobMapView from './views/JobMapView';
 import { ViewJob, ViewJobPriority } from './views/jobViewTypes';
-import { Job, Customer, User as UserType, JobStatus, UrgencyLevel, ServiceType, WO_TO_JOB_STATUS, WOStatus } from '../types';
+import { Job, Customer, User as UserType, JobStatus, UrgencyLevel, WO_TO_JOB_STATUS, WOStatus } from '../types';
 
 // Map UrgencyLevel onto the shared map-view priority palette.
 const MAP_PRIORITY: Record<UrgencyLevel, ViewJobPriority> = {
@@ -74,14 +74,6 @@ function contractorBucket(job: Job): ContractorBucket {
 
 // ─── Standalone sub-components (defined outside Jobs to prevent remount on parent re-render) ───
 
-const serviceTypes: { value: ServiceType; label: string; color: string }[] = [
-  { value: 'maintenance', label: 'Maintenance', color: 'bg-blue-100 text-blue-700' },
-  { value: 'repair', label: 'Repair', color: 'bg-amber-100 text-amber-700' },
-  { value: 'installation', label: 'Installation', color: 'bg-purple-100 text-purple-700' },
-  { value: 'inspection', label: 'Inspection', color: 'bg-green-100 text-green-700' },
-  { value: 'emergency', label: 'Emergency', color: 'bg-red-100 text-red-700' },
-];
-
 // Work-type badge: flags whether the WO is an Inverter, Optimizer, or simple
 // site visit. Derived from the service code first, then a text fallback so older
 // WOs without a code still classify. Site Transfer is intentionally excluded.
@@ -123,6 +115,31 @@ const urgencyLabels: Record<UrgencyLevel, string> = {
   low: 'Low', medium: 'Medium', high: 'High', critical: 'Critical',
 };
 
+const STEP_MS = 3 * 24 * 60 * 60 * 1000; // priority bumps one level every 3 days
+
+// Every 3 days elapsed = one level up: 0 -> Low, 1 -> Medium, 2 -> High, 3+ -> Critical.
+function escalate(since: string | undefined, now: number): UrgencyLevel {
+  const steps = since ? Math.floor((now - new Date(since).getTime()) / STEP_MS) : 0;
+  return (['low', 'medium', 'high', 'critical'] as const)[Math.min(steps, 3)];
+}
+
+/**
+ * Age-driven priority for a service order card. Default is Low and it bumps up
+ * one level for every 3 days of age (Low -> Medium -> High -> Critical):
+ *  - Open (not yet invoiced): counter off createdAt.
+ *  - Invoiced: counter resets off invoicedAt.
+ * Completed/paid/archived orders that aren't invoiced stay Low (no escalation).
+ */
+export function derivedPriority(job: Job): UrgencyLevel {
+  const now = Date.now();
+  const stage = boardStatus(job);
+  if (stage === 'invoiced') return escalate(job.invoicedAt ?? job.completedAt ?? job.createdAt, now);
+  // No escalation once the order is finished (completed / paid / archived).
+  if (stage === 'completed' || stage === 'paid' || stage === 'archived') return 'low';
+  // Open order: escalate off how long it has been open.
+  return escalate(job.createdAt, now);
+}
+
 interface JobCardProps {
   job: Job;
   customer: Customer | undefined;
@@ -155,14 +172,12 @@ const JobCard: React.FC<JobCardProps> = ({ job, customer, contractorName, isDrag
   >
     <div className="flex items-start justify-between mb-3">
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 flex-wrap">
-          <h3 className="font-semibold text-slate-900 truncate">{customer?.name}</h3>
-          {job.clientId && (
-            <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-mono font-medium shrink-0">
-              {job.clientId}
-            </span>
-          )}
-        </div>
+        {(job.clientId || customer?.clientId) && (
+          <span className="inline-block text-xs px-2 py-0.5 mb-1 rounded-full bg-slate-100 text-slate-600 font-mono font-medium">
+            {job.clientId || customer?.clientId}
+          </span>
+        )}
+        <h3 className="font-semibold text-slate-900 truncate">{customer?.name}</h3>
         <p className="text-sm text-slate-500 flex items-center gap-1 mt-1 truncate">
           <MapPin className="w-3 h-3 shrink-0" />
           {customer?.address}, {customer?.city}
@@ -177,11 +192,14 @@ const JobCard: React.FC<JobCardProps> = ({ job, customer, contractorName, isDrag
         <span className={`text-xs px-2 py-1 rounded-full border ${statusColors[boardStatus(job)]}`}>
           {badgeLabel(job)}
         </span>
-        {job.urgency && (
-          <span className={`text-[10px] px-1.5 py-0.5 rounded-full border ${urgencyColors[job.urgency]}`}>
-            {urgencyLabels[job.urgency]}
-          </span>
-        )}
+        {(() => {
+          const p = derivedPriority(job);
+          return (
+            <span className={`text-[10px] px-1.5 py-0.5 rounded-full border ${urgencyColors[p]}`}>
+              {urgencyLabels[p]}
+            </span>
+          );
+        })()}
       </div>
     </div>
     <div className="flex items-center gap-2 mb-3 flex-wrap">
@@ -193,17 +211,18 @@ const JobCard: React.FC<JobCardProps> = ({ job, customer, contractorName, isDrag
           </span>
         ) : null;
       })()}
-      <span className={`text-xs px-2 py-1 rounded-full ${serviceTypes.find(s => s.value === job.serviceType)?.color ?? 'bg-slate-100'}`}>
-        {job.serviceType}
-      </span>
       {job.isPowercare && (
         <span className="text-xs px-2 py-1 rounded-full bg-indigo-100 text-indigo-700 flex items-center gap-1">
           <Zap className="w-3 h-3" />PowerCare
         </span>
       )}
-      {contractorName && (
+      {job.contractorId ? (
         <span className="text-xs text-slate-500 flex items-center gap-1">
-          <User className="w-3 h-3" />{contractorName}
+          <User className="w-3 h-3" />{contractorName ?? 'Assigned'}
+        </span>
+      ) : (
+        <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200 font-semibold flex items-center gap-1">
+          <User className="w-3 h-3" />Pending Assignment
         </span>
       )}
     </div>

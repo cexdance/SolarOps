@@ -688,7 +688,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
   const applyRecurringDiscount = discountType !== ''; // kept for legacy compat
 
   // Active tab
-  const [activeTab, setActiveTab] = useState<'overview' | 'parts' | 'photos' | 'report' | 'comments' | 'history' | 'map'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'parts' | 'photos' | 'report' | 'history' | 'map'>('overview');
   // WO audit trail (Phase B), loaded lazily when the History tab is opened.
   const [historyEntries, setHistoryEntries] = useState<ChangeEntry[] | null>(null);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -1343,7 +1343,6 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
     { key: 'parts',    label: 'Parts & Labor',   icon: <Wrench className="w-4 h-4" /> },
     { key: 'photos',   label: `Photos${woPhotos.length ? ` (${woPhotos.length})` : ''}`, icon: <Camera className="w-4 h-4" /> },
     { key: 'report',   label: 'Service Report',  icon: <FileText className="w-4 h-4" /> },
-    { key: 'comments', label: `Comments${woActivities.length ? ` (${woActivities.length})` : ''}`, icon: <Users className="w-4 h-4" /> },
     { key: 'history',  label: 'History',         icon: <History className="w-4 h-4" /> },
     { key: 'map',      label: 'Map',             icon: <MapPin className="w-4 h-4" /> },
   ] as const;
@@ -1578,6 +1577,81 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
           {/* Overview */}
           {activeTab === 'overview' && (
             <div className="p-6 space-y-5">
+              {/* ── Comments & Activity, surfaced first so the user sees what is
+                  happening with the service order at a glance. Posts to the WO
+                  activity feed AND the client timeline (Customer Activity tab via
+                  combinedActivity). Thread format mirrors other cards/mentions. ── */}
+              <div className="border-b border-slate-100 pb-5">
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                  <Users className="w-3.5 h-3.5" />
+                  Comments &amp; Activity
+                  <span className="ml-1 text-slate-400 font-normal normal-case tracking-normal">- shared with the team and shown on the client timeline</span>
+                </p>
+                <MentionTextarea
+                  value={newComment}
+                  onChange={setNewComment}
+                  users={users ?? []}
+                  rows={3}
+                  onPaste={handleCommentPaste}
+                  placeholder="Type your update… use @ to mention a teammate · Ctrl/Cmd+V to paste a screenshot"
+                  className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 resize-none"
+                />
+                {(commentAttachments.length > 0 || commentUploading) && (
+                  <div className="flex flex-wrap items-center gap-2 mt-2">
+                    {commentAttachments.map(att => (
+                      <div key={att.id} className="relative group">
+                        <img src={att.url} alt={att.name} className="w-16 h-16 object-cover rounded-lg border border-slate-200" />
+                        <button
+                          onClick={() => removeCommentAttachment(att.id)}
+                          className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-slate-900 text-white flex items-center justify-center shadow hover:bg-red-600 transition-colors"
+                          title="Remove image"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                    {commentUploading && (
+                      <div className="w-16 h-16 rounded-lg border border-dashed border-slate-300 flex items-center justify-center">
+                        <Loader2 className="w-4 h-4 text-slate-400 animate-spin" />
+                      </div>
+                    )}
+                  </div>
+                )}
+                {commentError && (
+                  <p className="mt-1 text-xs text-red-600 font-medium">⚠️ {commentError}</p>
+                )}
+                <div className="flex items-center justify-end mt-2">
+                  <button
+                    onClick={addComment}
+                    disabled={(!newComment.trim() && commentAttachments.length === 0) || commentUploading}
+                    className="px-4 py-1.5 bg-orange-500 text-white text-sm font-medium rounded-lg hover:bg-orange-600 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed transition-colors"
+                  >
+                    Post
+                  </button>
+                </div>
+                {woActivities.length > 0 && (
+                  <div className="mt-4">
+                    <ActivityFeed
+                      activities={woActivities}
+                      users={users ?? []}
+                      currentUser={(users ?? []).find(u => u.name === currentUserName) ?? null}
+                      onEdit={editComment}
+                      onDelete={deleteComment}
+                      onReact={reactComment}
+                      onMentionClick={(userId) => {
+                        const u = (users ?? []).find((x) => x.id === userId) as FeedUser | undefined;
+                        if (u) {
+                          const username = u.username;
+                          const role = u.role;
+                          alert(`${u.name}${username ? ' (@' + username + ')' : ''}${role ? '\nRole: ' + role : ''}`);
+                        }
+                      }}
+                      emptyMessage="No comments yet, start the conversation by posting an update above."
+                    />
+                  </div>
+                )}
+              </div>
+
               {/* Priority, top of form for quick triage */}
               <div>
                 <label className="block text-xs font-medium text-slate-500 mb-1">Priority</label>
@@ -2031,6 +2105,9 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                   users={users}
                   rows={5}
                   onPaste={handleNotesPaste}
+                  // ponytail: autosave scope/notes on blur so closing the panel
+                  // never silently drops typed info (e.g. site-transfer notes)
+                  onBlur={() => { if (notes !== (job?.notes ?? '')) handleSaveRef.current(undefined, true); }}
                   placeholder="Describe the work to be done… (paste screenshots with Ctrl/Cmd+V)"
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 resize-none"
                 />
@@ -2985,84 +3062,6 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                     ))}
                   </div>
                 )}
-              </div>
-            </div>
-          )}
-
-          {/* ── Comments & Activity ──────────────────────────────────── */}
-          {activeTab === 'comments' && (
-            <div className="p-6 space-y-5">
-              <div>
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Add a comment</p>
-                <MentionTextarea
-                  value={newComment}
-                  onChange={setNewComment}
-                  users={users ?? []}
-                  rows={3}
-                  onPaste={handleCommentPaste}
-                  placeholder="Type your update… use @ to mention a teammate · Ctrl/Cmd+V to paste a screenshot"
-                  className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 resize-none"
-                />
-                {/* Pasted image attachments, staged until the comment is posted */}
-                {(commentAttachments.length > 0 || commentUploading) && (
-                  <div className="flex flex-wrap items-center gap-2 mt-2">
-                    {commentAttachments.map(att => (
-                      <div key={att.id} className="relative group">
-                        <img src={att.url} alt={att.name} className="w-16 h-16 object-cover rounded-lg border border-slate-200" />
-                        <button
-                          onClick={() => removeCommentAttachment(att.id)}
-                          className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-slate-900 text-white flex items-center justify-center shadow hover:bg-red-600 transition-colors"
-                          title="Remove image"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </div>
-                    ))}
-                    {commentUploading && (
-                      <div className="w-16 h-16 rounded-lg border border-dashed border-slate-300 flex items-center justify-center">
-                        <Loader2 className="w-4 h-4 text-slate-400 animate-spin" />
-                      </div>
-                    )}
-                  </div>
-                )}
-                {commentError && (
-                  <p className="mt-1 text-xs text-red-600 font-medium">⚠️ {commentError}</p>
-                )}
-                <div className="flex items-center justify-between mt-2">
-                  <p className="text-[11px] text-slate-400">Comments are shared with the entire team and stored with this service order.</p>
-                  <button
-                    onClick={addComment}
-                    disabled={(!newComment.trim() && commentAttachments.length === 0) || commentUploading}
-                    className="px-4 py-1.5 bg-orange-500 text-white text-sm font-medium rounded-lg hover:bg-orange-600 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed transition-colors"
-                  >
-                    Post
-                  </button>
-                </div>
-              </div>
-
-              <div className="border-t border-slate-100 pt-5">
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                  <Users className="w-3.5 h-3.5" />
-                  Team Conversation
-                </p>
-                <ActivityFeed
-                  activities={woActivities}
-                  users={users ?? []}
-                  currentUser={(users ?? []).find(u => u.name === currentUserName) ?? null}
-                  onEdit={editComment}
-                  onDelete={deleteComment}
-                  onReact={reactComment}
-                  onMentionClick={(userId) => {
-                    const u = (users ?? []).find((x) => x.id === userId) as FeedUser | undefined;
-                    if (u) {
-                      // Could navigate to user profile in future, for now show info
-                      const username = u.username;
-                      const role = u.role;
-                      alert(`${u.name}${username ? ' (@' + username + ')' : ''}${role ? '\nRole: ' + role : ''}`);
-                    }
-                  }}
-                  emptyMessage="No comments yet, start the conversation by posting an update above."
-                />
               </div>
             </div>
           )}
