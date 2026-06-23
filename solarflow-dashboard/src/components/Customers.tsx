@@ -3191,6 +3191,9 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
   // Activity edit/delete
   const [editingActivityId, setEditingActivityId] = useState<string | null>(null);
   const [editingActivityText, setEditingActivityText] = useState('');
+  // When the entry being edited is SO-sourced, this holds its parent job id so the
+  // save/delete routes back to that Service Order instead of the customer record.
+  const [editingActivityJobId, setEditingActivityJobId] = useState<string | null>(null);
   const [undoStack, setUndoStack] = useState<Array<{ action: 'delete' | 'edit'; entry: Activity; previousText?: string }>>([]);
   const [showEmojiPicker, setShowEmojiPicker] = useState<string | null>(null);
 
@@ -3292,6 +3295,32 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
       ),
     });
     setEditingActivityId(null);
+  };
+
+  // ── SO-sourced activity edits (flow back to the parent Service Order) ───────
+  // The client card aggregates each job's activityHistory read-only; these let a
+  // user edit/delete an SO comment in place and have it persist on the SO itself.
+  const handleSaveJobActivity = (jobId: string, activityId: string, text: string) => {
+    const job = jobs.find(j => j.id === jobId);
+    if (!job || !onUpdateJob) return;
+    onUpdateJob({
+      ...job,
+      updatedAt: new Date().toISOString(), // sync LWW key, or the edit loses to a stale push
+      activityHistory: (job.activityHistory ?? []).map(a =>
+        a.id === activityId ? { ...a, description: text } : a),
+    });
+    setEditingActivityId(null);
+    setEditingActivityJobId(null);
+  };
+
+  const handleDeleteJobActivity = (jobId: string, activityId: string) => {
+    const job = jobs.find(j => j.id === jobId);
+    if (!job || !onUpdateJob) return;
+    onUpdateJob({
+      ...job,
+      updatedAt: new Date().toISOString(),
+      activityHistory: (job.activityHistory ?? []).filter(a => a.id !== activityId),
+    });
   };
 
   const handleUndoActivity = () => {
@@ -4338,17 +4367,17 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                                 <Smile className="w-3.5 h-3.5" />
                               </button>
                             )}
-                            {activity.type === 'note_added' && !jobId && (
+                            {activity.type === 'note_added' && (!jobId || onUpdateJob) && (
                               <>
                                 <button
-                                  onClick={() => { setEditingActivityId(activity.id); setEditingActivityText(activity.description); }}
+                                  onClick={() => { setEditingActivityId(activity.id); setEditingActivityText(activity.description); setEditingActivityJobId(jobId || null); }}
                                   className="p-1 rounded hover:bg-slate-200 text-slate-400 hover:text-slate-600"
-                                  title="Edit note"
+                                  title={jobId ? 'Edit SO comment' : 'Edit note'}
                                 >
                                   <Pencil className="w-3.5 h-3.5" />
                                 </button>
                                 <button
-                                  onClick={() => handleDeleteActivity(activity.id)}
+                                  onClick={() => jobId ? handleDeleteJobActivity(jobId, activity.id) : handleDeleteActivity(activity.id)}
                                   className="p-1 rounded hover:bg-red-100 text-slate-400 hover:text-red-500"
                                   title="Delete entry"
                                 >
@@ -4381,8 +4410,8 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                               className="w-full text-sm border border-slate-300 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-orange-400"
                             />
                             <div className="flex gap-2">
-                              <button onClick={() => handleSaveActivity(activity.id)} className="px-3 py-1 bg-orange-500 text-white text-xs font-medium rounded-lg hover:bg-orange-600">Save</button>
-                              <button onClick={() => setEditingActivityId(null)} className="px-3 py-1 bg-slate-200 text-slate-600 text-xs font-medium rounded-lg hover:bg-slate-300">Cancel</button>
+                              <button onClick={() => editingActivityJobId ? handleSaveJobActivity(editingActivityJobId, activity.id, editingActivityText) : handleSaveActivity(activity.id)} className="px-3 py-1 bg-orange-500 text-white text-xs font-medium rounded-lg hover:bg-orange-600">Save</button>
+                              <button onClick={() => { setEditingActivityId(null); setEditingActivityJobId(null); }} className="px-3 py-1 bg-slate-200 text-slate-600 text-xs font-medium rounded-lg hover:bg-slate-300">Cancel</button>
                             </div>
                           </div>
                         ) : (

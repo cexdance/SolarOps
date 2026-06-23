@@ -3608,6 +3608,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
           grandTotal={lineItems.reduce((s, i) => s + i.totalCost, 0)}
           notes={notes}
           notifyName="Daniel Matos"
+          users={users ?? []}
           onClose={() => setShowQuotePreview(false)}
           onSavePreview={(payload) => {
             // 1. Persist any edits made in the preview back onto the WO line items.
@@ -3649,6 +3650,33 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                 message: mentionText,
               });
             }
+
+            // Notify anyone @mentioned in the Notes field (beyond the quote owner),
+            // and surface the note as a visible comment so the mention is auditable.
+            const noteText = payload.notes.trim();
+            const noteMentionIds = parseMentions(noteText, users).filter(id => id !== owner?.id);
+            if (noteText && noteMentionIds.length > 0) {
+              const noteEmails = parseMentionEmails(noteText, users as (MentionUser & { email?: string })[]);
+              setWoActivities(prev => [{
+                id: `wo-cmt-note-${Date.now()}`,
+                type: 'note_added',
+                description: noteText,
+                timestamp: new Date().toISOString(),
+                userId: (currentUserName && users.find(u => u.name === currentUserName)?.id) || undefined,
+                userName: currentUserName ?? 'Staff',
+                mentions: noteMentionIds,
+              }, ...prev]);
+              fireMentionNotifications({
+                mentionedUserIds: noteMentionIds,
+                mentionedUserEmails: noteEmails,
+                notifierName: currentUserName || 'Staff',
+                context: `${siteName}, ${woLabel}`,
+                contextId: siteId,
+                contextType: 'workOrder',
+                message: noteText,
+              });
+            }
+
             setQuoteResult({
               ok: true,
               msg: owner ? `Quote saved · @${(owner as MentionUser).username || owner.name.replace(/\s+/g, '')} notified` : 'Quote saved · add Daniel Matos to staff to auto-notify',

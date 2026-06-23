@@ -27,6 +27,18 @@ import { isAllowedCustomer } from './solarEdgeSiteFilter';
 import type { AppState, Customer, Job, WOPhoto } from '../types';
 import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 
+// Resolve a live auth session, refreshing once if the cached access token has
+// expired. Supabase's background auto-refresh can miss on mobile (Safari/PWA
+// suspended in the field), leaving getSession() null while the refresh token is
+// still valid - that produced a premature "Session expired" banner that stranded
+// every write locally. Only declare the session dead after a refresh also fails.
+async function getActiveSession() {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (session) return session;
+  const { data: refreshed } = await supabase.auth.refreshSession();
+  return refreshed.session ?? null;
+}
+
 // ── Key constants ─────────────────────────────────────────────────────────────
 
 export const PREFIX = {
@@ -296,7 +308,7 @@ async function fetchRemoteContractorJobs(): Promise<unknown> {
  */
 export async function pushKeyValue(key: string, value: unknown): Promise<void> {
   try {
-    const { data: { session } } = await supabase.auth.getSession();
+    const session = await getActiveSession();
     if (!session) {
       window.dispatchEvent(new CustomEvent('supabase-sync-error', {
         detail: { message: 'Session expired, your changes are saved locally but not synced. Please re-login.' },
@@ -431,7 +443,7 @@ async function dropStaleRows(
  */
 export async function pushToSupabase(state: AppState): Promise<void> {
   try {
-    const { data: { session } } = await supabase.auth.getSession();
+    const session = await getActiveSession();
     if (!session) {
       window.dispatchEvent(new CustomEvent('supabase-sync-error', {
         detail: { message: 'Session expired, your changes are saved locally but not synced. Please re-login.' },

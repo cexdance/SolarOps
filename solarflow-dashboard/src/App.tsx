@@ -1252,8 +1252,33 @@ function App() {
             }
           : {};
 
+        // Surface the contractor's service note as a comment on the job's
+        // activity feed so it flows to the Client Card Activity tab (the same
+        // aggregation that shows staff SO comments). Append-only with a
+        // content-stable id: mergeJobPair unions activityHistory by id, so the
+        // SAME note re-synced from another device collapses to one entry instead
+        // of spamming the feed on every contractor save.
+        const contractorNote = (updatedJob.operationalNotes ?? updatedJob.completionNotes ?? '').trim();
+        const prevContractorNote = (adminJob.serviceReport ?? '').trim();
+        let woActivityHistory = adminJob.activityHistory ?? [];
+        if (contractorNote && contractorNote !== prevContractorNote) {
+          let h = 0;
+          for (let i = 0; i < contractorNote.length; i++) h = (h * 31 + contractorNote.charCodeAt(i)) | 0;
+          const noteId = `cnote-${updatedJob.sourceJobId}-${h >>> 0}`;
+          if (!woActivityHistory.some(a => a.id === noteId)) {
+            const c = contractors.find(c => c.id === updatedJob.contractorId);
+            const cName = c?.businessName ?? c?.contactName ?? 'Contractor';
+            woActivityHistory = [
+              { id: noteId, type: 'note_added' as const, description: contractorNote,
+                timestamp: new Date().toISOString(), userName: cName },
+              ...woActivityHistory,
+            ];
+          }
+        }
+
         const updatedAdminJob = {
           ...adminJob,
+          activityHistory: woActivityHistory,
           // Stamp the admin-side mirror too (CB-3): the ContractorJob is stamped
           // above, but the Job row that pushes to Supabase needs its own fresh
           // updatedAt or a stale prior edit time can win the LWW merge and stomp

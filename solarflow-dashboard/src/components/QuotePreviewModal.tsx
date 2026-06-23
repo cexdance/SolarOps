@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, Send, Mail, DollarSign, Loader2, CheckCircle, AlertTriangle } from 'lucide-react';
 import { sendQuoteEmail } from '../lib/quoteService';
+import { MentionTextarea, type MentionUser } from './ui/MentionTextarea';
 
 interface LineItem {
   description: string;
@@ -34,6 +35,8 @@ interface QuotePreviewProps {
   }) => void;
   /** Teammate notified when the preview is saved (shown on the primary button). */
   notifyName?: string;
+  /** Staff roster for @mention autocomplete in the Notes field. */
+  users?: MentionUser[];
 }
 
 export const QuotePreviewModal: React.FC<QuotePreviewProps> = ({
@@ -48,6 +51,7 @@ export const QuotePreviewModal: React.FC<QuotePreviewProps> = ({
   onSent,
   onSavePreview,
   notifyName,
+  users,
 }) => {
   const [customerName, setCustomerName] = useState(initialName);
   const [customerEmail, setCustomerEmail] = useState(initialEmail);
@@ -225,12 +229,13 @@ export const QuotePreviewModal: React.FC<QuotePreviewProps> = ({
           {/* Notes */}
           <div>
             <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Notes (optional)</label>
-            <textarea
+            <MentionTextarea
               value={notes}
-              onChange={e => setNotes(e.target.value)}
+              onChange={setNotes}
+              users={users ?? []}
               rows={3}
               className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 resize-none"
-              placeholder="Additional notes for the customer..."
+              placeholder="Additional notes… use @ to mention a teammate"
             />
           </div>
 
