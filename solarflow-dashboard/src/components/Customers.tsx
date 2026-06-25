@@ -3815,9 +3815,13 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
             <span className="flex items-center gap-1.5 text-xs text-slate-400 italic"><Mail className="w-3.5 h-3.5" />No email</span>
           )}
           {customer.address && (
-            <span className="flex items-center gap-1.5 text-xs text-slate-500 truncate">
-              <MapPin className="w-3.5 h-3.5 flex-shrink-0" />{customer.city || customer.address}
-            </span>
+            <AddressLink
+              address={customer.address}
+              city={customer.city}
+              state={customer.state}
+              zip={customer.zip}
+              compact
+            />
           )}
         </div>
 
