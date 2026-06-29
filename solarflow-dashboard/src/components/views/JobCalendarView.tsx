@@ -80,6 +80,11 @@ const JobCalendarView: React.FC<JobCalendarViewProps> = ({ jobs, onOpen }) => {
                   >
                     <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${PRIORITY_DOT[job.priority]}`} />
                     <span className="text-[10px] text-slate-700 truncate">{job.title}</span>
+                    {job.clientNumber && (
+                      <span className="text-[8px] px-1 py-0.5 rounded font-bold font-mono bg-blue-100 text-blue-700 flex-shrink-0">
+                        {job.clientNumber}
+                      </span>
+                    )}
                   </button>
                 ))}
                 {dayJobs.length > 3 && (

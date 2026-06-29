@@ -53,6 +53,12 @@ const ServiceOrderCard: React.FC<{ job: ContractorJob }> = ({ job }) => {
               {serviceOrderNo(job.woNumber)}
             </span>
           )}
+          {/* Client Number - contractors reference this on invoices */}
+          {job.clientId && (
+            <span className="text-xs font-bold font-mono text-blue-700 bg-blue-50 border border-blue-200 rounded-md px-2 py-0.5">
+              {job.clientId}
+            </span>
+          )}
         </div>
         <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase ${STATUS_STYLE[job.status] ?? 'bg-slate-100 text-slate-600'}`}>
           {job.status.replace(/_/g, ' ')}

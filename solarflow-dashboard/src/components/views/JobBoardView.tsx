@@ -40,6 +40,11 @@ const JobBoardView: React.FC<JobBoardViewProps> = ({ jobs, columns, onOpen, form
                       <span className={`w-2 h-2 rounded-full flex-shrink-0 ${PRIORITY_DOT[job.priority]}`} />
                       <span className="font-semibold text-sm text-slate-900 truncate">{job.title}</span>
                     </div>
+                    {job.clientNumber && (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full font-bold font-mono bg-blue-100 text-blue-700 mb-1 inline-block">
+                        {job.clientNumber}
+                      </span>
+                    )}
                     <p className="text-xs text-slate-500 flex items-center gap-1 truncate">
                       <MapPin className="w-3 h-3 flex-shrink-0" />{job.city}{job.state ? `, ${job.state}` : ''}
                     </p>

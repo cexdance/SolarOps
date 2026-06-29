@@ -1851,6 +1851,8 @@ function App() {
           sourceJobId: updatedJob.id,
           contractorId: updatedJob.contractorId,
           customerId: updatedJob.customerId,
+          // Client number (US-1XXXX) - contractors need this for invoices. Prefer customer record, fall back to job's solarEdgeClientId
+          clientId: mirrorCust?.clientId ?? updatedJob.clientId ?? updatedJob.solarEdgeClientId,
           customerName: updatedJob.clientName ?? '',
           customerPhone: mirrorCust?.phone ?? '',
           customerEmail: mirrorCust?.email,
@@ -1894,6 +1896,8 @@ function App() {
         const nextCj = contractorJobs.map(cj => cj.sourceJobId === updatedJob.id
           ? { ...cj,
               contractorId: updatedJob.contractorId!,
+              // Client number (US-1XXXX) - sync from customer record if available
+              clientId: mirrorCust?.clientId ?? updatedJob.clientId ?? updatedJob.solarEdgeClientId ?? cj.clientId,
               address: mirrorCust?.address || updatedJob.siteAddress || cj.address,
               city:    mirrorCust?.city ?? cj.city,
               state:   mirrorCust?.state ?? cj.state,

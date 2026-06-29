@@ -280,6 +280,8 @@ export const ContractorDashboard: React.FC<ContractorDashboardProps> = ({
     scheduledTime: j.scheduledTime,
     serviceType: j.serviceType,
     pay: j.contractorTotalPay,
+    // Client number (US-1XXXX) for the contractor's reference on invoices
+    clientNumber: j.clientId,
   });
   const viewJobs: ViewJob[] = jobs.map(toViewJob);
 
