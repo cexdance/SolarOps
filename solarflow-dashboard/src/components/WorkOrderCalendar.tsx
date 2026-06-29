@@ -241,7 +241,7 @@ const WeekPlanner: React.FC<{
           customers={customers}
           // Every day in the 7-day range is in-scope; never dim (only the Month
           // grid fades leading/trailing days from adjacent months).
-          isCurrentMonth
+          isCurrentMonth={true}
           resolveContractor={resolveContractor}
           onJobClick={onJobClick}
           isLastColumn={i === days.length - 1}
@@ -276,7 +276,7 @@ const TwoWeekPlanner: React.FC<{
           jobs={getJobsForDay(jobs, day)}
           customers={customers}
           // All 14 days are in-scope; never dim in the 2-week planner.
-          isCurrentMonth
+          isCurrentMonth={true}
           onJobClick={onJobClick}
           resolveContractor={resolveContractor}
           isLastColumn={i === 6}
