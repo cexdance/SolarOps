@@ -210,6 +210,12 @@ export const ContractorDashboard: React.FC<ContractorDashboardProps> = ({
             }`}>
               {job.status.replace(/_/g,' ').toUpperCase()}
             </span>
+            {/* Client number, contractors reference it when submitting their invoice. */}
+            {job.clientId && (
+              <span className="text-[10px] px-2 py-0.5 rounded-full font-bold font-mono bg-blue-100 text-blue-700">
+                {job.clientId}
+              </span>
+            )}
           </div>
           <h3 className="font-semibold text-slate-900">{job.customerName}</h3>
           <p className="text-sm text-slate-500 flex items-center gap-1 mt-0.5">

@@ -4,7 +4,7 @@ import {
   subWeeks, subMonths, startOfMonth, endOfMonth, eachDayOfInterval,
   isSameDay, isSameMonth, isToday, isValid,
 } from 'date-fns';
-import { ChevronLeft, ChevronRight, CalendarDays, User, Clock } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CalendarDays, User, Clock, Pause, Play } from 'lucide-react';
 import { Job, Customer, User as UserType, JobStatus } from '../types';
 import type { Contractor } from '../types/contractor';
 
@@ -101,7 +101,8 @@ const PlannerJobCard: React.FC<{
   contractorName?: string;
   onClick: (jobId: string) => void;
   dimmed?: boolean;
-}> = ({ job, customer, contractorName, onClick, dimmed }) => {
+  onToggleHold?: (job: Job) => void;
+}> = ({ job, customer, contractorName, onClick, dimmed, onToggleHold }) => {
   const colorClass = statusColors[job.status] ?? 'bg-slate-100 text-slate-700 border-slate-200';
   const name = customer?.name ?? job.clientName ?? `WO ${job.id.slice(0, 6)}`;
   const serviceLabel = job.serviceType
@@ -109,36 +110,54 @@ const PlannerJobCard: React.FC<{
     : '';
   const hourWindow = formatHourWindow(job.scheduledTime, job.laborHours);
 
+  // Card + an overlaid hold/resume control. The control is a sibling button (not
+  // nested in the card button, which is invalid HTML); stopPropagation keeps a
+  // hold click from opening the WO.
   return (
-    <button
-      onClick={() => onClick(job.id)}
-      draggable
-      onDragStart={e => { e.dataTransfer.setData('text/plain', job.id); e.dataTransfer.effectAllowed = 'move'; }}
-      className={`w-full text-left rounded border px-2 py-1.5 mb-1 transition-opacity cursor-grab active:cursor-grabbing ${colorClass} ${dimmed ? 'opacity-40' : 'hover:opacity-80'}`}
-    >
-      {/* Line 1: US-15xxx + customer name */}
-      <p className="text-[11px] font-semibold leading-tight truncate">
-        {customer?.clientId && <span className="opacity-60">{customer.clientId} </span>}
-        {name}
-      </p>
-      {/* Line 2: visit type */}
-      {serviceLabel && (
-        <p className="text-[9px] opacity-70 leading-tight truncate">{serviceLabel}</p>
-      )}
-      {/* Line 3: contractor assigned */}
-      <p className="text-[9px] leading-tight truncate flex items-center gap-1">
-        <User className="w-2.5 h-2.5 flex-shrink-0 opacity-60" />
-        <span className={contractorName ? 'opacity-80' : 'opacity-50 italic'}>
-          {contractorName || 'Unassigned'}
-        </span>
-      </p>
-      {/* Line 4: hour window */}
-      {hourWindow && (
-        <p className="text-[9px] font-semibold opacity-60 leading-tight flex items-center gap-1">
-          <Clock className="w-2.5 h-2.5 flex-shrink-0" />{hourWindow}
+    <div className="relative mb-1">
+      <button
+        onClick={() => onClick(job.id)}
+        draggable
+        onDragStart={e => { e.dataTransfer.setData('text/plain', job.id); e.dataTransfer.effectAllowed = 'move'; }}
+        className={`w-full text-left rounded border px-2 py-1.5 transition-opacity cursor-grab active:cursor-grabbing ${colorClass} ${dimmed ? 'opacity-40' : 'hover:opacity-80'} ${job.onHold ? 'ring-1 ring-amber-400' : ''}`}
+      >
+        {/* Line 1: US-15xxx + customer name (pad right so the hold button never overlaps) */}
+        <p className="text-[11px] font-semibold leading-tight truncate pr-5">
+          {customer?.clientId && <span className="opacity-60">{customer.clientId} </span>}
+          {name}
         </p>
+        {/* Line 2: visit type */}
+        {serviceLabel && (
+          <p className="text-[9px] opacity-70 leading-tight truncate">{serviceLabel}</p>
+        )}
+        {/* Line 3: contractor assigned */}
+        <p className="text-[9px] leading-tight truncate flex items-center gap-1">
+          <User className="w-2.5 h-2.5 flex-shrink-0 opacity-60" />
+          <span className={contractorName ? 'opacity-80' : 'opacity-50 italic'}>
+            {contractorName || 'Unassigned'}
+          </span>
+        </p>
+        {/* Line 4: hour window */}
+        {hourWindow && (
+          <p className="text-[9px] font-semibold opacity-60 leading-tight flex items-center gap-1">
+            <Clock className="w-2.5 h-2.5 flex-shrink-0" />{hourWindow}
+          </p>
+        )}
+        {job.onHold && (
+          <span className="inline-block mt-1 text-[8px] font-bold uppercase tracking-wide text-amber-700 bg-amber-100 rounded px-1 py-0.5">On hold</span>
+        )}
+      </button>
+      {onToggleHold && (
+        <button
+          onClick={e => { e.stopPropagation(); onToggleHold(job); }}
+          title={job.onHold ? 'Resume (remove hold)' : 'Place on hold'}
+          aria-label={job.onHold ? 'Resume work order' : 'Place work order on hold'}
+          className={`absolute top-1 right-1 p-0.5 rounded transition-colors ${job.onHold ? 'text-amber-600 hover:bg-amber-100' : 'text-slate-400 hover:text-amber-600 hover:bg-white/60'}`}
+        >
+          {job.onHold ? <Play className="w-3 h-3" /> : <Pause className="w-3 h-3" />}
+        </button>
       )}
-    </button>
+    </div>
   );
 };
 
@@ -153,7 +172,8 @@ const PlannerDayColumn: React.FC<{
   resolveContractor: (job: Job) => string;
   isLastColumn?: boolean;
   onReschedule?: Reschedule;
-}> = ({ day, jobs, customers, isCurrentMonth, onJobClick, resolveContractor, isLastColumn, onReschedule }) => {
+  onToggleHold?: (job: Job) => void;
+}> = ({ day, jobs, customers, isCurrentMonth, onJobClick, resolveContractor, isLastColumn, onReschedule, onToggleHold }) => {
   const today = isToday(day);
   const { over, props: dropProps } = useDayDrop(day, onReschedule);
 
@@ -191,6 +211,7 @@ const PlannerDayColumn: React.FC<{
               contractorName={resolveContractor(job)}
               onClick={onJobClick}
               dimmed={!isCurrentMonth}
+              onToggleHold={onToggleHold}
             />
           ))
         )}
@@ -209,7 +230,8 @@ const WeekPlanner: React.FC<{
   onJobClick: (jobId: string) => void;
   resolveContractor: (job: Job) => string;
   onReschedule?: Reschedule;
-}> = ({ days, jobs, customers, focusMonth, onJobClick, resolveContractor, onReschedule }) => (
+  onToggleHold?: (job: Job) => void;
+}> = ({ days, jobs, customers, focusMonth, onJobClick, resolveContractor, onReschedule, onToggleHold }) => (
   <div className="overflow-x-auto rounded-lg border border-slate-200">
     <div className="flex min-w-[700px]">
       {days.map((day, i) => (
@@ -223,6 +245,7 @@ const WeekPlanner: React.FC<{
           onJobClick={onJobClick}
           isLastColumn={i === days.length - 1}
           onReschedule={onReschedule}
+          onToggleHold={onToggleHold}
         />
       ))}
     </div>
@@ -239,7 +262,8 @@ const TwoWeekPlanner: React.FC<{
   onJobClick: (jobId: string) => void;
   resolveContractor: (job: Job) => string;
   onReschedule?: Reschedule;
-}> = ({ weekStart, jobs, customers, focusMonth, onJobClick, resolveContractor, onReschedule }) => {
+  onToggleHold?: (job: Job) => void;
+}> = ({ weekStart, jobs, customers, focusMonth, onJobClick, resolveContractor, onReschedule, onToggleHold }) => {
   const week1 = eachDayOfInterval({ start: weekStart, end: addDays(weekStart, 6) });
   const week2 = eachDayOfInterval({ start: addDays(weekStart, 7), end: addDays(weekStart, 13) });
 
@@ -256,6 +280,7 @@ const TwoWeekPlanner: React.FC<{
           resolveContractor={resolveContractor}
           isLastColumn={i === 6}
           onReschedule={onReschedule}
+          onToggleHold={onToggleHold}
         />
       ))}
     </div>
@@ -280,7 +305,8 @@ const MonthDayCell: React.FC<{
   onJobClick: (jobId: string) => void;
   resolveContractor: (job: Job) => string;
   onReschedule?: Reschedule;
-}> = ({ day, jobs, customers, isCurrentMonth, onJobClick, resolveContractor, onReschedule }) => {
+  onToggleHold?: (job: Job) => void;
+}> = ({ day, jobs, customers, isCurrentMonth, onJobClick, resolveContractor, onReschedule, onToggleHold }) => {
   const [showAll, setShowAll] = useState(false);
   const { over, props: dropProps } = useDayDrop(day, onReschedule);
   const visible = jobs.slice(0, 3);
@@ -311,6 +337,7 @@ const MonthDayCell: React.FC<{
             contractorName={resolveContractor(job)}
             onClick={onJobClick}
             dimmed={!isCurrentMonth}
+            onToggleHold={onToggleHold}
           />
         ))}
         {overflow > 0 && !showAll && (
@@ -329,6 +356,7 @@ const MonthDayCell: React.FC<{
             contractorName={resolveContractor(job)}
             onClick={onJobClick}
             dimmed={!isCurrentMonth}
+            onToggleHold={onToggleHold}
           />
         ))}
       </div>
@@ -343,7 +371,8 @@ const MonthGrid: React.FC<{
   onJobClick: (jobId: string) => void;
   resolveContractor: (job: Job) => string;
   onReschedule?: Reschedule;
-}> = ({ focusDate, jobs, customers, onJobClick, resolveContractor, onReschedule }) => {
+  onToggleHold?: (job: Job) => void;
+}> = ({ focusDate, jobs, customers, onJobClick, resolveContractor, onReschedule, onToggleHold }) => {
   const monthStart = startOfMonth(focusDate);
   const monthEnd = endOfMonth(focusDate);
   const gridStart = getWeekStart(monthStart);
@@ -373,6 +402,7 @@ const MonthGrid: React.FC<{
             onJobClick={onJobClick}
             resolveContractor={resolveContractor}
             onReschedule={onReschedule}
+            onToggleHold={onToggleHold}
           />
         ))}
       </div>
@@ -425,7 +455,20 @@ interface WorkOrderCalendarProps {
   onJobClick: (jobId: string) => void;
   /** Drag-to-reschedule: drop a card on a day to set its scheduled date. */
   onReschedule?: Reschedule;
+  /** Park/un-park a work order from its calendar card. */
+  onToggleHold?: (job: Job) => void;
 }
+
+type CalStatusFilter = 'active' | 'on_hold' | 'completed' | 'all';
+const CALENDAR_STATUS_KEY = 'solarops_calendar_status_filter';
+// Status-filter predicates. "Active" = the working queue: pending/assigned/scheduled/
+// in-progress, parked orders and finished (completed/invoiced/paid/archived) hidden.
+const statusFilterFns: Record<CalStatusFilter, (j: Job) => boolean> = {
+  active: j => !j.onHold && !['completed', 'invoiced', 'paid', 'archived'].includes(j.status),
+  on_hold: j => !!j.onHold,
+  completed: j => ['completed', 'invoiced', 'paid'].includes(j.status),
+  all: () => true,
+};
 
 export const WorkOrderCalendar: React.FC<WorkOrderCalendarProps> = ({
   jobs,
@@ -433,11 +476,20 @@ export const WorkOrderCalendar: React.FC<WorkOrderCalendarProps> = ({
   contractors = [],
   onJobClick,
   onReschedule,
+  onToggleHold,
 }) => {
   const [calendarView, setCalendarView] = useState<CalendarViewMode>(() => {
     const saved = localStorage.getItem(CALENDAR_VIEW_KEY) as CalendarViewMode | null;
     return saved ?? 'week';
   });
+  const [statusFilter, setStatusFilter] = useState<CalStatusFilter>(() => {
+    const saved = localStorage.getItem(CALENDAR_STATUS_KEY) as CalStatusFilter | null;
+    return saved ?? 'active';
+  });
+  const changeStatusFilter = useCallback((f: CalStatusFilter) => {
+    setStatusFilter(f);
+    localStorage.setItem(CALENDAR_STATUS_KEY, f);
+  }, []);
 
   // Resolve the contractor assigned to a job for display on each card.
   const contractorById = React.useMemo(
@@ -458,8 +510,10 @@ export const WorkOrderCalendar: React.FC<WorkOrderCalendarProps> = ({
     setFocusDate(prev => getWeekStart(prev));
   }, []);
 
-  const scheduledJobs = jobs.filter(j => parseDateSafe(j.scheduledDate) !== null);
-  const unscheduledJobs = jobs.filter(j => !parseDateSafe(j.scheduledDate));
+  const statusVisible = statusFilterFns[statusFilter];
+  const visibleJobs = jobs.filter(statusVisible);
+  const scheduledJobs = visibleJobs.filter(j => parseDateSafe(j.scheduledDate) !== null);
+  const unscheduledJobs = visibleJobs.filter(j => !parseDateSafe(j.scheduledDate));
 
   const navigateBack = () => {
     if (calendarView === 'month') setFocusDate(d => getWeekStart(startOfMonth(subMonths(addDays(d, 15), 1))));
@@ -523,26 +577,44 @@ export const WorkOrderCalendar: React.FC<WorkOrderCalendarProps> = ({
           </button>
         </div>
 
-        <div className="flex rounded-lg border border-slate-200 overflow-hidden text-sm">
-          {(['week', '2week', 'month'] as CalendarViewMode[]).map(mode => (
-            <button
-              key={mode}
-              onClick={() => handleViewChange(mode)}
-              className={`px-3 py-1.5 font-medium transition-colors ${
-                calendarView === mode
-                  ? 'bg-slate-800 text-white'
-                  : 'bg-white text-slate-600 hover:bg-slate-50'
-              }`}
-            >
-              {mode === 'week' ? '7-Day' : mode === '2week' ? '2-Week' : 'Month'}
-            </button>
-          ))}
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Status filter: defaults to Active so finished/parked orders are hidden. */}
+          <div className="flex rounded-lg border border-slate-200 overflow-hidden text-sm">
+            {([['active', 'Active'], ['on_hold', 'On Hold'], ['completed', 'Completed'], ['all', 'All']] as [CalStatusFilter, string][]).map(([key, label]) => (
+              <button
+                key={key}
+                onClick={() => changeStatusFilter(key)}
+                title={key === 'active' ? 'Pending, assigned, scheduled and in-progress only' : undefined}
+                className={`px-2.5 py-1.5 font-medium transition-colors ${
+                  statusFilter === key ? 'bg-orange-500 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex rounded-lg border border-slate-200 overflow-hidden text-sm">
+            {(['week', '2week', 'month'] as CalendarViewMode[]).map(mode => (
+              <button
+                key={mode}
+                onClick={() => handleViewChange(mode)}
+                className={`px-3 py-1.5 font-medium transition-colors ${
+                  calendarView === mode
+                    ? 'bg-slate-800 text-white'
+                    : 'bg-white text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                {mode === 'week' ? '7-Day' : mode === '2week' ? '2-Week' : 'Month'}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
       {/* Calendar body */}
       {calendarView === 'month' ? (
-        <MonthGrid focusDate={focusDate} jobs={scheduledJobs} customers={customers} onJobClick={onJobClick} resolveContractor={resolveContractor} onReschedule={onReschedule} />
+        <MonthGrid focusDate={focusDate} jobs={scheduledJobs} customers={customers} onJobClick={onJobClick} resolveContractor={resolveContractor} onReschedule={onReschedule} onToggleHold={onToggleHold} />
       ) : calendarView === '2week' ? (
         <TwoWeekPlanner
           weekStart={weekStart}
@@ -552,6 +624,7 @@ export const WorkOrderCalendar: React.FC<WorkOrderCalendarProps> = ({
           onJobClick={onJobClick}
           resolveContractor={resolveContractor}
           onReschedule={onReschedule}
+          onToggleHold={onToggleHold}
         />
       ) : (
         <WeekPlanner
@@ -562,6 +635,7 @@ export const WorkOrderCalendar: React.FC<WorkOrderCalendarProps> = ({
           onJobClick={onJobClick}
           resolveContractor={resolveContractor}
           onReschedule={onReschedule}
+          onToggleHold={onToggleHold}
         />
       )}
 

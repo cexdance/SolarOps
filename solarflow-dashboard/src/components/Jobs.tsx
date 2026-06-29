@@ -1,5 +1,5 @@
 // SolarFlow MVP - Jobs Component
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { formatMoney } from '../lib/money';
 import {
   Plus, Search, Calendar, MapPin, User, Clock, X, Wrench, Zap, LayoutGrid, List as ListIcon,
@@ -413,7 +413,10 @@ export const Jobs: React.FC<JobsProps> = ({
   const archivedCount = useMemo(() => jobs.filter(j => j.status === 'archived' && !showArchived).length, [jobs, showArchived]);
   const onHoldCount = useMemo(() => jobs.filter(j => j.onHold && j.status !== 'archived').length, [jobs]);
 
-  const filteredJobs = useMemo(() => jobs.filter((job) => {
+  // Shared job predicate. `includeHeld` lets the calendar receive parked orders
+  // (it has its own On Hold / Active status filter) while the list + kanban keep
+  // the board's "Show On Hold" gating.
+  const jobMatches = useCallback((job: Job, includeHeld: boolean) => {
     const customer = customers.find((c) => c.id === job.customerId);
     const matchesSearch =
       !searchQuery ||
@@ -440,11 +443,15 @@ export const Jobs: React.FC<JobsProps> = ({
     const isArchived = job.status === 'archived';
     const notArchived = !isArchived || showArchived;
     // Held orders are parked: hidden from the queue unless "Show On Hold" is on or
-    // the admin is explicitly filtering to On Hold.
-    const notHeld = !job.onHold || showOnHold || filterStatus === 'on_hold';
+    // the admin is explicitly filtering to On Hold (the calendar passes includeHeld).
+    const notHeld = includeHeld || !job.onHold || showOnHold || filterStatus === 'on_hold';
 
     return matchesSearch && matchesStatus && matchesContractor && matchesPeriod && notArchived && notHeld;
-  }), [jobs, customers, searchQuery, filterStatus, filterContractor, periodRange, showArchived, showOnHold]);
+  }, [customers, searchQuery, filterStatus, filterContractor, periodRange, showArchived, showOnHold]);
+
+  const filteredJobs = useMemo(() => jobs.filter(j => jobMatches(j, false)), [jobs, jobMatches]);
+  // The calendar always receives held orders; its own status filter shows/hides them.
+  const calendarJobs = useMemo(() => jobs.filter(j => jobMatches(j, true)), [jobs, jobMatches]);
 
   // Held orders for the kanban "On Hold" column - always shown there (independent of
   // the Show On Hold toggle and status filter), matching the search/contractor/period
@@ -761,13 +768,14 @@ export const Jobs: React.FC<JobsProps> = ({
       {/* Calendar View */}
       {viewMode === 'calendar' && (
         <WorkOrderCalendar
-          jobs={filteredJobs}
+          jobs={calendarJobs}
           customers={customers}
           users={users}
           contractors={contractors}
           isMobile={isMobile}
           onJobClick={handleCardClick}
           onReschedule={handleReschedule}
+          onToggleHold={handleToggleHold}
         />
       )}
 
