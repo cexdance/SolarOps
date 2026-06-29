@@ -8,6 +8,8 @@ import { useVersionPoll } from './hooks/useVersionPoll';
 import { useSyncEngine }  from './hooks/useSyncEngine';
 import { BUILD_ID } from './lib/versionConfig';
 import { StorageWarningBanner } from './components/StorageWarningBanner';
+import { ErrorBoundary } from './shared/components/ErrorBoundary';
+import { SuspenseFallback } from './shared/components/SuspenseFallback';
 const Layout             = lazy(() => import('./components/Layout').then(m => ({ default: m.Layout })));
 const Dashboard          = lazy(() => import('./components/Dashboard').then(m => ({ default: m.Dashboard })));
 const Jobs               = lazy(() => import('./components/Jobs').then(m => ({ default: m.Jobs })));
@@ -55,7 +57,7 @@ import { useUnreadBadge } from './hooks/useUnreadBadge';
 import { resolveSessionRoute, isContractorAccount } from './lib/authRouting';
 import { Eye, X } from 'lucide-react';
 
-// ── Web Push helpers ──────────────────────────────────────────────────────────
+// ── Web Push helpers ────────────────────────────────────────────────────────
 
 const VAPID_PUBLIC_KEY = 'BAZ1FTjkOgcZmNiDU8ZLbeVFpuXv3XHNMXdAIi0DNWP3OyEGnHjdpDnHeWsAoF7FzGg-mMpo7YC2KPgMhSRGvB8';
 
@@ -66,7 +68,7 @@ function urlBase64ToUint8Array(b64: string): Uint8Array {
   return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
 }
 
-async function subscribeToPush(): Promise<void> {
+async function subscribeToPush(accessToken?: string): Promise<void> {
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
   try {
     const reg = await navigator.serviceWorker.ready;
@@ -79,16 +81,33 @@ async function subscribeToPush(): Promise<void> {
         applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
       });
     }
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.access_token) return;
+    // Use provided token, or fetch session as fallback
+    let token = accessToken;
+    if (!token) {
+      const { data: { session } } = await supabase.auth.getSession();
+      token = session?.access_token;
+    }
+    if (!token) return;
     await fetch('/api/push-subscribe', {
       method:  'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body:    JSON.stringify({ subscription: sub.toJSON() }),
     });
   } catch (err) {
     console.warn('[push] subscription failed:', err);
   }
+}
+
+// Auth timeout error class for distinct error handling
+class AuthTimeoutError extends Error {
+  constructor(message = 'Authentication request timed out') {
+    super(message);
+    this.name = 'AuthTimeoutError';
+  }
+}
+
+function isAuthTimeoutError(err: unknown): err is AuthTimeoutError {
+  return err instanceof AuthTimeoutError;
 }
 
 // ── Passkey / WebAuthn helpers (imported from shared lib) ─────────────────────
@@ -118,16 +137,22 @@ const LoginScreen: React.FC<{
   const [forgotLoading, setForgotLoading] = useState(false);
   const [passkeyAvailable, setPasskeyAvailable] = useState(false);
   const [passkeyStored, setPasskeyStored] = useState(false);
-  useEffect(() => {
+  useEffect((): (() => void) => {
     localStorage.removeItem('solarops_reset_mode'); // staff page clears contractor mode flag
+    let cancelled = false;
     if (isPlatformAuthAvailable()) {
       window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()
         .then(available => {
-          setPasskeyAvailable(available);
-          setPasskeyStored(available && !!localStorage.getItem(PASSKEY_STORE_KEY));
+          if (!cancelled) {
+            setPasskeyAvailable(available);
+            setPasskeyStored(available && !!localStorage.getItem(PASSKEY_STORE_KEY));
+          }
         })
-        .catch((e) => console.error('[App] passkey availability check failed', e));
+        .catch((e) => {
+          if (!cancelled) console.error('[App] passkey availability check failed', e);
+        });
     }
+    return () => { cancelled = true; };
   }, []);
 
   const finishStaffLogin = async (supaUser: import('@supabase/supabase-js').User, offerPasskey = false) => {
@@ -139,7 +164,16 @@ const LoginScreen: React.FC<{
           headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
         });
         if (res.ok) {
-          const remote = await res.json() as { build?: string };
+          let remote: { build?: string } = { build: undefined };
+          try {
+            remote = await res.json() as { build?: string };
+            // Validate the response format
+            if (typeof remote !== 'object' || remote === null) {
+              throw new Error('Invalid version response format');
+            }
+          } catch (parseErr) {
+            console.warn('[Auth] Version check: malformed response, ignoring', parseErr);
+          }
           if (remote.build && remote.build !== BUILD_ID) {
             console.info('[Auth] New deployment detected on sign-in. Reloading…');
             window.location.reload();
@@ -178,9 +212,39 @@ const LoginScreen: React.FC<{
   };
 
   const AUTH_TIMEOUT_MS = 12_000; // 12s, Supabase auth must respond within this window
-  const authTimeout = <T,>(p: Promise<T>): Promise<T> =>
-    Promise.race([p, new Promise<T>((_, reject) =>
-      setTimeout(() => reject(new Error('auth-timeout')), AUTH_TIMEOUT_MS))]);
+
+// Auth timeout wrapper with custom error and optional retry
+async function authTimeoutWithRetry<T>(
+  p: Promise<T>,
+  timeoutMs = AUTH_TIMEOUT_MS,
+  retries = 0
+): Promise<T> {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await Promise.race<T>([
+        p,
+        new Promise<T>((_, reject) =>
+          setTimeout(() => reject(new AuthTimeoutError()), timeoutMs)
+        ),
+      ]);
+    } catch (err) {
+      if (isAuthTimeoutError(err)) {
+        if (attempt < retries) {
+          console.warn(`[Auth] Timeout on attempt ${attempt + 1}/${retries + 1}, retrying...`);
+          // Exponential backoff: 1s, 2s, 4s...
+          await new Promise(r => setTimeout(r, 1000 * 2 ** attempt));
+          continue;
+        }
+        throw new AuthTimeoutError(
+          `Authentication timed out after ${retries + 1} attempt(s). Check your internet connection.`
+        );
+      }
+      throw err;
+    }
+  }
+  // Should never reach here, but TypeScript needs it
+  throw new AuthTimeoutError('Authentication failed after retries');
+}
 
   const handlePasskeyLogin = async () => {
     setError('');
@@ -192,9 +256,10 @@ const LoginScreen: React.FC<{
         return;
       }
       // Try current session first; if JWT expired, refresh using the stored refresh token
-      let { data: { session } } = await authTimeout(supabase.auth.getSession());
+      // Use retry logic (2 retries = 3 attempts total) for better resilience on slow networks
+      let { data: { session } } = await authTimeoutWithRetry(supabase.auth.getSession(), AUTH_TIMEOUT_MS, 2);
       if (!session) {
-        const { data: refreshed } = await authTimeout(supabase.auth.refreshSession());
+        const { data: refreshed } = await authTimeoutWithRetry(supabase.auth.refreshSession(), AUTH_TIMEOUT_MS, 1);
         session = refreshed.session;
       }
       if (session?.user) {
@@ -203,8 +268,8 @@ const LoginScreen: React.FC<{
         setError('Session expired. Please sign in with your password once to re-enable Face ID.');
       }
     } catch (err: any) {
-      if (err?.message === 'auth-timeout') {
-        setError('Connection timed out. Check your internet and try again.');
+      if (isAuthTimeoutError(err)) {
+        setError(err.message);
       } else {
         setError('Sign in failed. Please try again.');
       }
@@ -218,8 +283,10 @@ const LoginScreen: React.FC<{
     setError('');
     setLoading(true);
     try {
-      const { data, error: authError } = await authTimeout(
-        supabase.auth.signInWithPassword({ email, password })
+      const { data, error: authError } = await authTimeoutWithRetry(
+        supabase.auth.signInWithPassword({ email, password }),
+        AUTH_TIMEOUT_MS,
+        2 // 2 retries for password auth too
       );
       if (authError || !data.user) {
         setError('Invalid email or password.');
@@ -234,8 +301,8 @@ const LoginScreen: React.FC<{
       }
       await finishStaffLogin(data.user, true);
     } catch (err: any) {
-      if (err?.message === 'auth-timeout') {
-        setError('Connection timed out. Check your internet and try again.');
+      if (isAuthTimeoutError(err)) {
+        setError(err.message);
       } else {
         setError('Sign in failed. Please try again.');
       }
@@ -811,6 +878,93 @@ function App() {
     saveContractorJobs(contractorJobs);
   }, [contractorJobs]);
 
+  // ── Contractor → admin reconciliation (sync-side) ──────────────────────────
+  // handleContractorJobUpdate mirrors contractor work into the admin Job, but it
+  // only runs on the CONTRACTOR's device, where data.jobs usually has no admin
+  // Job, so `if (!adminJob) return prev` no-ops and the admin Job never gets the
+  // completion or photos. The ContractorJob still syncs (completed + photos), so
+  // the admin board is left stuck at "assigned"/0 photos (e.g. SO-2606-82754:
+  // contractor completed with 15 photos, admin frozen at assigned). This admin-
+  // side pass reconciles any synced ContractorJob into its linked admin Job.
+  // Idempotent: it only writes when content actually differs (photo stems, status,
+  // service report), so once mirrored it produces no further updates and can't loop.
+  // ponytail: additive photo merge (never deletes) + advance-only status. The
+  // contractor-device path still owns deletes/downgrades; this only fills gaps.
+  useEffect(() => {
+    // Skip while an admin is impersonating a contractor (read-only view, no writes).
+    // Real contractor sessions are staff-User-less and carry no admin jobs anyway.
+    if (isImpersonating) return;
+    const VALID = new Set(['before', 'after', 'serial', 'process', 'parts', 'progress', 'ppe', 'voltage', 'old_serial', 'string_voltage', 'cabinet_old', 'cabinet_new', 'new_serial', 'inv_overview']);
+    const STALE_ADMIN = new Set<JobStatus>(['new', 'assigned', 'in_progress']);
+
+    const jobsById = new Map(data.jobs.map(j => [j.id, j]));
+    const patches = new Map<string, Job>();
+
+    for (const cj of contractorJobs) {
+      if (!cj.sourceJobId) continue;
+      const adminJob = jobsById.get(cj.sourceJobId);
+      if (!adminJob) continue;
+
+      // New contractor photos (Storage URLs only; base64 lives in IDB and is
+      // mirrored once it has an https URL). Dedupe by URL stem against existing.
+      const existing = adminJob.woPhotos ?? [];
+      const seen = new Set(existing.map(p => photoUrlStem(p.storageUrl || p.dataUrl || '')).filter(Boolean));
+      const newPhotos: import('./types').WOPhoto[] = [];
+      for (const [cat, urls] of Object.entries(cj.photos ?? {})) {
+        for (const url of (urls ?? [])) {
+          if (!url || !url.startsWith('http')) continue;
+          const stem = photoUrlStem(url);
+          if (stem && seen.has(stem)) continue;
+          if (stem) seen.add(stem);
+          newPhotos.push({
+            id: `cp-${cat}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            category: (VALID.has(cat) ? cat : 'process') as import('./types').WOPhoto['category'],
+            name: `${cat} photo`, dataUrl: '', storageUrl: url, createdAt: new Date().toISOString(),
+          });
+        }
+      }
+
+      // Completion is driven by completedAt, NOT status: 'on_hold' is an orthogonal
+      // parking flag (not a status), so a completed-then-parked WO still carries
+      // completedAt and must read as completed on the admin side. Advance only when
+      // the admin Job is still behind so we never downgrade an invoiced/paid order.
+      const isCompleted = cj.status === 'completed' || !!cj.completedAt;
+      const liveStatus: (WOStatus & JobStatus) | null = isCompleted ? 'completed'
+        : (cj.status === 'en_route' || cj.status === 'in_progress') ? 'in_progress' : null;
+      const advance = !!liveStatus && STALE_ADMIN.has(adminJob.status) && liveStatus !== adminJob.status;
+      const note = (cj.operationalNotes ?? cj.completionNotes ?? '').trim();
+      const needReport = !!note && note !== (adminJob.serviceReport ?? '').trim();
+      // NOTE: On Hold is admin-owned (orthogonal parking flag). We deliberately do
+      // NOT mirror a contractor's on_hold here, a completed WO shouldn't be force-
+      // parked on the staff board, and the office controls hold state.
+
+      if (newPhotos.length === 0 && !advance && !needReport) continue;
+
+      const updated: Job = { ...adminJob, updatedAt: new Date().toISOString() };
+      if (newPhotos.length) updated.woPhotos = [...existing, ...newPhotos];
+      if (advance && liveStatus) {
+        updated.status = liveStatus;
+        updated.woStatus = liveStatus;
+        if (liveStatus === 'completed') updated.completedAt = adminJob.completedAt || cj.completedAt || new Date().toISOString();
+      }
+      updated.contractorJobStatus = cj.status ?? adminJob.contractorJobStatus;
+      if (needReport) updated.serviceReport = note;
+      if (cj.serviceStatus && cj.serviceStatus !== adminJob.serviceStatus) updated.serviceStatus = cj.serviceStatus;
+
+      patches.set(adminJob.id, updated);
+      logChange('job.field_update', 'job', adminJob.id, {
+        source: 'contractor-reconcile', cjId: cj.id, photosAdded: newPhotos.length, advanced: advance,
+      }, data.currentUser?.email ?? 'system');
+    }
+
+    if (patches.size === 0) return;
+    setData(prev => {
+      const next = { ...prev, jobs: prev.jobs.map(j => patches.get(j.id) ?? j) };
+      saveData(next);
+      return next;
+    });
+  }, [contractorJobs, data.jobs, isImpersonating]);
+
   // remote-update handler is now inside useSyncEngine above
 
   // Run billing timers once on mount
@@ -909,6 +1063,8 @@ function App() {
         flushChangeLog().catch((e) => console.error('[App] flushChangeLog failed', e));
         // Load Supabase notifications, start polling + Realtime sub for instant delivery
         setupNotifications(user.id);
+        // Subscribe to Web Push (Tier 3 badge) - pass token from restored session
+        subscribeToPush(session?.access_token);
         // Restore dual-role contractor link on session resume
         const linked = findLinkedContractor(loadContractors(), user.email);
         if (linked) setLinkedContractor(linked);
@@ -983,12 +1139,14 @@ function App() {
     : null;
 
   // Auth handlers
-  const handleLogin = (user: User, forcePasswordChange = false) => {
+  const handleLogin = async (user: User, forcePasswordChange = false) => {
     sessionStorage.removeItem('solarflow_contractor_mode');
     setData(prev => ({ ...prev, currentUser: user }));
     setIsAuthenticated(true);
     setIsContractorMode(false);
     if (forcePasswordChange) { setMustChangePassword(true); return; }
+    // Get session for Web Push subscription (avoids race condition in subscribeToPush)
+    const { data: { session } } = await supabase.auth.getSession();
     fetchStaffUsers().then(users => {
       if (users.length > 0) setData(prev => ({
         ...prev,
@@ -1000,8 +1158,8 @@ function App() {
     });
     // Wire up the bell on fresh login (resume path does this separately).
     setupNotifications(user.id);
-    // Subscribe to Web Push (Tier 3 badge) - asks for Notifications permission once.
-    subscribeToPush();
+    // Subscribe to Web Push (Tier 3 badge) - pass token to avoid race condition
+    if (session?.access_token) subscribeToPush(session.access_token);
     if (user.role === 'sales') {
       setCurrentView('crm');
     }
@@ -3114,9 +3272,10 @@ function App() {
   };
 
   return (
-    <Suspense fallback={<div className="min-h-screen bg-slate-50 flex items-center justify-center"><div className="w-8 h-8 border-4 border-orange-400 border-t-transparent rounded-full animate-spin" /></div>}>
-      <StorageWarningBanner getSnapshot={() => data} />
-      <Layout
+    <ErrorBoundary>
+      <Suspense fallback={<SuspenseFallback message="Loading application..." />}>
+        <StorageWarningBanner getSnapshot={() => data} />
+        <Layout
         currentView={currentView}
         onViewChange={handleViewChange}
         currentUser={currentUser}
@@ -3139,7 +3298,8 @@ function App() {
       </Layout>
       <SyncStatusToast />
     </Suspense>
-  );
+  </ErrorBoundary>
+);
 }
 
 export default App;

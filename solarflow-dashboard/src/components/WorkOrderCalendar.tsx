@@ -55,6 +55,29 @@ function getJobsForDay(jobs: Job[], day: Date): Job[] {
   });
 }
 
+type Reschedule = (jobId: string, newDate: string) => void;
+
+// Native HTML5 drop target for a calendar day. Returns `over` (for highlight)
+// and the drag handlers to spread onto the day container. Drop reschedules the
+// dragged job to this day (yyyy-MM-dd).
+function useDayDrop(day: Date, onReschedule?: Reschedule) {
+  const [over, setOver] = useState(false);
+  const enabled = !!onReschedule;
+  const props = enabled
+    ? {
+        onDragOver: (e: React.DragEvent) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; if (!over) setOver(true); },
+        onDragLeave: () => setOver(false),
+        onDrop: (e: React.DragEvent) => {
+          e.preventDefault();
+          setOver(false);
+          const id = e.dataTransfer.getData('text/plain');
+          if (id) onReschedule!(id, format(day, 'yyyy-MM-dd'));
+        },
+      }
+    : {};
+  return { over: enabled && over, props };
+}
+
 // ── Job Card (planner style) ──────────────────────────────────────────────────
 
 // Format the scheduled time as an hour window. With a known labor duration we
@@ -89,7 +112,9 @@ const PlannerJobCard: React.FC<{
   return (
     <button
       onClick={() => onClick(job.id)}
-      className={`w-full text-left rounded border px-2 py-1.5 mb-1 transition-opacity ${colorClass} ${dimmed ? 'opacity-40' : 'hover:opacity-80'}`}
+      draggable
+      onDragStart={e => { e.dataTransfer.setData('text/plain', job.id); e.dataTransfer.effectAllowed = 'move'; }}
+      className={`w-full text-left rounded border px-2 py-1.5 mb-1 transition-opacity cursor-grab active:cursor-grabbing ${colorClass} ${dimmed ? 'opacity-40' : 'hover:opacity-80'}`}
     >
       {/* Line 1: US-15xxx + customer name */}
       <p className="text-[11px] font-semibold leading-tight truncate">
@@ -127,11 +152,16 @@ const PlannerDayColumn: React.FC<{
   onJobClick: (jobId: string) => void;
   resolveContractor: (job: Job) => string;
   isLastColumn?: boolean;
-}> = ({ day, jobs, customers, isCurrentMonth, onJobClick, resolveContractor, isLastColumn }) => {
+  onReschedule?: Reschedule;
+}> = ({ day, jobs, customers, isCurrentMonth, onJobClick, resolveContractor, isLastColumn, onReschedule }) => {
   const today = isToday(day);
+  const { over, props: dropProps } = useDayDrop(day, onReschedule);
 
   return (
-    <div className={`flex flex-col flex-1 min-w-[110px] border-r ${isLastColumn ? 'border-r-0' : ''} border-slate-200`}>
+    <div
+      {...dropProps}
+      className={`flex flex-col flex-1 min-w-[110px] border-r ${isLastColumn ? 'border-r-0' : ''} border-slate-200 ${over ? 'ring-2 ring-inset ring-orange-400 bg-orange-50/40' : ''}`}
+    >
       {/* Day header */}
       <div className={`flex flex-col items-center py-2 border-b border-slate-200 ${today ? 'bg-orange-50' : 'bg-slate-50'}`}>
         <span className={`text-[10px] font-semibold uppercase tracking-wide ${today ? 'text-orange-500' : 'text-slate-500'}`}>
@@ -178,7 +208,8 @@ const WeekPlanner: React.FC<{
   focusMonth: Date;
   onJobClick: (jobId: string) => void;
   resolveContractor: (job: Job) => string;
-}> = ({ days, jobs, customers, focusMonth, onJobClick, resolveContractor }) => (
+  onReschedule?: Reschedule;
+}> = ({ days, jobs, customers, focusMonth, onJobClick, resolveContractor, onReschedule }) => (
   <div className="overflow-x-auto rounded-lg border border-slate-200">
     <div className="flex min-w-[700px]">
       {days.map((day, i) => (
@@ -191,6 +222,7 @@ const WeekPlanner: React.FC<{
           resolveContractor={resolveContractor}
           onJobClick={onJobClick}
           isLastColumn={i === days.length - 1}
+          onReschedule={onReschedule}
         />
       ))}
     </div>
@@ -206,7 +238,8 @@ const TwoWeekPlanner: React.FC<{
   focusMonth: Date;
   onJobClick: (jobId: string) => void;
   resolveContractor: (job: Job) => string;
-}> = ({ weekStart, jobs, customers, focusMonth, onJobClick, resolveContractor }) => {
+  onReschedule?: Reschedule;
+}> = ({ weekStart, jobs, customers, focusMonth, onJobClick, resolveContractor, onReschedule }) => {
   const week1 = eachDayOfInterval({ start: weekStart, end: addDays(weekStart, 6) });
   const week2 = eachDayOfInterval({ start: addDays(weekStart, 7), end: addDays(weekStart, 13) });
 
@@ -222,6 +255,7 @@ const TwoWeekPlanner: React.FC<{
           onJobClick={onJobClick}
           resolveContractor={resolveContractor}
           isLastColumn={i === 6}
+          onReschedule={onReschedule}
         />
       ))}
     </div>
@@ -245,13 +279,18 @@ const MonthDayCell: React.FC<{
   isCurrentMonth: boolean;
   onJobClick: (jobId: string) => void;
   resolveContractor: (job: Job) => string;
-}> = ({ day, jobs, customers, isCurrentMonth, onJobClick, resolveContractor }) => {
+  onReschedule?: Reschedule;
+}> = ({ day, jobs, customers, isCurrentMonth, onJobClick, resolveContractor, onReschedule }) => {
   const [showAll, setShowAll] = useState(false);
+  const { over, props: dropProps } = useDayDrop(day, onReschedule);
   const visible = jobs.slice(0, 3);
   const overflow = jobs.length - 3;
 
   return (
-    <div className={`min-h-[100px] p-1 border-b border-r border-slate-100 relative ${!isCurrentMonth ? 'bg-slate-50' : 'bg-white'}`}>
+    <div
+      {...dropProps}
+      className={`min-h-[100px] p-1 border-b border-r border-slate-100 relative ${!isCurrentMonth ? 'bg-slate-50' : 'bg-white'} ${over ? 'ring-2 ring-inset ring-orange-400 bg-orange-50/40' : ''}`}
+    >
       <div className="mb-1 text-center">
         {isToday(day) ? (
           <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-orange-500 text-white text-xs font-bold">
@@ -303,7 +342,8 @@ const MonthGrid: React.FC<{
   customers: Customer[];
   onJobClick: (jobId: string) => void;
   resolveContractor: (job: Job) => string;
-}> = ({ focusDate, jobs, customers, onJobClick, resolveContractor }) => {
+  onReschedule?: Reschedule;
+}> = ({ focusDate, jobs, customers, onJobClick, resolveContractor, onReschedule }) => {
   const monthStart = startOfMonth(focusDate);
   const monthEnd = endOfMonth(focusDate);
   const gridStart = getWeekStart(monthStart);
@@ -332,6 +372,7 @@ const MonthGrid: React.FC<{
             isCurrentMonth={isSameMonth(day, monthStart)}
             onJobClick={onJobClick}
             resolveContractor={resolveContractor}
+            onReschedule={onReschedule}
           />
         ))}
       </div>
@@ -382,6 +423,8 @@ interface WorkOrderCalendarProps {
   contractors?: Contractor[];
   isMobile?: boolean;
   onJobClick: (jobId: string) => void;
+  /** Drag-to-reschedule: drop a card on a day to set its scheduled date. */
+  onReschedule?: Reschedule;
 }
 
 export const WorkOrderCalendar: React.FC<WorkOrderCalendarProps> = ({
@@ -389,6 +432,7 @@ export const WorkOrderCalendar: React.FC<WorkOrderCalendarProps> = ({
   customers,
   contractors = [],
   onJobClick,
+  onReschedule,
 }) => {
   const [calendarView, setCalendarView] = useState<CalendarViewMode>(() => {
     const saved = localStorage.getItem(CALENDAR_VIEW_KEY) as CalendarViewMode | null;
@@ -498,7 +542,7 @@ export const WorkOrderCalendar: React.FC<WorkOrderCalendarProps> = ({
 
       {/* Calendar body */}
       {calendarView === 'month' ? (
-        <MonthGrid focusDate={focusDate} jobs={scheduledJobs} customers={customers} onJobClick={onJobClick} resolveContractor={resolveContractor} />
+        <MonthGrid focusDate={focusDate} jobs={scheduledJobs} customers={customers} onJobClick={onJobClick} resolveContractor={resolveContractor} onReschedule={onReschedule} />
       ) : calendarView === '2week' ? (
         <TwoWeekPlanner
           weekStart={weekStart}
@@ -507,6 +551,7 @@ export const WorkOrderCalendar: React.FC<WorkOrderCalendarProps> = ({
           focusMonth={focusDate}
           onJobClick={onJobClick}
           resolveContractor={resolveContractor}
+          onReschedule={onReschedule}
         />
       ) : (
         <WeekPlanner
@@ -516,6 +561,7 @@ export const WorkOrderCalendar: React.FC<WorkOrderCalendarProps> = ({
           focusMonth={focusDate}
           onJobClick={onJobClick}
           resolveContractor={resolveContractor}
+          onReschedule={onReschedule}
         />
       )}
 

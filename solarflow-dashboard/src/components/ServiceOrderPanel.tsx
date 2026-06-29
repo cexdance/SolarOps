@@ -7,7 +7,7 @@ import {
   CheckCircle, Clock, AlertTriangle, DollarSign, Wrench,
   Camera, ClipboardList, Package, ZapOff, Zap,
   ShieldCheck, Banknote, TrendingUp, TrendingDown, Users,
-  RotateCcw, History, Loader2, FolderOpen, MapPin, ExternalLink,
+  RotateCcw, History, Loader2, FolderOpen, MapPin, ExternalLink, Printer,
 } from 'lucide-react';
 import SiteMapView from './views/SiteMapView';
 import { Job, WOStatus, WOLineItem, WOPhoto, WOServiceStatus, WO_TO_JOB_STATUS, RMAEntry, AuditEntry } from '../types';
@@ -19,6 +19,7 @@ import { loadServiceRates } from '../lib/contractorStore';
 import { searchParts, CatalogPart } from '../lib/partsCatalog';
 import { MentionTextarea, MentionUser, renderWithMentions, parseMentions, parseMentionEmails, fireMentionNotifications } from './ui/MentionTextarea';
 import { formatMoney } from '../lib/money';
+import { printServiceReport } from '../lib/printServiceReport';
 import { serviceOrderNo, workOrderNo, generateServiceOrderNumber } from '../lib/woHelpers';
 import { SowDistributionModal, SOW_DISTRIBUTION_NAMES } from './SowDistributionModal';
 import { ActivityFeed, type FeedUser } from './ui/ActivityFeed';
@@ -1429,13 +1430,33 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                 style={{ width: 172, height: 'auto', marginTop: -24 }}
               />
             </div>
-            <button
-              onClick={onClose}
-              className="text-slate-400 hover:text-white transition-colors cursor-pointer"
-              aria-label="Close panel"
-            >
-              <X className="w-5 h-5" />
-            </button>
+            <div className="flex items-center gap-3">
+              {job && (
+                <button
+                  onClick={() => printServiceReport({
+                    job,
+                    customer,
+                    siteName,
+                    siteAddress: normalizedSiteAddress,
+                    clientId,
+                    serviceType,
+                  })}
+                  title="Print client service report (no financials)"
+                  className="inline-flex items-center gap-1.5 text-slate-300 hover:text-orange-300 transition-colors cursor-pointer text-xs font-medium"
+                  aria-label="Print service report"
+                >
+                  <Printer className="w-4 h-4" />
+                  Report
+                </button>
+              )}
+              <button
+                onClick={onClose}
+                className="text-slate-400 hover:text-white transition-colors cursor-pointer"
+                aria-label="Close panel"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
           </div>
         </div>
 
@@ -3295,6 +3316,15 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
 
               {/* Scrollable report body */}
               <div className="overflow-y-auto p-6 md:p-8 space-y-6 print:p-0" id="report-print-area">
+
+                {/* ── Logo Header ───────────────────────────────────── */}
+                <div className="flex items-center justify-between pb-4 border-b border-slate-200">
+                  <img src="/conexsol-logo-color.png" alt="Conexsol - Rethink Energy" className="h-14 w-auto print:h-12" />
+                  <div className="text-right">
+                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-widest">Work Order Report</p>
+                    <p className="text-xs text-slate-400">{today}</p>
+                  </div>
+                </div>
 
                 {/* ── Client & Site Header ─────────────────────────────── */}
                 <div className="bg-slate-900 text-white rounded-xl p-4">

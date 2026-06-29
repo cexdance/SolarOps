@@ -516,6 +516,15 @@ export const Jobs: React.FC<JobsProps> = ({
 
   const handleCardClick = (jobId: string) => onViewChange('jobDetail', jobId);
 
+  // Calendar drag-to-reschedule: stamp the new scheduled date (yyyy-MM-dd) plus
+  // updatedAt so the sync engine keeps the change (LWW). No-op if the date is
+  // unchanged so we don't churn sync rows on an accidental drop.
+  const handleReschedule = (jobId: string, newDate: string) => {
+    const job = jobs.find(j => j.id === jobId);
+    if (!job || (job.scheduledDate ?? '').split('T')[0] === newDate) return;
+    onUpdateJob({ ...job, scheduledDate: newDate, updatedAt: new Date().toISOString() });
+  };
+
   // Park / un-park a service order. Hold drops it out of the active queue on both
   // the admin board and the contractor portal; the underlying woStatus is kept so
   // Resume returns it to its place in the pipeline.
@@ -758,6 +767,7 @@ export const Jobs: React.FC<JobsProps> = ({
           contractors={contractors}
           isMobile={isMobile}
           onJobClick={handleCardClick}
+          onReschedule={handleReschedule}
         />
       )}
 
