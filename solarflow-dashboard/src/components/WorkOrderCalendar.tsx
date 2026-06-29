@@ -226,12 +226,11 @@ const WeekPlanner: React.FC<{
   days: Date[];
   jobs: Job[];
   customers: Customer[];
-  focusMonth: Date;
   onJobClick: (jobId: string) => void;
   resolveContractor: (job: Job) => string;
   onReschedule?: Reschedule;
   onToggleHold?: (job: Job) => void;
-}> = ({ days, jobs, customers, focusMonth, onJobClick, resolveContractor, onReschedule, onToggleHold }) => (
+}> = ({ days, jobs, customers, onJobClick, resolveContractor, onReschedule, onToggleHold }) => (
   <div className="overflow-x-auto rounded-lg border border-slate-200">
     <div className="flex min-w-[700px]">
       {days.map((day, i) => (
@@ -240,7 +239,9 @@ const WeekPlanner: React.FC<{
           day={day}
           jobs={getJobsForDay(jobs, day)}
           customers={customers}
-          isCurrentMonth={isSameMonth(day, focusMonth)}
+          // Every day in the 7-day range is in-scope; never dim (only the Month
+          // grid fades leading/trailing days from adjacent months).
+          isCurrentMonth
           resolveContractor={resolveContractor}
           onJobClick={onJobClick}
           isLastColumn={i === days.length - 1}
@@ -258,12 +259,11 @@ const TwoWeekPlanner: React.FC<{
   weekStart: Date;
   jobs: Job[];
   customers: Customer[];
-  focusMonth: Date;
   onJobClick: (jobId: string) => void;
   resolveContractor: (job: Job) => string;
   onReschedule?: Reschedule;
   onToggleHold?: (job: Job) => void;
-}> = ({ weekStart, jobs, customers, focusMonth, onJobClick, resolveContractor, onReschedule, onToggleHold }) => {
+}> = ({ weekStart, jobs, customers, onJobClick, resolveContractor, onReschedule, onToggleHold }) => {
   const week1 = eachDayOfInterval({ start: weekStart, end: addDays(weekStart, 6) });
   const week2 = eachDayOfInterval({ start: addDays(weekStart, 7), end: addDays(weekStart, 13) });
 
@@ -275,7 +275,8 @@ const TwoWeekPlanner: React.FC<{
           day={day}
           jobs={getJobsForDay(jobs, day)}
           customers={customers}
-          isCurrentMonth={isSameMonth(day, focusMonth)}
+          // All 14 days are in-scope; never dim in the 2-week planner.
+          isCurrentMonth
           onJobClick={onJobClick}
           resolveContractor={resolveContractor}
           isLastColumn={i === 6}
@@ -620,7 +621,6 @@ export const WorkOrderCalendar: React.FC<WorkOrderCalendarProps> = ({
           weekStart={weekStart}
           jobs={scheduledJobs}
           customers={customers}
-          focusMonth={focusDate}
           onJobClick={onJobClick}
           resolveContractor={resolveContractor}
           onReschedule={onReschedule}
@@ -631,7 +631,6 @@ export const WorkOrderCalendar: React.FC<WorkOrderCalendarProps> = ({
           days={weekDays}
           jobs={scheduledJobs}
           customers={customers}
-          focusMonth={focusDate}
           onJobClick={onJobClick}
           resolveContractor={resolveContractor}
           onReschedule={onReschedule}
