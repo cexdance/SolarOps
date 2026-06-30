@@ -39,7 +39,7 @@ import {
   BarChart3,
   DollarSign,
   Send,
-  ExternalLink,
+  Maximize2,
   Leaf,
   FileBarChart,
   Eye,
@@ -65,6 +65,7 @@ import { AddressAutocomplete } from './AddressAutocomplete';
 import { AddressLink } from './AddressLink';
 import { ServiceOrderPanel } from './ServiceOrderPanel';
 import { PhoneLink } from './PhoneLink';
+import { ImageLightbox } from './ImageLightbox';
 import { ActivityFeed } from './ui/ActivityFeed';
 import { uploadCustomerFilesPartial, StoredCustomerFile, CustomerFileUpload } from '../lib/customerFileStorage';
 import { fireMentionNotifications, parseMentionEmails } from './ui/MentionTextarea';
@@ -3214,6 +3215,30 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
       (y.activity.timestamp || '').localeCompare(x.activity.timestamp || ''));
   }, [customer.activityHistory, customer.id, jobs]);
 
+  // Click-to-enlarge viewer (Files & Photos + comment thumbnails).
+  const [lightbox, setLightbox] = useState<{ src: string; name?: string } | null>(null);
+
+  // Files & Photos = explicitly uploaded customer files PLUS every image attached
+  // to a comment (own notes AND Service Order comments). Comment photos used to be
+  // stranded on the activity entry; surfacing them here (deduped by URL) means a
+  // photo posted in any comment shows up in Files & Photos without copying data.
+  const allFiles = React.useMemo(() => {
+    const seen = new Set<string>();
+    const out: { id: string; name: string; url: string; mimeType: string; size?: number; source?: string }[] = [];
+    for (const f of (customer.files ?? [])) {
+      if (f.url && !seen.has(f.url)) { seen.add(f.url); out.push(f); }
+    }
+    for (const { activity } of combinedActivity) {
+      for (const a of (activity.attachments ?? [])) {
+        if (a.url && !seen.has(a.url)) {
+          seen.add(a.url);
+          out.push({ id: a.id, name: a.name, url: a.url, mimeType: a.mimeType || '', source: 'comment' });
+        }
+      }
+    }
+    return out;
+  }, [customer.files, combinedActivity]);
+
   // Notes composer: inline photo/camera input. Mobile browsers can't paste an
   // image into a textarea, so without this there was no way to attach a photo to
   // a note from a phone (the prior "Add Files" button only switched tabs).
@@ -3764,6 +3789,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
 
   return (
     <div className="flex flex-col md:flex-row md:h-[calc(100vh-80px)]">
+      {lightbox && <ImageLightbox src={lightbox.src} name={lightbox.name} onClose={() => setLightbox(null)} />}
       {/* Left Panel - Story & Details (60%) */}
       <div className="flex flex-col md:flex-1 border-r border-slate-200 bg-white md:overflow-hidden">
         {/* Header */}
@@ -4258,47 +4284,56 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                 <h3 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
                   <ImageIcon className="w-4 h-4 text-orange-500" />
                   Photos & Documents
-                  {(customer.files?.length ?? 0) > 0 && (
-                    <span className="ml-auto text-xs text-slate-400 font-normal">{customer.files!.length} file{customer.files!.length !== 1 ? 's' : ''}</span>
+                  {allFiles.length > 0 && (
+                    <span className="ml-auto text-xs text-slate-400 font-normal">{allFiles.length} file{allFiles.length !== 1 ? 's' : ''}</span>
                   )}
                 </h3>
 
-                {(customer.files?.length ?? 0) === 0 ? (
-                  <p className="text-sm text-slate-400 text-center py-6">No files yet. Import a Trello card to pull in attachments.</p>
+                {allFiles.length === 0 ? (
+                  <p className="text-sm text-slate-400 text-center py-6">No files yet. Add a photo to a comment or import a Trello card.</p>
                 ) : (
                   <div className="grid grid-cols-3 gap-2">
-                    {customer.files!.map(file => {
+                    {allFiles.map(file => {
                       const isImage = file.mimeType.startsWith('image/') || /\.(png|jpg|jpeg|webp|gif|heic)$/i.test(file.name);
-                      return (
+                      const cardCls = "group relative aspect-square rounded-lg overflow-hidden border border-slate-200 bg-slate-100 flex items-center justify-center hover:border-orange-400 transition-colors";
+                      const badge = file.source === 'trello'
+                        ? <span className="absolute top-1 left-1 bg-blue-600 text-white text-[9px] px-1 py-0.5 rounded font-bold">T</span>
+                        : file.source === 'comment'
+                        ? <span className="absolute top-1 left-1 bg-purple-600 text-white text-[9px] px-1 py-0.5 rounded font-bold">SO</span>
+                        : null;
+                      return isImage ? (
+                        <button
+                          key={file.id}
+                          type="button"
+                          onClick={() => setLightbox({ src: file.url, name: file.name })}
+                          className={`${cardCls} cursor-pointer`}
+                          title={file.name}
+                        >
+                          <img
+                            src={file.url}
+                            alt={file.name}
+                            className="w-full h-full object-cover"
+                            onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                          />
+                          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
+                            <Maximize2 className="w-5 h-5 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                          </div>
+                          {badge}
+                        </button>
+                      ) : (
                         <a
                           key={file.id}
                           href={file.url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="group relative aspect-square rounded-lg overflow-hidden border border-slate-200 bg-slate-100 flex items-center justify-center hover:border-orange-400 transition-colors"
+                          className={cardCls}
                           title={file.name}
                         >
-                          {isImage ? (
-                            <>
-                              <img
-                                src={file.url}
-                                alt={file.name}
-                                className="w-full h-full object-cover"
-                                onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                              />
-                              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
-                                <ExternalLink className="w-5 h-5 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
-                              </div>
-                            </>
-                          ) : (
-                            <div className="flex flex-col items-center gap-1 p-2">
-                              <FileText className="w-8 h-8 text-slate-400" />
-                              <span className="text-[10px] text-slate-500 text-center leading-tight line-clamp-2">{file.name}</span>
-                            </div>
-                          )}
-                          {file.source === 'trello' && (
-                            <span className="absolute top-1 left-1 bg-blue-600 text-white text-[9px] px-1 py-0.5 rounded font-bold">T</span>
-                          )}
+                          <div className="flex flex-col items-center gap-1 p-2">
+                            <FileText className="w-8 h-8 text-slate-400" />
+                            <span className="text-[10px] text-slate-500 text-center leading-tight line-clamp-2">{file.name}</span>
+                          </div>
+                          {badge}
                         </a>
                       );
                     })}
@@ -4426,6 +4461,37 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                                 : part
                             )}
                           </p>
+                        )}
+                        {/* Attached photos/files, click image to enlarge */}
+                        {activity.attachments && activity.attachments.length > 0 && (
+                          <div className="flex flex-wrap gap-2 mt-2">
+                            {activity.attachments.map(att => {
+                              const isImg = (att.mimeType || '').startsWith('image/') || /\.(png|jpg|jpeg|webp|gif|heic)$/i.test(att.name || '');
+                              return isImg ? (
+                                <button
+                                  key={att.id}
+                                  type="button"
+                                  onClick={() => setLightbox({ src: att.url, name: att.name })}
+                                  className="w-16 h-16 rounded-lg overflow-hidden border border-slate-200 hover:border-orange-400 transition-colors cursor-pointer"
+                                  title={att.name}
+                                >
+                                  <img src={att.url} alt={att.name} className="w-full h-full object-cover" />
+                                </button>
+                              ) : (
+                                <a
+                                  key={att.id}
+                                  href={att.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg border border-slate-200 bg-white text-xs text-slate-600 hover:border-orange-400 transition-colors"
+                                  title={att.name}
+                                >
+                                  <FileText className="w-4 h-4 text-slate-400" />
+                                  <span className="max-w-[120px] truncate">{att.name}</span>
+                                </a>
+                              );
+                            })}
+                          </div>
                         )}
                         {/* Reactions */}
                         {activity.reactions && Object.keys(activity.reactions).length > 0 && (
