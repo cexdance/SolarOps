@@ -33,8 +33,19 @@ export function ImageLightbox({ src, name, onClose }: ImageLightboxProps) {
       a.remove();
       URL.revokeObjectURL(url);
     } catch {
-      // ponytail: CORS-blocked fetch falls back to opening the image in a tab.
-      window.open(src, '_blank', 'noopener,noreferrer');
+      // Cross-origin/CORS blocked the blob fetch. Fall back to the storage
+      // download endpoint: Supabase public URLs honor `?download=<name>` by
+      // returning Content-Disposition: attachment, so the browser SAVES the file
+      // server-side (the anchor `download` attr alone is ignored cross-origin).
+      const sep = src.includes('?') ? '&' : '?';
+      const dl = `${src}${sep}download=${encodeURIComponent(name || 'image')}`;
+      const a = document.createElement('a');
+      a.href = dl;
+      a.download = name || 'image';
+      a.rel = 'noopener';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
     }
   };
 
