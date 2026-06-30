@@ -38,7 +38,7 @@ import { canSeeFinancials, isFinancialView } from './lib/access';
 import { syncFromDB } from './lib/db';
 import { loadData, saveData } from './lib/dataStore';
 import { migrateWoPhotos } from './lib/photoStore';
-import { pickupJobsForContractor, toContractorJobView, serviceOrderNo, photoUrlStem } from './lib/woHelpers';
+import { pickupJobsForContractor, toContractorJobView, serviceOrderNo, photoUrlStem, bareOrderNo } from './lib/woHelpers';
 import { fireMentionNotifications, sendCustomerAppointmentEmail } from './components/ui/MentionTextarea';
 import { logChange, logJobChange, flushChangeLog } from './lib/changeLog';
 import { autoArchiveCompletedJobs } from './lib/jobService';
@@ -2836,7 +2836,20 @@ function App() {
       // order was deleted or re-imported with a new id - so it must NOT surface as an
       // active work order. Those stale rows were why the contractor's WO tab showed
       // more jobs than the Service Orders window (single source of truth = data.jobs).
-      const trueOrphans = contractorJobs.filter(cj => !cj.sourceJobId && !allJobIds.has(cj.id));
+      // A legacy mirror created BEFORE sourceJobId linking has no sourceJobId, so the
+      // check above can't tie it to its admin Job. After a reassignment the live job
+      // moves (projected row gets the new contractorId) but this dangling row keeps its
+      // OLD contractorId, duplicating the order under the previously-assigned contractor
+      // (the "removed from Carlos but still shows on Carlos" bug). Suppress any such
+      // orphan that a live job already represents (same order number, or same
+      // customer + service type).
+      const liveOrderNos = new Set(projected.map(p => bareOrderNo(p.woNumber)).filter(Boolean));
+      const liveCustSvc  = new Set(projected.map(p => `${p.customerId}|${p.serviceType}`));
+      const trueOrphans = contractorJobs.filter(cj =>
+        !cj.sourceJobId && !allJobIds.has(cj.id) &&
+        !(cj.woNumber && liveOrderNos.has(bareOrderNo(cj.woNumber))) &&
+        !liveCustSvc.has(`${cj.customerId}|${cj.serviceType}`)
+      );
       return [...projected, ...trueOrphans];
     })();
 
