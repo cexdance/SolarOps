@@ -41,7 +41,7 @@ import { migrateWoPhotos } from './lib/photoStore';
 import { pickupJobsForContractor, toContractorJobView, serviceOrderNo, photoUrlStem, bareOrderNo } from './lib/woHelpers';
 import { fireMentionNotifications, sendCustomerAppointmentEmail } from './components/ui/MentionTextarea';
 import { logChange, logJobChange, flushChangeLog } from './lib/changeLog';
-import { autoArchiveCompletedJobs } from './lib/jobService';
+import { autoArchiveCompletedJobs, stampJobFields } from './lib/jobService';
 import { fetchMyNotifications, markNotificationReadRemote, markAllNotificationsReadRemote, startNotificationPolling, stopNotificationPolling, subscribeToNotifications, unsubscribeFromNotifications } from './lib/notifications';
 import { processBillingTimers } from './lib/billingService';
 import { loadContractors, saveContractors, loadServiceRates, saveServiceRates, loadContractorJobs, saveContractorJobs, initializeContractorData, findInviteByToken } from './lib/contractorStore';
@@ -951,7 +951,7 @@ function App() {
       if (needReport) updated.serviceReport = note;
       if (cj.serviceStatus && cj.serviceStatus !== adminJob.serviceStatus) updated.serviceStatus = cj.serviceStatus;
 
-      patches.set(adminJob.id, updated);
+      patches.set(adminJob.id, stampJobFields(adminJob, updated));
       logChange('job.field_update', 'job', adminJob.id, {
         source: 'contractor-reconcile', cjId: cj.id, photosAdded: newPhotos.length, advanced: advance,
       }, data.currentUser?.email ?? 'system');
@@ -1488,7 +1488,7 @@ function App() {
 
         const next = {
           ...prev,
-          jobs: prev.jobs.map(j => j.id === updatedJob.sourceJobId ? updatedAdminJob : j),
+          jobs: prev.jobs.map(j => j.id === updatedJob.sourceJobId ? stampJobFields(adminJob, updatedAdminJob) : j),
         };
         saveData(next);
 
@@ -1645,7 +1645,7 @@ function App() {
     setData(prev => {
       const next = {
         ...prev,
-        jobs: prev.jobs.map(j => (j.id === updated.id ? updated : j)),
+        jobs: prev.jobs.map(j => (j.id === updated.id ? stampJobFields(adminJob, updated) : j)),
         notifications: [...(prev.notifications || []), ...newNotifs],
       };
       saveData(next);
@@ -1743,15 +1743,18 @@ function App() {
       requiresFollowUp: job.requiresFollowUp,
       nextSteps: job.nextSteps,
     };
-    logChange('job.create', 'job', newJob.id, newJob, resolveActor());
+    // Stamp all fields at creation (prev=undefined) so a new job carries a full
+    // fieldTimes map from the start.
+    const stampedNewJob = stampJobFields(undefined, newJob);
+    logChange('job.create', 'job', stampedNewJob.id, stampedNewJob, resolveActor());
     setData(prev => {
-      const next = { ...prev, jobs: [...prev.jobs, newJob] };
+      const next = { ...prev, jobs: [...prev.jobs, stampedNewJob] };
       saveData(next);
       return next;
     });
     // Don't navigate away when creating from a site panel (WO has solarEdgeSiteId set)
     if (!job.solarEdgeSiteId) setCurrentView('jobs');
-    return newJob;
+    return stampedNewJob;
   };
 
   // Resolve who performed an action for audit attribution: admin email, else the
@@ -1803,14 +1806,13 @@ function App() {
     const prevForAssign = data.jobs.find(j => j.id === incomingJob.id);
     const newlyAssigned = !!incomingJob.contractorId && incomingJob.contractorId !== prevForAssign?.contractorId;
     const isPreDispatch = !incomingJob.woStatus || PRE_DISPATCH_WO.has(incomingJob.woStatus) || incomingJob.status === 'new';
-    const updatedJob: Job = {
-      ...((newlyAssigned && isPreDispatch && role === 'admin')
-        ? { ...incomingJob, woStatus: 'scheduled' as WOStatus, status: 'assigned' as JobStatus, contractorSentAt: incomingJob.contractorSentAt ?? new Date().toISOString() }
-        : incomingJob),
-      // Stamp the LWW key on every admin edit so the change reliably wins the merge
-      // and propagates to other devices (e.g. the assigned contractor's portal).
-      updatedAt: new Date().toISOString(),
-    };
+    const baseJob: Job = (newlyAssigned && isPreDispatch && role === 'admin')
+      ? { ...incomingJob, woStatus: 'scheduled' as WOStatus, status: 'assigned' as JobStatus, contractorSentAt: incomingJob.contractorSentAt ?? new Date().toISOString() }
+      : incomingJob;
+    // Stamp the LWW key (updatedAt) AND per-field edit times against the previous
+    // record, so this change wins the merge and, once field-level merge ships
+    // (Phase 2), only the fields that actually changed here can win.
+    const updatedJob: Job = stampJobFields(prevForAssign, baseJob);
     const newActivity = {
       id: `activity-${Date.now()}`,
       type: 'job_updated' as const,

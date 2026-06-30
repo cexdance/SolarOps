@@ -212,6 +212,11 @@ export interface Job {
   totalAmount: number;
   createdAt: string;
   updatedAt?: string; // last local edit / push time, drives sync conflict resolution
+  // Per-field last-edit times (ISO) for field-level sync merge. Records without
+  // this fall back to record-level LWW via updatedAt, so old data is unaffected.
+  // See spec_job_field_level_merge: enables a stale client's unrelated edit to
+  // stop clobbering another client's change to a different field.
+  fieldTimes?: Record<string, string>;
   urgency: UrgencyLevel;
   isPowercare: boolean;
   contractorId?: string;
