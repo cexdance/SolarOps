@@ -23,7 +23,6 @@ import { printServiceReport } from '../lib/printServiceReport';
 import { serviceOrderNo, workOrderNo, generateServiceOrderNumber } from '../lib/woHelpers';
 import { SowDistributionModal, SOW_DISTRIBUTION_NAMES } from './SowDistributionModal';
 import { ActivityFeed, type FeedUser } from './ui/ActivityFeed';
-import { ImageLightbox } from './ImageLightbox';
 import { compressImageToDataUrl, compressImageToBlob } from '../lib/photoCompress';
 import { uploadPhotoToStorage, deletePhotoFromStorage } from '../lib/photoStorage';
 import { logUpload, fetchLogForEntity, ChangeEntry } from '../lib/changeLog';
@@ -510,7 +509,6 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
   // dataUrl, only a photoStoreId). Hydrate those in the background so <img>
   // can render. Already-inlined photos pass through untouched.
   const [woPhotos, setWoPhotos]     = useState<WOPhoto[]>(job?.woPhotos ?? []);
-  const [lightbox, setLightbox]     = useState<{ src: string; name?: string } | null>(null);
   useEffect(() => {
     let revoked = false;
     const created: string[] = [];
@@ -1365,7 +1363,6 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-8">
-      {lightbox && <ImageLightbox src={lightbox.src} name={lightbox.name} onClose={() => setLightbox(null)} />}
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
 
@@ -2882,9 +2879,16 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                                 });
                               } else if (isEditingCat) {
                                 setEditingCategoryFor(null);
-                              } else {
-                                const src = photo.storageUrl ?? photo.dataUrl;
-                                if (src) setLightbox({ src, name: photo.name });
+                              } else if (photo.storageUrl) {
+                                // Open the full-res photo in its own browser tab
+                                // (native zoom + right-click Save Image As).
+                                window.open(photo.storageUrl, '_blank', 'noopener,noreferrer');
+                              } else if (photo.dataUrl) {
+                                // data: URLs can't be a top-level tab in Chrome; open via blob URL.
+                                fetch(photo.dataUrl)
+                                  .then(r => r.blob())
+                                  .then(b => window.open(URL.createObjectURL(b), '_blank', 'noopener,noreferrer'))
+                                  .catch(() => {});
                               }
                             }}
                           >
