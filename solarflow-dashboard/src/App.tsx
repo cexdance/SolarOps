@@ -38,7 +38,7 @@ import { canSeeFinancials, isFinancialView } from './lib/access';
 import { syncFromDB } from './lib/db';
 import { loadData, saveData } from './lib/dataStore';
 import { migrateWoPhotos } from './lib/photoStore';
-import { pickupJobsForContractor, toContractorJobView, serviceOrderNo, photoUrlStem, bareOrderNo } from './lib/woHelpers';
+import { pickupJobsForContractor, toContractorJobView, serviceOrderNo, photoUrlStem, bareOrderNo, dedupeWoPhotos } from './lib/woHelpers';
 import { fireMentionNotifications, sendCustomerAppointmentEmail } from './components/ui/MentionTextarea';
 import { logChange, logJobChange, flushChangeLog } from './lib/changeLog';
 import { autoArchiveCompletedJobs, stampJobFields } from './lib/jobService';
@@ -1806,9 +1806,13 @@ function App() {
     const prevForAssign = data.jobs.find(j => j.id === incomingJob.id);
     const newlyAssigned = !!incomingJob.contractorId && incomingJob.contractorId !== prevForAssign?.contractorId;
     const isPreDispatch = !incomingJob.woStatus || PRE_DISPATCH_WO.has(incomingJob.woStatus) || incomingJob.status === 'new';
-    const baseJob: Job = (newlyAssigned && isPreDispatch && role === 'admin')
+    const baseJob0: Job = (newlyAssigned && isPreDispatch && role === 'admin')
       ? { ...incomingJob, woStatus: 'scheduled' as WOStatus, status: 'assigned' as JobStatus, contractorSentAt: incomingJob.contractorSentAt ?? new Date().toISOString() }
       : incomingJob;
+    // Self-heal duplicate woPhotos on every save (root cause of the 581-photo WO).
+    const baseJob: Job = baseJob0.woPhotos && baseJob0.woPhotos.length > 0
+      ? { ...baseJob0, woPhotos: dedupeWoPhotos(baseJob0.woPhotos) }
+      : baseJob0;
     // Stamp the LWW key (updatedAt) AND per-field edit times against the previous
     // record, so this change wins the merge and, once field-level merge ships
     // (Phase 2), only the fields that actually changed here can win.

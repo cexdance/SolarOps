@@ -49,6 +49,31 @@ export function photoUrlStem(url: string): string {
   return dot > 0 ? seg.slice(0, dot) : seg;
 }
 
+/**
+ * De-dupe a list of WO photo objects, preserving first-seen order. Drops:
+ *  - exact-duplicate objects sharing the same `id` (root cause of the 581-photo
+ *    WO-2605-97694 incident: one IDB-offloaded photo got cloned 528x and every
+ *    full-record save/merge carried the clones forward), and
+ *  - the same image stored under two storage keys (.jpg vs .../category/.jpeg).
+ * Applied on every job write and every sync merge so duplicates can never
+ * accumulate again, whatever the upstream append bug was.
+ */
+export function dedupeWoPhotos<T extends { id?: string; storageUrl?: string; dataUrl?: string }>(photos: T[]): T[] {
+  const seenId = new Set<string>();
+  const seenStem = new Set<string>();
+  const out: T[] = [];
+  for (const p of photos) {
+    if (!p) continue;
+    if (p.id && seenId.has(p.id)) continue;
+    const stem = photoUrlStem(p.storageUrl || p.dataUrl || '');
+    if (stem && seenStem.has(stem)) continue;
+    if (p.id) seenId.add(p.id);
+    if (stem) seenStem.add(stem);
+    out.push(p);
+  }
+  return out;
+}
+
 /** De-dupe a list of photo URLs by stem, preserving first-seen order. */
 export function dedupePhotoUrls(urls: string[]): string[] {
   const seen = new Set<string>();

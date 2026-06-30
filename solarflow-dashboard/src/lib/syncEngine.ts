@@ -24,6 +24,7 @@
 import { supabase } from './supabase';
 import { markPushPending, clearPendingPush, isRowPoisoned, incRowFailure, clearRowPoison } from './outbox';
 import { isAllowedCustomer } from './solarEdgeSiteFilter';
+import { dedupeWoPhotos } from './woHelpers';
 import type { AppState, Customer, Job, WOPhoto } from '../types';
 import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 
@@ -874,7 +875,10 @@ export function mergeWoPhotos(winnerPhotos: WOPhoto[], loserPhotos: WOPhoto[]): 
     // An uploaded photo (has storageUrl) absent from the newer winner = deleted.
     if (!p.storageUrl) merged.push(p);
   }
-  return merged;
+  // Collapse any duplicates already present in the winner set (this function only
+  // gates what the LOSER adds; it never healed pre-existing clones, which is how
+  // WO-2605-97694 reached 581 copies). Heals every job on its next sync pull.
+  return dedupeWoPhotos(merged);
 }
 
 /** Merge a job pair: LWW winner + union of activities, upload-aware photo merge. */
