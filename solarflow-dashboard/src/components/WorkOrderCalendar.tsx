@@ -16,7 +16,7 @@ const CALENDAR_VIEW_KEY = 'solarops_calendar_view';
 
 const statusColors: Record<JobStatus, string> = {
   new: 'bg-blue-100 text-blue-700 border-blue-200',
-  assigned: 'bg-slate-100 text-slate-700 border-slate-200',
+  assigned: 'bg-indigo-100 text-indigo-700 border-indigo-200',
   in_progress: 'bg-amber-100 text-amber-800 border-amber-200',
   completed: 'bg-green-100 text-green-700 border-green-200',
   invoiced: 'bg-purple-100 text-purple-700 border-purple-200',
@@ -26,7 +26,7 @@ const statusColors: Record<JobStatus, string> = {
 
 const statusDotColors: Record<JobStatus, string> = {
   new: 'bg-blue-500',
-  assigned: 'bg-slate-400',
+  assigned: 'bg-indigo-500',
   in_progress: 'bg-amber-500',
   completed: 'bg-green-500',
   invoiced: 'bg-purple-500',
