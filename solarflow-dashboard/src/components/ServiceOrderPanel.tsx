@@ -23,6 +23,7 @@ import { printServiceReport } from '../lib/printServiceReport';
 import { serviceOrderNo, workOrderNo, generateServiceOrderNumber } from '../lib/woHelpers';
 import { SowDistributionModal, SOW_DISTRIBUTION_NAMES } from './SowDistributionModal';
 import { ActivityFeed, type FeedUser } from './ui/ActivityFeed';
+import { ImageLightbox } from './ImageLightbox';
 import { compressImageToDataUrl, compressImageToBlob } from '../lib/photoCompress';
 import { uploadPhotoToStorage, deletePhotoFromStorage } from '../lib/photoStorage';
 import { logUpload, fetchLogForEntity, ChangeEntry } from '../lib/changeLog';
@@ -509,6 +510,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
   // dataUrl, only a photoStoreId). Hydrate those in the background so <img>
   // can render. Already-inlined photos pass through untouched.
   const [woPhotos, setWoPhotos]     = useState<WOPhoto[]>(job?.woPhotos ?? []);
+  const [lightbox, setLightbox]     = useState<{ src: string; name?: string } | null>(null);
   useEffect(() => {
     let revoked = false;
     const created: string[] = [];
@@ -570,6 +572,19 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
 
   // Contractor assignment
   const [assignedContractorId, setAssignedContractorId] = useState(job?.contractorId ?? '');
+  // Adopt an EXTERNAL contractor change (a sync pull from another device/user) into
+  // the local selection so this panel never re-asserts a stale contractorId on its
+  // next full-record save. The ref tracks the last prop value we saw, so a re-render
+  // that doesn't change job.contractorId (e.g. the user's own in-progress edit before
+  // saving) is ignored and won't clobber their pending selection.
+  const lastPropContractorRef = useRef(job?.contractorId ?? '');
+  useEffect(() => {
+    const incoming = job?.contractorId ?? '';
+    if (incoming !== lastPropContractorRef.current) {
+      lastPropContractorRef.current = incoming;
+      setAssignedContractorId(incoming);
+    }
+  }, [job?.contractorId]);
   const [contractorPayRate, setContractorPayRate] = useState<number>(job?.contractorPayRate ?? 125);
   // Pay rate/unit are derived from the service rate (see PowerCare toggle + service
   // select); the manual inputs were removed from the form, so the unit is read-only here.
@@ -1350,6 +1365,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-8">
+      {lightbox && <ImageLightbox src={lightbox.src} name={lightbox.name} onClose={() => setLightbox(null)} />}
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
 
@@ -1953,7 +1969,14 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                 ) : (
                   <select
                     value={assignedContractorId}
-                    onChange={e => setAssignedContractorId(e.target.value)}
+                    onChange={e => {
+                      setAssignedContractorId(e.target.value);
+                      lastPropContractorRef.current = e.target.value;
+                      // Persist the reassignment NOW so it lands with a fresh updatedAt
+                      // at the moment of the user's action, rather than riding along on
+                      // some later unrelated save (which a stale client could beat).
+                      setTimeout(() => handleSaveRef.current(undefined, true), 0);
+                    }}
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 cursor-pointer"
                   >
                     <option value="">- Unassigned -</option>
@@ -2859,6 +2882,9 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                                 });
                               } else if (isEditingCat) {
                                 setEditingCategoryFor(null);
+                              } else {
+                                const src = photo.storageUrl ?? photo.dataUrl;
+                                if (src) setLightbox({ src, name: photo.name });
                               }
                             }}
                           >
