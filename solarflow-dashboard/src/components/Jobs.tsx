@@ -115,6 +115,12 @@ const urgencyLabels: Record<UrgencyLevel, string> = {
   low: 'Low', medium: 'Medium', high: 'High', critical: 'Critical',
 };
 
+// Single seam for priority display. Manual-only today (job.urgency, default low).
+// Any future escalation logic must go here, guarded by resolvePriority.test.ts.
+export function resolvePriority(job: Job): UrgencyLevel {
+  return job.urgency ?? 'low';
+}
+
 interface JobCardProps {
   job: Job;
   customer: Customer | undefined;
@@ -168,7 +174,7 @@ const JobCard: React.FC<JobCardProps> = ({ job, customer, contractorName, isDrag
           {badgeLabel(job)}
         </span>
         {(() => {
-          const p = job.urgency ?? 'low';
+          const p = resolvePriority(job);
           return (
             <span className={`text-[10px] px-1.5 py-0.5 rounded-full border ${urgencyColors[p]}`}>
               {urgencyLabels[p]}

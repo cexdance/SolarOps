@@ -4004,7 +4004,12 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                       {pastedFiles.map(f => (
                         <div key={f.id} className="relative group/paste border border-slate-200 rounded-lg overflow-hidden bg-white shadow-sm">
                           {f.mimeType.startsWith('image/') ? (
-                            <img src={f.dataUrl} alt={f.name} className="w-20 h-20 object-cover" />
+                            <img
+                              src={f.dataUrl}
+                              alt={f.name}
+                              className="w-20 h-20 object-cover cursor-zoom-in"
+                              onClick={() => setLightbox({ src: f.dataUrl, name: f.name })}
+                            />
                           ) : (
                             <div className="w-20 h-20 flex flex-col items-center justify-center gap-1 bg-slate-50 px-1">
                               <Paperclip className="w-5 h-5 text-slate-400" />
