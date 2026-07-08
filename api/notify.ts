@@ -19,8 +19,17 @@ const RESEND_API_KEY   = (process.env.RESEND_API_KEY ?? '').trim() || undefined;
 const VAPID_PUBLIC_KEY = (process.env.VAPID_PUBLIC_KEY ?? '').trim();
 const VAPID_PRIVATE_KEY = (process.env.VAPID_PRIVATE_KEY ?? '').trim();
 
+// Guard: malformed VAPID keys make setVapidDetails throw synchronously. At module
+// scope that crashes the whole function (FUNCTION_INVOCATION_FAILED) and takes the
+// core @mention notifications down with it. Isolate push init so it stays best-effort.
+let pushEnabled = false;
 if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
-  webPush.setVapidDetails('mailto:admin@conexsol.us', VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+  try {
+    webPush.setVapidDetails('mailto:admin@conexsol.us', VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+    pushEnabled = true;
+  } catch (err) {
+    console.error('[notify] invalid VAPID keys, web push disabled:', (err as Error).message);
+  }
 }
 
 const supabaseHeaders = {
@@ -174,7 +183,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // ── Send Web Push to each mentioned user's registered devices ────────────
-  if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
+  if (pushEnabled) {
     await Promise.all(
       mentioned.map(async (u) => {
         const subRes = await fetch(
