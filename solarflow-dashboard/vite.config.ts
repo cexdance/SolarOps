@@ -12,8 +12,12 @@ const isProd = process.env.BUILD_MODE === 'prod'
 function computeBuildInfo() {
   const pkg = JSON.parse(readFileSync(path.resolve(__dirname, 'package.json'), 'utf8'))
   const version = `v${pkg.version}`
-  let sha = 'local'
-  try { sha = execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim() } catch { /* not a git repo or git unavailable */ }
+  // Vercel's build sandbox has no .git, so `git rev-parse` fails there. It does
+  // inject VERCEL_GIT_COMMIT_SHA (40-char), so use it first, fall back to git locally.
+  let sha = (process.env.VERCEL_GIT_COMMIT_SHA || '').slice(0, 7) || 'local'
+  if (sha === 'local') {
+    try { sha = execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim() } catch { /* not a git repo or git unavailable */ }
+  }
   const now = new Date()
   const builtAt = now.toISOString()
   const buildId = `${version}+${sha}.${Date.now()}`
