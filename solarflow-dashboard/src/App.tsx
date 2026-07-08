@@ -48,7 +48,7 @@ import { loadContractors, saveContractors, loadServiceRates, saveServiceRates, l
 import { ContractorInvite as ContractorInviteType } from './types/contractor';
 import { AppState, Job, Customer, User, AppNotification, SolarEdgeExtraSite, RMAEntry, WOStatus, JobStatus, Activity } from './types';
 import { FL_SITES } from './lib/solarEdgeSites';
-import { isFloridaSite, isAllowedCustomer } from './lib/solarEdgeSiteFilter';
+import { isFloridaSite, isAllowedCustomer, deriveClientId } from './lib/solarEdgeSiteFilter';
 import { getDeletedCustomerIds, markJobDeleted } from './lib/dataStore';
 import { Contractor, ContractorStatus, ContractorJob } from './types/contractor';
 import { addInteraction, loadCustomers, loadInteractions, saveInteractions } from './lib/customerStore';
@@ -2291,6 +2291,7 @@ function App() {
       const newCustomersFromSync: Customer[] = unmatchedSites.map((s: any) => ({
         id: `cust-se-${s.id}`,
         name: s.name || `SolarEdge Site ${s.id}`,
+        clientId: deriveClientId(s.name, s.accountId),
         firstName: '',
         lastName: '',
         email: '',

@@ -22,6 +22,7 @@ export function isFloridaSite(s: RawSite): boolean {
   const addr  = (s.location?.address  || '').trim();
 
   // ── Hard exclusions ───────────────────────────────────────────────────────
+  if (/^V[\s-]/i.test(name))        return false;  // V-xxxx accounts (non-FL, excluded)
   if (/^GA[\s-]/i.test(name))       return false;  // Georgia territory GA-xxxxx
   if (/^GT[\s-]/i.test(name))       return false;  // Guatemala territory GT-xxxxx
   if (/^USP[\s-]/i.test(name))      return false;  // USP territory accounts
@@ -39,11 +40,27 @@ export function isFloridaSite(s: RawSite): boolean {
   if (/\bnull\b/i.test(name))       return false;  // corrupted / placeholder records
 
   // ── Florida allow-list ────────────────────────────────────────────────────
+  // An explicit non-Florida state excludes the site even if it uses the
+  // Conexsol US-NNNNN naming. Empty/unknown state falls through to the naming
+  // rule (SolarEdge often omits state on FL sites).
+  const st = state.toLowerCase();
+  if (st && st !== 'fl' && st !== 'florida') return false;
   if (state === 'Florida' || state === 'FL') return true;
   if (/^US[\s-]\d+/i.test(name))             return true;  // Conexsol FL naming (US-NNNNN)
 
-  // Anything else (explicit non-FL state, unknown territory), exclude
+  // Anything else (unknown territory, no FL signal), exclude
   return false;
+}
+
+/**
+ * Client ID for an imported site: the leading US-NNNNN token of the site name
+ * (Conexsol naming, e.g. "US-15523-2 Charles Roach" -> "US-15523-2"), else the
+ * SolarEdge accountId. Empty string when neither applies.
+ */
+export function deriveClientId(name?: string, accountId?: string): string {
+  const first = (name || '').trim().split(/\s+/)[0];
+  if (/^US-?\d/i.test(first)) return first;
+  return accountId || '';
 }
 
 /**
@@ -53,6 +70,7 @@ export function isFloridaSite(s: RawSite): boolean {
 export function isAllowedCustomer(c: { name?: string; address?: string }): boolean {
   const name = (c.name    || '').trim();
   const addr = (c.address || '').trim();
+  if (/^V[\s-]/i.test(name))    return false;
   if (/^GA[\s-]/i.test(name))   return false;
   if (/^GT[\s-]/i.test(name))   return false;
   if (/^USP[\s-]/i.test(name))  return false;
