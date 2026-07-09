@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { formatMoney } from '../../lib/money';
 import {
-  ArrowLeft, MapPin, Phone, AlertTriangle,
+  ArrowLeft, Phone, AlertTriangle,
   Play, Pause, Camera, CheckCircle, FileText, X, Plus,
   Trash2, Wrench, Zap, DollarSign,
   Star, Navigation, ShieldAlert, Image as ImageIcon, Check,
@@ -849,6 +849,42 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
 
       <div className="p-4 pb-[calc(8rem+env(safe-area-inset-bottom))] space-y-4 max-w-xl mx-auto">
 
+        {/* Customer card: who the call is for + Call/Navigate, pinned to the top.
+            Address lives once, in the Service Order card below (Google Maps link). */}
+        {phase === 'pre_start' && (
+          <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <h2 className="font-bold text-slate-900">{job.customerName}</h2>
+                {job.clientId && (
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-mono font-medium">
+                    {job.clientId}
+                  </span>
+                )}
+              </div>
+              <span className={`text-xs px-2.5 py-1 rounded-full font-semibold border ${
+                job.status === 'en_route' ? 'bg-sky-50 text-sky-700 border-sky-200' : 'bg-slate-50 text-slate-600 border-slate-200'
+              }`}>
+                {job.status === 'en_route' ? 'En Route' : 'In Queue'}
+              </span>
+            </div>
+
+            <div className="flex gap-3">
+              <a href={`tel:${job.customerPhone}`}
+                className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-sm font-medium transition-colors cursor-pointer"
+              >
+                <Phone className="w-4 h-4" />Call
+              </a>
+              <a href={`https://maps.google.com/?q=${job.latitude},${job.longitude}`}
+                target="_blank" rel="noopener noreferrer"
+                className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-sky-50 hover:bg-sky-100 text-sky-700 rounded-xl text-sm font-medium transition-colors cursor-pointer"
+              >
+                <Navigation className="w-4 h-4" />Navigate
+              </a>
+            </div>
+          </div>
+        )}
+
         {/* Service Order review: links the WO to its SO, scope of work, dates,
             status, location, photos and notes in one read-only place. */}
         <ServiceOrderCard job={job} />
@@ -902,48 +938,6 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
         {/* ── PRE-START: Customer info + Start Call CTA ────────────────────── */}
         {phase === 'pre_start' && (
           <>
-            {/* Customer card */}
-            <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <h2 className="font-bold text-slate-900">{job.customerName}</h2>
-                  {job.clientId && (
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-mono font-medium">
-                      {job.clientId}
-                    </span>
-                  )}
-                </div>
-                <span className={`text-xs px-2.5 py-1 rounded-full font-semibold border ${
-                  job.status === 'en_route' ? 'bg-sky-50 text-sky-700 border-sky-200' : 'bg-slate-50 text-slate-600 border-slate-200'
-                }`}>
-                  {job.status === 'en_route' ? 'En Route' : 'In Queue'}
-                </span>
-              </div>
-
-              <a
-                href={`https://maps.google.com/?q=${encodeURIComponent(job.address+', '+job.city+', '+job.state)}`}
-                target="_blank" rel="noopener noreferrer"
-                className="flex items-start gap-2 text-sm text-blue-600 hover:underline"
-              >
-                <MapPin className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                <span>{job.address}, {job.city}, {job.state} {job.zip}</span>
-              </a>
-
-              <div className="flex gap-3">
-                <a href={`tel:${job.customerPhone}`}
-                  className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-sm font-medium transition-colors cursor-pointer"
-                >
-                  <Phone className="w-4 h-4" />Call
-                </a>
-                <a href={`https://maps.google.com/?q=${job.latitude},${job.longitude}`}
-                  target="_blank" rel="noopener noreferrer"
-                  className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-sky-50 hover:bg-sky-100 text-sky-700 rounded-xl text-sm font-medium transition-colors cursor-pointer"
-                >
-                  <Navigation className="w-4 h-4" />Navigate
-                </a>
-              </div>
-            </div>
-
             {/* Work order details */}
             <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-3">
               <h3 className="font-semibold text-slate-900 flex items-center gap-2">
@@ -954,10 +948,6 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
                 <div>
                   <p className="text-xs text-slate-400">Service Type</p>
                   <p className="font-medium text-slate-800">{job.serviceType}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-slate-400">Scheduled</p>
-                  <p className="font-medium text-slate-800">{job.scheduledDate} {job.scheduledTime}</p>
                 </div>
                 <div>
                   <p className="text-xs text-slate-400">Est. Duration</p>

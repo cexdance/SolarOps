@@ -4,7 +4,7 @@
 // status, location, photos and notes in one read-only place.
 import React, { useState } from 'react';
 import {
-  ClipboardList, ChevronDown, Calendar, CheckCircle2, MapPin, FileText, Image as ImageIcon,
+  ClipboardList, ChevronDown, CheckCircle2, MapPin, FileText, Image as ImageIcon,
 } from 'lucide-react';
 import { ContractorJob, JobStatusContractor } from '../../types/contractor';
 import { serviceOrderNo, dedupePhotoUrls } from '../../lib/woHelpers';
@@ -95,12 +95,27 @@ const ServiceOrderCard: React.FC<{ job: ContractorJob }> = ({ job }) => {
           </div>
         )}
 
-        {/* Key facts grid */}
-        <div className="grid grid-cols-2 gap-3">
-          <Fact icon={<Calendar className="w-3.5 h-3.5" />} label="Scheduled" value={`${fmtDate(job.scheduledDate)}${job.scheduledTime ? ` · ${job.scheduledTime}` : ''}`} />
-          <Fact icon={<CheckCircle2 className="w-3.5 h-3.5" />} label="Completed" value={fmtDate(job.completedAt)} />
-          <Fact icon={<MapPin className="w-3.5 h-3.5" />} label="Location" value={location || '-'} full />
+        {/* Location: the single address instance in the WO view, linked to Google Maps.
+            Scheduled date lives only in the Schedule service date card below. */}
+        <div>
+          <p className="flex items-center gap-1 text-[10px] font-semibold text-slate-400 uppercase tracking-wide">
+            <MapPin className="w-3.5 h-3.5" />Location
+          </p>
+          {location ? (
+            <a
+              href={`https://maps.google.com/?q=${encodeURIComponent(location)}`}
+              target="_blank" rel="noopener noreferrer"
+              className="inline-block text-sm text-blue-600 hover:underline mt-0.5"
+            >
+              {location}
+            </a>
+          ) : (
+            <p className="text-sm text-slate-800 mt-0.5">-</p>
+          )}
         </div>
+        {job.completedAt && (
+          <Fact icon={<CheckCircle2 className="w-3.5 h-3.5" />} label="Completed" value={fmtDate(job.completedAt)} />
+        )}
 
         {/* Photos */}
         <div>
