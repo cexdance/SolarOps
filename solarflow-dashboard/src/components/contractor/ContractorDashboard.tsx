@@ -11,6 +11,7 @@ import { APP_VERSION } from '../../lib/versionConfig';
 import { Contractor, ContractorJob, JobPriority, JobStatusContractor } from '../../types/contractor';
 import { Lead } from '../../types';
 import ConexSolTerms from './ConexSolTerms';
+import { useJobGeofence } from '../../lib/geofence';
 import { JobDetail } from './JobDetail';
 import JobBoardView from '../views/JobBoardView';
 import JobCalendarView from '../views/JobCalendarView';
@@ -59,6 +60,9 @@ export const ContractorDashboard: React.FC<ContractorDashboardProps> = ({
   onProposeSchedule,
 }) => {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  // Arrival auto-starts today's assigned jobs; departure after the on-site
+  // dwell auto-completes them. Admin alerts fire in handleContractorJobUpdate.
+  useJobGeofence(jobs, onUpdateJob);
   const [view, setView]                 = useState<'list' | 'board' | 'calendar' | 'map'>('list');
   const [openJob, setOpenJob]           = useState<ContractorJob | null>(null);
   const [xpData, setXpData]             = useState<ContractorXpData>(() => loadXpData(contractorId));

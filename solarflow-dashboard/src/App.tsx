@@ -59,7 +59,10 @@ import { Eye, X } from 'lucide-react';
 
 // ── Web Push helpers ────────────────────────────────────────────────────────
 
-const VAPID_PUBLIC_KEY = 'BAZ1FTjkOgcZmNiDU8ZLbeVFpuXv3XHNMXdAIi0DNWP3OyEGnHjdpDnHeWsAoF7FzGg-mMpo7YC2KPgMhSRGvB8';
+// Rotated 2026-07-10: the private half of the previous key was lost (Vercel env
+// held empty strings), so a fresh pair was generated. Must match the server's
+// VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY env in Vercel or every push is rejected.
+const VAPID_PUBLIC_KEY = 'BAukyCJ6BvbIXY2lp54WbisMgPjwL5qU8T93BmdtAAmGCKNAkTQwuU84OjrrQIxLq91qiZCa5QjQoRpzuOH5XJg';
 
 function urlBase64ToUint8Array(b64: string): Uint8Array {
   const padding = '='.repeat((4 - (b64.length % 4)) % 4);
@@ -72,13 +75,26 @@ async function subscribeToPush(accessToken?: string): Promise<void> {
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
   try {
     const reg = await navigator.serviceWorker.ready;
+    const appKey = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
     let sub = await reg.pushManager.getSubscription();
+    // VAPID rotation: a subscription bound to an old server key can never
+    // receive pushes signed with the current one; drop it and re-subscribe.
+    if (sub) {
+      const bound = sub.options.applicationServerKey
+        ? new Uint8Array(sub.options.applicationServerKey)
+        : null;
+      const stale = !bound || bound.length !== appKey.length || bound.some((b, i) => b !== appKey[i]);
+      if (stale) {
+        await sub.unsubscribe().catch(() => {});
+        sub = null;
+      }
+    }
     if (!sub) {
       const perm = await Notification.requestPermission();
       if (perm !== 'granted') return;
       sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+        applicationServerKey: appKey,
       });
     }
     // Use provided token, or fetch session as fallback
@@ -1538,15 +1554,29 @@ function App() {
         }
       })();
     }
-    // Notify admins when a contractor marks the work order as completed
-    if (updatedJob.status === 'completed') {
+    // Notify admins when the work order transitions to started, left-site
+    // (documentation), or completed. Transition-guarded against prevCj so later
+    // saves of an already-completed job (photo sweeps, report edits) do not
+    // re-fire the alert. Manual buttons and the arrival/departure geofence both
+    // land here, one notify path.
+    const startedNow = updatedJob.status === 'in_progress' && prevCj?.status !== 'in_progress';
+    const leftSiteNow = updatedJob.status === 'documentation' && prevCj?.status !== 'documentation';
+    const completedNow = updatedJob.status === 'completed' && prevCj?.status !== 'completed';
+    if (startedNow || leftSiteNow || completedNow) {
       const adminUserIds = ['user-1', 'user-3', 'user-4'];
+      const message = completedNow
+        ? `${updatedJob.serviceType} completed by contractor for ${updatedJob.customerName} at ${updatedJob.address}, ${updatedJob.city}`
+        : leftSiteNow
+          ? `Contractor left site for ${updatedJob.serviceType} at ${updatedJob.address}, ${updatedJob.city} (${updatedJob.customerName}). Service report pending.`
+          : `${updatedJob.serviceType} started by contractor for ${updatedJob.customerName} at ${updatedJob.address}, ${updatedJob.city}`;
       const newNotifs: AppNotification[] = adminUserIds.map(uid => ({
         id: `notif-${Date.now()}-${uid}-${Math.random().toString(36).slice(2, 6)}`,
         userId: uid,
-        type: 'contractor_completed' as const,
-        title: 'Work Order Completed',
-        message: `${updatedJob.serviceType} completed by contractor for ${updatedJob.customerName} at ${updatedJob.address}, ${updatedJob.city}`,
+        // 'mention' reused for the start/left-site alerts (same precedent as
+        // the auto-schedule FYI) to avoid widening the AppNotification union.
+        type: completedNow ? ('contractor_completed' as const) : ('mention' as const),
+        title: completedNow ? 'Work Order Completed' : leftSiteNow ? 'Contractor Left Site' : 'Work Order Started',
+        message,
         relatedJobId: updatedJob.sourceJobId || updatedJob.id,
         relatedContractorId: updatedJob.contractorId,
         read: false,
@@ -1556,6 +1586,15 @@ function App() {
         ...prev,
         notifications: [...(prev.notifications || []), ...newNotifs],
       }));
+      // Best-effort push/email to the admin team via /api/notify (prod).
+      void fireMentionNotifications({
+        mentionedUserIds: adminUserIds,
+        notifierName: currentContractor?.contactName || currentContractor?.businessName || 'Contractor',
+        context: `${serviceOrderNo(updatedJob.woNumber)} ${updatedJob.customerName}`,
+        contextId: updatedJob.sourceJobId || updatedJob.id,
+        contextType: 'workOrder',
+        message,
+      }).catch(e => console.error('[contractor] status notify failed', e));
     }
   };
 
