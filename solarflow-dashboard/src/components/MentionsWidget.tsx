@@ -2,7 +2,7 @@
 // Reads from mentionsStore. Auto-refreshes on mentions-updated event.
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { AtSign, Check, ExternalLink } from 'lucide-react';
+import { AtSign, Check, ExternalLink, Search, X } from 'lucide-react';
 import { getMentionsFor, markRead, markAllRead, MentionRecord } from '../lib/mentionsStore';
 import { Avatar } from './ui/Avatar';
 import { User } from '../types';
@@ -29,6 +29,7 @@ function relTime(iso: string): string {
 export const MentionsWidget: React.FC<Props> = ({ userId, users, onOpenCustomer, onOpenWorkOrder }) => {
   const [tick, setTick] = useState(0);
   const [filter, setFilter] = useState<'unread' | 'all'>('unread');
+  const [query, setQuery] = useState('');
 
   useEffect(() => {
     const refresh = () => setTick(t => t + 1);
@@ -41,7 +42,13 @@ export const MentionsWidget: React.FC<Props> = ({ userId, users, onOpenCustomer,
   }, []);
 
   const all = useMemo(() => getMentionsFor(userId), [userId, tick]);
-  const visible = filter === 'unread' ? all.filter(m => !m.read) : all;
+  const q = query.trim().toLowerCase();
+  const visible = all
+    .filter(m => (filter === 'unread' ? !m.read : true))
+    .filter(m => !q
+      || m.snippet.toLowerCase().includes(q)
+      || m.notifierName.toLowerCase().includes(q)
+      || (m.sourceLabel ?? '').toLowerCase().includes(q));
   const unreadCount = all.filter(m => !m.read).length;
 
   const handleOpen = (m: MentionRecord) => {
@@ -91,13 +98,35 @@ export const MentionsWidget: React.FC<Props> = ({ userId, users, onOpenCustomer,
         </div>
       </div>
 
+      {/* Search */}
+      <div className="relative mb-2 flex-shrink-0">
+        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+        <input
+          type="text"
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          placeholder="Search mentions: text, person, order..."
+          className="w-full pl-8 pr-7 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-400"
+        />
+        {query && (
+          <button
+            onClick={() => setQuery('')}
+            aria-label="Clear search"
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
+
       {/* List */}
       <div className="flex-1 overflow-y-auto min-h-0 space-y-2 pr-1">
         {visible.length === 0 ? (
           <div className="text-center py-8">
             <AtSign className="w-8 h-8 text-slate-200 mx-auto mb-2" />
             <p className="text-xs text-slate-400">
-              {filter === 'unread' ? "You're all caught up, no unread mentions." : 'No mentions yet.'}
+              {q ? 'No mentions match your search.'
+                : filter === 'unread' ? "You're all caught up, no unread mentions." : 'No mentions yet.'}
             </p>
           </div>
         ) : visible.map(m => {

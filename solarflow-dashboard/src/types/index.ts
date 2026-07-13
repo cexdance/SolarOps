@@ -263,6 +263,13 @@ export interface Job {
   lineItems?: WOLineItem[];
   // Photos (structured, replaces flat string[] for WO-panel jobs)
   woPhotos?: WOPhoto[];
+  /**
+   * Photo-URL stems (photoUrlStem) the admin explicitly deleted from woPhotos.
+   * The contractor->admin photo reconciles skip any stem listed here, so a
+   * deleted contractor photo (or a cleaned-up duplicate) can never be
+   * re-imported from cj.photos, which has no delete tombstones of its own.
+   */
+  deletedPhotoStems?: string[];
   // Service report
   serviceReport?: string;
   serviceStatus?: WOServiceStatus;

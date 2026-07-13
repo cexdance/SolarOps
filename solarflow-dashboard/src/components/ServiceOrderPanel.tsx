@@ -20,7 +20,7 @@ import { searchParts, CatalogPart } from '../lib/partsCatalog';
 import { MentionTextarea, MentionUser, renderWithMentions, parseMentions, parseMentionEmails, fireMentionNotifications } from './ui/MentionTextarea';
 import { formatMoney } from '../lib/money';
 import { printServiceReport } from '../lib/printServiceReport';
-import { serviceOrderNo, workOrderNo, generateServiceOrderNumber } from '../lib/woHelpers';
+import { serviceOrderNo, workOrderNo, generateServiceOrderNumber, photoUrlStem } from '../lib/woHelpers';
 import { SowDistributionModal, SOW_DISTRIBUTION_NAMES } from './SowDistributionModal';
 import { ImageLightbox } from './ImageLightbox';
 import { ActivityFeed, type FeedUser } from './ui/ActivityFeed';
@@ -539,6 +539,9 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
   const [editingCategoryFor, setEditingCategoryFor] = useState<string | null>(null);
   // Full-screen gallery: index into galleryPhotos (images only), null = closed
   const [lightboxIdx, setLightboxIdx] = useState<number | null>(null);
+  // URL stems of photos deleted this session; persisted to job.deletedPhotoStems
+  // on save so the contractor-photo reconciles never re-import them.
+  const [deletedStems, setDeletedStems] = useState<string[]>([]);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const startLongPress = useCallback((photoId: string) => {
@@ -995,6 +998,9 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
     // Guard: don't remove a photo that's still uploading (would orphan the Storage object)
     if (pendingUploads.current.has(id)) return;
     const photo = woPhotos.find(p => p.id === id);
+    // Ledger the deleted stem so the contractor-photo reconciles never re-import it
+    const stem = photo ? photoUrlStem(photo.storageUrl || photo.dataUrl || '') : '';
+    if (stem && !stem.startsWith('data:')) setDeletedStems(prev => prev.includes(stem) ? prev : [...prev, stem]);
     // Remove from UI first (optimistic), then persist + delete from Storage
     setWoPhotos(prev => prev.filter(p => p.id !== id));
     // Persist the deletion immediately, without this the photo comes back on refresh
@@ -1306,6 +1312,9 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
       contractorSentAt: effectiveWoStatus === 'scheduled' ? (job?.contractorSentAt ?? new Date().toISOString()) : job?.contractorSentAt,
       lineItems,
       woPhotos,
+      // Union of previously ledgered + this-session deleted stems, capped so the
+      // list can't grow unbounded on photo-heavy jobs.
+      deletedPhotoStems: Array.from(new Set([...(job?.deletedPhotoStems ?? []), ...deletedStems])).slice(-500),
       activityHistory: woActivities,
       serviceReport,
       serviceStatus,

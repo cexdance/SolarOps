@@ -13,6 +13,15 @@ async function assertSession(): Promise<string | null> {
   return data.session ? null : 'session_expired';
 }
 
+/** sha-256 of the blob bytes as a 16-hex-char id, e.g. "ph-a1b2c3d4e5f60718". */
+async function contentHashId(blob: Blob): Promise<string> {
+  const buf = await blob.arrayBuffer();
+  const digest = await crypto.subtle.digest('SHA-256', buf);
+  const hex = Array.from(new Uint8Array(digest).slice(0, 8))
+    .map(b => b.toString(16).padStart(2, '0')).join('');
+  return `ph-${hex}`;
+}
+
 // ── WO Photo upload ───────────────────────────────────────────────────────────
 export async function uploadPhotoToStorage(
   file: File | Blob,
@@ -28,7 +37,14 @@ export async function uploadPhotoToStorage(
   const toUpload = isImage ? await compressImageUnderBytes(file).catch(() => file) : file;
   const ext =
     toUpload instanceof File && toUpload.name.includes('.') ? toUpload.name.split('.').pop() : 'jpg';
-  const path = `wo-photos/${jobId}/${photoId}.${ext}`;
+  // Content-addressed key: same bytes always land on the SAME storage object,
+  // so a double-tap, an upload retry, or a second upload path can never mint a
+  // second public URL for the same photo. Every downstream dedupe keys on the
+  // URL stem, so collapsing identical bytes to one URL kills the duplicate-photo
+  // class at the source (SO-2605-25309: 7 of 15 photos were byte-identical twins
+  // under two storage keys). Falls back to photoId if hashing fails.
+  const objectId = await contentHashId(toUpload).catch(() => photoId) ?? photoId;
+  const path = `wo-photos/${jobId}/${objectId}.${ext}`;
 
   const { error } = await supabase.storage
     .from(BUCKET)

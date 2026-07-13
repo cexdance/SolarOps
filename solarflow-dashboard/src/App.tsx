@@ -922,15 +922,18 @@ function App() {
       if (!adminJob) continue;
 
       // New contractor photos (Storage URLs only; base64 lives in IDB and is
-      // mirrored once it has an https URL). Dedupe by URL stem against existing.
+      // mirrored once it has an https URL). Dedupe by URL stem against existing,
+      // and NEVER re-import a stem the admin explicitly deleted (cj.photos has no
+      // tombstones, so without this ledger a deleted/cleaned photo resurrects here).
       const existing = adminJob.woPhotos ?? [];
       const seen = new Set(existing.map(p => photoUrlStem(p.storageUrl || p.dataUrl || '')).filter(Boolean));
+      const removedStems = new Set(adminJob.deletedPhotoStems ?? []);
       const newPhotos: import('./types').WOPhoto[] = [];
       for (const [cat, urls] of Object.entries(cj.photos ?? {})) {
         for (const url of (urls ?? [])) {
           if (!url || !url.startsWith('http')) continue;
           const stem = photoUrlStem(url);
-          if (stem && seen.has(stem)) continue;
+          if (stem && (seen.has(stem) || removedStems.has(stem))) continue;
           if (stem) seen.add(stem);
           newPhotos.push({
             id: `cp-${cat}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -1398,10 +1401,12 @@ function App() {
         );
         const keptExisting = existingWoPhotos.filter(p => contractorUrlSet.has(effectiveUrl(p)));
         const keptUrls = new Set(keptExisting.map(effectiveUrl).filter(Boolean));
+        // Never re-import a stem the admin explicitly deleted (see deletedPhotoStems).
+        const removedStems = new Set(adminJob.deletedPhotoStems ?? []);
         const newPhotos = contractorPhotosToWoPhotos(updatedJob.photos)
           .filter(p => {
             const url = effectiveUrl(p);
-            return url && !keptUrls.has(url);
+            return url && !keptUrls.has(url) && !removedStems.has(photoUrlStem(url));
           });
         // De-dupe by photo stem so the same image saved under two storage keys
         // (.jpg vs .../category/.jpeg) collapses to one stored woPhoto.
