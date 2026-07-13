@@ -371,6 +371,9 @@ export const Customers: React.FC<CustomersProps> = ({
   const [filterType, setFilterType] = useState<'all' | 'residential' | 'commercial'>(
     () => loadView('filterType', 'all' as 'all' | 'residential' | 'commercial')
   );
+  const [powerCareOnly, setPowerCareOnly] = useState<boolean>(
+    () => loadView('powerCareOnly', false)
+  );
   const [colOrder, setColOrder] = useState<ColId[]>(
     () => loadView('colOrder', ['name','clientId','type','category','system','seAlerts','status','location','phone','email','workOrders','powerCare'] as ColId[])
   );
@@ -389,6 +392,7 @@ export const Customers: React.FC<CustomersProps> = ({
 
   // Persist whenever view config changes
   React.useEffect(() => { saveView({ filterType }); }, [filterType]);
+  React.useEffect(() => { saveView({ powerCareOnly }); }, [powerCareOnly]);
   React.useEffect(() => { saveView({ colOrder }); }, [colOrder]);
   React.useEffect(() => { saveView({ hiddenCols: Array.from(hiddenCols) }); }, [hiddenCols]);
   React.useEffect(() => { saveView({ colFilters }); }, [colFilters]);
@@ -576,13 +580,14 @@ export const Customers: React.FC<CustomersProps> = ({
       customer.address.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (customer.clientId || '').toLowerCase().includes(searchQuery.toLowerCase());
     const matchesType = filterType === 'all' || customer.type === filterType;
+    const matchesPowerCare = !powerCareOnly || !!customer.isPowerCare;
     // Per-column filters
     const matchesCols = Object.entries(colFilters).every(([col, val]) => {
       if (!val) return true;
       const stats = getCustomerStats(customer.id);
       return getCellValue(customer, col as ColId, stats).toLowerCase().includes(val.toLowerCase());
     });
-    return matchesSearch && matchesType && matchesCols;
+    return matchesSearch && matchesType && matchesPowerCare && matchesCols;
   });
 
   // Sort
@@ -598,7 +603,7 @@ export const Customers: React.FC<CustomersProps> = ({
     : filteredCustomers;
 
   // Reset page when filters change
-  React.useEffect(() => { setPage(1); }, [searchQuery, filterType, colFilters]);
+  React.useEffect(() => { setPage(1); }, [searchQuery, filterType, powerCareOnly, colFilters]);
 
   const handleRowClick = (customer: Customer) => {
     if (selectionMode) {
@@ -760,6 +765,17 @@ export const Customers: React.FC<CustomersProps> = ({
               {t.charAt(0).toUpperCase() + t.slice(1)}
             </button>
           ))}
+          <button
+            onClick={() => setPowerCareOnly(v => !v)}
+            title="Show only PowerCare customers"
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+              powerCareOnly
+                ? 'bg-orange-500 text-white'
+                : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+            }`}>
+            <Zap className="w-4 h-4" />
+            PowerCare
+          </button>
         </div>
 
         {/* Find Duplicates */}

@@ -376,6 +376,7 @@ export const Jobs: React.FC<JobsProps> = ({
   const [filterContractor, setFilterContractor] = useState<string>('all');
   const [showArchived, setShowArchived] = useState(false);
   const [showOnHold, setShowOnHold] = useState(false);
+  const [powerCareOnly, setPowerCareOnly] = useState(false);
   type PeriodFilter = 'all' | 'this_week' | 'this_month' | 'last_month' | 'custom';
   const [filterPeriod, setFilterPeriod] = useState<PeriodFilter>('all');
   const [customFrom, setCustomFrom] = useState('');
@@ -418,6 +419,7 @@ export const Jobs: React.FC<JobsProps> = ({
 
   const archivedCount = useMemo(() => jobs.filter(j => j.status === 'archived' && !showArchived).length, [jobs, showArchived]);
   const onHoldCount = useMemo(() => jobs.filter(j => j.onHold && j.status !== 'archived').length, [jobs]);
+  const powerCareCount = useMemo(() => jobs.filter(j => j.isPowercare && j.status !== 'archived').length, [jobs]);
 
   // Shared job predicate. `includeHeld` lets the calendar receive parked orders
   // (it has its own On Hold / Active status filter) while the list + kanban keep
@@ -434,6 +436,7 @@ export const Jobs: React.FC<JobsProps> = ({
       filterStatus === 'on_hold' ? !!job.onHold :
       boardStatus(job) === filterStatus;
     const matchesContractor = filterContractor === 'all' || job.contractorId === filterContractor;
+    const matchesPowerCare = !powerCareOnly || !!job.isPowercare;
     // Period filter, uses scheduledDate or createdAt
     let matchesPeriod = true;
     if (periodRange) {
@@ -452,8 +455,8 @@ export const Jobs: React.FC<JobsProps> = ({
     // the admin is explicitly filtering to On Hold (the calendar passes includeHeld).
     const notHeld = includeHeld || !job.onHold || showOnHold || filterStatus === 'on_hold';
 
-    return matchesSearch && matchesStatus && matchesContractor && matchesPeriod && notArchived && notHeld;
-  }, [customers, searchQuery, filterStatus, filterContractor, periodRange, showArchived, showOnHold]);
+    return matchesSearch && matchesStatus && matchesContractor && matchesPowerCare && matchesPeriod && notArchived && notHeld;
+  }, [customers, searchQuery, filterStatus, filterContractor, powerCareOnly, periodRange, showArchived, showOnHold]);
 
   const filteredJobs = useMemo(() => jobs.filter(j => jobMatches(j, false)), [jobs, jobMatches]);
   // The calendar always receives held orders; its own status filter shows/hides them.
@@ -471,13 +474,14 @@ export const Jobs: React.FC<JobsProps> = ({
       customer?.address.toLowerCase().includes(searchQuery.toLowerCase()) ||
       job.notes.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesContractor = filterContractor === 'all' || job.contractorId === filterContractor;
+    const matchesPowerCare = !powerCareOnly || !!job.isPowercare;
     let matchesPeriod = true;
     if (periodRange) {
       const dateStr = job.scheduledDate || job.createdAt;
       matchesPeriod = dateStr ? (() => { const d = new Date(dateStr.split('T')[0]); return d >= periodRange.start && d <= periodRange.end; })() : false;
     }
-    return matchesSearch && matchesContractor && matchesPeriod;
-  }), [jobs, customers, searchQuery, filterContractor, periodRange]);
+    return matchesSearch && matchesContractor && matchesPowerCare && matchesPeriod;
+  }), [jobs, customers, searchQuery, filterContractor, powerCareOnly, periodRange]);
 
   // Per-contractor workload summary (Assigned / On Route / In Progress / Completed).
   // Computed across ALL of the selected contractor's non-archived jobs, independent of
@@ -680,6 +684,18 @@ export const Jobs: React.FC<JobsProps> = ({
               Show On Hold {onHoldCount > 0 && `(${onHoldCount})`}
             </span>
           </label>
+          <button
+            type="button"
+            onClick={() => setPowerCareOnly(v => !v)}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition-colors cursor-pointer ${
+              powerCareOnly
+                ? 'bg-orange-500 text-white border-orange-500 hover:bg-orange-600'
+                : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+            }`}
+          >
+            <Zap className="w-4 h-4" />
+            PowerCare {powerCareCount > 0 && `(${powerCareCount})`}
+          </button>
         </div>
         <div className="flex-1 relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />

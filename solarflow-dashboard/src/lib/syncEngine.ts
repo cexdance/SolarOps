@@ -446,6 +446,14 @@ export async function pushToSupabase(state: AppState): Promise<void> {
   try {
     const session = await getActiveSession();
     if (!session) {
+      // Queue the push in the durable outbox before bailing. Without this the
+      // edit sits dirty in localStorage but is never retried: the 30s/online/
+      // focus drains only run when the outbox has a pending flag, so a lone edit
+      // made while the session is expired never reaches Supabase (it strands until
+      // some UNRELATED later edit happens to trigger a full-state push). Marking
+      // pending makes the outbox re-attempt on its own once the user re-auths.
+      // (SO-2605-27374 date edit stranded exactly this way, 2026-07-13.)
+      markPushPending('session-expired');
       window.dispatchEvent(new CustomEvent('supabase-sync-error', {
         detail: { message: 'Session expired, your changes are saved locally but not synced. Please re-login.' },
       }));

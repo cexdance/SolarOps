@@ -261,7 +261,10 @@ export const SowDistributionModal: React.FC<Props> = ({
 }) => {
   const [weather, setWeather] = useState<WeatherResult | null | 'loading'>('loading');
 
-  const woPhotos      = job.woPhotos ?? [];
+  // PDF attachments can't render as <img>, keep them out of the report
+  const woPhotos      = (job.woPhotos ?? []).filter(
+    p => p.mimeType !== 'application/pdf' && !/\.pdf(\?|$)/i.test(p.name || ''),
+  );
   const contractor    = contractors.find(c => c.id === job.contractorId);
 
   const contractorLabel = [contractor?.contactName, contractor?.businessName]

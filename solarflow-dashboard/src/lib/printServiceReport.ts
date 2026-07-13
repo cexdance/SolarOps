@@ -63,6 +63,8 @@ export function printServiceReport({ job, customer, siteName, siteAddress, clien
     .join('');
 
   const photos = (job.woPhotos ?? [])
+    // PDF attachments can't render as <img>, keep them out of the print report
+    .filter(p => p.mimeType !== 'application/pdf' && !/\.pdf(\?|$)/i.test(p.name || ''))
     .map(p => ({ src: p.storageUrl || p.dataUrl, cap: (p.name?.trim() || photoLabel[p.category] || '') }))
     .filter(p => p.src)
     .map(p => `<figure><img src="${esc(p.src)}" alt="${esc(p.cap || 'Service photo')}">${p.cap ? `<figcaption>${esc(p.cap)}</figcaption>` : ''}</figure>`)

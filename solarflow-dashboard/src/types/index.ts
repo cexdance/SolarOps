@@ -187,6 +187,8 @@ export interface WOPhoto {
   photoStoreId?: string;
   /** Public Supabase Storage URL. When set, use this instead of dataUrl for display. */
   storageUrl?: string;
+  /** MIME type; set for non-image attachments (e.g. application/pdf). Absent = image. */
+  mimeType?: string;
   createdAt: string;
 }
 

@@ -22,6 +22,7 @@ import { formatMoney } from '../lib/money';
 import { printServiceReport } from '../lib/printServiceReport';
 import { serviceOrderNo, workOrderNo, generateServiceOrderNumber } from '../lib/woHelpers';
 import { SowDistributionModal, SOW_DISTRIBUTION_NAMES } from './SowDistributionModal';
+import { ImageLightbox } from './ImageLightbox';
 import { ActivityFeed, type FeedUser } from './ui/ActivityFeed';
 import { compressImageToDataUrl, compressImageToBlob } from '../lib/photoCompress';
 import { uploadPhotoToStorage, deletePhotoFromStorage } from '../lib/photoStorage';
@@ -536,6 +537,8 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
   const [selectMode, setSelectMode]               = useState(false);
   const [selectedPhotoIds, setSelectedPhotoIds]   = useState<Set<string>>(new Set());
   const [editingCategoryFor, setEditingCategoryFor] = useState<string | null>(null);
+  // Full-screen gallery: index into galleryPhotos (images only), null = closed
+  const [lightboxIdx, setLightboxIdx] = useState<number | null>(null);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const startLongPress = useCallback((photoId: string) => {
@@ -862,6 +865,56 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
     setUploadError(null);
     const effectiveCat = forceCat ?? uploadCategory;
     Array.from(files).forEach(async file => {
+      if (file.type === 'application/pdf') {
+        // PDFs: upload-first (no base64 preview ever enters synced state).
+        if (file.size > 20 * 1024 * 1024) {
+          setUploadError(`PDF too large (${Math.round(file.size / 1024 / 1024)}MB), max 20MB`);
+          return;
+        }
+        const pdfId = `ph-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+        const start = Date.now();
+        pendingUploads.current.add(pdfId);
+        setUploading(true);
+        try {
+          logUpload('photo.upload_start', pdfId, {
+            name: file.name, size: file.size, type: file.type,
+            jobId: stableWoIdRef.current, category: effectiveCat,
+          });
+          const result = await uploadPhotoToStorage(file, stableWoIdRef.current, pdfId);
+          if (result.url) {
+            const bustUrl = result.url.includes('?') ? `${result.url}&t=${Date.now()}` : `${result.url}?t=${Date.now()}`;
+            logUpload('photo.upload_success', pdfId, {
+              storageUrl: bustUrl, name: file.name, jobId: stableWoIdRef.current,
+            }, undefined, Date.now() - start);
+            setWoPhotos(prev => [...prev, {
+              id: pdfId,
+              category: effectiveCat,
+              name: file.name,
+              dataUrl: '',
+              storageUrl: bustUrl,
+              mimeType: 'application/pdf',
+              createdAt: new Date().toISOString(),
+            }]);
+          } else {
+            logUpload('photo.upload_fail', pdfId, {
+              error: result.error, name: file.name, jobId: stableWoIdRef.current,
+            }, undefined, Date.now() - start);
+            setUploadError(result.error === 'session_expired'
+              ? 'Session expired, please re-login to save files.'
+              : `PDF upload failed: ${result.error ?? 'unknown error'}`);
+          }
+        } catch (err) {
+          console.error('[ServiceOrderPanel] pdf upload error', err);
+          setUploadError('PDF upload failed. Check your connection.');
+        } finally {
+          pendingUploads.current.delete(pdfId);
+          setUploading(pendingUploads.current.size > 0);
+          if (pendingUploads.current.size === 0) {
+            setTimeout(() => handleSaveRef.current(undefined, true), 0);
+          }
+        }
+        return;
+      }
       if (!file.type.startsWith('image/')) return;
       const photoId = `ph-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
       const uploadStart = Date.now();
@@ -1351,6 +1404,15 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
     acc[cat] = woPhotos.filter(p => p.category === cat);
     return acc;
   }, {} as Record<WOPhoto['category'], WOPhoto[]>);
+
+  // Gallery: every displayable image (PDFs excluded) flattened in the same
+  // category order as the grid, so prev/next in the lightbox matches the page.
+  const isPdfAttachment = (p: WOPhoto) =>
+    p.mimeType === 'application/pdf' || /\.pdf(\?|$)/i.test(p.name || '');
+  const galleryPhotos = PHOTO_CATEGORIES
+    .flatMap(cat => photosByCategory[cat])
+    .filter(p => !isPdfAttachment(p) && (p.storageUrl || p.dataUrl))
+    .map(p => ({ id: p.id, src: p.storageUrl || p.dataUrl, name: p.name }));
 
   const tabs = [
     { key: 'overview', label: 'Overview',        icon: <ClipboardList className="w-4 h-4" /> },
@@ -2793,14 +2855,14 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                     </div>
                   </div>
                   <span className="text-sm font-semibold text-white">Tap to take photo or choose files</span>
-                  <span className="text-xs text-slate-400">Drag & drop or paste (Ctrl+V) images here</span>
+                  <span className="text-xs text-slate-400">Drag & drop or paste (Ctrl+V) images or PDFs here</span>
                   <span className="text-[10px] text-orange-400 capitalize">{PHOTO_CATEGORY_LABELS[uploadCategory]}</span>
                 </label>
                 <input
                   id="wo-photo-upload"
                   ref={photoInputRef}
                   type="file"
-                  accept="image/*"
+                  accept="image/*,application/pdf"
                   multiple
                   className="hidden"
                   onChange={e => { handlePhotoFiles(e.target.files); e.target.value = ''; }}
@@ -2879,24 +2941,29 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                                 });
                               } else if (isEditingCat) {
                                 setEditingCategoryFor(null);
-                              } else if (photo.storageUrl) {
-                                // Open the full-res photo in its own browser tab
-                                // (native zoom + right-click Save Image As).
-                                window.open(photo.storageUrl, '_blank', 'noopener,noreferrer');
-                              } else if (photo.dataUrl) {
-                                // data: URLs can't be a top-level tab in Chrome; open via blob URL.
-                                fetch(photo.dataUrl)
-                                  .then(r => r.blob())
-                                  .then(b => window.open(URL.createObjectURL(b), '_blank', 'noopener,noreferrer'))
-                                  .catch(() => {});
+                              } else if (isPdfAttachment(photo)) {
+                                // Browsers render PDFs natively; open in a tab.
+                                if (photo.storageUrl) window.open(photo.storageUrl, '_blank', 'noopener,noreferrer');
+                              } else {
+                                // Open the full-screen gallery at this photo,
+                                // browse all photos with arrows/thumbnails.
+                                const idx = galleryPhotos.findIndex(g => g.id === photo.id);
+                                if (idx >= 0) setLightboxIdx(idx);
                               }
                             }}
                           >
-                            <img
-                              src={photo.storageUrl ?? photo.dataUrl}
-                              alt={photo.name}
-                              className="w-full h-full object-cover"
-                            />
+                            {isPdfAttachment(photo) ? (
+                              <div className="w-full h-full bg-slate-800 flex flex-col items-center justify-center gap-2">
+                                <FileText className="w-10 h-10 text-red-400" />
+                                <span className="text-[10px] font-bold text-slate-300 uppercase tracking-wider">PDF</span>
+                              </div>
+                            ) : (
+                              <img
+                                src={photo.storageUrl ?? photo.dataUrl}
+                                alt={photo.name}
+                                className="w-full h-full object-cover"
+                              />
+                            )}
 
                             {/* Checkbox, select mode only */}
                             {selectMode && (
@@ -2973,7 +3040,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                       <input
                         id={`wo-photo-add-${cat}`}
                         type="file"
-                        accept="image/*"
+                        accept="image/*,application/pdf"
                         multiple
                         className="hidden"
                         onChange={e => { handlePhotoFiles(e.target.files, cat); e.target.value = ''; }}
@@ -3764,6 +3831,18 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
               setTimeout(() => handleSaveRef.current(next, true), 0);
             }
           }}
+        />
+      )}
+
+      {/* ── Full-screen photo gallery ─────────────────────────────── */}
+      {lightboxIdx !== null && galleryPhotos[lightboxIdx] && (
+        <ImageLightbox
+          src={galleryPhotos[lightboxIdx].src}
+          name={galleryPhotos[lightboxIdx].name}
+          items={galleryPhotos}
+          index={lightboxIdx}
+          onNavigate={setLightboxIdx}
+          onClose={() => setLightboxIdx(null)}
         />
       )}
 

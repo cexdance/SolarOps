@@ -23,7 +23,9 @@ export async function uploadPhotoToStorage(
   if (authErr) return { url: null, error: authErr };
 
   // Auto-downscale/recompress any oversized image to < 1 MB before upload.
-  const toUpload = await compressImageUnderBytes(file).catch(() => file);
+  // Non-image files (PDFs) upload as-is; the image pipeline would reject them.
+  const isImage = !file.type || file.type.startsWith('image/');
+  const toUpload = isImage ? await compressImageUnderBytes(file).catch(() => file) : file;
   const ext =
     toUpload instanceof File && toUpload.name.includes('.') ? toUpload.name.split('.').pop() : 'jpg';
   const path = `wo-photos/${jobId}/${photoId}.${ext}`;
