@@ -283,6 +283,8 @@ interface KanbanColumnProps {
   customers: Customer[];
   users: UserType[];
   contractors: import('../types/contractor').Contractor[];
+  sortBy: JobSortOption;
+  onSortChange: (sortBy: JobSortOption) => void;
   onUpdateJob: (job: Job) => void;
   onDragStart: (e: React.DragEvent, jobId: string) => void;
   onDragEnd: () => void;
@@ -303,9 +305,11 @@ const colColors: Record<JobStatus | 'on_hold', string> = {
 
 const KanbanColumn: React.FC<KanbanColumnProps> = ({
   status, title, columnJobs, allJobs, draggedJobId,
-  customers, users, contractors, onUpdateJob, onDragStart, onDragEnd, onCardClick, onToggleHold,
+  customers, users, contractors, sortBy, onSortChange, onUpdateJob, onDragStart, onDragEnd, onCardClick, onToggleHold,
 }) => {
   const [isOver, setIsOver] = useState(false);
+  // Sort is per-column, not board-wide: each column keeps its own independent order.
+  const sortedJobs = useMemo(() => sortJobsBy(columnJobs, sortBy, contractors), [columnJobs, sortBy, contractors]);
 
   const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); setIsOver(true); };
   const handleDragLeave = (e: React.DragEvent) => {
@@ -348,12 +352,28 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center justify-between mb-1.5">
         <h3 className="font-semibold text-slate-800">{title}</h3>
         <span className="text-xs font-medium text-slate-500 bg-white px-2 py-1 rounded-full">{columnJobs.length}</span>
       </div>
-      <div className="space-y-3 overflow-y-auto max-h-[calc(100vh-300px)]">
-        {columnJobs.map(job => (
+      <div className="relative mb-3">
+        <ArrowUpDown className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400 pointer-events-none" />
+        <select
+          value={sortBy}
+          onChange={(e) => onSortChange(e.target.value as JobSortOption)}
+          title={`Sort ${title}`}
+          className="w-full pl-6 pr-2 py-1 bg-white border border-slate-200 rounded-md text-[11px] text-slate-600 focus:outline-none focus:ring-1 focus:ring-orange-500 cursor-pointer"
+        >
+          <option value="none">Sort: Default</option>
+          <option value="priority_desc">Priority, High to Low</option>
+          <option value="date_desc">Date Added, Newest First</option>
+          <option value="date_asc">Date Added, Oldest First</option>
+          <option value="service_type">Service Type, A-Z</option>
+          <option value="contractor">Contractor, A-Z</option>
+        </select>
+      </div>
+      <div className="space-y-3 overflow-y-auto max-h-[calc(100vh-340px)]">
+        {sortedJobs.map(job => (
           <JobCard
             key={job.id}
             job={job}
@@ -414,7 +434,10 @@ export const Jobs: React.FC<JobsProps> = ({
   const [showArchived, setShowArchived] = useState(false);
   const [showOnHold, setShowOnHold] = useState(false);
   const [powerCareOnly, setPowerCareOnly] = useState(false);
-  const [sortBy, setSortBy] = useState<JobSortOption>('none');
+  // Sort is per-Kanban-column (each column keeps its own independent order); the
+  // flat List view gets one sort since it has no columns to separate.
+  const [columnSortBy, setColumnSortBy] = useState<Record<string, JobSortOption>>({});
+  const [listSortBy, setListSortBy] = useState<JobSortOption>('none');
   type PeriodFilter = 'all' | 'this_week' | 'this_month' | 'last_month' | 'custom';
   const [filterPeriod, setFilterPeriod] = useState<PeriodFilter>('all');
   const [customFrom, setCustomFrom] = useState('');
@@ -521,14 +544,11 @@ export const Jobs: React.FC<JobsProps> = ({
     return matchesSearch && matchesContractor && matchesPowerCare && matchesPeriod;
   }), [jobs, customers, searchQuery, filterContractor, powerCareOnly, periodRange]);
 
-  // Sort applies uniformly to the Kanban columns (below) and the List view.
-  const sortedFilteredJobs = useMemo(
-    () => sortJobsBy(filteredJobs, sortBy, contractors),
-    [filteredJobs, sortBy, contractors]
-  );
-  const sortedHeldJobs = useMemo(
-    () => sortJobsBy(boardHeldJobs, sortBy, contractors),
-    [boardHeldJobs, sortBy, contractors]
+  // List view has no columns, so it gets one sort (Kanban columns each sort
+  // independently inside KanbanColumn via their own sortBy/onSortChange props).
+  const sortedListJobs = useMemo(
+    () => sortJobsBy(filteredJobs, listSortBy, contractors),
+    [filteredJobs, listSortBy, contractors]
   );
 
   // Per-contractor workload summary (Assigned / On Route / In Progress / Completed).
@@ -744,12 +764,14 @@ export const Jobs: React.FC<JobsProps> = ({
             <Zap className="w-4 h-4" />
             PowerCare {powerCareCount > 0 && `(${powerCareCount})`}
           </button>
-          {(viewMode === 'kanban' || viewMode === 'list') && (
+          {/* Kanban sorts per-column (in each column's own header); List has no
+              columns to separate, so it gets one board-wide sort here. */}
+          {viewMode === 'list' && (
             <div className="relative">
               <ArrowUpDown className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
               <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as JobSortOption)}
+                value={listSortBy}
+                onChange={(e) => setListSortBy(e.target.value as JobSortOption)}
                 title="Sort service orders"
                 className="pl-8 pr-4 py-2.5 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 text-sm cursor-pointer"
               >
@@ -811,12 +833,14 @@ export const Jobs: React.FC<JobsProps> = ({
               // raw status is stale/undefined) so RMA/imported service orders land in
               // the right column WITHOUT needing a manual save, and none vanish. Held
               // jobs go ONLY in the On Hold column, never their status column.
-              columnJobs={col === 'on_hold' ? sortedHeldJobs : sortedFilteredJobs.filter(j => !j.onHold && boardStatus(j) === col)}
+              columnJobs={col === 'on_hold' ? boardHeldJobs : filteredJobs.filter(j => !j.onHold && boardStatus(j) === col)}
               allJobs={jobs}
               draggedJobId={draggedJobId}
               customers={customers}
               users={users}
               contractors={contractors}
+              sortBy={columnSortBy[col] ?? 'none'}
+              onSortChange={(v) => setColumnSortBy(prev => ({ ...prev, [col]: v }))}
               onUpdateJob={onUpdateJob}
               onDragStart={handleDragStart}
               onDragEnd={() => setDraggedJobId(null)}
@@ -830,7 +854,7 @@ export const Jobs: React.FC<JobsProps> = ({
       {/* List View */}
       {viewMode === 'list' && (
         <div className="space-y-3">
-          {sortedFilteredJobs.map((job) => (
+          {sortedListJobs.map((job) => (
             <JobCard
               key={job.id}
               job={job}
