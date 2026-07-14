@@ -1683,11 +1683,13 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
 
           {/* Overview */}
           {activeTab === 'overview' && (
-            <div className="p-6 space-y-5">
-              {/* ── Comments & Activity, surfaced first so the user sees what is
-                  happening with the service order at a glance. Posts to the WO
-                  activity feed AND the client timeline (Customer Activity tab via
-                  combinedActivity). Thread format mirrors other cards/mentions. ── */}
+            <div className="p-6 lg:grid lg:grid-cols-[1.618fr_1fr] lg:gap-6 lg:items-start">
+              {/* ── Comments & Activity: default DOM order keeps it first for
+                  mobile/tablet, unchanged from the 2026-06-22 decision. At lg+
+                  (1024px+, where this staff-only panel is actually used) it
+                  becomes a right rail via lg:order-2, the golden split applied
+                  to layout instead of scroll. ── */}
+              <div className="space-y-5 lg:order-2">
               <div className="border-b border-slate-100 pb-5">
                 <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
                   <Users className="w-3.5 h-3.5" />
@@ -1766,7 +1768,11 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                   </div>
                 )}
               </div>
+              </div>
 
+              {/* Fields column: everything but comments, order-1 at desktop so it
+                  reads first even though comments are first in DOM (mobile order). */}
+              <div className="space-y-5 lg:order-1 mt-5 lg:mt-0">
               {/* Priority, top of form for quick triage */}
               <div>
                 <label className="block text-xs font-medium text-slate-500 mb-1">Priority</label>
@@ -2268,6 +2274,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                 </div>
               )}
 
+            </div>
             </div>
           )}
 
