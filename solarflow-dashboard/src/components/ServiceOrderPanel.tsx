@@ -1440,7 +1440,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
 
       {/* Panel */}
-      <div className="relative w-full max-w-3xl max-h-[92vh] bg-white flex flex-col shadow-2xl rounded-2xl overflow-hidden">
+      <div className="relative w-full max-w-4xl max-h-[92vh] bg-white flex flex-col shadow-2xl rounded-2xl overflow-hidden">
 
         {/* ── Header ─────────────────────────────────────────────────── */}
         <div className="bg-slate-900 px-6 pt-4 pb-3 shrink-0 flex gap-4">
@@ -1547,7 +1547,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
         </div>
 
         {/* ── Status Pipeline ────────────────────────────────────────── */}
-        <div className="bg-slate-800 px-6 py-3 shrink-0">
+        <div className="bg-slate-800 px-6 py-2 shrink-0">
           <div className="flex items-center gap-0">
             {WO_STAGES.map((stage, idx) => {
               const done    = idx < stageIdx;
@@ -1602,7 +1602,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
 
         {/* ── Workflow Action Bar ─────────────────────────────────────── */}
         {action && (
-          <div className={`border-b px-6 py-2.5 flex items-center justify-between gap-4 shrink-0 ${
+          <div className={`border-b px-6 py-2 flex items-center justify-between gap-4 shrink-0 ${
             isServiceAccountExpense ? 'bg-blue-50 border-blue-200' : 'bg-slate-50 border-slate-200'
           }`}>
             <div className="flex items-center gap-2 text-sm text-slate-500">
@@ -1790,18 +1790,17 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-slate-500 mb-1">Job Title</label>
-                  <input
-                    value={title}
-                    onChange={e => setTitle(e.target.value)}
-                    placeholder={`WO, ${siteName}`}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
-                  />
-                </div>
-                {/* Service, full width, fed from Excel rate table */}
-                <div className="col-span-2">
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1">Job Title</label>
+                <input
+                  value={title}
+                  onChange={e => setTitle(e.target.value)}
+                  placeholder={`WO, ${siteName}`}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                />
+              </div>
+              {/* Service, fed from Excel rate table */}
+              <div>
                   <div className="flex items-center justify-between mb-1">
                     <label className="block text-xs font-medium text-slate-500">Service</label>
                     <button
@@ -1914,6 +1913,34 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                     );
                   })()}
                 </div>
+
+              {/* Scope of Work, grouped with Job Title/Service (what), not money fields */}
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1">
+                  Scope of Work / Notes
+                  {users.length > 0 && <span className="ml-1 text-slate-400 font-normal">- type @ to mention · Ctrl/Cmd+V to paste images</span>}
+                </label>
+                <MentionTextarea
+                  value={notes}
+                  onChange={setNotes}
+                  users={users}
+                  rows={4}
+                  onPaste={handleNotesPaste}
+                  // ponytail: autosave scope/notes on blur so closing the panel
+                  // never silently drops typed info (e.g. site-transfer notes)
+                  onBlur={() => { if (notes !== (job?.notes ?? '')) handleSaveRef.current(undefined, true); }}
+                  placeholder="Describe the work to be done… (paste screenshots with Ctrl/Cmd+V)"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 resize-none"
+                />
+                {pasteToast && (
+                  <p className="mt-1 text-xs text-emerald-600 font-medium">📎 {pasteToast}</p>
+                )}
+                {pasteError && (
+                  <p className="mt-1 text-xs text-red-600 font-medium">⚠️ {pasteError}</p>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-slate-500 mb-1">Scheduled Date</label>
                   <input
@@ -2215,31 +2242,6 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                   </div>
                 </div>
               )}
-
-              <div>
-                <label className="block text-xs font-medium text-slate-500 mb-1">
-                  Scope of Work / Notes
-                  {users.length > 0 && <span className="ml-1 text-slate-400 font-normal">- type @ to mention · Ctrl/Cmd+V to paste images</span>}
-                </label>
-                <MentionTextarea
-                  value={notes}
-                  onChange={setNotes}
-                  users={users}
-                  rows={5}
-                  onPaste={handleNotesPaste}
-                  // ponytail: autosave scope/notes on blur so closing the panel
-                  // never silently drops typed info (e.g. site-transfer notes)
-                  onBlur={() => { if (notes !== (job?.notes ?? '')) handleSaveRef.current(undefined, true); }}
-                  placeholder="Describe the work to be done… (paste screenshots with Ctrl/Cmd+V)"
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 resize-none"
-                />
-                {pasteToast && (
-                  <p className="mt-1 text-xs text-emerald-600 font-medium">📎 {pasteToast}</p>
-                )}
-                {pasteError && (
-                  <p className="mt-1 text-xs text-red-600 font-medium">⚠️ {pasteError}</p>
-                )}
-              </div>
 
               {/* SE Compensation banner, shown when warranty SolarEdge parts added + site < 5 yrs */}
               {seCompEligible && (
