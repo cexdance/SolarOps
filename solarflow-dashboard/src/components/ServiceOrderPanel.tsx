@@ -400,6 +400,8 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
   const [showQuotePreview, setShowQuotePreview] = useState(false);
   // SOW / report preview modal (separate from the quote-send modal above)
   const [showSowReport, setShowSowReport] = useState(false);
+  // Overview comment thread starts collapsed to the latest 2 entries
+  const [showAllComments, setShowAllComments] = useState(false);
   const [quoteSending] = useState(false);
   const [quoteResult, setQuoteResult] = useState<{ ok: boolean; msg: string } | null>(null);
   const [technicianId] = useState(job?.technicianId ?? '');
@@ -1737,7 +1739,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                 {woActivities.length > 0 && (
                   <div className="mt-4">
                     <ActivityFeed
-                      activities={woActivities}
+                      activities={showAllComments ? woActivities : woActivities.slice(0, 2)}
                       users={users ?? []}
                       currentUser={(users ?? []).find(u => u.name === currentUserName) ?? null}
                       onEdit={editComment}
@@ -1753,6 +1755,14 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                       }}
                       emptyMessage="No comments yet, start the conversation by posting an update above."
                     />
+                    {woActivities.length > 2 && (
+                      <button
+                        onClick={() => setShowAllComments(v => !v)}
+                        className="mt-2 text-xs font-medium text-orange-600 hover:text-orange-700"
+                      >
+                        {showAllComments ? 'Show less' : `Show all ${woActivities.length} comments`}
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -2256,18 +2266,6 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                 </div>
               )}
 
-              {/* Site info (readonly) */}
-              <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Site Info</p>
-                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-                  <span className="text-slate-500">Client ID</span>
-                  <span className="font-mono text-slate-800">{clientId ?? '-'}</span>
-                  <span className="text-slate-500">Site ID</span>
-                  <span className="font-mono text-slate-800">{siteId}</span>
-                  <span className="text-slate-500">Address</span>
-                  <span className="text-slate-800">{normalizedSiteAddress ?? '-'}</span>
-                </div>
-              </div>
             </div>
           )}
 
@@ -3195,6 +3193,75 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
 
           {activeTab === 'history' && (
             <div className="p-6 space-y-3">
+              {/* ── Activity Timeline (audit trail: created/modified/completed
+                  summary + narrative trail of stage changes, photos, pricing) ── */}
+              <div className="border border-slate-200 bg-slate-50/60 rounded-xl p-4 mb-2">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                    <History className="w-3.5 h-3.5" />
+                    Activity Timeline
+                  </p>
+                  {auditLog.length > 0 && (
+                    <span className="text-[11px] text-slate-400">{auditLog.length} {auditLog.length === 1 ? 'event' : 'events'}</span>
+                  )}
+                </div>
+
+                {/* Created / Last modified / Completed summary */}
+                {(() => {
+                  const created = auditLog.find(e => e.action === 'created');
+                  const completed = [...auditLog].reverse().find(e => e.action === 'completed' || /→ completed/.test(e.details));
+                  const last = auditLog[auditLog.length - 1];
+                  const fmt = (e?: AuditEntry) => e ? `${e.userName} · ${new Date(e.timestamp).toLocaleString()}` : '—';
+                  return (
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3">
+                      <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Created</p>
+                        <p className="text-xs text-slate-700 mt-0.5 truncate">{fmt(created)}</p>
+                      </div>
+                      <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Last modified</p>
+                        <p className="text-xs text-slate-700 mt-0.5 truncate">{fmt(last)}</p>
+                      </div>
+                      <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Completed</p>
+                        <p className="text-xs text-slate-700 mt-0.5 truncate">{completed ? fmt(completed) : 'Not yet'}</p>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Full chronological trail, newest first */}
+                {auditLog.length === 0 ? (
+                  <p className="text-xs text-slate-400 italic">No changes recorded yet. Activity appears here as the service order is created, edited, saved, or advanced, from photo uploads to price changes.</p>
+                ) : (
+                  <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                    {[...auditLog].reverse().map(entry => {
+                      const d = entry.details;
+                      const Icon = entry.action === 'created' ? Plus
+                        : entry.action === 'completed' ? CheckCircle
+                        : /Photos/.test(d) ? Camera
+                        : /Total \$|Line items/.test(d) ? DollarSign
+                        : /Stage/.test(d) ? ChevronRight
+                        : Clock;
+                      const tone = entry.action === 'created' || entry.action === 'completed' ? 'text-emerald-500'
+                        : /Photos/.test(d) ? 'text-blue-500'
+                        : /Total \$|Line items/.test(d) ? 'text-amber-500'
+                        : /Stage/.test(d) ? 'text-orange-500'
+                        : 'text-slate-400';
+                      return (
+                        <div key={entry.id} className="flex items-start gap-2.5 text-xs">
+                          <Icon className={`w-3.5 h-3.5 mt-0.5 shrink-0 ${tone}`} />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-slate-700">{d}</p>
+                            <p className="text-slate-400 mt-0.5">{entry.userName} · {new Date(entry.timestamp).toLocaleString()}</p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
               <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
                 <History className="w-3.5 h-3.5" />
                 Change History, who created, modified, or updated this service order
@@ -3247,107 +3314,11 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
             </div>
           )}
 
-          {/* ── Activity Timeline (always visible, audit trail) ──────────── */}
-          <div className="border-t border-slate-200 bg-slate-50/60 px-6 py-4">
-            <div className="flex items-center justify-between mb-3">
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
-                <History className="w-3.5 h-3.5" />
-                Activity Timeline
-              </p>
-              {auditLog.length > 0 && (
-                <span className="text-[11px] text-slate-400">{auditLog.length} {auditLog.length === 1 ? 'event' : 'events'}</span>
-              )}
-            </div>
-
-            {/* Created / Last modified / Completed summary */}
-            {(() => {
-              const created = auditLog.find(e => e.action === 'created');
-              const completed = [...auditLog].reverse().find(e => e.action === 'completed' || /→ completed/.test(e.details));
-              const last = auditLog[auditLog.length - 1];
-              const fmt = (e?: AuditEntry) => e ? `${e.userName} · ${new Date(e.timestamp).toLocaleString()}` : '—';
-              return (
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3">
-                  <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
-                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Created</p>
-                    <p className="text-xs text-slate-700 mt-0.5 truncate">{fmt(created)}</p>
-                  </div>
-                  <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
-                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Last modified</p>
-                    <p className="text-xs text-slate-700 mt-0.5 truncate">{fmt(last)}</p>
-                  </div>
-                  <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
-                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Completed</p>
-                    <p className="text-xs text-slate-700 mt-0.5 truncate">{completed ? fmt(completed) : 'Not yet'}</p>
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* Full chronological trail, newest first */}
-            {auditLog.length === 0 ? (
-              <p className="text-xs text-slate-400 italic">No changes recorded yet. Activity appears here as the service order is created, edited, saved, or advanced, from photo uploads to price changes.</p>
-            ) : (
-              <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
-                {[...auditLog].reverse().map(entry => {
-                  const d = entry.details;
-                  const Icon = entry.action === 'created' ? Plus
-                    : entry.action === 'completed' ? CheckCircle
-                    : /Photos/.test(d) ? Camera
-                    : /Total \$|Line items/.test(d) ? DollarSign
-                    : /Stage/.test(d) ? ChevronRight
-                    : Clock;
-                  const tone = entry.action === 'created' || entry.action === 'completed' ? 'text-emerald-500'
-                    : /Photos/.test(d) ? 'text-blue-500'
-                    : /Total \$|Line items/.test(d) ? 'text-amber-500'
-                    : /Stage/.test(d) ? 'text-orange-500'
-                    : 'text-slate-400';
-                  return (
-                    <div key={entry.id} className="flex items-start gap-2.5 text-xs">
-                      <Icon className={`w-3.5 h-3.5 mt-0.5 shrink-0 ${tone}`} />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-slate-700">{d}</p>
-                        <p className="text-slate-400 mt-0.5">{entry.userName} · {new Date(entry.timestamp).toLocaleString()}</p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
         </div>
 
         {/* ── Footer ─────────────────────────────────────────────────── */}
         <div className="border-t border-slate-200 px-6 py-4 flex items-center justify-between gap-3 bg-white shrink-0">
-          <div className="flex items-center gap-2">
-            <button
-              onClick={onClose}
-              className="px-5 py-2 text-sm font-medium text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer"
-            >
-              Cancel
-            </button>
-            {job?.status === 'in_progress' && (
-              <button
-                onClick={() => setShowSowReport(true)}
-                className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer"
-              >
-                <FileText className="w-4 h-4" />
-                Preview Report
-              </button>
-            )}
-            {/* SOW Distribution Report, always accessible once a WO exists */}
-            {!isNew && (
-              <button
-                onClick={() => setShowSowDistribution(true)}
-                className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg transition-colors cursor-pointer ${
-                  job?.woStatus === 'completed'
-                    ? 'bg-emerald-600 text-white hover:bg-emerald-700'
-                    : 'text-slate-700 border border-slate-200 hover:bg-slate-50'
-                }`}
-              >
-                <FileText className="w-4 h-4" />
-                SOW Report
-              </button>
-            )}
+          <div className="flex items-center gap-3">
             {!isNew && onDeleteJob && (
               deleteStep === 0 ? (
                 <button
@@ -3375,12 +3346,41 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                 </div>
               )
             )}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={onClose}
+                className="px-5 py-2 text-sm font-medium text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              {job?.status === 'in_progress' && (
+                <button
+                  onClick={() => setShowSowReport(true)}
+                  className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer"
+                >
+                  <FileText className="w-4 h-4" />
+                  Preview Report
+                </button>
+              )}
+              {/* SOW Distribution Report, always accessible once a WO exists */}
+              {!isNew && (
+                <button
+                  onClick={() => setShowSowDistribution(true)}
+                  className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg transition-colors cursor-pointer ${
+                    job?.woStatus === 'completed'
+                      ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                      : 'text-slate-700 border border-slate-200 hover:bg-slate-50'
+                  }`}
+                >
+                  <FileText className="w-4 h-4" />
+                  SOW Report
+                </button>
+              )}
+            </div>
           </div>
           <div className="flex items-center gap-3">
-            {isNew ? (
+            {isNew && (
               <span className="text-xs text-slate-400">Creating new service order for <strong>{siteName}</strong></span>
-            ) : (
-              <span className="text-xs text-slate-400">{serviceOrderNo(job?.woNumber)}</span>
             )}
             <button
               onClick={() => handleSave()}
