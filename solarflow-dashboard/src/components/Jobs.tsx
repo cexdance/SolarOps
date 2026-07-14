@@ -572,7 +572,7 @@ export const Jobs: React.FC<JobsProps> = ({
       </div>
 
       {/* Filters */}
-      <div className="flex flex-col md:flex-row gap-3 mb-6">
+      <div className="flex flex-col md:flex-row md:flex-wrap gap-3 mb-6">
         <div className="flex rounded-lg border border-slate-200 overflow-hidden">
           <button
             onClick={() => handleViewMode('kanban')}
@@ -697,7 +697,7 @@ export const Jobs: React.FC<JobsProps> = ({
             PowerCare {powerCareCount > 0 && `(${powerCareCount})`}
           </button>
         </div>
-        <div className="flex-1 relative">
+        <div className="flex-1 min-w-[220px] relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
           <input
             type="text"
