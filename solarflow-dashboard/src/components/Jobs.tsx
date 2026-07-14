@@ -428,20 +428,58 @@ export const Jobs: React.FC<JobsProps> = ({
   const [showCustomerPicker, setShowCustomerPicker] = useState(false);
   const [createCustomer, setCreateCustomer] = useState<Customer | null>(null);
   const [editingCreatedJob, setEditingCreatedJob] = useState<Job | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filterStatus, setFilterStatus] = useState<JobStatus | 'all' | 'on_hold'>('all');
-  const [filterContractor, setFilterContractor] = useState<string>('all');
-  const [showArchived, setShowArchived] = useState(false);
-  const [showOnHold, setShowOnHold] = useState(false);
-  const [powerCareOnly, setPowerCareOnly] = useState(false);
+
+  // ── Persist filters/sort to localStorage, so they survive a page leave/return
+  // (same pattern as Customers.tsx's loadView/saveView). ─────────────────────
+  const FILTERS_KEY = 'solarops_jobs_filters';
+  const loadFilters = <T,>(key: string, fallback: T): T => {
+    try {
+      const raw = localStorage.getItem(FILTERS_KEY);
+      if (!raw) return fallback;
+      const saved = JSON.parse(raw);
+      return key in saved ? saved[key] : fallback;
+    } catch { return fallback; }
+  };
+  const saveFilters = (patch: Record<string, unknown>) => {
+    try {
+      const raw = localStorage.getItem(FILTERS_KEY);
+      const saved = raw ? JSON.parse(raw) : {};
+      localStorage.setItem(FILTERS_KEY, JSON.stringify({ ...saved, ...patch }));
+    } catch (e) { console.error('[Jobs] saveFilters failed', e); }
+  };
+
+  const [searchQuery, setSearchQuery] = useState(() => loadFilters('searchQuery', ''));
+  const [filterStatus, setFilterStatus] = useState<JobStatus | 'all' | 'on_hold'>(
+    () => loadFilters('filterStatus', 'all' as JobStatus | 'all' | 'on_hold')
+  );
+  const [filterContractor, setFilterContractor] = useState<string>(() => loadFilters('filterContractor', 'all'));
+  const [showArchived, setShowArchived] = useState(() => loadFilters('showArchived', false));
+  const [showOnHold, setShowOnHold] = useState(() => loadFilters('showOnHold', false));
+  const [powerCareOnly, setPowerCareOnly] = useState(() => loadFilters('powerCareOnly', false));
   // Sort is per-Kanban-column (each column keeps its own independent order); the
   // flat List view gets one sort since it has no columns to separate.
-  const [columnSortBy, setColumnSortBy] = useState<Record<string, JobSortOption>>({});
-  const [listSortBy, setListSortBy] = useState<JobSortOption>('none');
+  const [columnSortBy, setColumnSortBy] = useState<Record<string, JobSortOption>>(
+    () => loadFilters('columnSortBy', {} as Record<string, JobSortOption>)
+  );
+  const [listSortBy, setListSortBy] = useState<JobSortOption>(() => loadFilters('listSortBy', 'none' as JobSortOption));
   type PeriodFilter = 'all' | 'this_week' | 'this_month' | 'last_month' | 'custom';
-  const [filterPeriod, setFilterPeriod] = useState<PeriodFilter>('all');
-  const [customFrom, setCustomFrom] = useState('');
-  const [customTo, setCustomTo] = useState('');
+  const [filterPeriod, setFilterPeriod] = useState<PeriodFilter>(() => loadFilters('filterPeriod', 'all' as PeriodFilter));
+  const [customFrom, setCustomFrom] = useState(() => loadFilters('customFrom', ''));
+  const [customTo, setCustomTo] = useState(() => loadFilters('customTo', ''));
+
+  // Persist whenever a filter/sort changes.
+  React.useEffect(() => { saveFilters({ searchQuery }); }, [searchQuery]);
+  React.useEffect(() => { saveFilters({ filterStatus }); }, [filterStatus]);
+  React.useEffect(() => { saveFilters({ filterContractor }); }, [filterContractor]);
+  React.useEffect(() => { saveFilters({ showArchived }); }, [showArchived]);
+  React.useEffect(() => { saveFilters({ showOnHold }); }, [showOnHold]);
+  React.useEffect(() => { saveFilters({ powerCareOnly }); }, [powerCareOnly]);
+  React.useEffect(() => { saveFilters({ columnSortBy }); }, [columnSortBy]);
+  React.useEffect(() => { saveFilters({ listSortBy }); }, [listSortBy]);
+  React.useEffect(() => { saveFilters({ filterPeriod }); }, [filterPeriod]);
+  React.useEffect(() => { saveFilters({ customFrom }); }, [customFrom]);
+  React.useEffect(() => { saveFilters({ customTo }); }, [customTo]);
+
   const [viewMode, setViewMode] = useState<'list' | 'kanban' | 'calendar' | 'map'>(() => {
     const saved = localStorage.getItem('solarops_jobs_view') as 'list' | 'kanban' | 'calendar' | 'map' | null;
     if (saved === 'kanban' || saved === 'list' || saved === 'calendar' || saved === 'map') return saved;
