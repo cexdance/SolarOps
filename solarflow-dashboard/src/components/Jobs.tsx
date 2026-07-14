@@ -3,7 +3,7 @@ import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { formatMoney } from '../lib/money';
 import {
   Plus, Search, Calendar, MapPin, User, Clock, X, Wrench, Zap, LayoutGrid, List as ListIcon,
-  Power, Cpu, ClipboardCheck, PauseCircle, PlayCircle,
+  Power, Cpu, ClipboardCheck, PauseCircle, PlayCircle, ArrowUpDown,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import {
@@ -119,6 +119,43 @@ const urgencyLabels: Record<UrgencyLevel, string> = {
 // Any future escalation logic must go here, guarded by resolvePriority.test.ts.
 export function resolvePriority(job: Job): UrgencyLevel {
   return job.urgency ?? 'low';
+}
+
+// ─── Board sort ────────────────────────────────────────────────────────────
+// One sort applies uniformly across the Kanban columns and the List view, so
+// card order stays consistent when switching between them.
+export type JobSortOption = 'none' | 'priority_desc' | 'date_desc' | 'date_asc' | 'service_type' | 'contractor';
+
+const PRIORITY_RANK: Record<UrgencyLevel, number> = { critical: 4, high: 3, medium: 2, low: 1 };
+
+export function sortJobsBy(
+  list: Job[],
+  sortBy: JobSortOption,
+  contractors: import('../types/contractor').Contractor[],
+): Job[] {
+  if (sortBy === 'none') return list;
+  const sorted = [...list];
+  switch (sortBy) {
+    case 'priority_desc':
+      sorted.sort((a, b) => PRIORITY_RANK[resolvePriority(b)] - PRIORITY_RANK[resolvePriority(a)]);
+      break;
+    case 'date_desc':
+      sorted.sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime());
+      break;
+    case 'date_asc':
+      sorted.sort((a, b) => new Date(a.createdAt ?? 0).getTime() - new Date(b.createdAt ?? 0).getTime());
+      break;
+    case 'service_type':
+      sorted.sort((a, b) => String(a.serviceType ?? '').localeCompare(String(b.serviceType ?? '')));
+      break;
+    case 'contractor': {
+      // Unassigned sorts to the end regardless of direction, "￿" is after any real name.
+      const nameOf = (j: Job) => contractors.find(c => c.id === j.contractorId)?.contactName ?? '￿';
+      sorted.sort((a, b) => nameOf(a).localeCompare(nameOf(b)));
+      break;
+    }
+  }
+  return sorted;
 }
 
 interface JobCardProps {
@@ -377,6 +414,7 @@ export const Jobs: React.FC<JobsProps> = ({
   const [showArchived, setShowArchived] = useState(false);
   const [showOnHold, setShowOnHold] = useState(false);
   const [powerCareOnly, setPowerCareOnly] = useState(false);
+  const [sortBy, setSortBy] = useState<JobSortOption>('none');
   type PeriodFilter = 'all' | 'this_week' | 'this_month' | 'last_month' | 'custom';
   const [filterPeriod, setFilterPeriod] = useState<PeriodFilter>('all');
   const [customFrom, setCustomFrom] = useState('');
@@ -482,6 +520,16 @@ export const Jobs: React.FC<JobsProps> = ({
     }
     return matchesSearch && matchesContractor && matchesPowerCare && matchesPeriod;
   }), [jobs, customers, searchQuery, filterContractor, powerCareOnly, periodRange]);
+
+  // Sort applies uniformly to the Kanban columns (below) and the List view.
+  const sortedFilteredJobs = useMemo(
+    () => sortJobsBy(filteredJobs, sortBy, contractors),
+    [filteredJobs, sortBy, contractors]
+  );
+  const sortedHeldJobs = useMemo(
+    () => sortJobsBy(boardHeldJobs, sortBy, contractors),
+    [boardHeldJobs, sortBy, contractors]
+  );
 
   // Per-contractor workload summary (Assigned / On Route / In Progress / Completed).
   // Computed across ALL of the selected contractor's non-archived jobs, independent of
@@ -696,6 +744,24 @@ export const Jobs: React.FC<JobsProps> = ({
             <Zap className="w-4 h-4" />
             PowerCare {powerCareCount > 0 && `(${powerCareCount})`}
           </button>
+          {(viewMode === 'kanban' || viewMode === 'list') && (
+            <div className="relative">
+              <ArrowUpDown className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as JobSortOption)}
+                title="Sort service orders"
+                className="pl-8 pr-4 py-2.5 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 text-sm cursor-pointer"
+              >
+                <option value="none">Sort: Default</option>
+                <option value="priority_desc">Priority, High to Low</option>
+                <option value="date_desc">Date Added, Newest First</option>
+                <option value="date_asc">Date Added, Oldest First</option>
+                <option value="service_type">Service Type, A-Z</option>
+                <option value="contractor">Contractor, A-Z</option>
+              </select>
+            </div>
+          )}
         </div>
         <div className="flex-1 min-w-[220px] relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
@@ -745,7 +811,7 @@ export const Jobs: React.FC<JobsProps> = ({
               // raw status is stale/undefined) so RMA/imported service orders land in
               // the right column WITHOUT needing a manual save, and none vanish. Held
               // jobs go ONLY in the On Hold column, never their status column.
-              columnJobs={col === 'on_hold' ? boardHeldJobs : filteredJobs.filter(j => !j.onHold && boardStatus(j) === col)}
+              columnJobs={col === 'on_hold' ? sortedHeldJobs : sortedFilteredJobs.filter(j => !j.onHold && boardStatus(j) === col)}
               allJobs={jobs}
               draggedJobId={draggedJobId}
               customers={customers}
@@ -764,7 +830,7 @@ export const Jobs: React.FC<JobsProps> = ({
       {/* List View */}
       {viewMode === 'list' && (
         <div className="space-y-3">
-          {filteredJobs.map((job) => (
+          {sortedFilteredJobs.map((job) => (
             <JobCard
               key={job.id}
               job={job}
