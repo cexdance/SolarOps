@@ -3,6 +3,7 @@
 // Falls back to a plain input if no key is set or if the API fails.
 import React, { useRef, useEffect, useCallback } from 'react';
 import { MapPin, CheckCircle2, AlertCircle, Loader } from 'lucide-react';
+import { parseUsAddress } from '../lib/addressValidator';
 
 export const GMAPS_KEY_STORAGE = 'solarops_gmaps_key';
 const SCRIPT_ID = 'google-maps-places-script';
@@ -163,9 +164,34 @@ export const AddressAutocomplete: React.FC<Props> = ({
       .catch(() => setStatus('error'));
   }, [initAC]);
 
+  // Detach Google listeners and sweep the `.pac-container` dropdowns it appends to
+  // <body>. Google never removes them on unmount; a stale one (z-index:99999 via our
+  // injected style) can overlay the next modal's input and swallow focus, making the
+  // field impossible to type in ("address locked out").
+  // ponytail: brute-remove all pac-containers, only one AddressAutocomplete mounts at a time.
+  useEffect(() => {
+    return () => {
+      const g = (window as any).google;
+      if (acRef.current && g?.maps?.event) g.maps.event.clearInstanceListeners(acRef.current);
+      acRef.current = null;
+      document.querySelectorAll('.pac-container').forEach(el => el.remove());
+    };
+  }, []);
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setValidated(false);
     onChange(e.target.value);
+  };
+
+  // When a full address is typed or pasted (not picked from Google's dropdown),
+  // split it into street/city/state/zip on blur so the other fields auto-populate.
+  const handleBlur = () => {
+    if (validated) return; // Google already resolved the components
+    const parsed = parseUsAddress(value);
+    if (!parsed) return;
+    onChange(parsed.address);
+    onAddressSelect(parsed);
+    setValidated(true);
   };
 
   const hasKey = !!(sessionStorage.getItem(GMAPS_KEY_STORAGE) || (import.meta.env['VITE_GOOGLE_MAPS_API_KEY'] as string));
@@ -177,6 +203,7 @@ export const AddressAutocomplete: React.FC<Props> = ({
         type="text"
         value={value}
         onChange={handleChange}
+        onBlur={handleBlur}
         placeholder={placeholder}
         required={required}
         autoComplete="off" /* prevents browser autocomplete + password managers from blocking PAC */

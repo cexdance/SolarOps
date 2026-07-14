@@ -347,6 +347,46 @@ export function stripEmbeddedCityStateZip(
   return out.replace(/,\s*$/, '') || address.trim();
 }
 
+export interface ParsedAddress { address: string; city: string; state: string; zip: string; }
+
+/**
+ * Split a one-line US address into components. Anchors on a trailing
+ * "<STATE> <ZIP>" so it only fires on a full address, never a bare street.
+ *   "123 Main St, Miami, FL 33101"      -> { address:'123 Main St', city:'Miami', state:'FL', zip:'33101' }
+ *   "Address: 330 Beulah Rd, Winter Garden, FL 34787" (label stripped, multi-word city kept)
+ *   "123 Main St Miami FL 33101"        -> best-effort space split (see ceiling below)
+ * Returns null when there is no state+zip tail (i.e. not a complete address).
+ * ponytail: comma form is exact; the comma-less fallback takes only the last word as
+ * city, so "123 Main St Winter Garden FL 34787" loses "Winter". Add a city gazetteer
+ * only if comma-less multi-word cities actually show up in real Trello cards.
+ */
+export function parseUsAddress(raw: string): ParsedAddress | null {
+  let s = (raw || '').replace(/\s+/g, ' ').trim();
+  if (!s) return null;
+  // Drop a leading label like "Address:", "Site -", "Location:".
+  s = s.replace(/^\s*(address|addr|location|site|home)\s*[:\-]\s*/i, '').trim();
+  const tail = s.match(/\b([A-Za-z]{2})\s*,?\s*(\d{5})(?:-\d{4})?\s*$/);
+  if (!tail || tail.index === undefined) return null;
+  const state = tail[1]!.toUpperCase();
+  const zip = tail[2]!;
+  const head = s.slice(0, tail.index).replace(/[,\s]+$/, '').trim();
+  if (!head) return null;
+
+  let address = '', city = '';
+  const commaParts = head.split(',').map(p => p.trim()).filter(Boolean);
+  if (commaParts.length >= 2) {
+    city = commaParts.pop()!;
+    address = commaParts.join(', ');
+  } else {
+    const words = head.split(' ');
+    if (words.length < 3) return null; // need at least "<num> <street> <city>"
+    city = words.pop()!;
+    address = words.join(' ');
+  }
+  if (!address || !city) return null;
+  return { address, city, state, zip };
+}
+
 /**
  * Format address for display/storage
  */

@@ -2,6 +2,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { serviceOrderNo } from '../lib/woHelpers';
 import { authedFetch } from '../lib/supabase';
+import { compressImageToDataUrl } from '../lib/photoCompress';
 import {
   Plus,
   Search,
@@ -59,7 +60,7 @@ const { ComposedChart, Bar, Line, XAxis, YAxis, Tooltip: RechartsTooltip, Respon
 import { Customer, CustomerFile, Job, ClientStatus, Activity, User, CustomerCategory, SystemType, SolarEdgeAlert } from '../types';
 import { loadAlerts } from '../lib/operationsStore';
 import { formatMoney } from '../lib/money';
-import { importTrelloCard, TrelloImportResult, fetchTrelloCard, extractContactInfo } from '../lib/trelloImporter';
+import { importTrelloCard, TrelloImportResult, fetchTrelloCard, extractContactInfo, extractAddress, buildImportActivities } from '../lib/trelloImporter';
 import { FL_SITES, SolarEdgeSite } from '../lib/solarEdgeSites';
 import { AddressAutocomplete } from './AddressAutocomplete';
 import { AddressLink } from './AddressLink';
@@ -70,37 +71,6 @@ import { ActivityFeed } from './ui/ActivityFeed';
 import { uploadCustomerFilesPartial, StoredCustomerFile, CustomerFileUpload } from '../lib/customerFileStorage';
 import { fireMentionNotifications, parseMentionEmails } from './ui/MentionTextarea';
 import { toast } from 'sonner';
-
-// Downscale + recompress an image File to a JPEG dataURL so full-res phone
-// photos (often 10-30MB, over the 20MB Storage cap) shrink before upload.
-// Non-images and anything that fails to decode pass through as their raw dataURL.
-async function compressImageFile(file: File, maxDim = 1600, quality = 0.82): Promise<string> {
-  const rawDataUrl = await new Promise<string>((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(r.result as string);
-    r.onerror = () => reject(r.error ?? new Error('read failed'));
-    r.readAsDataURL(file);
-  });
-  if (!file.type.startsWith('image/')) return rawDataUrl;
-  try {
-    const dataUrl = await new Promise<string>((resolve, reject) => {
-      const img = new Image();
-      img.onerror = () => reject(new Error('decode failed'));
-      img.onload = () => {
-        const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
-        const canvas = document.createElement('canvas');
-        canvas.width = Math.round(img.width * scale);
-        canvas.height = Math.round(img.height * scale);
-        canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height);
-        resolve(canvas.toDataURL('image/jpeg', quality));
-      };
-      img.src = rawDataUrl;
-    });
-    return dataUrl;
-  } catch {
-    return rawDataUrl; // fall back to the original if compression fails
-  }
-}
 
 // Client Status Badge Component
 const getStatusColor = (status: ClientStatus): string => {
@@ -3264,7 +3234,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
     for (const file of Array.from(fileList)) {
       try {
         const isImg = file.type.startsWith('image/');
-        const dataUrl = await compressImageFile(file);
+        const dataUrl = await compressImageToDataUrl(file, 1600, 0.82);
         setPastedFiles(prev => [...prev, {
           id: `note-img-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
           name: isImg ? file.name.replace(/\.[^.]+$/, '') + '.jpg' : (file.name || `file-${Date.now()}`),
@@ -3291,7 +3261,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
       const toUpload: CustomerFileUpload[] = await Promise.all(
         Array.from(fileList).map(async (file) => {
           const isImg = file.type.startsWith('image/');
-          const dataUrl = await compressImageFile(file);
+          const dataUrl = await compressImageToDataUrl(file, 1600, 0.82);
           return {
             id: `cf-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
             name: isImg ? file.name.replace(/\.[^.]+$/, '') + '.jpg' : file.name,
@@ -5497,6 +5467,8 @@ const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({ onClose, onCr
   const [trelloError,   setTrelloError]   = useState('');
   const [trelloOk,      setTrelloOk]      = useState('');
   const [trelloOpen,    setTrelloOpen]    = useState(false);
+  // Trello comments captured on import, folded into the new customer's activity timeline on save.
+  const [pendingActivities, setPendingActivities] = useState<Activity[]>([]);
 
   // Screenshot import, parse a lead email screenshot with Claude Vision
   const [screenshotOpen,    setScreenshotOpen]    = useState(false);
@@ -5596,6 +5568,7 @@ const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({ onClose, onCr
       const first    = parts[0] ?? '';
       const last     = parts.slice(1).join(' ');
       const us       = card.name.match(/US-\d+/i)?.[0] ?? '';
+      const addr     = extractAddress(card);
 
       setFormData(prev => ({
         ...prev,
@@ -5605,10 +5578,23 @@ const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({ onClose, onCr
         name:      namePart || prev.name,
         phone:     contact.phone || prev.phone,
         email:     contact.email || prev.email,
+        address:   addr?.address || prev.address,
+        city:      addr?.city    || prev.city,
+        state:     addr?.state   || prev.state,
+        zip:       addr?.zip     || prev.zip,
         notes:     card.desc?.slice(0, 1000) || prev.notes,
         referralSource: prev.referralSource || 'Trello',
       }));
-      setTrelloOk(`Imported "${card.name}"`);
+
+      // Carry the card's comments into the new customer's activity timeline.
+      // buildImportActivities also emits a desc note; drop it (desc already fills Notes).
+      const comments = buildImportActivities(card, 'Trello')
+        .filter(a => a.id.startsWith('trello-comment-'));
+      setPendingActivities(comments);
+
+      const bits = [addr ? 'address' : '', comments.length ? `${comments.length} comment${comments.length > 1 ? 's' : ''}` : '']
+        .filter(Boolean).join(' + ');
+      setTrelloOk(`Imported "${card.name}"${bits ? ` (${bits})` : ''}`);
     } catch (err) {
       setTrelloError(err instanceof Error ? err.message : 'Failed to fetch card');
     } finally {
@@ -5624,6 +5610,7 @@ const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({ onClose, onCr
       category: formData.category || undefined,
       systemType: formData.systemType || undefined,
       clientStatus: formData.clientStatus || undefined,
+      ...(pendingActivities.length ? { activityHistory: pendingActivities } : {}),
       createdAt: new Date().toISOString(),
     });
     onClose();
@@ -5725,7 +5712,7 @@ const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({ onClose, onCr
             </button>
             {trelloOpen && (
               <div className="px-3 pb-3 space-y-2">
-                <p className="text-[11px] text-slate-500">Paste a Trello card URL to pre-fill name, phone, email, and notes.</p>
+                <p className="text-[11px] text-slate-500">Paste a Trello card URL to pre-fill name, phone, email, address, notes, and comments.</p>
                 <div className="flex gap-2">
                   <input
                     type="text"

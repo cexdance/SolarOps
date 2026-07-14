@@ -47,6 +47,32 @@ describe('stripEmbeddedCityStateZip', () => {
   });
 });
 
+import { parseUsAddress } from '../lib/addressValidator';
+
+describe('parseUsAddress (auto-populate city/state/zip from a full address line)', () => {
+  it('splits a standard comma-separated address', () => {
+    expect(parseUsAddress('123 Main St, Miami, FL 33101'))
+      .toEqual({ address: '123 Main St', city: 'Miami', state: 'FL', zip: '33101' });
+  });
+  it('keeps a multi-word city and strips a leading label', () => {
+    expect(parseUsAddress('Address: 330 Beulah Rd, Winter Garden, FL 34787'))
+      .toEqual({ address: '330 Beulah Rd', city: 'Winter Garden', state: 'FL', zip: '34787' });
+  });
+  it('handles ZIP+4 and a comma before the state', () => {
+    expect(parseUsAddress('7499 NW 72nd St, Tamarac, FL, 33321-1234'))
+      .toEqual({ address: '7499 NW 72nd St', city: 'Tamarac', state: 'FL', zip: '33321' });
+  });
+  it('falls back to a space-separated single-word city', () => {
+    expect(parseUsAddress('123 Main St Miami FL 33101'))
+      .toEqual({ address: '123 Main St', city: 'Miami', state: 'FL', zip: '33101' });
+  });
+  it('returns null without a state+zip tail (bare street)', () => {
+    expect(parseUsAddress('123 Main St')).toBeNull();
+    expect(parseUsAddress('Miami, FL')).toBeNull();
+    expect(parseUsAddress('')).toBeNull();
+  });
+});
+
 import { sameStreetAddress, canonicalStreet } from '../lib/addressValidator';
 
 describe('sameStreetAddress (validated CRM address prevails at SolarEdge ingress)', () => {

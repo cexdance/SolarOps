@@ -4,7 +4,7 @@
 
 import { Activity, Customer, CustomerFile } from '../types';
 import { authedFetch } from './supabase';
-import { validateAddress, ValidatedAddress } from './addressValidator';
+import { validateAddress, ValidatedAddress, parseUsAddress, ParsedAddress } from './addressValidator';
 
 export interface TrelloAttachment {
   name: string;
@@ -237,6 +237,28 @@ export function extractContactInfo(card: TrelloCardData): { phone: string; email
   return { phone: bestPhone, email: bestEmail };
 }
 
+// ── Address mining ──────────────────────────────────────────────────────────────
+// The address may live anywhere on the card (desc, a custom field, a comment, a
+// checklist item). Scan every text source line-by-line and return the first line
+// that parses as a complete US address (parseUsAddress requires a STATE+ZIP tail,
+// so partial junk is ignored).
+export function extractAddress(card: TrelloCardData): ParsedAddress | null {
+  const sources: string[] = [
+    card.desc,
+    ...card.customFieldItems.map(c => c.value),
+    ...card.comments.map(c => c.text),
+    ...card.checklists.flatMap(cl => [cl.name, ...cl.items]),
+  ];
+  for (const src of sources) {
+    if (!src) continue;
+    for (const line of src.split('\n')) {
+      const parsed = parseUsAddress(line);
+      if (parsed) return parsed;
+    }
+  }
+  return null;
+}
+
 // ── Build Activity entries ─────────────────────────────────────────────────────
 // IDs are derived from the card's stable short key so re-importing the same
 // card produces identical IDs, enabling dedup by ID in importTrelloCard.
@@ -348,6 +370,18 @@ export async function importTrelloCard(
 
   if (!customer.phone && contactInfo.phone) updates.phone = contactInfo.phone;
   if (!customer.email && contactInfo.email) updates.email = contactInfo.email;
+
+  // Pull the address off the card when the customer record has none yet.
+  // handleUpdateCustomer normalizes street order on write, so store as-parsed.
+  if (!customer.address) {
+    const addr = extractAddress(card);
+    if (addr) {
+      updates.address = addr.address;
+      if (!customer.city)  updates.city  = addr.city;
+      if (!customer.state) updates.state = addr.state;
+      if (!customer.zip)   updates.zip   = addr.zip;
+    }
+  }
 
   return { card, contactInfo, activities, files: newFiles, updates, addressValidation };
 }
