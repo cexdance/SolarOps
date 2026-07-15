@@ -5,7 +5,57 @@
  * exclusion, US-NNNNN allow-list, and clientId derivation from site name.
  */
 import { describe, it, expect } from 'vitest';
-import { isFloridaSite, isAllowedCustomer, deriveClientId } from '../lib/solarEdgeSiteFilter';
+import {
+  isFloridaSite,
+  isAllowedCustomer,
+  deriveClientId,
+  findCustomerForSite,
+} from '../lib/solarEdgeSiteFilter';
+
+describe('findCustomerForSite', () => {
+  const crmRushBear = { id: 'cust-1783960743175', name: 'Rush Bear', clientId: 'US-15646' };
+  const site = { id: '3621435', name: 'US-15646 Rush Bear' };
+
+  it('matches an already-linked customer by solarEdgeSiteId', () => {
+    const linked = { id: 'c1', name: 'Whoever', solarEdgeSiteId: '3621435' };
+    expect(findCustomerForSite([linked], site)?.id).toBe('c1');
+  });
+
+  // The US-15646 regression: a CRM customer has the client id but no site id, so a
+  // siteId-only lookup missed it and the import forked a second, contact-less record.
+  it('matches a CRM customer by the US-NNNNN client id in the site name', () => {
+    expect(findCustomerForSite([crmRushBear], site)?.id).toBe('cust-1783960743175');
+  });
+
+  it('derives the client id from the customer name when the field is blank', () => {
+    const named = { id: 'c2', name: 'US-15646 Rush Bear' };
+    expect(findCustomerForSite([named], site)?.id).toBe('c2');
+  });
+
+  it('tolerates "US 15646" / casing variants on either side', () => {
+    const loose = { id: 'c3', name: 'Rush Bear', clientId: 'us 15646' };
+    expect(findCustomerForSite([loose], site)?.id).toBe('c3');
+  });
+
+  it('keeps multi-site clients distinct (US-15523 vs US-15523-2)', () => {
+    const base = { id: 'c4', name: 'Charles Roach', clientId: 'US-15523' };
+    expect(findCustomerForSite([base], { id: '99', name: 'US-15523-2 Charles Roach' })).toBeUndefined();
+  });
+
+  it('never steals a site from a customer already linked to another site', () => {
+    const taken = { ...crmRushBear, solarEdgeSiteId: '999' };
+    expect(findCustomerForSite([taken], site)).toBeUndefined();
+  });
+
+  it('does not match on accountId alone (not a reliable join key)', () => {
+    const acct = { id: 'c5', name: 'Someone', clientId: 'ACC-1' };
+    expect(findCustomerForSite([acct], { id: '77', name: 'Some Site', accountId: 'ACC-1' })).toBeUndefined();
+  });
+
+  it('returns undefined for a genuinely new site', () => {
+    expect(findCustomerForSite([crmRushBear], { id: '55', name: 'US-19999 New Client' })).toBeUndefined();
+  });
+});
 
 describe('isFloridaSite', () => {
   it('excludes V- and GT prefixed names', () => {

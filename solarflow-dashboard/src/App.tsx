@@ -48,7 +48,7 @@ import { loadContractors, saveContractors, loadServiceRates, saveServiceRates, l
 import { ContractorInvite as ContractorInviteType } from './types/contractor';
 import { AppState, Job, Customer, User, AppNotification, SolarEdgeExtraSite, RMAEntry, WOStatus, JobStatus, Activity } from './types';
 import { FL_SITES } from './lib/solarEdgeSites';
-import { isFloridaSite, isAllowedCustomer, deriveClientId } from './lib/solarEdgeSiteFilter';
+import { isFloridaSite, isAllowedCustomer, deriveClientId, findCustomerForSite } from './lib/solarEdgeSiteFilter';
 import { getDeletedCustomerIds, markJobDeleted } from './lib/dataStore';
 import { Contractor, ContractorStatus, ContractorJob } from './types/contractor';
 import { addInteraction, loadCustomers, loadInteractions, saveInteractions } from './lib/customerStore';
@@ -2324,14 +2324,35 @@ function App() {
           ? (data.solarEdgeConfig.dailyCallCount ?? 0) + 1
           : 1;
 
-      // ── Create new customers for sites with no match ──────────────────────
+      // ── Link sites to existing customers, then create only what is new ────
       const flSiteIds = new Set(FL_SITES.map(s => s.siteId));
-      const existingSiteIds = new Set(updatedCustomers.map(c => c.solarEdgeSiteId).filter(Boolean));
       const tombstonedIds   = getDeletedCustomerIds(); // never re-add manually deleted sites
-      const unmatchedSites: any[] = sites.filter((s: any) =>
-        !existingSiteIds.has(String(s.id)) &&
-        !tombstonedIds.has(`cust-se-${s.id}`)
-      );
+      const liveSites: any[] = sites.filter((s: any) => !tombstonedIds.has(`cust-se-${s.id}`));
+
+      // A CRM-created customer carries the US-NNNNN client id but no site id.
+      // It has to adopt the site here; without this the site looks unmatched and
+      // forks a second, contact-less record for a client that already exists.
+      const adoptions = new Map<string, string>(); // customerId -> siteId
+      for (const s of liveSites) {
+        const match = findCustomerForSite(updatedCustomers, s);
+        if (match && !match.solarEdgeSiteId) adoptions.set(match.id, String(s.id));
+      }
+      const linkedCustomers = adoptions.size === 0 ? updatedCustomers : updatedCustomers.map(c => {
+        const siteId = adoptions.get(c.id);
+        if (!siteId) return c;
+        logChange('customer.se_link', 'customer', c.id, {
+          source: 'solaredge-sync', field: 'solarEdgeSiteId', from: '', to: siteId,
+        }, data.currentUser?.email ?? 'unknown');
+        // updatedAt is the LWW key, stamp it or a stale client reverts the link.
+        return {
+          ...c,
+          solarEdgeSiteId: siteId,
+          systemType: c.systemType || 'SolarEdge',
+          updatedAt: new Date().toISOString(),
+        };
+      });
+
+      const unmatchedSites: any[] = liveSites.filter((s: any) => !findCustomerForSite(linkedCustomers, s));
       const newCustomersFromSync: Customer[] = unmatchedSites.map((s: any) => ({
         id: `cust-se-${s.id}`,
         name: s.name || `SolarEdge Site ${s.id}`,
@@ -2352,8 +2373,10 @@ function App() {
       }));
 
       // ── Persist any new sites not in the static FL_SITES list ─────────────
+      // Keyed off liveSites, not unmatchedSites: a site adopted by an existing
+      // customer still needs its monitoring entry.
       const existingExtraIds = new Set((data.solarEdgeExtraSites ?? []).map(x => x.siteId));
-      const newExtraSites: SolarEdgeExtraSite[] = unmatchedSites
+      const newExtraSites: SolarEdgeExtraSite[] = liveSites
         .filter((s: any) => !flSiteIds.has(String(s.id)) && !existingExtraIds.has(String(s.id)))
         .map((s: any) => ({
           siteId: String(s.id),
@@ -2379,7 +2402,7 @@ function App() {
       setData(prev => {
         const next = {
           ...prev,
-          customers: [...updatedCustomers, ...newCustomersFromSync].filter(isAllowedCustomer),
+          customers: [...linkedCustomers, ...newCustomersFromSync].filter(isAllowedCustomer),
           solarEdgeExtraSites: [...(prev.solarEdgeExtraSites ?? []), ...newExtraSites],
           solarEdgeConfig: {
             ...prev.solarEdgeConfig,
@@ -2446,14 +2469,16 @@ function App() {
     const sites = allSites.filter(isFLSite);
 
     const flSiteIds      = new Set(FL_SITES.map(s => s.siteId));
-    const existingSiteIds = new Set(data.customers.map((c) => c.solarEdgeSiteId).filter(Boolean));
     const existingExtraIds = new Set((data.solarEdgeExtraSites ?? []).map(x => x.siteId));
 
-    const newSites = sites.filter((s: any) => !existingSiteIds.has(String(s.id)));
+    // Match on site id AND client id, so a CRM-created customer is not forked.
+    const newSites = sites.filter((s: any) => !findCustomerForSite(data.customers, s));
 
     const newCustomers: Customer[] = newSites.map((s: any) => ({
-      id: `cust-se-${s.id}-${Date.now()}`,
+      // Stable id, no Date.now() suffix: a re-run must not duplicate the record.
+      id: `cust-se-${s.id}`,
       name: s.name || `SolarEdge Site ${s.id}`,
+      clientId: deriveClientId(s.name, s.accountId),
       firstName: '', lastName: '', email: '', phone: '',
       // SolarEdge sends street name before house number; never store raw.
       address: normalizeStreetOrder(s.location?.address || ''),
@@ -2619,6 +2644,10 @@ function App() {
             if (c.id !== item.customer!.id) return c;
             const updates: Partial<Customer> = {};
             for (const ch of item.changes!) {
+              if (ch.field === 'SolarEdge Site') {
+                updates.solarEdgeSiteId = ch.to;
+                updates.systemType = c.systemType || 'SolarEdge';
+              }
               if (ch.field === 'Name')    updates.name    = ch.to;
               if (ch.field === 'Address') {
                 // Validated CRM address PREVAILS: never let a SolarEdge import
@@ -2642,7 +2671,9 @@ function App() {
                 }, prev.currentUser?.email ?? 'unknown');
               }
             }
-            return { ...c, ...updates };
+            if (Object.keys(updates).length === 0) return c;
+            // updatedAt is the LWW key, stamp it or a stale client reverts the import.
+            return { ...c, ...updates, updatedAt: new Date().toISOString() };
           });
         }
 

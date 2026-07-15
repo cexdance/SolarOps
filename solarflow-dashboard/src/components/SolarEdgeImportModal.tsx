@@ -9,7 +9,7 @@ import {
   Plus, Edit2, Check, ChevronDown, ChevronUp, Loader2, Search,
 } from 'lucide-react';
 import { Customer } from '../types';
-import { isFloridaSite } from '../lib/solarEdgeSiteFilter';
+import { isFloridaSite, findCustomerForSite } from '../lib/solarEdgeSiteFilter';
 import { normalizeStreetOrder, sameStreetAddress } from '../lib/addressValidator';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -106,16 +106,15 @@ function siteToName(raw: string): string {
 function buildDiff(sites: LiveSite[], customers: Customer[]): DiffItem[] {
   const items: DiffItem[] = [];
 
-  // Map existing customers by solarEdgeSiteId
-  const byId = new Map<string, Customer>();
-  customers.forEach(c => { if (c.solarEdgeSiteId) byId.set(c.solarEdgeSiteId, c); });
-
   const liveSiteIds = new Set(sites.map(s => String(s.id)));
 
   // New + Updated
   for (const site of sites) {
     const sid = String(site.id);
-    const existing = byId.get(sid);
+    // Matches on site id first, then the US-NNNNN client id: a CRM-created
+    // customer holds the client id but no site id, and treating it as "new"
+    // is what forked duplicate records.
+    const existing = findCustomerForSite(customers, site);
     const liveName = siteToName(site.name);
     const liveCity  = site.location.city || '';
 
@@ -128,6 +127,9 @@ function buildDiff(sites: LiveSite[], customers: Customer[]): DiffItem[] {
       });
     } else {
       const changes: FieldChange[] = [];
+      // Matched on client id, so the record has no site id yet: linking it is the change.
+      if (!existing.solarEdgeSiteId)
+        changes.push({ field: 'SolarEdge Site', from: '(not linked)', to: sid });
       if (existing.name !== liveName && liveName)
         changes.push({ field: 'Name', from: existing.name, to: liveName });
       // Validated CRM address PREVAILS: only propose an address change when the

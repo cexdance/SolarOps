@@ -34,6 +34,22 @@ import {
 } from 'lucide-react';
 import { User as UserType, AppNotification, Customer, Job } from '../types';
 
+// Inbox-style dimension chips for the notifications panel
+const NOTIF_GROUPS: Record<string, AppNotification['type'][]> = {
+  mentions: ['mention'],
+  completed: ['contractor_completed'],
+  billing: ['late_fee_1', 'late_fee_2', 'contractor_autopay'],
+  alerts: ['service_disconnect'],
+};
+const NOTIF_CHIPS: { key: string; label: string }[] = [
+  { key: 'all', label: 'All' },
+  { key: 'unread', label: 'Unread' },
+  { key: 'mentions', label: 'Mentions' },
+  { key: 'completed', label: 'Completed' },
+  { key: 'billing', label: 'Billing' },
+  { key: 'alerts', label: 'Alerts' },
+];
+
 interface LayoutProps {
   children: React.ReactNode;
   currentView: string;
@@ -99,6 +115,8 @@ export const Layout: React.FC<LayoutProps> = ({
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
+  const [notifQuery, setNotifQuery] = useState('');
+  const [notifFilter, setNotifFilter] = useState('all');
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const notifRef = useRef<HTMLDivElement>(null);
@@ -112,6 +130,7 @@ export const Layout: React.FC<LayoutProps> = ({
     const handler = (e: MouseEvent) => {
       if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
         setNotifOpen(false);
+        setNotifQuery('');
       }
       if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
         setSearchOpen(false);
@@ -177,6 +196,21 @@ export const Layout: React.FC<LayoutProps> = ({
 
   const myNotifications = notifications.filter(n => n.userId === currentUser?.id);
   const unreadCount = myNotifications.filter(n => !n.read).length;
+
+  // ponytail: linear scan per render, lists are small; virtualize if they ever aren't
+  const notifChipCount = (key: string) =>
+    key === 'all' ? myNotifications.length
+    : key === 'unread' ? unreadCount
+    : myNotifications.filter(n => NOTIF_GROUPS[key].includes(n.type)).length;
+
+  const visibleNotifications = myNotifications
+    .filter(n => {
+      if (notifFilter === 'unread' && n.read) return false;
+      if (NOTIF_GROUPS[notifFilter] && !NOTIF_GROUPS[notifFilter].includes(n.type)) return false;
+      const q = notifQuery.trim().toLowerCase();
+      return !q || `${n.title} ${n.message}`.toLowerCase().includes(q);
+    })
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   // SolarEdge Sites is hidden by default; auto-expands when that view is active
   const [customersExpanded, setCustomersExpanded] = useState(
     ['solaredge', 'lobby'].includes(currentView)
@@ -307,13 +341,48 @@ export const Layout: React.FC<LayoutProps> = ({
                     </button>
                   )}
                 </div>
+
+                {/* Inbox controls: search + dimension chips */}
+                <div className="px-3 py-2 border-b border-slate-100 space-y-2">
+                  <div className="relative">
+                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <input
+                      value={notifQuery}
+                      onChange={e => setNotifQuery(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Escape') setNotifQuery(''); }}
+                      placeholder="Search customer, SO number, text…"
+                      className="w-full pl-8 pr-2 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-orange-400 focus:bg-white transition-colors"
+                    />
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {NOTIF_CHIPS.map(chip => {
+                      const count = notifChipCount(chip.key);
+                      if (count === 0 && chip.key !== 'all') return null;
+                      const active = notifFilter === chip.key;
+                      return (
+                        <button
+                          key={chip.key}
+                          onClick={() => setNotifFilter(active ? 'all' : chip.key)}
+                          className={`text-[10px] font-semibold px-2 py-1 rounded-full transition-colors ${
+                            active
+                              ? 'bg-orange-500 text-white'
+                              : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                          }`}
+                        >
+                          {chip.label} {count}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
                 <div className="max-h-96 overflow-y-auto divide-y divide-slate-100">
-                  {myNotifications.length === 0 ? (
+                  {visibleNotifications.length === 0 ? (
                     <div className="px-4 py-8 text-center text-slate-400 text-sm">
-                      No notifications yet
+                      {myNotifications.length === 0 ? 'No notifications yet' : 'No matching notifications'}
                     </div>
                   ) : (
-                    myNotifications.map(notif => (
+                    visibleNotifications.map(notif => (
                       <button
                         key={notif.id}
                         onClick={() => {

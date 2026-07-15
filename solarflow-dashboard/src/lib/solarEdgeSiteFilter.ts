@@ -63,6 +63,40 @@ export function deriveClientId(name?: string, accountId?: string): string {
   return accountId || '';
 }
 
+/** "us 15646" / "US-15646" -> "US-15646". Empty for anything that isn't a US-NNNNN token. */
+function normalizeClientId(v?: string): string {
+  const t = (v || '').trim().toUpperCase().replace(/^US[\s-]*/, 'US-');
+  return /^US-\d/.test(t) ? t : '';
+}
+
+/**
+ * The customer a SolarEdge site belongs to: solarEdgeSiteId first, then the
+ * US-NNNNN client id carried in the site name.
+ *
+ * The clientId fallback is the point of this helper. A customer created in the
+ * CRM (Trello import, manual entry) holds the client id but no site id, so a
+ * siteId-only lookup never matches it and the import forks a second,
+ * contact-less record for a client that already exists.
+ */
+export function findCustomerForSite<
+  T extends { id: string; name?: string; clientId?: string; solarEdgeSiteId?: string },
+>(customers: T[], site: { id: string | number; name?: string; accountId?: string }): T | undefined {
+  const siteId = String(site.id);
+  const linked = customers.find(c => c.solarEdgeSiteId === siteId);
+  if (linked) return linked;
+
+  // accountId is not a reliable join key, so only a real US-NNNNN token counts.
+  const want = normalizeClientId(deriveClientId(site.name, site.accountId));
+  if (!want) return undefined;
+
+  return customers.find(
+    c =>
+      // Never steal a site away from a customer that is already linked elsewhere.
+      !c.solarEdgeSiteId &&
+      normalizeClientId(c.clientId || deriveClientId(c.name)) === want,
+  );
+}
+
 /**
  * Customer-record variant, same rules, different field shape.
  * Use in loadData(), mergeRemote(), and anywhere Customer[] is filtered.
