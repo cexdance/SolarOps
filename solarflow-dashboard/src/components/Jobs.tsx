@@ -941,7 +941,7 @@ export const Jobs: React.FC<JobsProps> = ({
               status={col}
               title={col === 'unstaged' ? 'Unstaged' : col === 'done' ? 'Completed' : PIPELINE_STAGE_LABEL[col]}
               columnJobs={col === 'unstaged'
-                ? filteredJobs.filter(j => !j.pipelineStage)
+                ? filteredJobs.filter(j => !j.pipelineStage && j.status !== 'completed')
                 : col === 'done'
                   ? filteredJobs.filter(j => j.pipelineStage === col || j.status === 'completed')
                   : filteredJobs.filter(j => j.pipelineStage === col)}
