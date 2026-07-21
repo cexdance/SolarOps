@@ -11,6 +11,7 @@ import {
 } from 'date-fns';
 import { WorkOrderCalendar } from './WorkOrderCalendar';
 import { pipelineDropPatch } from '../lib/woHelpers';
+import { resolvePriority, sortJobsBy, JOB_SORT_OPTIONS, type JobSortOption } from '../lib/jobSort';
 import JobMapView from './views/JobMapView';
 import { ViewJob, ViewJobPriority } from './views/jobViewTypes';
 import {
@@ -119,48 +120,13 @@ const urgencyLabels: Record<UrgencyLevel, string> = {
   low: 'Low', medium: 'Medium', high: 'High', critical: 'Critical',
 };
 
-// Single seam for priority display. Manual-only today (job.urgency, default low).
-// Any future escalation logic must go here, guarded by resolvePriority.test.ts.
-export function resolvePriority(job: Job): UrgencyLevel {
-  return job.urgency ?? 'low';
-}
-
 // ─── Board sort ────────────────────────────────────────────────────────────
 // One sort applies uniformly across the Kanban columns and the List view, so
-// card order stays consistent when switching between them.
-export type JobSortOption = 'none' | 'priority_desc' | 'date_desc' | 'date_asc' | 'service_type' | 'contractor';
-
-const PRIORITY_RANK: Record<UrgencyLevel, number> = { critical: 4, high: 3, medium: 2, low: 1 };
-
-export function sortJobsBy(
-  list: Job[],
-  sortBy: JobSortOption,
-  contractors: import('../types/contractor').Contractor[],
-): Job[] {
-  if (sortBy === 'none') return list;
-  const sorted = [...list];
-  switch (sortBy) {
-    case 'priority_desc':
-      sorted.sort((a, b) => PRIORITY_RANK[resolvePriority(b)] - PRIORITY_RANK[resolvePriority(a)]);
-      break;
-    case 'date_desc':
-      sorted.sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime());
-      break;
-    case 'date_asc':
-      sorted.sort((a, b) => new Date(a.createdAt ?? 0).getTime() - new Date(b.createdAt ?? 0).getTime());
-      break;
-    case 'service_type':
-      sorted.sort((a, b) => String(a.serviceType ?? '').localeCompare(String(b.serviceType ?? '')));
-      break;
-    case 'contractor': {
-      // Unassigned sorts to the end regardless of direction, "￿" is after any real name.
-      const nameOf = (j: Job) => contractors.find(c => c.id === j.contractorId)?.contactName ?? '￿';
-      sorted.sort((a, b) => nameOf(a).localeCompare(nameOf(b)));
-      break;
-    }
-  }
-  return sorted;
-}
+// card order stays consistent when switching between them. Moved to
+// lib/jobSort.ts so the Billing board can share it; re-exported here for the
+// existing importers and resolvePriority.test.ts.
+export { resolvePriority, sortJobsBy, JOB_SORT_OPTIONS } from '../lib/jobSort';
+export type { JobSortOption } from '../lib/jobSort';
 
 interface JobCardProps {
   job: Job;
@@ -401,12 +367,7 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({
           title={`Sort ${title}`}
           className="w-full pl-6 pr-2 py-1 bg-white border border-slate-200 rounded-md text-[11px] text-slate-600 focus:outline-none focus:ring-1 focus:ring-orange-500 cursor-pointer"
         >
-          <option value="none">Sort: Default</option>
-          <option value="priority_desc">Priority, High to Low</option>
-          <option value="date_desc">Date Added, Newest First</option>
-          <option value="date_asc">Date Added, Oldest First</option>
-          <option value="service_type">Service Type, A-Z</option>
-          <option value="contractor">Contractor, A-Z</option>
+          {JOB_SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
       </div>
       <div className="space-y-3 overflow-y-auto max-h-[calc(100vh-340px)]">
@@ -857,12 +818,7 @@ export const Jobs: React.FC<JobsProps> = ({
                 title="Sort service orders"
                 className="pl-8 pr-4 py-2.5 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 text-sm cursor-pointer"
               >
-                <option value="none">Sort: Default</option>
-                <option value="priority_desc">Priority, High to Low</option>
-                <option value="date_desc">Date Added, Newest First</option>
-                <option value="date_asc">Date Added, Oldest First</option>
-                <option value="service_type">Service Type, A-Z</option>
-                <option value="contractor">Contractor, A-Z</option>
+                {JOB_SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
             </div>
           )}

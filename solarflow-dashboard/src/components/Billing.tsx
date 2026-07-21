@@ -12,8 +12,11 @@ import {
   Calendar,
   Printer,
   ChevronRight,
+  ArrowUpDown,
 } from 'lucide-react';
 import { Job, Customer, User as UserType } from '../types';
+import type { Contractor } from '../types/contractor';
+import { sortJobsBy, JOB_SORT_OPTIONS, type JobSortOption } from '../lib/jobSort';
 import { serviceOrderNo } from '../lib/woHelpers';
 import { notifyAdminForInvoice } from '../lib/quoteService';
 import { formatMoney } from '../lib/money';
@@ -29,6 +32,7 @@ interface BillingProps {
   isMobile: boolean;
   currentUserName?: string;
   onJobClick?: (jobId: string) => void;
+  contractors?: Contractor[];
 }
 
 export const Billing: React.FC<BillingProps> = ({
@@ -38,6 +42,7 @@ export const Billing: React.FC<BillingProps> = ({
   onUpdateJob,
   currentUserName,
   onJobClick,
+  contractors = [],
 }) => {
   const [filter, setFilter] = useState<'all' | 'unbilled' | 'invoiced' | 'paid'>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -48,6 +53,20 @@ export const Billing: React.FC<BillingProps> = ({
     if (saved === 'kanban' || saved === 'list' || saved === 'calendar') return saved as 'kanban' | 'list' | 'calendar';
     return 'list';
   });
+
+  // Per-column sort, same options and persistence behavior as the Service
+  // Orders board. Keyed by column so each stack can be ordered independently.
+  const COL_SORT_KEY = 'solarops_billing_col_sort';
+  const [columnSortBy, setColumnSortBy] = useState<Record<string, JobSortOption>>(() => {
+    try { return JSON.parse(localStorage.getItem(COL_SORT_KEY) ?? '{}'); } catch { return {}; }
+  });
+  const setColSort = (col: string, sort: JobSortOption) => {
+    setColumnSortBy(prev => {
+      const next = { ...prev, [col]: sort };
+      localStorage.setItem(COL_SORT_KEY, JSON.stringify(next));
+      return next;
+    });
+  };
 
   // Whole card opens the service order. ponytail: one target check instead of
   // stopPropagation on every action button, so buttons added later are covered
@@ -298,7 +317,12 @@ export const Billing: React.FC<BillingProps> = ({
             { key: 'paid'          as BillingCol, label: 'Paid',               sub: 'Client / SolarEdge paid',      headerCls: 'bg-green-50 border-green-200 text-green-700' },
             { key: 'costs_covered' as BillingCol, label: 'Costs Covered',      sub: 'Contractor + expenses settled', headerCls: 'bg-emerald-50 border-emerald-200 text-emerald-700' },
           ]).map(col => {
-            const colJobs = filteredJobs.filter(j => j.status !== 'archived' && getBillingColumn(j) === col.key);
+            const colSort = columnSortBy[col.key] ?? 'none';
+            const colJobs = sortJobsBy(
+              filteredJobs.filter(j => j.status !== 'archived' && getBillingColumn(j) === col.key),
+              colSort,
+              contractors,
+            );
             return (
               <div
                 key={col.key}
@@ -318,6 +342,17 @@ export const Billing: React.FC<BillingProps> = ({
                     <span className="text-xs font-bold">{colJobs.length}</span>
                   </div>
                   <p className="text-[10px] opacity-70 mt-0.5">{col.sub}</p>
+                </div>
+                <div className="relative mb-3">
+                  <ArrowUpDown className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400 pointer-events-none" />
+                  <select
+                    value={colSort}
+                    onChange={e => setColSort(col.key, e.target.value as JobSortOption)}
+                    title={`Sort ${col.label}`}
+                    className="w-full pl-6 pr-2 py-1 bg-white border border-slate-200 rounded-md text-[11px] text-slate-600 focus:outline-none focus:ring-1 focus:ring-orange-500 cursor-pointer"
+                  >
+                    {JOB_SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
                 </div>
                 <div className="space-y-3 min-h-[80px]">
                   {colJobs.length === 0 ? (
