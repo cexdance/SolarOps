@@ -533,6 +533,12 @@ export interface InventoryItem {
    */
   deletedAt?: string;
   imageUrl?: string;
+  /**
+   * Content photos. Used by box rows (see `inventoryStore.BOXES`) to show what is
+   * inside without opening the box. Plain LWW like the rest of the record: two
+   * devices photographing the same box in the same minute, newest wins.
+   */
+  photos?: string[];
   /** Receiving / provenance history, each delivery into stock with its proof image and optional RMA match. */
   receipts?: StockReceipt[];
 }

@@ -22,9 +22,12 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.99.2",
+    "@types/qrcode": "^1.5.6",
     "date-fns": "^3.0.0",
+    "jsqr": "^1.4.0",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.364.0",
+    "qrcode": "^1.5.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-leaflet": "^4.2.1",

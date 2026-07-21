@@ -131,7 +131,8 @@ import {
   User,
   RMAEntry,
 } from '../types';
-import { loadInventory, saveInventory, deleteInventoryItem, adjustLocationQty, applyPartsToInventory, pendingStockParts } from '../lib/inventoryStore';
+import { loadInventory, saveInventory, deleteInventoryItem, adjustLocationQty, applyPartsToInventory, pendingStockParts, BOXES, isBoxRow } from '../lib/inventoryStore';
+import { BoxesPanel } from './BoxesPanel';
 import { loadTools, saveTools, deleteTool, setToolAssignment } from '../lib/toolStore';
 import { serviceOrderNo } from '../lib/woHelpers';
 import { RmaCreateModal } from './RmaCreateModal';
@@ -384,7 +385,12 @@ const toolStatusLabels: Record<ToolStatus, string> = {
 };
 
 export const InventoryModule: React.FC<InventoryModuleProps> = ({ jobs = [], onUpdateJob, currentUser, standaloneRmas = [], onCreateStandaloneRma, onUpdateStandaloneRma, contractors = [] }) => {
-  const [activeTab, setActiveTab] = useState<'equipment' | 'tools' | 'providers'>('equipment');
+  // A scanned box label lands on `/?box=PPE` (App routes that to this view), so
+  // the deep link also picks the tab and opens the box straight away.
+  const scannedBox = new URLSearchParams(window.location.search).get('box');
+  const [activeTab, setActiveTab] = useState<'equipment' | 'boxes' | 'tools' | 'providers'>(
+    scannedBox ? 'boxes' : 'equipment',
+  );
   const [searchQuery, setSearchQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [showAddModal, setShowAddModal] = useState(false);
@@ -488,6 +494,8 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ jobs = [], onU
 
   // Filter inventory
   const filteredInventory = inventoryItems.filter((item) => {
+    // Box rows are containers, not stock. They belong to the Boxes tab only.
+    if (isBoxRow(item)) return false;
     const matchesSearch =
       item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       item.sku.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -628,6 +636,16 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ jobs = [], onU
             Equipment ({demoInventory.length})
           </button>
           <button
+            onClick={() => setActiveTab('boxes')}
+            className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-colors ${
+              activeTab === 'boxes'
+                ? 'bg-white text-slate-900 shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            Boxes ({BOXES.length})
+          </button>
+          <button
             onClick={() => setActiveTab('tools')}
             className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-colors ${
               activeTab === 'tools'
@@ -717,6 +735,10 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ jobs = [], onU
 
       {/* Content */}
       <div className="px-4 pb-24">
+        {activeTab === 'boxes' && (
+          <BoxesPanel items={inventoryItems} onChange={updateInventory} initialBox={scannedBox} />
+        )}
+
         {/* Equipment Tab */}
         {activeTab === 'equipment' && (
           <div className="space-y-3">

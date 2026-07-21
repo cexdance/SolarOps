@@ -1,7 +1,7 @@
 // SolarOps, OPS CENTER Dashboard
 // 2 columns × 2 rows = 4 configurable widget slots
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import { serviceOrderNo } from '../lib/woHelpers';
+import { serviceOrderNo, WO_STATUS_COLOR, WO_STATUS_LABEL } from '../lib/woHelpers';
 import { formatMoney } from '../lib/money';
 import { Crosshair, AlertTriangle, Zap, Wrench, Plus, X, Sun,
   Clock, MapPin, LayoutGrid, Search, ChevronRight, ChevronUp, ChevronDown,
@@ -230,19 +230,6 @@ const IMPACT_COLORS: Record<string, string> = {
   '6': 'bg-red-300 text-red-900',
 };
 
-const JOB_STATUS_COLORS: Record<string, string> = {
-  new:         'bg-blue-100 text-blue-700',
-  assigned:    'bg-indigo-100 text-indigo-700',
-  in_progress: 'bg-amber-100 text-amber-700',
-  completed:   'bg-emerald-100 text-emerald-700',
-  invoiced:    'bg-purple-100 text-purple-700',
-  paid:        'bg-green-100 text-green-700',
-};
-const JOB_STATUS_LABEL: Record<string, string> = {
-  new: 'New', assigned: 'Assigned', in_progress: 'In Progress',
-  completed: 'Completed', invoiced: 'Invoiced', paid: 'Paid',
-};
-
 const PRIORITY_COLORS: Record<string, string> = {
   low: 'bg-slate-100 text-slate-500',
   medium: 'bg-amber-100 text-amber-700',
@@ -417,7 +404,7 @@ const AllWorkOrdersWidget: React.FC<{ jobs: Job[]; customers: Customer[]; onView
                         onClick={e => { e.stopPropagation(); cust && onViewCustomer(cust.id); }}
                       >{cust?.name || job.clientName || 'Unknown'}</span>
                     </div>
-                    <span className={`flex-shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${JOB_STATUS_COLORS[job.status] || 'bg-slate-100 text-slate-500'}`}>{JOB_STATUS_LABEL[job.status] || job.status}</span>
+                    <span className={`flex-shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${WO_STATUS_COLOR[job.status] || 'bg-slate-100 text-slate-500'}`}>{WO_STATUS_LABEL[job.status] || job.status}</span>
                   </div>
                   <div className="flex items-center justify-between gap-1">
                     <div className="flex items-center gap-1 min-w-0"><MapPin className="w-3 h-3 text-slate-400 flex-shrink-0" /><span className="text-[10px] text-slate-400 truncate">{cust?.city ? `${cust.city}, ${cust.state}` : cust?.address || job.siteAddress || '-'}</span></div>
@@ -453,7 +440,7 @@ const SingleWOWidget: React.FC<{ jobId: string; jobs: Job[]; customers: Customer
           <ClipboardList className="w-4 h-4 text-blue-500" />
           <span className="text-xs font-mono font-bold text-slate-500">{job.woNumber ? serviceOrderNo(job.woNumber) : job.id.slice(-6).toUpperCase()}</span>
         </div>
-        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${JOB_STATUS_COLORS[job.status] || 'bg-slate-100 text-slate-500'}`}>{JOB_STATUS_LABEL[job.status] || job.status}</span>
+        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${WO_STATUS_COLOR[job.status] || 'bg-slate-100 text-slate-500'}`}>{WO_STATUS_LABEL[job.status] || job.status}</span>
       </div>
       {/* Customer, clickable → profile */}
       <button
@@ -595,7 +582,7 @@ const ContractorWOWidget: React.FC<{ contractorId: string; contractors: Contract
                         onClick={e => { e.stopPropagation(); cust && onViewCustomer(cust.id); }}
                       >{cust?.name || job.clientName || '-'}</span>
                     </div>
-                    <span className={`flex-shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${JOB_STATUS_COLORS[job.status] || 'bg-slate-100'}`}>{JOB_STATUS_LABEL[job.status] || job.status}</span>
+                    <span className={`flex-shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${WO_STATUS_COLOR[job.status] || 'bg-slate-100'}`}>{WO_STATUS_LABEL[job.status] || job.status}</span>
                   </div>
                   <div className="flex items-center justify-between gap-1">
                     <div className="flex items-center gap-1 min-w-0"><MapPin className="w-3 h-3 text-slate-400 flex-shrink-0" /><span className="text-[10px] text-slate-400 truncate">{cust?.city ? `${cust.city}, ${cust.state}` : '-'}</span></div>
@@ -972,7 +959,7 @@ const AddWidgetModal: React.FC<{
                                   {cust?.clientId && <span className={`text-[10px] font-mono ${selection === job.id ? 'text-orange-100' : 'text-orange-600'}`}>{cust.clientId}</span>}
                                 </div>
                                 <p className={`text-sm font-medium truncate ${selection === job.id ? 'text-white' : 'text-slate-800'}`}>{cust?.name || job.clientName || 'Unknown'}</p>
-                                <p className={`text-xs ${selection === job.id ? 'text-orange-100' : 'text-slate-400'}`}>{JOB_STATUS_LABEL[job.status] || job.status} · {fmtDate(job.scheduledDate || job.date)}</p>
+                                <p className={`text-xs ${selection === job.id ? 'text-orange-100' : 'text-slate-400'}`}>{WO_STATUS_LABEL[job.status] || job.status} · {fmtDate(job.scheduledDate || job.date)}</p>
                               </div>
                               {selection === job.id && <Check className="w-4 h-4 text-white flex-shrink-0" />}
                             </button>

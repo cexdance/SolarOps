@@ -8,7 +8,7 @@
 // `mergeInventoryItems`, which unions rather than overwrites so the local-only
 // items every device accumulated during that period get adopted, not deleted.
 
-import { InventoryItem } from '../types';
+import { InventoryItem, InventoryCategory, UnitOfMeasure } from '../types';
 import type { JobPart } from '../types/contractor';
 import { PARTS_CATALOG } from './partsCatalog';
 import { dbSet } from './db';
@@ -96,6 +96,111 @@ export function adjustLocationQty(item: InventoryItem, location: string, delta: 
   return setLocationQty(base, location, Math.max(0, current + delta));
 }
 
+// ── Boxes ────────────────────────────────────────────────────────────────────
+// A box is a QR-labelled physical container. Two things had to be modelled: what
+// is inside it, and where it currently sits. Both reuse machinery that already
+// exists, so boxes add no synced key, no merge branch and no tombstone contract.
+//
+//  - CONTENTS: an item inside a box holds its stock at location `Box: PPE`.
+//    `knownLocations` discovers that string on its own, exactly like the
+//    `Contractor: <name>` convention it already follows.
+//  - THE BOX ITSELF: one ordinary InventoryItem per box (`box-ppe`, qty 1) whose
+//    `stockByLocation` says which building the box is in, and whose `photos`
+//    hold the shots of what is inside.
+//
+// Moving a box is therefore a single-row write: the contents stay "in PPE" and
+// only the box row changes address. Nothing has to walk the contents.
+
+/** The six physical boxes. A fixed list on purpose: six strings do not need CRUD. */
+export const BOXES = ['PPE', 'Electrical Big', 'Electrical Small', 'Rail System', 'Cables', 'Random'];
+
+/** Where a box row can live. Boxes shuttle between these two. */
+export const BOX_HOMES = ['Storage Locker', 'Service Van'];
+
+const DEFAULT_BOX_HOME = 'Storage Locker';
+
+/** Stock-location string for things inside `box`. */
+export const boxLocation = (box: string): string => `Box: ${box}`;
+
+/** Inverse of `boxLocation`, or null when `location` is not a box. */
+export function parseBoxLocation(location: string): string | null {
+  return location.startsWith('Box: ') ? location.slice(5) : null;
+}
+
+/** Deterministic id, so two devices creating the same box row converge instead of forking. */
+export const boxRowId = (box: string): string => `box-${box.toLowerCase().replace(/\s+/g, '-')}`;
+
+/** True for the placeholder row representing a box, which is not real stock. */
+export const isBoxRow = (item: Pick<InventoryItem, 'id'>): boolean => item.id.startsWith('box-');
+
+/** The row representing `box`, if any device has created it yet. */
+export function findBoxRow(items: InventoryItem[], box: string): InventoryItem | undefined {
+  return items.find(i => i.id === boxRowId(box));
+}
+
+/**
+ * Which home the box currently sits in. Falls back to the storage locker when no
+ * row exists yet, so a never-touched box still reads sensibly instead of blank.
+ */
+export function boxHome(items: InventoryItem[], box: string): string {
+  const row = findBoxRow(items, box);
+  const at = Object.keys(row?.stockByLocation ?? {})[0];
+  return at || DEFAULT_BOX_HOME;
+}
+
+/** Live items holding stock inside `box`. */
+export function boxContents(items: InventoryItem[], box: string): InventoryItem[] {
+  const loc = boxLocation(box);
+  return items.filter(i => !isBoxRow(i) && (i.stockByLocation?.[loc] ?? 0) > 0);
+}
+
+/**
+ * Create the row for `box` on demand. Boxes are not seeded at load: six phantom
+ * rows would show up in the equipment catalog for a feature nobody had used yet.
+ * The row appears the first time someone moves a box or adds a photo.
+ */
+export function ensureBoxRow(items: InventoryItem[], box: string): InventoryItem[] {
+  if (findBoxRow(items, box)) return items;
+  const now = new Date().toISOString();
+  return [...items, {
+    id: boxRowId(box),
+    sku: `BOX-${box.toUpperCase().replace(/\s+/g, '-')}`,
+    name: `Box: ${box}`,
+    category: 'bos' as InventoryCategory,
+    description: `Physical storage box. Scan its QR label to see what is inside.`,
+    quantity: 1,
+    stockByLocation: { [DEFAULT_BOX_HOME]: 1 },
+    unitOfMeasure: 'unit' as UnitOfMeasure,
+    location: DEFAULT_BOX_HOME,
+    minStockThreshold: 0,
+    unitCost: 0,
+    purchaseDate: now.slice(0, 10),
+    createdAt: now,
+  }];
+}
+
+/**
+ * Move a whole box to another home. One row changes; the contents do not move,
+ * they stay "in PPE" wherever PPE happens to be.
+ *
+ * Assigns the whole map rather than going through `setLocationQty`: a box is one
+ * object in exactly one place, so a move REPLACES its location instead of adding
+ * a second one. (Doing both was a bug: the box ended up listed in two places at
+ * once with `quantity` stuck at 2.)
+ */
+export function moveBox(items: InventoryItem[], box: string, to: string): InventoryItem[] {
+  return ensureBoxRow(items, box).map(i =>
+    i.id === boxRowId(box) ? { ...i, quantity: 1, stockByLocation: { [to]: 1 }, location: to } : i,
+  );
+}
+
+/** Replace a box's content photos. */
+export function setBoxPhotos(items: InventoryItem[], box: string, photos: string[]): InventoryItem[] {
+  return ensureBoxRow(items, box).map(i =>
+    i.id === boxRowId(box) ? { ...i, photos, imageUrl: photos[0] } : i,
+  );
+}
+
 /**
  * Every location currently in play: the standard set, plus any location holding
  * stock, plus a per-contractor location for each active contractor. Derived, so
@@ -103,6 +208,9 @@ export function adjustLocationQty(item: InventoryItem, location: string, delta: 
  */
 export function knownLocations(items: InventoryItem[], contractorNames: string[] = []): string[] {
   const set = new Set<string>(STD_LOCATIONS);
+  // Boxes are offered even when empty, otherwise you could never receive the
+  // first item INTO a box: the location would not exist until stock was in it.
+  for (const b of BOXES) set.add(boxLocation(b));
   for (const i of items) for (const loc of Object.keys(i.stockByLocation ?? {})) set.add(loc);
   // Matches the format the receiving modal already writes, so contractor stock
   // received before this feature lands in the same bucket, not a parallel one.

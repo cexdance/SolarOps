@@ -60,6 +60,29 @@ This section lists the primary functionalities of the SolarOps platform:
 - **Inventory** — Equipment, tools, and provider management.
 - **Billing** — Invoice creation, payment tracking, and Xero integration.
 
+## Project Structure
+
+- This is the SolarOps/SolarFlow dashboard (TypeScript/React + Supabase + Vercel). Vercel's Root Directory is unset (repo root), so the **repo-root `/api/`** directory is what actually deploys, confirmed via `.vercel/project.json` and root `vercel.json`'s `buildCommand`/`outputDirectory`. A "flip to `solarflow-dashboard/` as root" migration was attempted and abandoned (see 2026-06-05 note); do not repeat it.
+- `solarflow-dashboard/api/` is a second, parallel `api/` tree that has drifted from root's, it currently has `xero-api.ts`/`xero-connections.ts`/`xero-token.ts` with no equivalent in root's `xero.ts`. Treat this as unverified duplication, not a place to add new endpoints, until reconciled.
+
+## Deployment
+
+- After every deploy, poll the live production URL's `version.json` until its `sha` matches the commit just pushed, and confirm the changed feature is actually visible, before reporting success. Vercel deploys and HMR frequently serve stale builds.
+- If it hasn't propagated after ~3 minutes, trigger a manual deploy (`cd solarflow-dashboard && vercel --prod`) and re-poll. Do not report success on a timeout.
+- Use the `/deploy` skill (`.claude/skills/deploy/SKILL.md`) for this loop end-to-end.
+
+## Debugging
+
+- When fixing sync/data bugs, always diagnose against LIVE Supabase data and fix the live projection, not snapshots. Cross-browser divergence and tombstone issues are common here.
+
+## Security & Dependencies
+
+- Do not install third-party SDKs/plugins without vetting the source repo for security first. Refuse ad/tracking SDKs like RuntimeAds.
+
+## Tooling Conventions
+
+- Prefer per-file Edits and small Python/JS scripts over sed/grep glob one-liners for bulk changes. zsh glob expansion and the context-mode wrapper have repeatedly misfired here.
+
 ## Obsidian & Memory Integration
 
 This section defines how Claude leverages persistent memory and knowledge organization across sessions.

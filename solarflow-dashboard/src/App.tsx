@@ -699,7 +699,11 @@ function App() {
   const [dbReady, setDbReady] = useState(false);
   const [data, setData] = useState<AppState>(() => loadData());
   const [currentView, setCurrentView] = useState(
-    () => localStorage.getItem('solarflow_current_view') || 'dashboard'
+    // `?box=` means a box QR label was scanned, which overrides the remembered
+    // view: the point of scanning is to land on that box, not wherever you were.
+    () => (new URLSearchParams(window.location.search).has('box')
+      ? 'inventory'
+      : localStorage.getItem('solarflow_current_view') || 'dashboard')
   );
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);

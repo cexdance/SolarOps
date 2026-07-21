@@ -1,6 +1,7 @@
 // SolarEdge Monitoring: Florida Sites Table
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { formatMoney } from '../lib/money';
+import { WO_STATUS_COLOR, WO_STATUS_LABEL } from '../lib/woHelpers';
 import { authedFetch } from '../lib/supabase';
 import { resilientJson } from '../lib/resilientFetch';
 import {
@@ -36,24 +37,6 @@ import { MentionUser } from './ui/MentionTextarea';
 
 type SortKey = keyof SolarEdgeSite;
 type SortDir = 'asc' | 'desc' | null;
-
-const WO_STATUS_COLORS: Record<string, string> = {
-  new:         'bg-blue-100 text-blue-700',
-  assigned:    'bg-indigo-100 text-indigo-700',
-  in_progress: 'bg-amber-100 text-amber-700',
-  completed:   'bg-emerald-100 text-emerald-700',
-  invoiced:    'bg-purple-100 text-purple-700',
-  paid:        'bg-green-100 text-green-700',
-};
-
-const WO_STATUS_LABEL: Record<string, string> = {
-  new:         'New',
-  assigned:    'Assigned',
-  in_progress: 'In Progress',
-  completed:   'Completed',
-  invoiced:    'Invoiced',
-  paid:        'Paid',
-};
 
 function SortIcon({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey | null; sortDir: SortDir }) {
   if (col !== sortKey) return <ChevronsUpDown className="w-3 h-3 text-slate-400" />;
@@ -747,7 +730,7 @@ export const SolarEdgeMonitoring: React.FC<Props> = ({
                                 <div key={job.id} className="bg-white rounded-lg border border-slate-200 px-3 py-2 flex flex-wrap items-center gap-3 text-xs">
                                   <span className="font-mono text-slate-400">{job.id.slice(0,8)}</span>
                                   <span className="font-medium text-slate-800">{job.title || job.serviceType}</span>
-                                  <span className={`px-2 py-0.5 rounded-full font-medium ${WO_STATUS_COLORS[job.status] || 'bg-slate-100 text-slate-600'}`}>
+                                  <span className={`px-2 py-0.5 rounded-full font-medium ${WO_STATUS_COLOR[job.status] || 'bg-slate-100 text-slate-600'}`}>
                                     {WO_STATUS_LABEL[job.status] || job.status}
                                   </span>
                                   {job.urgency && (

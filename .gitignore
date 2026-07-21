@@ -46,3 +46,6 @@ extracted_package/
 .aider*
 .vercel
 address-audit/
+solar_scout/.env
+solar_scout/leads.db
+solar_scout/.venv/
