@@ -49,19 +49,18 @@ export const Billing: React.FC<BillingProps> = ({
     return 'list';
   });
 
-  // Open the service order, or print the client service report, straight from a
-  // billing card. ponytail: reuses printServiceReport + the existing jobDetail
-  // view, no new modal.
+  // Whole card opens the service order. ponytail: one target check instead of
+  // stopPropagation on every action button, so buttons added later are covered
+  // for free. A drag never fires click, so this is safe on the kanban card.
+  const openFromCard = (job: Job) => (e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest('button,a')) return;
+    onJobClick?.(job.id);
+  };
+
+  // Print the client service report straight from a billing card.
+  // ponytail: reuses printServiceReport, no new modal.
   const cardLinks = (job: Job, customer?: Customer) => (
     <div className="flex items-center gap-3 text-[11px] font-medium">
-      {onJobClick && (
-        <button
-          onClick={(e) => { e.stopPropagation(); onJobClick(job.id); }}
-          className="inline-flex items-center gap-0.5 text-slate-500 hover:text-slate-900 cursor-pointer"
-        >
-          Open SO <ChevronRight className="w-3 h-3" />
-        </button>
-      )}
       <button
         onClick={(e) => {
           e.stopPropagation();
@@ -333,6 +332,8 @@ export const Billing: React.FC<BillingProps> = ({
                         draggable
                         onDragStart={() => setDraggedId(job.id)}
                         onDragEnd={() => { setDraggedId(null); setDragOverCol(null); }}
+                        onClick={openFromCard(job)}
+                        title="Open service order"
                         className={`rounded-xl border p-3 hover:shadow-md transition-all cursor-grab select-none ${
                           job.isPowercare ? 'bg-orange-50/70 border-orange-200' : 'bg-white border-slate-200'
                         } ${draggedId === job.id ? 'opacity-40 scale-95' : ''}`}
@@ -454,8 +455,10 @@ export const Billing: React.FC<BillingProps> = ({
             return (
               <div
                 key={job.id}
+                onClick={openFromCard(job)}
+                title="Open service order"
                 className={`
-                  rounded-xl border p-4
+                  rounded-xl border p-4 ${onJobClick ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}
                   ${billingStatus === 'unbilled' && daysOld > 2 ? 'border-red-300 bg-red-50'
                     : job.isPowercare ? 'bg-orange-50/70 border-orange-200' : 'bg-white border-slate-200'}
                 `}
