@@ -743,10 +743,10 @@ export const Jobs: React.FC<JobsProps> = ({
           </button>
           <button
             onClick={() => handleViewMode('tryout')}
-            title="Tryout (multi-state pipeline)"
+            title="S1 (multi-state pipeline)"
             className={`px-3 py-2.5 text-xs font-semibold flex items-center justify-center ${viewMode === 'tryout' ? 'bg-slate-800 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}
           >
-            Tryout
+            S1
           </button>
         </div>
         <div className="flex gap-2 flex-wrap">
@@ -939,10 +939,12 @@ export const Jobs: React.FC<JobsProps> = ({
             <KanbanColumn
               key={col}
               status={col}
-              title={col === 'unstaged' ? 'Unstaged' : PIPELINE_STAGE_LABEL[col]}
+              title={col === 'unstaged' ? 'Unstaged' : col === 'done' ? 'Completed' : PIPELINE_STAGE_LABEL[col]}
               columnJobs={col === 'unstaged'
                 ? filteredJobs.filter(j => !j.pipelineStage)
-                : filteredJobs.filter(j => j.pipelineStage === col)}
+                : col === 'done'
+                  ? filteredJobs.filter(j => j.pipelineStage === col || j.status === 'completed')
+                  : filteredJobs.filter(j => j.pipelineStage === col)}
               allJobs={jobs}
               draggedJobId={draggedJobId}
               customers={customers}
