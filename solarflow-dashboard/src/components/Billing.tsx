@@ -68,6 +68,15 @@ export const Billing: React.FC<BillingProps> = ({
     });
   };
 
+  const LIST_SORT_KEY = 'solarops_billing_list_sort';
+  const [listSortBy, setListSortBy] = useState<JobSortOption>(
+    () => (localStorage.getItem(LIST_SORT_KEY) as JobSortOption) || 'none'
+  );
+  const setListSort = (sort: JobSortOption) => {
+    setListSortBy(sort);
+    localStorage.setItem(LIST_SORT_KEY, sort);
+  };
+
   // Whole card opens the service order. ponytail: one target check instead of
   // stopPropagation on every action button, so buttons added later are covered
   // for free. A drag never fires click, so this is safe on the kanban card.
@@ -305,6 +314,20 @@ export const Billing: React.FC<BillingProps> = ({
             className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
           />
         </div>
+        {/* List sort. The kanban has its own per-column control instead. */}
+        {viewMode === 'list' && (
+          <div className="relative">
+            <ArrowUpDown className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+            <select
+              value={listSortBy}
+              onChange={e => setListSort(e.target.value as JobSortOption)}
+              title="Sort billing records"
+              className="pl-8 pr-4 py-2.5 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 text-sm cursor-pointer"
+            >
+              {JOB_SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
+        )}
       </div>
 
       {/* Kanban View: the billing pipeline. Drag a card to advance it. */}
@@ -482,7 +505,7 @@ export const Billing: React.FC<BillingProps> = ({
             <p className="text-slate-500">No {filter} jobs found</p>
           </div>
         ) : (
-          filteredJobs.map((job) => {
+          sortJobsBy(filteredJobs, listSortBy, contractors).map((job) => {
             const customer = getCustomer(job.customerId);
             const daysOld = getDaysSinceCompleted(job.completedAt);
             const billingStatus = getJobBillingStatus(job);
