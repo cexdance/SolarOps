@@ -351,7 +351,7 @@ export const Layout: React.FC<LayoutProps> = ({
                       onChange={e => setNotifQuery(e.target.value)}
                       onKeyDown={e => { if (e.key === 'Escape') setNotifQuery(''); }}
                       placeholder="Search customer, SO number, text…"
-                      className="w-full pl-8 pr-2 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-orange-400 focus:bg-white transition-colors"
+                      className="w-full pl-8 pr-2 py-1.5 text-xs text-slate-800 placeholder-slate-400 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-orange-400 focus:bg-white transition-colors"
                     />
                   </div>
                   <div className="flex flex-wrap gap-1">
