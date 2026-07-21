@@ -19,6 +19,7 @@ import { notifyAdminForInvoice } from '../lib/quoteService';
 import { formatMoney } from '../lib/money';
 import { WorkOrderCalendar } from './WorkOrderCalendar';
 import { BillingReportModal } from './BillingReportModal';
+import { printServiceReport } from '../lib/printServiceReport';
 
 interface BillingProps {
   jobs: Job[];
@@ -27,6 +28,7 @@ interface BillingProps {
   onUpdateJob: (job: Job) => void;
   isMobile: boolean;
   currentUserName?: string;
+  onJobClick?: (jobId: string) => void;
 }
 
 export const Billing: React.FC<BillingProps> = ({
@@ -35,6 +37,7 @@ export const Billing: React.FC<BillingProps> = ({
   users,
   onUpdateJob,
   currentUserName,
+  onJobClick,
 }) => {
   const [filter, setFilter] = useState<'all' | 'unbilled' | 'invoiced' | 'paid'>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -45,6 +48,39 @@ export const Billing: React.FC<BillingProps> = ({
     if (saved === 'kanban' || saved === 'list' || saved === 'calendar') return saved as 'kanban' | 'list' | 'calendar';
     return 'list';
   });
+
+  // Open the service order, or print the client service report, straight from a
+  // billing card. ponytail: reuses printServiceReport + the existing jobDetail
+  // view, no new modal.
+  const cardLinks = (job: Job, customer?: Customer) => (
+    <div className="flex items-center gap-3 text-[11px] font-medium">
+      {onJobClick && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onJobClick(job.id); }}
+          className="inline-flex items-center gap-0.5 text-slate-500 hover:text-slate-900 cursor-pointer"
+        >
+          Open SO <ChevronRight className="w-3 h-3" />
+        </button>
+      )}
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          printServiceReport({
+            job,
+            customer,
+            siteName: customer?.name ?? '',
+            siteAddress: customer?.address,
+            clientId: customer?.clientId,
+            serviceType: job.serviceType ? String(job.serviceType) : undefined,
+          });
+        }}
+        title="Print client service report (no financials)"
+        className="inline-flex items-center gap-1 text-slate-500 hover:text-orange-600 cursor-pointer"
+      >
+        <Printer className="w-3 h-3" /> Report
+      </button>
+    </div>
+  );
 
   const handleViewMode = (mode: 'kanban' | 'list' | 'calendar') => {
     setViewMode(mode);
@@ -313,6 +349,7 @@ export const Billing: React.FC<BillingProps> = ({
                           )}
                         </div>
                         <p className="font-semibold text-slate-900 text-sm leading-tight truncate">{customer?.name}</p>
+                        <div className="mt-1">{cardLinks(job, customer)}</div>
                         <div className="flex items-center gap-1.5 flex-wrap mt-1 mb-2">
                           {job.serviceType && (
                             <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-teal-100 text-teal-700 whitespace-nowrap">{String(job.serviceType)}</span>
@@ -462,6 +499,7 @@ export const Billing: React.FC<BillingProps> = ({
                       {job.laborHours} hrs @ {formatMoney(job.laborRate, { decimals: 0 })}/hr
                       {job.partsCost > 0 && ` + ${formatMoney(job.partsCost, { decimals: 0 })} parts`}
                     </p>
+                    <div className="mt-2 flex justify-end">{cardLinks(job, customer)}</div>
                   </div>
                 </div>
 

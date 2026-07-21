@@ -3204,6 +3204,7 @@ function App() {
             onUpdateJob={handleUpdateJob}
             isMobile={isMobile}
             currentUserName={currentUser?.name}
+            onJobClick={(jobId) => handleViewChange('jobDetail', jobId)}
           />
         );
 
