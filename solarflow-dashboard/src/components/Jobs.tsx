@@ -199,11 +199,15 @@ const JobCard: React.FC<JobCardProps> = ({ job, customer, contractorName, isDrag
             {job.clientId || customer?.clientId}
           </span>
         )}
-        <h3 className="font-semibold text-slate-900 truncate">{customer?.name}</h3>
-        <p className="text-sm text-slate-500 flex items-center gap-1 mt-1 truncate">
-          <MapPin className="w-3 h-3 shrink-0" />
-          {customer?.address}, {customer?.city}
-        </p>
+        {/* Fall back to clientName: an intake lead (S1 "Leads" column) has no
+            customer record yet, and without this the whole card renders blank. */}
+        <h3 className="font-semibold text-slate-900 truncate">{customer?.name || job.clientName || 'Unnamed lead'}</h3>
+        {(customer?.address || customer?.city) && (
+          <p className="text-sm text-slate-500 flex items-center gap-1 mt-1 truncate">
+            <MapPin className="w-3 h-3 shrink-0" />
+            {[customer?.address, customer?.city].filter(Boolean).join(', ')}
+          </p>
+        )}
       </div>
       <div className="flex flex-col items-end gap-1 ml-2 shrink-0">
         {job.onHold && (

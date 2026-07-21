@@ -110,6 +110,80 @@ export function matchTargetList(action: TrelloWebhookAction): { boardId: string;
   return TARGET_LISTS.find(t => t.boardId === boardId && t.listId === landedListId);
 }
 
+/**
+ * Add the Lead to Lead Lobby, unless this card was already imported.
+ *
+ * CREATE-IF-ABSENT, deliberately not an overwrite. Trello redelivers, and a
+ * card dragged out of the list and back fires again. By then the team may have
+ * edited the Lead (added a phone, changed status, routed it). Re-importing the
+ * card's original values on top of that would silently undo their work, so an
+ * already-imported card is left completely alone.
+ */
+async function upsertLead(leadId: string, lead: unknown, now: string): Promise<'created' | 'exists'> {
+  const selectRes = await fetch(
+    `${SUPABASE_URL}/rest/v1/app_data?key=eq.${CRM_KEY}&select=value`,
+    { headers: supabaseHeaders },
+  );
+  if (!selectRes.ok) throw new Error(`Supabase read ${selectRes.status}`);
+  const rows = await selectRes.json() as { value?: { leads?: unknown[] } }[];
+  const current = rows[0]?.value ?? { leads: [] };
+  const leads = Array.isArray(current.leads) ? current.leads : [];
+
+  if (leads.some((l: any) => l?.id === leadId)) return 'exists';
+
+  const nextValue = { ...current, leads: [lead, ...leads] };
+  const upsertRes = await fetch(
+    `${SUPABASE_URL}/rest/v1/app_data?on_conflict=key`,
+    {
+      method: 'POST',
+      headers: { ...supabaseHeaders, Prefer: 'resolution=merge-duplicates,return=minimal' },
+      body: JSON.stringify({ key: CRM_KEY, value: nextValue, updated_at: now }),
+    },
+  );
+  if (!upsertRes.ok) {
+    const detail = await upsertRes.text().catch(() => '');
+    throw new Error(`Supabase lead upsert ${upsertRes.status}: ${detail}`);
+  }
+  return 'created';
+}
+
+/**
+ * Add the matching service order so the card also shows on the S1 board's
+ * "Leads Services SolarEdge" column, where the team works it up: assign a
+ * client number, attach a customer, build the story, then drag it onward.
+ *
+ * Jobs sync as their OWN per-record `job:<id>` rows (PREFIX.job in
+ * syncEngine.ts), not inside a blob, so this writes one row and the client's
+ * incremental pull picks it up by `updated_at`.
+ *
+ * Same create-if-absent rule as the Lead, and it matters more here: this row is
+ * the thing the team actively edits.
+ */
+async function upsertLeadJob(jobId: string, job: unknown, now: string): Promise<'created' | 'exists'> {
+  const key = `job:${jobId}`;
+  const selectRes = await fetch(
+    `${SUPABASE_URL}/rest/v1/app_data?key=eq.${encodeURIComponent(key)}&select=key`,
+    { headers: supabaseHeaders },
+  );
+  if (!selectRes.ok) throw new Error(`Supabase job read ${selectRes.status}`);
+  const existing = await selectRes.json() as unknown[];
+  if (existing.length > 0) return 'exists';
+
+  const upsertRes = await fetch(
+    `${SUPABASE_URL}/rest/v1/app_data?on_conflict=key`,
+    {
+      method: 'POST',
+      headers: { ...supabaseHeaders, Prefer: 'resolution=merge-duplicates,return=minimal' },
+      body: JSON.stringify({ key, value: job, updated_at: now }),
+    },
+  );
+  if (!upsertRes.ok) {
+    const detail = await upsertRes.text().catch(() => '');
+    throw new Error(`Supabase job upsert ${upsertRes.status}: ${detail}`);
+  }
+  return 'created';
+}
+
 async function handleLeadImportWebhook(req: VercelRequest, res: VercelResponse) {
   try {
     const action = (req.body as { action?: TrelloWebhookAction })?.action;
@@ -128,11 +202,14 @@ async function handleLeadImportWebhook(req: VercelRequest, res: VercelResponse) 
     const { firstName, lastName } = splitName(card.name);
     const { phone, email } = extractContact(`${card.name}\n${card.desc}`);
 
-    // Deterministic id from the card, so a duplicate delivery (Trello does
-    // occasionally redeliver) or a card that moves through this list twice
-    // overwrites the same Lead instead of creating a second one.
+    // Deterministic ids from the card id, so a redelivery resolves to the same
+    // records and the create-if-absent checks above can recognise them.
     const leadId = `lead-trello-${cardId}`;
+    const jobId  = `job-trello-${cardId}`;
     const now = new Date().toISOString();
+    const displayName = `${firstName} ${lastName}`.trim() || card.name;
+    const cardNote = card.desc.trim() || `Auto-imported from Trello card "${card.name}"`;
+
     const lead = {
       id: leadId,
       firstName, lastName, phone, email,
@@ -145,39 +222,45 @@ async function handleLeadImportWebhook(req: VercelRequest, res: VercelResponse) 
       leadType: 'service',
       createdAt: now,
       updatedAt: now,
-      notes: card.desc.trim() || `Auto-imported from Trello card "${card.name}"`,
+      notes: cardNote,
       trelloBackupUrl: card.shortUrl,
     };
 
-    // Read-modify-write against the live row. Remove any existing row with
-    // this deterministic id first, then append, so repeat deliveries are a
-    // no-op overwrite rather than a growing duplicate.
-    const selectRes = await fetch(
-      `${SUPABASE_URL}/rest/v1/app_data?key=eq.${CRM_KEY}&select=value`,
-      { headers: supabaseHeaders },
-    );
-    if (!selectRes.ok) throw new Error(`Supabase read ${selectRes.status}`);
-    const rows = await selectRes.json() as { value?: { leads?: unknown[] } }[];
-    const current = rows[0]?.value ?? { leads: [] };
-    const leads = Array.isArray(current.leads) ? current.leads : [];
-    const nextLeads = [lead, ...leads.filter((l: any) => l?.id !== leadId)];
-    const nextValue = { ...current, leads: nextLeads };
+    const job = {
+      id: jobId,
+      // No customer yet, that is the point: the team assigns the client number
+      // and links the customer as they work it. JobCard falls back to
+      // `clientName` for display while customerId is still empty.
+      customerId: '',
+      technicianId: '',
+      clientName: displayName,
+      title: card.name,
+      serviceType: 'Lead',
+      status: 'new',
+      pipelineStage: 'leads',
+      // Empty, not today's date: the calendar buckets these via parseDateSafe
+      // into "unscheduled" rather than dropping an unqualified lead onto today.
+      scheduledDate: '',
+      scheduledTime: '',
+      notes: `${cardNote}\n\nTrello card: ${card.shortUrl}`,
+      description: cardNote,
+      photos: [],
+      laborHours: 0, laborRate: 0, partsCost: 0, totalAmount: 0,
+      urgency: 'medium',
+      isPowercare: false,
+      createdAt: now,
+      // Required: syncEngine's remoteWins treats an updatedAt-less record as
+      // always losing, so an unstamped row would be dropped on first merge.
+      updatedAt: now,
+    };
 
-    const upsertRes = await fetch(
-      `${SUPABASE_URL}/rest/v1/app_data?on_conflict=key`,
-      {
-        method: 'POST',
-        headers: { ...supabaseHeaders, Prefer: 'resolution=merge-duplicates,return=minimal' },
-        body: JSON.stringify({ key: CRM_KEY, value: nextValue, updated_at: now }),
-      },
-    );
-    if (!upsertRes.ok) {
-      const detail = await upsertRes.text().catch(() => '');
-      throw new Error(`Supabase upsert ${upsertRes.status}: ${detail}`);
-    }
+    const [leadResult, jobResult] = await Promise.all([
+      upsertLead(leadId, lead, now),
+      upsertLeadJob(jobId, job, now),
+    ]);
 
-    console.info(`[trello-webhook] imported lead ${leadId} (${firstName} ${lastName}) from ${target.label}`);
-    return res.status(200).json({ imported: leadId });
+    console.info(`[trello-webhook] ${target.label}: lead ${leadId} ${leadResult}, job ${jobId} ${jobResult} (${displayName})`);
+    return res.status(200).json({ lead: { id: leadId, result: leadResult }, job: { id: jobId, result: jobResult } });
   } catch (err) {
     console.error('[trello-webhook] error:', err);
     return res.status(500).json({ error: err instanceof Error ? err.message : 'trello-webhook crashed' });
