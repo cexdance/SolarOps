@@ -714,6 +714,13 @@ export const Jobs: React.FC<JobsProps> = ({
       <div className="flex flex-col md:flex-row md:flex-wrap gap-3 mb-6">
         <div className="flex rounded-lg border border-slate-200 overflow-hidden">
           <button
+            onClick={() => handleViewMode('tryout')}
+            title="S1 (multi-state pipeline)"
+            className={`px-3 py-2.5 text-xs font-semibold flex items-center justify-center ${viewMode === 'tryout' ? 'bg-slate-800 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}
+          >
+            S1
+          </button>
+          <button
             onClick={() => handleViewMode('kanban')}
             title="Kanban"
             className={`px-3 py-2.5 flex items-center justify-center ${viewMode === 'kanban' ? 'bg-slate-800 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}
@@ -740,13 +747,6 @@ export const Jobs: React.FC<JobsProps> = ({
             className={`px-3 py-2.5 flex items-center justify-center ${viewMode === 'map' ? 'bg-slate-800 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}
           >
             <MapPin className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => handleViewMode('tryout')}
-            title="S1 (multi-state pipeline)"
-            className={`px-3 py-2.5 text-xs font-semibold flex items-center justify-center ${viewMode === 'tryout' ? 'bg-slate-800 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}
-          >
-            S1
           </button>
         </div>
         <div className="flex gap-2 flex-wrap">
