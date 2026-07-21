@@ -55,6 +55,12 @@ export const KV_SYNC_KEYS = [
   'solarflow_service_rates',
   'solarflow_crm_data',
   'solarops_address_cleanup',
+  // Inventory is multi-writer (warehouse desktop + techs on phones), so it MUST
+  // have a union merge below. It reached this list only after mergeInventoryItems
+  // existed: the default pull branch blind-overwrites localStorage, and the push
+  // gate forces pull-before-push, so a bare key here silently deletes whatever a
+  // device added while inventory was still local-only.
+  'solarops_inventory',
 ] as const;
 type KVSyncKey = typeof KV_SYNC_KEYS[number];
 
@@ -281,6 +287,42 @@ export function mergeAddressCleanupItems(localArr: unknown, remoteArr: unknown):
     if (!r?.id) continue;
     const l = byId.get(r.id);
     if (!l || (r.updatedAt ?? '') >= (l.updatedAt ?? '')) byId.set(r.id, r);
+  }
+  return Array.from(byId.values());
+}
+
+type InventoryItemLike = { id: string; updatedAt?: string; createdAt?: string; [k: string]: unknown };
+
+/** Effective LWW stamp. Legacy rows predate `updatedAt`, so fall back to createdAt. */
+function invTime(i: InventoryItemLike): string {
+  return i.updatedAt ?? i.createdAt ?? '';
+}
+
+/**
+ * Per-item merge for inventory ('solarops_inventory').
+ *
+ * Inventory was localStorage-only until 2026-07-20: `dbSet` silently no-op'd for
+ * it and nothing ever pulled it, so every device holds items that exist NOWHERE
+ * else. A blind remote-wins overwrite on the first pull would delete them all,
+ * which is exactly what the push gate (pull-before-push) guarantees would happen.
+ *
+ * So: union by id, newer stamp wins, and an item present on only ONE side is
+ * always kept. That makes the first sync after the fix additive, so each device's
+ * local-only items get adopted and pushed up instead of destroyed.
+ *
+ * Deletions are intentionally NOT propagated. Inventory has no tombstone list, and
+ * with local-only history everywhere a "missing" item means "this device never had
+ * it", not "someone deleted it". Real deletes need tombstones, same rule as jobs.
+ */
+export function mergeInventoryItems(localArr: unknown, remoteArr: unknown): InventoryItemLike[] {
+  const local: InventoryItemLike[]  = Array.isArray(localArr)  ? (localArr  as InventoryItemLike[]) : [];
+  const remote: InventoryItemLike[] = Array.isArray(remoteArr) ? (remoteArr as InventoryItemLike[]) : [];
+  const byId = new Map<string, InventoryItemLike>();
+  for (const i of local) if (i?.id) byId.set(i.id, i);
+  for (const r of remote) {
+    if (!r?.id) continue;
+    const l = byId.get(r.id);
+    if (!l || invTime(r) >= invTime(l)) byId.set(r.id, r);
   }
   return Array.from(byId.values());
 }
@@ -735,6 +777,19 @@ export async function pullFromSupabase(): Promise<Partial<AppState> | null> {
                 localStorage.setItem(row.key, next);
                 changedKVKeys.push(row.key);
               }
+            } else if (row.key === 'solarops_inventory') {
+              // Inventory: union per item. MUST NOT fall through to the blind
+              // overwrite below, every device still holds local-only items from
+              // the period when inventory never synced at all.
+              const prev = localStorage.getItem(row.key);
+              let local: unknown = null;
+              try { local = prev ? JSON.parse(prev) : null; } catch { local = null; }
+              const merged = mergeInventoryItems(local, row.value);
+              const next = JSON.stringify(merged);
+              if (prev !== next) {
+                localStorage.setItem(row.key, next);
+                changedKVKeys.push(row.key);
+              }
             } else {
               const next = JSON.stringify(row.value);
               const prev = localStorage.getItem(row.key);
@@ -1110,11 +1165,20 @@ export function subscribeToChanges(handlers: RealtimeHandlers): () => void {
               enqueue(() => handlers.onSolarSite!(value as SolarSitePayload));
             }
           } else if (isKVSyncKey(key) && value != null) {
-            const next = JSON.stringify(value);
+            // Inventory must merge here too, not just on pull. A broadcast from
+            // another device carries only THAT device's array, so writing it
+            // straight through would drop this device's local-only items.
             const prev = localStorage.getItem(key);
+            let incoming = value;
+            if (key === 'solarops_inventory') {
+              let local: unknown = null;
+              try { local = prev ? JSON.parse(prev) : null; } catch { local = null; }
+              incoming = mergeInventoryItems(local, value);
+            }
+            const next = JSON.stringify(incoming);
             if (prev !== next) {
               localStorage.setItem(key, next);
-              enqueue(() => handlers.onKV(key, value));
+              enqueue(() => handlers.onKV(key, incoming));
             }
           }
         } catch (err) {

@@ -1,9 +1,16 @@
-// Inventory persistence, localStorage + Neon sync
+// Inventory persistence: localStorage, synced to Supabase via the KV path.
 // Seeds from partsCatalog on first load (if store is empty).
+//
+// Until 2026-07-20 the "sync" here was fiction: `dbSet` silently no-op'd for this
+// key (not in KV_SYNC_KEYS), `dbGet` was a stub returning null, and the pull
+// helper had zero callers. Items added on one device reached no other device and
+// never hit the database. Now the key is synced and merged per item by
+// `mergeInventoryItems`, which unions rather than overwrites so the local-only
+// items every device accumulated during that period get adopted, not deleted.
 
 import { InventoryItem } from '../types';
 import { PARTS_CATALOG } from './partsCatalog';
-import { dbGet, dbSet } from './db';
+import { dbSet } from './db';
 
 const INVENTORY_KEY = 'solarops_inventory';
 
@@ -62,20 +69,47 @@ export function loadInventory(): InventoryItem[] {
   return seed;
 }
 
-export function saveInventory(items: InventoryItem[]): void {
+/**
+ * Stamp `updatedAt` on items whose content actually changed since the last save.
+ *
+ * Deliberately NOT a blanket stamp: `mergeInventoryItems` resolves conflicts by
+ * newest `updatedAt`, so re-stamping untouched items would make whichever device
+ * saved last win every field, which is the clobber this merge exists to prevent.
+ */
+function stampChanged(items: InventoryItem[], prevRaw: string | null): InventoryItem[] {
+  let prevById = new Map<string, string>();
   try {
-    localStorage.setItem(INVENTORY_KEY, JSON.stringify(items));
+    const prev: InventoryItem[] = prevRaw ? JSON.parse(prevRaw) : [];
+    if (Array.isArray(prev)) {
+      prevById = new Map(prev.filter(p => p?.id).map(p => [p.id, JSON.stringify(p)]));
+    }
+  } catch {
+    // Unreadable previous state: treat everything as new rather than lose the save.
+  }
+  const now = new Date().toISOString();
+  return items.map(item => {
+    if (!item?.id) return item;
+    const before = prevById.get(item.id);
+    // Compare ignoring updatedAt itself, otherwise every item looks changed.
+    const { updatedAt: _drop, ...bare } = item;
+    const beforeBare = before ? (() => {
+      try { const { updatedAt: _d, ...b } = JSON.parse(before); return JSON.stringify(b); }
+      catch { return null; }
+    })() : null;
+    if (beforeBare !== null && beforeBare === JSON.stringify(bare)) return item; // untouched
+    return { ...item, updatedAt: now };
+  });
+}
+
+export function saveInventory(items: InventoryItem[]): void {
+  const prevRaw = localStorage.getItem(INVENTORY_KEY);
+  const stamped = stampChanged(items, prevRaw);
+  try {
+    localStorage.setItem(INVENTORY_KEY, JSON.stringify(stamped));
   } catch (err) {
     // QuotaExceededError (e.g. an oversized inline image) must NOT abort the
     // save and lose the item, fall through to the DB write below.
     console.warn('[inventory] localStorage save failed (likely quota); persisting to DB only', err);
   }
-  dbSet(INVENTORY_KEY, items);
-}
-
-export async function syncInventoryFromDB(): Promise<void> {
-  const remote = await dbGet(INVENTORY_KEY) as InventoryItem[] | null;
-  if (Array.isArray(remote) && remote.length > 0) {
-    localStorage.setItem(INVENTORY_KEY, JSON.stringify(remote));
-  }
+  dbSet(INVENTORY_KEY, stamped);
 }

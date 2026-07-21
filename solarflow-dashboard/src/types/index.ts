@@ -499,6 +499,12 @@ export interface InventoryItem {
   vendorId?: string;
   purchaseDate: string;
   createdAt: string;
+  /**
+   * Last edit time, the LWW key for cross-device inventory merge
+   * (`mergeInventoryItems`). Optional: items created before inventory synced at
+   * all have none, and fall back to `createdAt`.
+   */
+  updatedAt?: string;
   imageUrl?: string;
   /** Receiving / provenance history, each delivery into stock with its proof image and optional RMA match. */
   receipts?: StockReceipt[];
