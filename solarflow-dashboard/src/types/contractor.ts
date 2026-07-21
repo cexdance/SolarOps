@@ -1,4 +1,9 @@
 // SolarFlow - Contractor Module Types
+
+// Type-only, so this is erased at compile time and creates no runtime cycle even
+// though index.ts re-exports this module.
+import type { RMAEntry } from './index';
+
 export type ContractorStatus = 'pending' | 'approved' | 'rejected' | 'suspended';
 export type BusinessType = 'sole_proprietor' | 'llc' | 'c_corp' | 's_corp' | 'partnership';
 export type JobPriority = 'critical' | 'high' | 'normal' | 'low';
@@ -37,6 +42,19 @@ export interface JobPart {
   quantity: number;
   unitPrice: number;
   totalPrice: number;
+
+  // ── Inventory consumption (office-confirmed) ──────────────────────────────
+  // A tech logging a part does NOT move stock. Contractors are not writers on
+  // the shared inventory blob; they record what they pulled and from where, and
+  // the office applies it. That keeps a bad field entry from corrupting stock,
+  // and keeps a single confirmed writer on the inventory key.
+  /** Inventory row this came out of, when the tech picked it from stock. */
+  inventoryItemId?: string;
+  /** Location key within that row's `stockByLocation` (their van, the locker). */
+  fromLocation?: string;
+  /** Set when the office actually decremented stock. Guards double-apply. */
+  appliedToInventoryAt?: string;
+  appliedBy?: string;
 }
 
 // Expense reporting
@@ -312,6 +330,11 @@ export interface ContractorJob {
 
   // Parts used
   parts: JobPart[];
+
+  // RMA case numbers the tech got from SolarEdge or another vendor, entered in
+  // the field. Mirrored into the admin Job's `rmaEntries` by a union merge, so a
+  // contractor save can never drop an RMA the office added.
+  rmaEntries?: RMAEntry[];
 
   // Invoice tracking
   invoiceId?: string;

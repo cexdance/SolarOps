@@ -61,6 +61,10 @@ export const KV_SYNC_KEYS = [
   // gate forces pull-before-push, so a bare key here silently deletes whatever a
   // device added while inventory was still local-only.
   'solarops_inventory',
+  // Tools are multi-writer for the same reason inventory is (office assigns,
+  // techs check in/out), so it has a KV_MERGERS entry. `kvMergers.test.ts`
+  // enforces that pairing rather than leaving it to a comment.
+  'solarops_tools',
 ] as const;
 type KVSyncKey = typeof KV_SYNC_KEYS[number];
 
@@ -310,11 +314,25 @@ function invTime(i: InventoryItemLike): string {
  * always kept. That makes the first sync after the fix additive, so each device's
  * local-only items get adopted and pushed up instead of destroyed.
  *
- * Deletions are intentionally NOT propagated. Inventory has no tombstone list, and
- * with local-only history everywhere a "missing" item means "this device never had
- * it", not "someone deleted it". Real deletes need tombstones, same rule as jobs.
+ * A merely ABSENT item is never treated as deleted: with local-only history
+ * everywhere, "missing" means "this device never had it". Real deletes ride a
+ * `deletedAt` tombstone on the record itself (see `deleteInventoryItem`), which
+ * this merge resolves as an ordinary newest-wins update. `loadInventory` filters
+ * tombstoned records out of the UI.
  */
 export function mergeInventoryItems(localArr: unknown, remoteArr: unknown): InventoryItemLike[] {
+  return mergeByIdNewest(localArr, remoteArr);
+}
+
+/** Tools sync on exactly the same contract as inventory: union by id, newest wins,
+ *  deletes carried as `deletedAt` records rather than as absence. */
+export function mergeToolItems(localArr: unknown, remoteArr: unknown): InventoryItemLike[] {
+  return mergeByIdNewest(localArr, remoteArr);
+}
+
+/** Union two record arrays by `id`, newest `updatedAt` (falling back to
+ *  `createdAt`) winning. Anything present on only one side is KEPT. */
+function mergeByIdNewest(localArr: unknown, remoteArr: unknown): InventoryItemLike[] {
   const local: InventoryItemLike[]  = Array.isArray(localArr)  ? (localArr  as InventoryItemLike[]) : [];
   const remote: InventoryItemLike[] = Array.isArray(remoteArr) ? (remoteArr as InventoryItemLike[]) : [];
   const byId = new Map<string, InventoryItemLike>();
@@ -327,21 +345,48 @@ export function mergeInventoryItems(localArr: unknown, remoteArr: unknown): Inve
   return Array.from(byId.values());
 }
 
-/** Fetch the current remote contractor_jobs blob (raw, un-sanitized) for merge. */
-async function fetchRemoteContractorJobs(): Promise<unknown> {
+/**
+ * The merge for each multi-writer KV key, in ONE place.
+ *
+ * Every path that moves a KV blob (pull, Realtime receive, push) consults this
+ * table. That is the point: the standing rule was "a multi-writer key needs a
+ * union merge in BOTH handlers before it joins KV_SYNC_KEYS", and it was a rule
+ * you had to remember, enforced by comments. Three near-identical branches had
+ * already drifted (push merged only contractor jobs, which is how a stale tab
+ * could overwrite inventory). Now a key either has a merger here and is merged
+ * everywhere, or has none and is a genuine single-writer blob.
+ *
+ * A key absent from this table is overwritten wholesale, so only put a key here
+ * if absence of a record must NOT be read as a delete.
+ */
+export const KV_MERGERS: Record<string, (local: unknown, remote: unknown) => unknown> = {
+  solarflow_contractor_jobs: (l, r) => mergeContractorJobs(l, r),
+  solarops_address_cleanup:  (l, r) => mergeAddressCleanupItems(l, r),
+  solarops_inventory:        (l, r) => mergeInventoryItems(l, r),
+  solarops_tools:            (l, r) => mergeToolItems(l, r),
+};
+
+/** Merge an incoming KV blob against what this device holds, if the key needs it. */
+export function mergeKVValue(key: string, local: unknown, remote: unknown): unknown {
+  const merger = KV_MERGERS[key];
+  return merger ? merger(local, remote) : remote;
+}
+
+/** Fetch the current remote blob for a KV key (raw, un-sanitized) for merge. */
+async function fetchRemoteKV(key: string): Promise<unknown> {
   try {
     const { data, error } = await supabase
       .from('app_data')
       .select('value')
-      .eq('key', 'solarflow_contractor_jobs')
+      .eq('key', key)
       .maybeSingle();
     if (error) {
-      console.warn('[SyncEngine] fetchRemoteContractorJobs failed:', error.message);
+      console.warn(`[SyncEngine] fetchRemoteKV(${key}) failed:`, error.message);
       return null;
     }
     return data?.value ?? null;
   } catch (err) {
-    console.warn('[SyncEngine] fetchRemoteContractorJobs error:', err);
+    console.warn(`[SyncEngine] fetchRemoteKV(${key}) error:`, err);
     return null;
   }
 }
@@ -365,14 +410,18 @@ export async function pushKeyValue(key: string, value: unknown): Promise<void> {
       return;
     }
 
-    // For contractor jobs: merge against the current remote blob first so a
-    // whole-blob upsert can never clobber another device's jobs or photos
-    // (CB-3), then strip any base64 photos to stay under the row size limit.
+    // Multi-writer blobs MUST merge against the current remote value before the
+    // upsert. A whole-blob upsert is a blind overwrite: whatever this device holds
+    // in memory replaces everything another device wrote since. The receive-side
+    // merge does not save you, it only heals the loser once it happens to push
+    // again, and the rows it overwrote in between are gone.
     let payload = value;
+    if (KV_MERGERS[key]) {
+      payload = mergeKVValue(key, value, await fetchRemoteKV(key));
+    }
     if (key === 'solarflow_contractor_jobs') {
-      const remote = await fetchRemoteContractorJobs();
-      const merged = mergeContractorJobs(value, remote);
-      payload = sanitizeContractorJobsPayload(merged);
+      // Strip base64 photos to stay under the row size limit.
+      payload = sanitizeContractorJobsPayload(payload);
     }
 
     const { error } = await supabase
@@ -753,39 +802,15 @@ export async function pullFromSupabase(): Promise<Partial<AppState> | null> {
                   changedKVKeys.push(row.key);
                 }
               }
-            } else if (row.key === 'solarflow_contractor_jobs') {
-              // Contractor jobs: merge remote into local per-record so a pull
-              // can never wipe locally-uploaded photos or local-only jobs (CB-3).
+            } else if (KV_MERGERS[row.key]) {
+              // Multi-writer blob: merge remote INTO local, never overwrite. A
+              // record missing from the remote copy means "that device has not
+              // seen it", not "deleted", so a blind write would destroy local-only
+              // contractor photos, inventory items and tools. See KV_MERGERS.
               const prev = localStorage.getItem(row.key);
               let local: unknown = null;
               try { local = prev ? JSON.parse(prev) : null; } catch { local = null; }
-              const merged = mergeContractorJobs(local, row.value);
-              const next = JSON.stringify(merged);
-              if (prev !== next) {
-                localStorage.setItem(row.key, next);
-                changedKVKeys.push(row.key);
-              }
-            } else if (row.key === 'solarops_address_cleanup') {
-              // Shared checklist: merge per item by updatedAt so two users
-              // checking different items concurrently never stomp each other.
-              const prev = localStorage.getItem(row.key);
-              let local: unknown = null;
-              try { local = prev ? JSON.parse(prev) : null; } catch { local = null; }
-              const merged = mergeAddressCleanupItems(local, row.value);
-              const next = JSON.stringify(merged);
-              if (prev !== next) {
-                localStorage.setItem(row.key, next);
-                changedKVKeys.push(row.key);
-              }
-            } else if (row.key === 'solarops_inventory') {
-              // Inventory: union per item. MUST NOT fall through to the blind
-              // overwrite below, every device still holds local-only items from
-              // the period when inventory never synced at all.
-              const prev = localStorage.getItem(row.key);
-              let local: unknown = null;
-              try { local = prev ? JSON.parse(prev) : null; } catch { local = null; }
-              const merged = mergeInventoryItems(local, row.value);
-              const next = JSON.stringify(merged);
+              const next = JSON.stringify(mergeKVValue(row.key, local, row.value));
               if (prev !== next) {
                 localStorage.setItem(row.key, next);
                 changedKVKeys.push(row.key);
@@ -1165,20 +1190,23 @@ export function subscribeToChanges(handlers: RealtimeHandlers): () => void {
               enqueue(() => handlers.onSolarSite!(value as SolarSitePayload));
             }
           } else if (isKVSyncKey(key) && value != null) {
-            // Inventory must merge here too, not just on pull. A broadcast from
-            // another device carries only THAT device's array, so writing it
-            // straight through would drop this device's local-only items.
+            // Multi-writer keys must merge HERE too, not just on pull. A broadcast
+            // carries only the SENDING device's array, so writing it straight
+            // through would drop this device's local-only records.
             const prev = localStorage.getItem(key);
-            let incoming = value;
-            if (key === 'solarops_inventory') {
-              let local: unknown = null;
-              try { local = prev ? JSON.parse(prev) : null; } catch { local = null; }
-              incoming = mergeInventoryItems(local, value);
-            }
+            let local: unknown = null;
+            try { local = prev ? JSON.parse(prev) : null; } catch { local = null; }
+            const incoming = mergeKVValue(key, local, value);
             const next = JSON.stringify(incoming);
             if (prev !== next) {
               localStorage.setItem(key, next);
               enqueue(() => handlers.onKV(key, incoming));
+              // Also announce it the same way the pull cycle does, so components
+              // that own their own KV state (InventoryModule) re-hydrate. onKV
+              // only covers the keys useSyncEngine itself holds in App state.
+              window.dispatchEvent(new CustomEvent('solarflow-remote-update', {
+                detail: { keys: [key] },
+              }));
             }
           }
         } catch (err) {

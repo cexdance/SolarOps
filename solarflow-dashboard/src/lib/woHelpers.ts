@@ -5,8 +5,34 @@
  * source of truth. Today they are used as read-side helpers; in Phase 2
  * they will replace the separate `contractorJobs` array entirely.
  */
-import type { Job, Customer, PipelineStage } from '../types';
+import type { Job, Customer, PipelineStage, RMAEntry } from '../types';
 import type { ContractorJob, JobStatusContractor, PhotoCategory } from '../types/contractor';
+
+/**
+ * Union merge for a job's RMA entries, by id, newest `updatedAt` wins.
+ *
+ * RMAs are now entered from two places (office in the SO panel, tech in the
+ * contractor app) against copies of the record that each only know their own
+ * half. Absence on one side therefore never means "deleted", so this keeps
+ * entries present on only one side, same rule as inventory.
+ */
+export function mergeRmaEntries(
+  a: RMAEntry[] | undefined,
+  b: RMAEntry[] | undefined,
+): RMAEntry[] | undefined {
+  if (!a?.length) return b?.length ? b : a;
+  if (!b?.length) return a;
+  const byId = new Map<string, RMAEntry>();
+  for (const e of a) if (e?.id) byId.set(e.id, e);
+  for (const e of b) {
+    if (!e?.id) continue;
+    const prev = byId.get(e.id);
+    // Tie goes to the incumbent: an unstamped legacy entry must not win over a
+    // stamped edit, and identical stamps mean identical content anyway.
+    if (!prev || (e.updatedAt ?? '') > (prev.updatedAt ?? '')) byId.set(e.id, e);
+  }
+  return Array.from(byId.values());
+}
 
 /**
  * Patch produced by dropping a card on the Tryout (multi-state pipeline) board.
@@ -216,6 +242,10 @@ export function toContractorJobView(job: Job, existingCj?: ContractorJob, custom
       quantity: li.quantity,
       type: li.type,
     })),
+    // RMA entries flow BOTH ways: the tech sees what the office already filed so
+    // they don't duplicate a case number, and anything they add here merges back
+    // into the admin job. Union so a stale contractor copy never drops an entry.
+    rmaEntries: mergeRmaEntries(job.rmaEntries, existingCj?.rmaEntries),
     contractorId: job.contractorId ?? '',
     customerId: job.customerId,
     customerName: job.clientName || customer?.name || '',

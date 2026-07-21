@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { mergeInventoryItems, KV_SYNC_KEYS, isKVSyncKey } from '../lib/syncEngine';
 
 const item = (id: string, over: Record<string, unknown> = {}) => ({
@@ -56,5 +56,46 @@ describe('mergeInventoryItems', () => {
   it('survives malformed input without dropping valid items', () => {
     const merged = mergeInventoryItems([item('a'), { noId: true }], 'garbage');
     expect(merged.map(i => i.id)).toEqual(['a']);
+  });
+});
+
+// ── Tombstoned deletes ───────────────────────────────────────────────────────
+// The union merge above is exactly why a delete cannot be a plain removal: a
+// shorter array is indistinguishable from "this device never had it", so the
+// item comes straight back. Deletes ride a `deletedAt` record instead.
+describe('inventory delete propagation', () => {
+  const KEY = 'solarops_inventory';
+  beforeEach(() => localStorage.clear());
+
+  it('a tombstone survives an ordinary save of the live list', async () => {
+    const { saveInventory, loadInventory, deleteInventoryItem } = await import('../lib/inventoryStore');
+    saveInventory([item('keep'), item('gone')] as never);
+    deleteInventoryItem('gone');
+
+    // A later save only ever carries the LIVE list. If it dropped the tombstone,
+    // the next pull from a device that still has 'gone' would resurrect it.
+    saveInventory(loadInventory());
+
+    const persisted = JSON.parse(localStorage.getItem(KEY)!);
+    expect(persisted.find((i: { id: string }) => i.id === 'gone').deletedAt).toBeTruthy();
+    expect(loadInventory().map(i => i.id)).toEqual(['keep']);
+  });
+
+  it('a deleted item is not resurrected by a device that still holds it', async () => {
+    const { deleteInventoryItem } = await import('../lib/inventoryStore');
+    localStorage.setItem(KEY, JSON.stringify([item('gone', { updatedAt: '2026-07-01T00:00:00.000Z' })]));
+    deleteInventoryItem('gone');
+    const localWithTombstone = JSON.parse(localStorage.getItem(KEY)!);
+
+    const staleRemote = [item('gone', { updatedAt: '2026-07-01T00:00:00.000Z' })];
+    const merged = mergeInventoryItems(localWithTombstone, staleRemote);
+    expect(merged.find(i => i.id === 'gone')!.deletedAt).toBeTruthy();
+  });
+
+  it('an all-tombstoned store does not reseed the catalog', async () => {
+    const { loadInventory, deleteInventoryItem } = await import('../lib/inventoryStore');
+    localStorage.setItem(KEY, JSON.stringify([item('only')]));
+    deleteInventoryItem('only');
+    expect(loadInventory()).toEqual([]);
   });
 });

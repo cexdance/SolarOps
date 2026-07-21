@@ -11,6 +11,8 @@ import {
   HardHat, CalendarClock, Send,
 } from 'lucide-react';
 import { ContractorJob, ServiceStatus, PhotoCategory, JobPart } from '../../types/contractor';
+import type { RMAEntry } from '../../types';
+import { loadInventory } from '../../lib/inventoryStore';
 import {
   addJobXp, calcJobXpBreakdown, getLevelInfo, getNextLevel,
   getLevelProgress, loadXpData, AddXpResult, addBonusXp,
@@ -260,6 +262,44 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
   const [showAddPart,     setShowAddPart]      = useState(false);
   const [newPart,         setNewPart]          = useState({ name: '', partNumber: '', quantity: 1, unitPrice: 0 });
   const [partsReimbursement, setPartsReimbursement] = useState(job.partsReimbursementRequested ?? false);
+
+  // Stock the tech can pull from. Read-only here: contractors are not writers on
+  // the inventory blob, they only reference the row and location so the office
+  // can apply the decrement. Locations with 0 units are already filtered out by
+  // `setLocationQty`, so anything listed is genuinely on hand somewhere.
+  const stockItems = useMemo(
+    () => loadInventory().filter(i => (i.quantity ?? 0) > 0),
+    [],
+  );
+  const [stockPick, setStockPick] = useState<{ itemId: string; location: string } | null>(null);
+
+  // RMA case numbers from SolarEdge / other vendors. Saved on their own button
+  // rather than folded into the report submit, a case number is worth keeping the
+  // moment the tech has it, even if they never finish the report that visit.
+  const [newRma, setNewRma] = useState({ manufacturer: 'SolarEdge', caseNumber: '', rmaNumber: '', partDescription: '' });
+  const rmaEntries = job.rmaEntries ?? [];
+
+  const saveRma = () => {
+    const caseNumber = newRma.caseNumber.trim();
+    const rmaNumber  = newRma.rmaNumber.trim();
+    if (!caseNumber && !rmaNumber) return;
+    const now = new Date().toISOString();
+    const entry: RMAEntry = {
+      id: `rma-${job.id}-${Date.now()}`,
+      manufacturer: newRma.manufacturer.trim() || 'Unknown',
+      partDescription: newRma.partDescription.trim(),
+      rmaNumber,
+      caseNumber: caseNumber || undefined,
+      status: 'pending',
+      rmaStatus: 'submitted',
+      createdAt: now,
+      createdBy: contractorId,
+      linkedJobId: job.sourceJobId ?? job.id,
+      updatedAt: now,
+    };
+    onUpdateJob({ ...job, rmaEntries: [...rmaEntries, entry] });
+    setNewRma({ manufacturer: 'SolarEdge', caseNumber: '', rmaNumber: '', partDescription: '' });
+  };
 
   // Safety
   const [safetyConcern,   setSafetyConcern]    = useState(false);
@@ -661,9 +701,17 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
 
   const handleAddPart = () => {
     if (!newPart.name) return;
-    const part: JobPart = { id: `p-${Date.now()}`, ...newPart, totalPrice: newPart.quantity * newPart.unitPrice };
+    const part: JobPart = {
+      id: `p-${Date.now()}`,
+      ...newPart,
+      totalPrice: newPart.quantity * newPart.unitPrice,
+      // Carried only when the tech picked from their stock. This does NOT move
+      // inventory, it records which row and location the office should decrement.
+      ...(stockPick ? { inventoryItemId: stockPick.itemId, fromLocation: stockPick.location } : {}),
+    };
     setParts(prev => [...prev, part]);
     setNewPart({ name: '', partNumber: '', quantity: 1, unitPrice: 0 });
+    setStockPick(null);
     setShowAddPart(false);
   };
 
@@ -1273,6 +1321,42 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
 
                   {showAddPart && (
                     <div className="mb-3 p-3 bg-slate-50 rounded-xl space-y-2 border border-slate-200">
+                      {/* Pull from stock. Picking one fills the name, part # and
+                          cost, and tags the part so the office knows which row
+                          and location to draw down. Leave it on "Not from stock"
+                          for anything bought at a counter. */}
+                      {stockItems.length > 0 && (
+                        <select
+                          value={stockPick ? `${stockPick.itemId}|${stockPick.location}` : ''}
+                          onChange={e => {
+                            const raw = e.target.value;
+                            if (!raw) { setStockPick(null); return; }
+                            const [itemId, location] = raw.split('|');
+                            const picked = stockItems.find(i => i.id === itemId);
+                            setStockPick({ itemId, location });
+                            if (picked) {
+                              setNewPart(p => ({
+                                ...p,
+                                name: picked.name,
+                                partNumber: picked.partNumber || picked.sku,
+                                unitPrice: picked.unitCost,
+                              }));
+                            }
+                          }}
+                          className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-400"
+                        >
+                          <option value="">Not from stock (bought / supplied)</option>
+                          {stockItems.flatMap(i =>
+                            Object.entries(i.stockByLocation ?? {})
+                              .filter(([, n]) => n > 0)
+                              .map(([loc, n]) => (
+                                <option key={`${i.id}|${loc}`} value={`${i.id}|${loc}`}>
+                                  {i.name} - {loc} ({n} on hand)
+                                </option>
+                              )),
+                          )}
+                        </select>
+                      )}
                       <input type="text" placeholder="Part name" value={newPart.name}
                         onChange={e => setNewPart({...newPart, name: e.target.value})}
                         className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
@@ -1344,6 +1428,76 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
                     </label>
                   </div>
                 )}
+
+                {/* ── RMA case numbers ────────────────────────────────────── */}
+                <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-3">
+                  <div>
+                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">RMA / Warranty Case</p>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Case number you got from SolarEdge or another vendor. Saves straight to the office.
+                    </p>
+                  </div>
+
+                  {rmaEntries.length > 0 && (
+                    <div className="space-y-2">
+                      {rmaEntries.map(entry => (
+                        <div key={entry.id} className="px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-sm font-semibold text-slate-800">{entry.manufacturer}</span>
+                            <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full font-medium">
+                              {entry.rmaStatus ?? entry.status}
+                            </span>
+                          </div>
+                          <div className="mt-1 space-y-0.5 text-xs text-slate-600">
+                            {entry.caseNumber && <p>Case #{entry.caseNumber}</p>}
+                            {entry.rmaNumber && <p>RMA #{entry.rmaNumber}</p>}
+                            {entry.partDescription && <p className="text-slate-500">{entry.partDescription}</p>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-2 gap-2">
+                      <input
+                        type="text"
+                        value={newRma.manufacturer}
+                        onChange={e => setNewRma(p => ({ ...p, manufacturer: e.target.value }))}
+                        placeholder="Vendor"
+                        className="px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                      />
+                      <input
+                        type="text"
+                        value={newRma.caseNumber}
+                        onChange={e => setNewRma(p => ({ ...p, caseNumber: e.target.value }))}
+                        placeholder="Case #"
+                        className="px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                      />
+                    </div>
+                    <input
+                      type="text"
+                      value={newRma.rmaNumber}
+                      onChange={e => setNewRma(p => ({ ...p, rmaNumber: e.target.value }))}
+                      placeholder="RMA # (if the vendor issued one)"
+                      className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                    />
+                    <textarea
+                      value={newRma.partDescription}
+                      onChange={e => setNewRma(p => ({ ...p, partDescription: e.target.value }))}
+                      placeholder="Part and notes (e.g. SE7600H inverter, no display, vendor says ship back)"
+                      rows={2}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm resize-none focus:outline-none focus:ring-2 focus:ring-orange-400"
+                    />
+                    <button
+                      onClick={saveRma}
+                      disabled={!newRma.caseNumber.trim() && !newRma.rmaNumber.trim()}
+                      className="w-full px-3 py-2.5 bg-orange-500 hover:bg-orange-600 disabled:bg-slate-200 disabled:text-slate-400 text-white text-sm font-semibold rounded-xl transition-colors"
+                    >
+                      Save RMA Case
+                    </button>
+                  </div>
+                </div>
 
                 {/* ── Upsell Opportunity ──────────────────────────────────── */}
                 <div className={`rounded-2xl border-2 transition-all ${upsellFlagged ? 'border-violet-300 bg-violet-50' : 'border-slate-200 bg-white'} p-4`}>

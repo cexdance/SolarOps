@@ -1,5 +1,5 @@
 // SolarFlow - Inventory Module
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { formatMoney } from '../lib/money';
 import {
   Package,
@@ -131,7 +131,9 @@ import {
   User,
   RMAEntry,
 } from '../types';
-import { loadInventory, saveInventory } from '../lib/inventoryStore';
+import { loadInventory, saveInventory, deleteInventoryItem, adjustLocationQty, applyPartsToInventory, pendingStockParts } from '../lib/inventoryStore';
+import { loadTools, saveTools, deleteTool, setToolAssignment } from '../lib/toolStore';
+import { serviceOrderNo } from '../lib/woHelpers';
 import { RmaCreateModal } from './RmaCreateModal';
 import { uploadPhotoToStorage } from '../lib/photoStorage';
 import { compressImageToDataUrlUnder } from '../lib/photoCompress';
@@ -402,6 +404,20 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ jobs = [], onU
     saveInventory(items);
   };
 
+  // Re-hydrate when sync writes fresh inventory to localStorage. Without this the
+  // list is a one-shot snapshot taken at mount: a warehouse tab left open all day
+  // never sees another device's items, and its next save pushes that stale array
+  // up. Both the pull cycle and the Realtime handler fire this event.
+  useEffect(() => {
+    const onRemoteUpdate = (e: Event) => {
+      const keys = (e as CustomEvent<{ keys: string[] }>).detail?.keys ?? [];
+      if (keys.includes('solarops_inventory')) setInventoryItems(loadInventory());
+      if (keys.includes('solarops_tools')) setToolItems(loadTools());
+    };
+    window.addEventListener('solarflow-remote-update', onRemoteUpdate as EventListener);
+    return () => window.removeEventListener('solarflow-remote-update', onRemoteUpdate as EventListener);
+  }, []);
+
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
   const toggleItemExpand = (id: string) => setExpandedItems(prev => {
     const next = new Set(prev);
@@ -427,8 +443,48 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ jobs = [], onU
     }));
     setEditingReceipt(null);
   };
-  const [toolItems, setToolItems] = useState<ToolItem[]>(demoTools);
+  // Tools were `useState(demoTools)` with nothing behind it: every edit, status
+  // change and assignment was lost on reload and no other device ever saw one.
+  // Seed from the demo set only when the store is genuinely empty.
+  const [toolItems, setToolItems] = useState<ToolItem[]>(() => {
+    const stored = loadTools();
+    if (stored.length > 0) return stored;
+    saveTools(demoTools);
+    return demoTools;
+  });
+
+  const updateTools = (tools: ToolItem[]) => {
+    setToolItems(tools);
+    saveTools(tools);
+  };
   const [providerItems, setProviderItems] = useState<Provider[]>(demoProviders);
+
+  // Jobs carrying contractor-logged parts that came from stock and have not been
+  // applied yet. The office-confirm queue.
+  const pendingPulls = useMemo(
+    () => jobs
+      .map(job => ({ job, parts: pendingStockParts(job.contractorParts) }))
+      .filter(({ parts }) => parts.length > 0),
+    [jobs],
+  );
+
+  /**
+   * Confirm one job's field pulls: decrement stock and stamp the parts, in a
+   * single pass. `applyPartsToInventory` is idempotent, so a double click is a
+   * no-op rather than a double decrement.
+   */
+  const applyPulls = (job: Job) => {
+    const res = applyPartsToInventory(
+      inventoryItems,
+      job.contractorParts ?? [],
+      currentUser?.email ?? currentUser?.name ?? 'office',
+    );
+    if (res.appliedCount === 0) return;
+    updateInventory(res.items);
+    // Write the stamps back, otherwise the queue re-offers the same pull and the
+    // only thing stopping a second decrement is the guard we just relied on.
+    onUpdateJob?.({ ...job, contractorParts: res.parts });
+  };
 
   // Filter inventory
   const filteredInventory = inventoryItems.filter((item) => {
@@ -579,7 +635,7 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ jobs = [], onU
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            Tools ({demoTools.length})
+            Tools ({toolItems.length})
           </button>
           <button
             onClick={() => setActiveTab('providers')}
@@ -630,7 +686,7 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ jobs = [], onU
                 <Wrench className="w-4 h-4 text-slate-500" />
                 <span className="text-xs text-slate-500">Total Tools</span>
               </div>
-              <p className="text-lg font-bold text-slate-900">{demoTools.length}</p>
+              <p className="text-lg font-bold text-slate-900">{toolItems.length}</p>
             </div>
             <div className="bg-white rounded-xl p-4 border border-slate-200">
               <div className="flex items-center gap-2 mb-2">
@@ -664,6 +720,42 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ jobs = [], onU
         {/* Equipment Tab */}
         {activeTab === 'equipment' && (
           <div className="space-y-3">
+            {/* Field pulls awaiting confirmation. Contractors record what they
+                took and from where; stock only moves when the office applies it
+                here, so a mistaken field entry can never corrupt inventory. */}
+            {pendingPulls.length > 0 && (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-600" />
+                  <h3 className="font-semibold text-amber-900 text-sm">
+                    Field pulls awaiting confirmation ({pendingPulls.length})
+                  </h3>
+                </div>
+                {pendingPulls.map(({ job, parts }) => (
+                  <div key={job.id} className="bg-white rounded-lg border border-amber-200 p-3">
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <span className="text-sm font-semibold text-slate-800">
+                        {serviceOrderNo(job.woNumber)} · {job.clientName}
+                      </span>
+                      <button
+                        onClick={() => applyPulls(job)}
+                        className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold rounded-lg transition-colors"
+                      >
+                        Apply to stock
+                      </button>
+                    </div>
+                    <ul className="space-y-0.5">
+                      {parts.map(p => (
+                        <li key={p.id} className="text-xs text-slate-600">
+                          {p.quantity} x {p.name}
+                          <span className="text-slate-400"> from {p.fromLocation}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            )}
             {filteredInventory.map((item) => (
               <div
                 key={item.id}
@@ -700,6 +792,21 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ jobs = [], onU
                     )}
                   </div>
                 </div>
+                {/* Where the stock actually sits. One chip per location holding
+                    units, so the same part in the locker and in a contractor's
+                    van reads at a glance instead of as one opaque total. */}
+                {Object.entries(item.stockByLocation ?? {}).filter(([, n]) => n > 0).length > 0 && (
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {Object.entries(item.stockByLocation ?? {})
+                      .filter(([, n]) => n > 0)
+                      .sort((a, b) => b[1] - a[1])
+                      .map(([loc, n]) => (
+                        <span key={loc} className="text-xs px-2 py-0.5 bg-slate-100 text-slate-600 rounded-full">
+                          {loc}: <span className="font-semibold text-slate-800">{n}</span>
+                        </span>
+                      ))}
+                  </div>
+                )}
                 <div className="flex items-center justify-between text-sm">
                   <div className="flex items-center gap-3 text-slate-500">
                     <span className="flex items-center gap-1">
@@ -739,7 +846,8 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ jobs = [], onU
                     <button
                       onClick={() => {
                         if (confirm(`Delete "${item.name}"?`)) {
-                          updateInventory(inventoryItems.filter(i => i.id !== item.id));
+                          // Tombstones the item so the delete reaches other devices.
+                          setInventoryItems(deleteInventoryItem(item.id));
                         }
                       }}
                       className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
@@ -844,6 +952,24 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ jobs = [], onU
                     <span className="text-sm font-medium text-slate-700">
                       ${tool.purchasePrice}
                     </span>
+                    {/* Check-out / check-in. Persisted and synced, so the office
+                        can see who is holding a tool from any device. */}
+                    <select
+                      value={tool.assignedContractorId ?? ''}
+                      onChange={e => {
+                        const id = e.target.value || null;
+                        const name = contractors.find(c => c.id === id)?.businessName;
+                        updateTools(toolItems.map(t =>
+                          t.id === tool.id ? setToolAssignment(t, id, name) : t
+                        ));
+                      }}
+                      className="text-xs px-2 py-1 border border-slate-200 rounded-lg bg-white max-w-[9rem]"
+                    >
+                      <option value="">Available</option>
+                      {contractors.map(c => (
+                        <option key={c.id} value={c.id}>{c.businessName || c.contactName}</option>
+                      ))}
+                    </select>
                     <button
                       onClick={() => {
                         setEditingTool(tool);
@@ -852,6 +978,14 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ jobs = [], onU
                       className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                     >
                       <Edit className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (confirm(`Delete "${tool.name}"?`)) setToolItems(deleteTool(tool.id));
+                      }}
+                      className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
                 </div>
@@ -999,7 +1133,7 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ jobs = [], onU
             setEditingItem(null);
           }}
           onSaveTool={(tool) => {
-            setToolItems(toolItems.map(t => t.id === tool.id ? tool : t));
+            updateTools(toolItems.map(t => t.id === tool.id ? tool : t));
             setShowEditModal(false);
             setEditingTool(null);
           }}
@@ -1340,9 +1474,11 @@ const ReceiveStockModal: React.FC<ReceiveStockModalProps> = ({ items, jobs, curr
     let updatedItems: InventoryItem[];
     if (mode === 'existing') {
       if (!existingId) { setErr('Pick the item this delivery goes into.'); return; }
+      // Stock lands in the location it was received into (a contractor's van
+      // included), not in one flat pile. `adjustLocationQty` recomputes the total.
       updatedItems = items.map(i =>
         i.id === existingId
-          ? { ...i, quantity: i.quantity + q, receipts: [...(i.receipts ?? []), receipt] }
+          ? { ...adjustLocationQty(i, receiptLocation, q), receipts: [...(i.receipts ?? []), receipt] }
           : i,
       );
     } else {
@@ -1354,6 +1490,7 @@ const ReceiveStockModal: React.FC<ReceiveStockModalProps> = ({ items, jobs, curr
         category,
         description: '',
         quantity: q,
+        stockByLocation: { [receiptLocation]: q },
         unitOfMeasure: 'unit',
         location: receiptLocation,
         minStockThreshold: 0,

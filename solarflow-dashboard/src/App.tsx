@@ -38,7 +38,7 @@ import { canSeeFinancials, isFinancialView } from './lib/access';
 import { syncFromDB } from './lib/db';
 import { loadData, saveData } from './lib/dataStore';
 import { migrateWoPhotos } from './lib/photoStore';
-import { pickupJobsForContractor, toContractorJobView, serviceOrderNo, photoUrlStem, bareOrderNo, dedupeWoPhotos } from './lib/woHelpers';
+import { pickupJobsForContractor, toContractorJobView, serviceOrderNo, photoUrlStem, bareOrderNo, dedupeWoPhotos, mergeRmaEntries } from './lib/woHelpers';
 import { fireMentionNotifications, sendCustomerAppointmentEmail } from './components/ui/MentionTextarea';
 import { logChange, logJobChange, flushChangeLog } from './lib/changeLog';
 import { autoArchiveCompletedJobs, stampJobFields } from './lib/jobService';
@@ -1482,6 +1482,11 @@ function App() {
           // ── Full contractor record mirror (Phase D) ────────────────────────
           // Previously these never reached data.jobs, so admin/billing couldn't
           // see contractor-entered parts, labor, signatures, invoice or mileage.
+          // RMA case numbers entered in the field. UNION by id, never a replace:
+          // the contractor's copy only ever carries what the field app knows, so
+          // assigning it straight across would delete every RMA the office added.
+          // Newest `updatedAt` wins per entry, same rule as everywhere else.
+          rmaEntries: mergeRmaEntries(adminJob.rmaEntries, updatedJob.rmaEntries),
           contractorParts: updatedJob.parts ?? adminJob.contractorParts,
           contractorPartsAmount: updatedJob.partsAmount ?? adminJob.contractorPartsAmount,
           contractorLaborAmount: updatedJob.laborAmount ?? adminJob.contractorLaborAmount,

@@ -1,5 +1,9 @@
 // SolarFlow MVP - Types and Interfaces
 
+// Type-only, erased at compile time, so this creates no runtime cycle with the
+// contractor module that this file also re-exports.
+import type { JobPart } from './contractor';
+
 export type UserRole = 'admin' | 'technician' | 'coo' | 'support' | 'sales';
 
 /**
@@ -366,7 +370,9 @@ export interface Job {
   // contractor invoice/billing, mileage). These are the durable, per-record-
   // synced, audit-logged home for what the contractor enters, letting the
   // contractor view become a pure projection with no separate store to diverge.
-  contractorParts?: { id: string; name: string; partNumber: string; quantity: number; unitPrice: number; totalPrice: number }[];
+  /** Parts the contractor logged in the field. `JobPart` (not an inline shape) so
+   *  the inventory-consumption fields travel with it to the office Apply step. */
+  contractorParts?: JobPart[];
   contractorPartsAmount?: number;
   contractorLaborAmount?: number;
   markupPercent?: number;
@@ -491,8 +497,22 @@ export interface InventoryItem {
   name: string;
   category: InventoryCategory;
   description: string;
+  /**
+   * TOTAL units across every location. Derived from `stockByLocation` and kept in
+   * sync by `setLocationQty`/`adjustLocationQty`, never edited directly. Staying a
+   * maintained total (rather than being replaced by the map) is deliberate: every
+   * catalog, valuation and low-stock read keeps working untouched.
+   */
   quantity: number;
+  /**
+   * Units per location, e.g. `{ "Storage Locker": 12, "IMPOWER Van": 3 }`. The
+   * authoritative breakdown. Legacy rows predate it and are migrated on load from
+   * `{ [location]: quantity }`, so it is optional on the wire but always present
+   * on anything `loadInventory` hands out.
+   */
+  stockByLocation?: Record<string, number>;
   unitOfMeasure: UnitOfMeasure;
+  /** Primary/home location. Still the default target for receiving. */
   location: string;
   minStockThreshold: number;
   unitCost: number;
@@ -505,6 +525,13 @@ export interface InventoryItem {
    * all have none, and fall back to `createdAt`.
    */
   updatedAt?: string;
+  /**
+   * Soft-delete tombstone. The record stays in the synced array so the delete
+   * actually propagates, `mergeInventoryItems` unions by id and a merely-absent
+   * item is resurrected from any device that still holds it. Filtered out of the
+   * UI by `loadInventory`.
+   */
+  deletedAt?: string;
   imageUrl?: string;
   /** Receiving / provenance history, each delivery into stock with its proof image and optional RMA match. */
   receipts?: StockReceipt[];
@@ -536,13 +563,21 @@ export interface ToolItem {
   category: ToolCategory;
   serialNumber?: string;
   status: ToolStatus;
+  /** Free-text holder name, legacy. `assignedContractorId` is the real link. */
   assignedTo?: string;
+  /** Contractor currently holding the tool, set by check-out, cleared by check-in. */
+  assignedContractorId?: string;
+  checkedOutAt?: string;
   location: string;
   purchaseDate: string;
   purchasePrice: number;
   lastInspectionDate?: string;
   notes?: string;
   createdAt: string;
+  /** LWW key for the cross-device merge. Absent on rows created before tools synced. */
+  updatedAt?: string;
+  /** Soft-delete tombstone, same contract as `InventoryItem.deletedAt`. */
+  deletedAt?: string;
   imageUrl?: string;
 }
 
