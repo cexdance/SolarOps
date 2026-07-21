@@ -262,7 +262,7 @@ export interface Job {
   priority?: UrgencyLevel;
   date?: string;
   clientId?: string; // US-1XXXX format
-  // Multi-state Trello-style funnel stage (Tryout board). Optional: legacy jobs
+  // Multi-state Trello-style funnel stage (S1 board). Optional: legacy jobs
   // have none and simply don't appear on that board until dragged onto it.
   pipelineStage?: PipelineStage;
   // ── Work Order Panel extended fields ──────────────────────────────────
@@ -552,9 +552,19 @@ export interface Provider {
   createdAt: string;
 }
 
+export interface PriceList {
+  id: string;
+  providerId: string;
+  fileName: string;
+  uploadDate: string;
+  notes?: string;
+}
+
 // ============================================
 // SolarFlow CRM v2 - Gamified Sales CRM
 // ============================================
+
+export type UserRoleCRM = 'admin' | 'manager' | 'sales_rep';
 
 export type LeadStatus =
   | 'new'
@@ -684,6 +694,17 @@ export interface Badge {
   rarity: 'common' | 'rare' | 'epic' | 'legendary';
 }
 
+export interface LeaderboardEntry {
+  userId: string;
+  userName: string;
+  avatar?: string;
+  xp: number;
+  level: number;
+  streak: number;
+  dealsClosed: number;
+  rank: number;
+}
+
 // XP Configuration
 export const XP_ACTIONS = {
   call_made: 10,
@@ -708,6 +729,14 @@ export const LEVEL_THRESHOLDS = [
   { level: 9, xp: 55000, title: 'Master Rep' },
   { level: 10, xp: 80000, title: 'Solar Legend' },
 ];
+
+// CRM App State
+export interface CRMState {
+  leads: Lead[];
+  activities: LeadActivity[];
+  userStats: Record<string, UserStats>;
+  currentUserId: string | null;
+}
 
 // ============================================
 // Customer Management Types
@@ -801,8 +830,90 @@ export interface CustomerState {
 }
 
 // ============================================
-// SolarOps Operations - Alerts
+// SolarOps Operations - Work Orders & Alerts
 // ============================================
+
+// Work Order Types
+export type WorkOrderStatus =
+  | 'draft'
+  | 'triage'
+  | 'scheduled'
+  | 'in_progress'
+  | 'on_site'
+  | 'pending_parts'
+  | 'review'
+  | 'completed'
+  | 'billed'
+  | 'cancelled';
+
+export type WorkOrderType =
+  | 'maintenance'
+  | 'repair'
+  | 'installation'
+  | 'inspection'
+  | 'emergency'
+  | 'rma'
+  | 'warranty';
+
+export interface WorkOrderLineItem {
+  id: string;
+  description: string;
+  quantity: number;
+  unitCost: number;
+  totalCost: number;
+  partNumber?: string;
+}
+
+export interface WorkOrder {
+  id: string;
+  woNumber: string;
+  customerId: string;
+  customerName: string;
+  siteAddress: string;
+
+  // Work Order Details
+  type: WorkOrderType;
+  status: WorkOrderStatus;
+  priority: 'low' | 'medium' | 'high' | 'critical';
+
+  // Scheduling
+  scheduledDate?: string;
+  scheduledTime?: string;
+  startedAt?: string;
+  completedAt?: string;
+
+  // Assignment
+  assignedTo?: string;
+  assignedTechnician?: string;
+
+  // Financials
+  laborHours: number;
+  laborRate: number;
+  laborCost: number;
+  parts: WorkOrderLineItem[];
+  partsCost: number;
+  totalCost: number;
+  revenue: number;
+  profit: number;
+  profitMargin: number;
+
+  // Details
+  description: string;
+  resolutionNotes?: string;
+  notes: string;
+
+  // SolarEdge
+  solarEdgeSiteId?: string;
+  inverterSerial?: string;
+
+  // Source
+  source: 'manual' | 'alert' | 'customer_call' | 'scheduled' | 'inspection';
+  createdFromAlertId?: string;
+
+  // Timestamps
+  createdAt: string;
+  updatedAt: string;
+}
 
 // SolarEdge Alert Types
 export type AlertSeverity = 'info' | 'warning' | 'critical';
@@ -857,3 +968,70 @@ export interface SolarEdgeAlert {
   createdAt: string;
 }
 
+// Client Profitability Types
+export interface ClientProfitability {
+  customerId: string;
+  customerName: string;
+  customerEmail: string;
+
+  // Revenue
+  installationRevenue: number;
+  serviceRevenue: number;
+  maintenanceContracts: number;
+  totalRevenue: number;
+
+  // Costs
+  customerAcquisitionCost: number;
+  hardwareCosts: number;
+  laborCosts: number;
+  partsCosts: number;
+  totalCosts: number;
+
+  // Profitability
+  grossProfit: number;
+  netProfit: number;
+  profitMargin: number;
+
+  // Work Order Stats
+  totalWorkOrders: number;
+  completedWorkOrders: number;
+  openWorkOrders: number;
+  avgResolutionTime: number; // hours
+
+  // Client Value
+  lifetimeValue: number;
+  serviceFrequency: number; // WOs per year
+
+  // Timestamps
+  lastServiceDate?: string;
+  firstServiceDate?: string;
+  calculatedAt: string;
+}
+
+// Operations Dashboard Stats
+export interface OperationsStats {
+  totalWorkOrders: number;
+  openWorkOrders: number;
+  completedThisMonth: number;
+  avgCompletionTime: number;
+  totalRevenue: number;
+  totalCosts: number;
+  totalProfit: number;
+
+  // Alerts
+  totalAlerts: number;
+  criticalAlerts: number;
+  unacknowledgedAlerts: number;
+
+  // By Priority
+  criticalCount: number;
+  highCount: number;
+  mediumCount: number;
+  lowCount: number;
+
+  // By Type
+  maintenanceCount: number;
+  repairCount: number;
+  inspectionCount: number;
+  emergencyCount: number;
+}
