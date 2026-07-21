@@ -878,6 +878,9 @@ export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserRole, customers
       laborHours: 0, laborRate: 100, partsCost: 0, totalAmount: 100,
       createdAt: now, urgency: 'medium', isPowercare: false,
       woStatus: 'draft', woNumber,
+      // Land the converted lead on the Tryout pipeline board. A site transfer
+      // started from the lobby IS the "Site Transfer is Processing" stage.
+      pipelineStage: 'site_transfer_processing',
       solarEdgeSiteId: siteTxSiteId.trim(),
       clientName: `${lead.firstName} ${lead.lastName}`,
       description: `Site ID: ${siteTxSiteId.trim()} | Inverter Serial: ${siteTxSerial.trim()}`,

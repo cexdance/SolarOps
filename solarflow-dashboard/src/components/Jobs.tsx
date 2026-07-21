@@ -10,9 +10,13 @@ import {
   startOfWeek, endOfWeek, startOfMonth, endOfMonth, subMonths,
 } from 'date-fns';
 import { WorkOrderCalendar } from './WorkOrderCalendar';
+import { pipelineDropPatch } from '../lib/woHelpers';
 import JobMapView from './views/JobMapView';
 import { ViewJob, ViewJobPriority } from './views/jobViewTypes';
-import { Job, Customer, User as UserType, JobStatus, UrgencyLevel, WO_TO_JOB_STATUS, WOStatus } from '../types';
+import {
+  Job, Customer, User as UserType, JobStatus, UrgencyLevel, WO_TO_JOB_STATUS, WOStatus,
+  PipelineStage, PIPELINE_STAGES, PIPELINE_STAGE_LABEL,
+} from '../types';
 
 // Map UrgencyLevel onto the shared map-view priority palette.
 const MAP_PRIORITY: Record<UrgencyLevel, ViewJobPriority> = {
@@ -275,7 +279,7 @@ const JobCard: React.FC<JobCardProps> = ({ job, customer, contractorName, isDrag
 };
 
 interface KanbanColumnProps {
-  status: JobStatus | 'on_hold';
+  status: JobStatus | 'on_hold' | PipelineStage | 'unstaged';
   title: string;
   columnJobs: Job[];
   allJobs: Job[];
@@ -292,7 +296,8 @@ interface KanbanColumnProps {
   onToggleHold: (job: Job) => void;
 }
 
-const colColors: Record<JobStatus | 'on_hold', string> = {
+// Keyed by status OR pipeline stage; unlisted keys fall back to neutral slate.
+const colColors: Record<string, string> = {
   new: 'bg-blue-50 border-blue-200',
   on_hold: 'bg-slate-100 border-slate-300',
   assigned: 'bg-slate-50 border-slate-200',
@@ -301,7 +306,25 @@ const colColors: Record<JobStatus | 'on_hold', string> = {
   invoiced: 'bg-purple-50 border-purple-200',
   paid: 'bg-emerald-50 border-emerald-200',
   archived: 'bg-gray-50 border-gray-200',
+  // Pipeline stages (Tryout board)
+  leads: 'bg-sky-50 border-sky-200',
+  needs_first_quote: 'bg-blue-50 border-blue-200',
+  first_quote_in_progress: 'bg-indigo-50 border-indigo-200',
+  site_transfer_processing: 'bg-violet-50 border-violet-200',
+  site_transfer_completed: 'bg-purple-50 border-purple-200',
+  service_quote_in_progress: 'bg-amber-50 border-amber-200',
+  needs_scheduling: 'bg-orange-50 border-orange-200',
+  done: 'bg-green-50 border-green-200',
+  email_follow_up: 'bg-yellow-50 border-yellow-200',
+  closed_won: 'bg-emerald-50 border-emerald-200',
+  closed_archived: 'bg-gray-50 border-gray-200',
 };
+
+const PIPELINE_STAGE_SET = new Set<string>(PIPELINE_STAGES);
+const isPipelineStage = (s: string): s is PipelineStage => PIPELINE_STAGE_SET.has(s);
+
+const JOBS_VIEW_MODES = ['list', 'kanban', 'calendar', 'map', 'tryout'] as const;
+type JobsViewMode = typeof JOBS_VIEW_MODES[number];
 
 const KanbanColumn: React.FC<KanbanColumnProps> = ({
   status, title, columnJobs, allJobs, draggedJobId,
@@ -323,6 +346,16 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({
     if (!jobId) return;
     const job = allJobs.find(j => j.id === jobId);
     if (!job) return;
+    // Tryout board: pipeline stage is orthogonal to status/woStatus, so a drop
+    // here moves ONLY pipelineStage. Execution status, billing and contractor
+    // visibility are deliberately left alone.
+    // Unstaged pulls the order back off the funnel. Neither branch touches
+    // status, so a Tryout drag can never archive or reopen a service order.
+    if (isPipelineStage(status) || status === 'unstaged') {
+      const patch = pipelineDropPatch(job, status);
+      if (patch) onUpdateJob({ ...job, ...patch });
+      return;
+    }
     // Drop on the On Hold column = park the order (keep its underlying stage).
     if (status === 'on_hold') {
       if (!job.onHold) onUpdateJob({ ...job, onHold: true, onHoldAt: new Date().toISOString() });
@@ -480,13 +513,13 @@ export const Jobs: React.FC<JobsProps> = ({
   React.useEffect(() => { saveFilters({ customFrom }); }, [customFrom]);
   React.useEffect(() => { saveFilters({ customTo }); }, [customTo]);
 
-  const [viewMode, setViewMode] = useState<'list' | 'kanban' | 'calendar' | 'map'>(() => {
-    const saved = localStorage.getItem('solarops_jobs_view') as 'list' | 'kanban' | 'calendar' | 'map' | null;
-    if (saved === 'kanban' || saved === 'list' || saved === 'calendar' || saved === 'map') return saved;
+  const [viewMode, setViewMode] = useState<JobsViewMode>(() => {
+    const saved = localStorage.getItem('solarops_jobs_view') as JobsViewMode | null;
+    if (saved && JOBS_VIEW_MODES.includes(saved)) return saved;
     return isMobile ? 'list' : 'kanban';
   });
 
-  const handleViewMode = (mode: 'list' | 'kanban' | 'calendar' | 'map') => {
+  const handleViewMode = (mode: JobsViewMode) => {
     setViewMode(mode);
     localStorage.setItem('solarops_jobs_view', mode);
   };
@@ -708,6 +741,13 @@ export const Jobs: React.FC<JobsProps> = ({
           >
             <MapPin className="w-4 h-4" />
           </button>
+          <button
+            onClick={() => handleViewMode('tryout')}
+            title="Tryout (multi-state pipeline)"
+            className={`px-3 py-2.5 text-xs font-semibold flex items-center justify-center ${viewMode === 'tryout' ? 'bg-slate-800 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}
+          >
+            Tryout
+          </button>
         </div>
         <div className="flex gap-2 flex-wrap">
           <select
@@ -879,6 +919,37 @@ export const Jobs: React.FC<JobsProps> = ({
               contractors={contractors}
               sortBy={columnSortBy[col] ?? 'none'}
               onSortChange={(v) => setColumnSortBy(prev => ({ ...prev, [col]: v }))}
+              onUpdateJob={onUpdateJob}
+              onDragStart={handleDragStart}
+              onDragEnd={() => setDraggedJobId(null)}
+              onCardClick={handleCardClick}
+              onToggleHold={handleToggleHold}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Tryout View: the 11-stage multi-state pipeline mirrored from the
+          "Conexsol Florida Services" Trello board, now the TX/GA standard.
+          Groups by `pipelineStage` ONLY. Orders with no stage yet (every legacy
+          record) sit in the Unstaged column until dragged onto the funnel. */}
+      {viewMode === 'tryout' && (
+        <div className="flex gap-4 overflow-x-auto pb-4">
+          {(['unstaged', ...PIPELINE_STAGES] as const).map(col => (
+            <KanbanColumn
+              key={col}
+              status={col}
+              title={col === 'unstaged' ? 'Unstaged' : PIPELINE_STAGE_LABEL[col]}
+              columnJobs={col === 'unstaged'
+                ? filteredJobs.filter(j => !j.pipelineStage)
+                : filteredJobs.filter(j => j.pipelineStage === col)}
+              allJobs={jobs}
+              draggedJobId={draggedJobId}
+              customers={customers}
+              users={users}
+              contractors={contractors}
+              sortBy={columnSortBy[`tryout_${col}`] ?? 'none'}
+              onSortChange={(v) => setColumnSortBy(prev => ({ ...prev, [`tryout_${col}`]: v }))}
               onUpdateJob={onUpdateJob}
               onDragStart={handleDragStart}
               onDragEnd={() => setDraggedJobId(null)}

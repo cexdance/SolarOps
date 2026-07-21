@@ -5,8 +5,25 @@
  * source of truth. Today they are used as read-side helpers; in Phase 2
  * they will replace the separate `contractorJobs` array entirely.
  */
-import type { Job, Customer } from '../types';
+import type { Job, Customer, PipelineStage } from '../types';
 import type { ContractorJob, JobStatusContractor, PhotoCategory } from '../types/contractor';
+
+/**
+ * Patch produced by dropping a card on the Tryout (multi-state pipeline) board.
+ * Returns null when nothing changed, so a no-op drag never writes and never
+ * bumps updatedAt (a needless write is a sync-clobber opportunity).
+ *
+ * INVARIANT: the patch only ever contains `pipelineStage`. The funnel is
+ * orthogonal to execution state, so this must never touch `status`/`woStatus`,
+ * which drive billing and CONTRACTOR_VISIBLE_STATUSES.
+ */
+export function pipelineDropPatch(
+  job: Pick<Job, 'pipelineStage'>,
+  target: PipelineStage | 'unstaged',
+): { pipelineStage: PipelineStage | undefined } | null {
+  const next = target === 'unstaged' ? undefined : target;
+  return job.pipelineStage === next ? null : { pipelineStage: next };
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Order numbering: one shared number, two prefixes.
@@ -87,6 +104,22 @@ export function dedupePhotoUrls(urls: string[]): string[] {
   }
   return out;
 }
+
+// Shared label/color for the 6 coarse board-column statuses. Used wherever a
+// job's WO_TO_JOB_STATUS-derived column needs a badge (dispatch board, SolarEdge
+// monitoring table). Duplicated verbatim in 2 files before consolidation here.
+export const WO_STATUS_COLOR: Record<string, string> = {
+  new:         'bg-blue-100 text-blue-700',
+  assigned:    'bg-indigo-100 text-indigo-700',
+  in_progress: 'bg-amber-100 text-amber-700',
+  completed:   'bg-emerald-100 text-emerald-700',
+  invoiced:    'bg-purple-100 text-purple-700',
+  paid:        'bg-green-100 text-green-700',
+};
+export const WO_STATUS_LABEL: Record<string, string> = {
+  new: 'New', assigned: 'Assigned', in_progress: 'In Progress',
+  completed: 'Completed', invoiced: 'Invoiced', paid: 'Paid',
+};
 
 /** Generate a fresh Service Order number (SO-YYMM-NNNNN). */
 export function generateServiceOrderNumber(): string {
