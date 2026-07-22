@@ -3438,6 +3438,7 @@ const mergedCustomerData = _baseCustomerData.map(c => {
   return {
     ...c,
     isPowerCare: true,
+    category: 'PowerCare' as const,
     powerCareCaseNumber: pc.powerCareCaseNumber || undefined,
     powerCareTrackingNumber: pc.powerCareTrackingNumber || undefined,
     // Enrich contact info if missing in SolarEdge import
@@ -3471,6 +3472,7 @@ for (const pc of powerCareMap.values()) {
     installDate: '',
     peakPower: 0,
     isPowerCare: true,
+    category: 'PowerCare' as const,
     powerCareCaseNumber: pc.powerCareCaseNumber || undefined,
     powerCareTrackingNumber: pc.powerCareTrackingNumber || undefined,
   });
