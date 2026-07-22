@@ -26,6 +26,7 @@ import { ImageLightbox } from './ImageLightbox';
 import { ActivityFeed, type FeedUser } from './ui/ActivityFeed';
 import { compressImageToDataUrl, compressImageToBlob } from '../lib/photoCompress';
 import { uploadPhotoToStorage, deletePhotoFromStorage } from '../lib/photoStorage';
+import { appendPhoto, dataUrlToBlob } from '../lib/photoStore';
 import { logUpload, fetchLogForEntity, ChangeEntry } from '../lib/changeLog';
 
 // ─── constants ────────────────────────────────────────────────────────────────
@@ -862,6 +863,23 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
 
   const removeLineItem = (id: string) => setLineItems(prev => prev.filter(i => i.id !== id));
 
+  // When a photo's Storage upload fails (flaky mobile signal, session_expired), its
+  // base64 dataUrl would otherwise sit in the single `solarflow_data` localStorage
+  // blob and, on a phone, blow iOS Safari's ~5MB origin cap ("Storage full" modal).
+  // Park the compressed blob in IndexedDB instead: it has a far larger quota, the
+  // photo survives reload via photoStoreId, saveData strips it from localStorage on
+  // the next save, and photoStore's background mirror retries the Storage upload.
+  const parkPhotoInIdb = useCallback(async (photoId: string, category: string, blob: Blob) => {
+    try {
+      const row = await appendPhoto({ jobId: stableWoIdRef.current, category, blob });
+      setWoPhotos(prev => prev.map(p =>
+        p.id === photoId ? { ...p, dataUrl: '', photoStoreId: row.id } : p
+      ));
+    } catch (e) {
+      console.error('[ServiceOrderPanel] park photo in IndexedDB failed', photoId, e);
+    }
+  }, []);
+
   // Photo upload, compress then push to Supabase Storage; store URL not base64.
   // Uses a stable folder ID (stableWoIdRef) so new WOs don't collide in /unsaved/.
   // Tracks in-flight uploads and auto-saves the WO after each successful upload.
@@ -923,6 +941,9 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
       if (!file.type.startsWith('image/')) return;
       const photoId = `ph-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
       const uploadStart = Date.now();
+      // Hoisted so the failure branches below can offload the in-flight bytes to IDB.
+      let compressedBlob: Blob | null = null;
+      let optimisticDataUrl = '';
       try {
         logUpload('photo.upload_start', photoId, {
           name: file.name, size: file.size, type: file.type,
@@ -931,6 +952,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
 
         // Step 1: compress to dataUrl for optimistic preview (instant display)
         const dataUrl = await compressImageToDataUrl(file);
+        optimisticDataUrl = dataUrl;
         const photo: WOPhoto = {
           id: photoId,
           category: effectiveCat,
@@ -944,6 +966,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
         pendingUploads.current.add(photoId);
         setUploading(true);
         const blob = await compressImageToBlob(file);
+        compressedBlob = blob;
         const result = await uploadPhotoToStorage(blob, stableWoIdRef.current, photoId);
         pendingUploads.current.delete(photoId);
         setUploading(pendingUploads.current.size > 0);
@@ -970,6 +993,9 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
             setUploadError(`Photo upload failed: ${result.error ?? 'unknown error'}`);
           }
           console.error('[ServiceOrderPanel] photo upload failed', result.error);
+          // Upload failed but the compressed bytes are in hand: move them to IDB so
+          // the base64 does not accumulate in localStorage and blow the mobile quota.
+          await parkPhotoInIdb(photoId, effectiveCat, blob);
         }
         // Auto-save once ALL in-flight uploads settle (prevents simultaneous-upload stomp).
         // With 3 concurrent photos, each decrements pendingUploads independently; only the
@@ -987,6 +1013,14 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
         }, undefined, Date.now() - uploadStart);
         console.error('[ServiceOrderPanel] photo upload error', err);
         setUploadError('Photo upload failed. Check your connection.');
+        // Same as the error-result branch: offload the in-flight bytes to IDB so a
+        // thrown upload (e.g. offline) doesn't leave base64 in localStorage. Prefer
+        // the compressed blob; fall back to the optimistic dataUrl if compression
+        // itself threw before producing a blob.
+        {
+          const offloadBlob = compressedBlob ?? (optimisticDataUrl ? dataUrlToBlob(optimisticDataUrl) : null);
+          if (offloadBlob) await parkPhotoInIdb(photoId, effectiveCat, offloadBlob);
+        }
         // Still save, other concurrent uploads may have succeeded.
         if (pendingUploads.current.size === 0) {
           setTimeout(() => handleSaveRef.current(undefined, true), 0);
@@ -2838,6 +2872,9 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                         ));
                       } else {
                         console.error('[ServiceOrderPanel] drop-zone paste upload failed', result.error);
+                        // Offload the in-flight bytes to IDB so the base64 doesn't
+                        // sit in localStorage and blow the mobile quota.
+                        await parkPhotoInIdb(photoId, uploadCategory, blob);
                       }
                       if (pendingUploads.current.size === 0) {
                         setTimeout(() => handleSaveRef.current(undefined, true), 0);

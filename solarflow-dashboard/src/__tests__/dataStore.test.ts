@@ -245,6 +245,24 @@ describe('saveData', () => {
     expect(savedJob.woPhotos[0].dataUrl).toBe('');
   });
 
+  it('strips base64 dataUrl from woPhotos offloaded to IndexedDB (photoStoreId, no storageUrl)', () => {
+    // A photo whose upload failed and was parked in IDB carries a photoStoreId but
+    // no storageUrl. It must still be stripped from localStorage (bytes live in IDB),
+    // otherwise the base64 accumulates and blows the ~5MB mobile quota.
+    const job = minJob('j-idb', 'c1');
+    (job as any).woPhotos = [
+      { photoStoreId: 'ph-idb-123', storageUrl: null, dataUrl: 'data:image/jpeg;base64,ABCDEF' },
+    ];
+    const state = minState({ jobs: [job] });
+    saveData(state);
+
+    const raw = localStorage.getItem(STORAGE_KEY);
+    const parsed = JSON.parse(raw!);
+    const savedJob = parsed.jobs.find((j: Job) => j.id === 'j-idb');
+    expect(savedJob.woPhotos[0].photoStoreId).toBe('ph-idb-123');
+    expect(savedJob.woPhotos[0].dataUrl).toBe('');
+  });
+
   it('ST-3 FIXED: keeps in-flight photos (no storageUrl/photoStoreId) so a reload does not lose them', () => {
     const job = minJob('j-pending', 'c1');
     (job as any).woPhotos = [
