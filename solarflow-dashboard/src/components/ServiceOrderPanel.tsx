@@ -7,10 +7,11 @@ import {
   CheckCircle, Clock, AlertTriangle, DollarSign, Wrench,
   Camera, ClipboardList, Package, ZapOff, Zap,
   ShieldCheck, Banknote, TrendingUp, TrendingDown, Users,
-  RotateCcw, History, Loader2, FolderOpen, MapPin, ExternalLink, Printer,
+  RotateCcw, History, Loader2, FolderOpen, MapPin, ExternalLink, Printer, Home,
 } from 'lucide-react';
 import SiteMapView from './views/SiteMapView';
-import { Job, WOStatus, WOLineItem, WOPhoto, WOServiceStatus, WO_TO_JOB_STATUS, RMAEntry, AuditEntry } from '../types';
+import ReroofTab from './ReroofTab';
+import { Job, WOStatus, WOLineItem, WOPhoto, WOServiceStatus, WO_TO_JOB_STATUS, RMAEntry, AuditEntry, ReroofWorkflow } from '../types';
 import { updateClientStatus } from '../lib/siteProfileStore';
 import { normalizeStreetOrder } from '../lib/addressValidator';
 import { QuotePreviewModal } from './QuotePreviewModal';
@@ -350,6 +351,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
   const [woStatus, setWoStatus] = useState<WOStatus>(job?.woStatus ?? 'draft');
   const [title, setTitle]           = useState(job?.title ?? '');
   const [serviceType, setServiceType] = useState(job?.serviceType ?? '');
+  const [reroof, setReroof] = useState<ReroofWorkflow>(job?.reroof ?? { parts: [] });
   // Initialize serviceCode - if job has serviceType but no serviceCode, try to match from rates
   const [serviceCode, setServiceCode] = useState(() => {
     if (job?.serviceCode) return job.serviceCode;
@@ -610,6 +612,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
   const isOptimizerJob = serviceType.toLowerCase().includes('optimizer');
   const isSerialJob    = isInverterJob || isOptimizerJob;
   const isSiteTransfer = serviceCode === 'SITE-TRX' || serviceType === 'Site Transfer';
+  const isReroofJob    = serviceType.toLowerCase().includes('reroof') || serviceType.toLowerCase().includes('re-roof');
   // Optimizer-only gate: the Optimizer Replacement Pricing Calculator should
   // appear only on optimizer-service WOs (service code OPT-*), never on inverter
   // or other PowerCare work.
@@ -711,7 +714,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
   const applyRecurringDiscount = discountType !== ''; // kept for legacy compat
 
   // Active tab
-  const [activeTab, setActiveTab] = useState<'overview' | 'parts' | 'photos' | 'report' | 'history' | 'map'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'parts' | 'reroof' | 'photos' | 'report' | 'history' | 'map'>('overview');
   // WO audit trail (Phase B), loaded lazily when the History tab is opened.
   const [historyEntries, setHistoryEntries] = useState<ChangeEntry[] | null>(null);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -1323,6 +1326,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
       ...(job ?? {}),
       title: title || `WO, ${siteName}`,
       serviceType: serviceType as Job['serviceType'],
+      ...(isReroofJob ? { reroof } : {}),
       status: WO_TO_JOB_STATUS[effectiveWoStatus],
       woStatus: effectiveWoStatus,
       woNumber: job?.woNumber ?? generateServiceOrderNumber(),
@@ -1462,11 +1466,12 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
   const tabs = [
     { key: 'overview', label: 'Overview',        icon: <ClipboardList className="w-4 h-4" /> },
     { key: 'parts',    label: 'Parts & Labor',   icon: <Wrench className="w-4 h-4" /> },
+    ...(isReroofJob ? [{ key: 'reroof', label: 'Reroofing', icon: <Home className="w-4 h-4" /> }] : []),
     { key: 'photos',   label: `Photos${woPhotos.length ? ` (${woPhotos.length})` : ''}`, icon: <Camera className="w-4 h-4" /> },
     { key: 'report',   label: 'Service Report',  icon: <FileText className="w-4 h-4" /> },
     { key: 'history',  label: 'History',         icon: <History className="w-4 h-4" /> },
     { key: 'map',      label: 'Map',             icon: <MapPin className="w-4 h-4" /> },
-  ] as const;
+  ];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-8">
@@ -2792,6 +2797,13 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                   </div>
                 );
               })()}
+            </div>
+          )}
+
+          {/* Reroofing workflow */}
+          {activeTab === 'reroof' && (
+            <div className="p-6">
+              <ReroofTab value={reroof} onChange={setReroof} />
             </div>
           )}
 

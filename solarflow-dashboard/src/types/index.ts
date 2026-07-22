@@ -387,6 +387,54 @@ export interface Job {
   contractorPaymentStatus?: string;
   contractorTotalPay?: number;
   assignedAt?: string;
+  /** Reroofing workflow. Present only when serviceType is a reroof; drives the
+   *  Reroofing tab in the Service Order panel. Optional so every other job is
+   *  unaffected. */
+  reroof?: ReroofWorkflow;
+}
+
+/** One reinstallation part in a reroofing job. Feeds Daniel's quote and Cesar's
+ *  procurement order. `pricePoints` are the raw web results the estimator found;
+ *  `unitPrice` is the chosen/averaged figure (manual override wins). */
+export interface ReroofPart {
+  id: string;
+  category: ReroofPartCategory;
+  name: string;
+  qty: number;
+  partNumber?: string;
+  manufacturer?: string;
+  unitPrice?: number;
+  priceSource?: string;
+  pricePoints?: { source: string; price: number; url?: string }[];
+  priceEstimatedAt?: string;
+  inventoryItemId?: string;
+  note?: string;
+}
+
+export type ReroofPartCategory =
+  | 'anchors'
+  | 'anchor_hardware'
+  | 'flashing'
+  | 'railing'
+  | 'micro_rail';
+
+export interface ReroofProcurementOrder {
+  createdAt: string;
+  createdBy?: string;
+  status: 'draft' | 'ordered' | 'received';
+  orderedAt?: string;
+  receivedAt?: string;
+  items: ReroofPart[]; // snapshot at generation time
+}
+
+export interface ReroofWorkflow {
+  systemManufacturer?: string;
+  panelQty?: number;
+  roofType?: string;
+  stories?: number;
+  railSystemType?: string;
+  parts: ReroofPart[];
+  procurement?: ReroofProcurementOrder;
 }
 
 export type RMAStatus = 'processes' | 'eligible' | 'not_eligible' | 'submitted' | 'shipped' | 'paid';
