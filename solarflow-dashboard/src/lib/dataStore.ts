@@ -341,6 +341,24 @@ export const loadData = (): AppState => {
   return fresh;
 };
 
+// ── localStorage pressure monitor ─────────────────────────────────────────────
+// iOS Safari caps localStorage at ~5MB/origin. Base64 photos no longer land here
+// (they go to IndexedDB / Supabase Storage), but the base dataset still grows with
+// the business. Warn once per session when the slim blob crosses 3.5MB, that's the
+// signal the IndexedDB-mirror migration has stopped being YAGNI (see
+// spec_indexeddb_mirror). ponytail: console warn only, no UI. bytes is the JS string
+// length, a close-enough (slightly high, so it warns early) proxy for byte size.
+const BLOB_WARN_BYTES = 3.5 * 1024 * 1024;
+let warnedBlobSize = false;
+function warnIfBlobLarge(bytes: number): void {
+  if (bytes < BLOB_WARN_BYTES || warnedBlobSize) return;
+  warnedBlobSize = true;
+  console.warn(
+    `[dataStore] solarflow_data is ~${(bytes / 1024 / 1024).toFixed(2)}MB, approaching the ~5MB ` +
+    `localStorage cap. Time to plan the IndexedDB mirror migration (spec_indexeddb_mirror).`,
+  );
+}
+
 // ── saveData ──────────────────────────────────────────────────────────────────
 //
 // Writes to localStorage synchronously. Strips woPhotos and customer files before
@@ -387,9 +405,11 @@ export const saveData = (state: AppState): void => {
   };
 
   let saved = false;
+  const serialized = JSON.stringify(slimState);
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(slimState));
+    localStorage.setItem(STORAGE_KEY, serialized);
     saved = true;
+    warnIfBlobLarge(serialized.length);
   } catch (e) {
     // QuotaExceededError: localStorage is still full even after stripping photos
     // This should be rare now, but handle it gracefully
