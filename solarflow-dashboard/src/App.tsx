@@ -1847,7 +1847,7 @@ function App() {
     }
   };
 
-  const handleUpdateJob = (incomingJob: Job, role: 'admin' | 'contractor' | 'technician' = 'admin') => {
+  const handleUpdateJob = async (incomingJob: Job, role: 'admin' | 'contractor' | 'technician' = 'admin') => {
     // Auto-dispatch: when an admin assigns a contractor to a job that is still at a
     // pre-dispatch stage (draft/new/quote_sent/contact_client/quote_approved), advance
     // it to the Assigned stage (woStatus 'scheduled' -> JobStatus 'assigned') so the
@@ -1870,6 +1870,18 @@ function App() {
     // record, so this change wins the merge and, once field-level merge ships
     // (Phase 2), only the fields that actually changed here can win.
     const updatedJob: Job = stampJobFields(prevForAssign, baseJob);
+    // Offload inline base64 photos to IndexedDB BEFORE the save below, so the
+    // localStorage write is already slim and cannot trip the mobile ~5MB quota.
+    // (Previously this ran fire-and-forget AFTER saveData, so the very first write
+    // still carried base64 and could blow the quota before the offload landed.)
+    // migrateWoPhotos is idempotent: already-offloaded/uploaded photos pass through.
+    if (updatedJob.woPhotos?.length) {
+      try {
+        updatedJob.woPhotos = await migrateWoPhotos(updatedJob.id, updatedJob.woPhotos);
+      } catch (e) {
+        console.error('[App] pre-save photo offload failed for job', updatedJob.id, e);
+      }
+    }
     const newActivity = {
       id: `activity-${Date.now()}`,
       type: 'job_updated' as const,
@@ -1974,29 +1986,6 @@ function App() {
         setContractorJobs(nextCj);
         saveContractorJobs(nextCj);
       }
-    }
-    // Fire-and-forget: offload any inline photo data URLs to IndexedDB so the
-    // localStorage blob doesn't bloat past quota. Runs after the synchronous
-    // save above, so the user's edit is already persisted; this just shrinks
-    // the next saved blob.
-    if (updatedJob.woPhotos && updatedJob.woPhotos.length > 0) {
-      void (async () => {
-        try {
-          const migrated = await migrateWoPhotos(updatedJob.id, updatedJob.woPhotos);
-          if (migrated.some((p, i) => p.photoStoreId && !updatedJob.woPhotos![i].photoStoreId)) {
-            setData(prev => {
-              const next = {
-                ...prev,
-                jobs: prev.jobs.map((j) => (j.id === updatedJob.id ? { ...j, woPhotos: migrated } : j)),
-              };
-              saveData(next);
-              return next;
-            });
-          }
-        } catch (e) {
-          console.error('[App] photo migration failed for job', updatedJob.id, e);
-        }
-      })();
     }
   };
 

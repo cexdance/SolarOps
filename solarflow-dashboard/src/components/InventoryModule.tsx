@@ -35,17 +35,35 @@ const ImageUploader: React.FC<{
   const [urlInput, setUrlInput] = React.useState('');
   const [mode, setMode] = React.useState<'url' | 'file'>('url');
 
-  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    // Auto-downscale/recompress under the cap before storing the data URL.
-    compressImageToDataUrlUnder(file, maxBytes)
-      .then(onChange)
-      .catch(() => {
-        const reader = new FileReader();
-        reader.onload = () => onChange(reader.result as string);
-        reader.readAsDataURL(file);
-      });
+    // Upload the thumbnail to Supabase Storage and store the URL, NOT base64.
+    // Inventory thumbnails used to be kept as a base64 dataUrl inside the item/tool
+    // record, which syncs whole into the shared ~5MB localStorage blob and, on
+    // mobile, helped blow the quota. A Storage URL is a few bytes.
+    try {
+      const blob = await compressImageToBlob(file);
+      const { url } = await uploadPhotoToStorage(
+        blob,
+        'inventory-thumb',
+        `it-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      );
+      if (url) { onChange(url); return; }
+      throw new Error('upload returned no url');
+    } catch (err) {
+      // Fallback: keep the compressed base64 so the image isn't lost. Costs
+      // localStorage until it can be re-uploaded, same tradeoff as an in-flight
+      // WO photo. Auto-downscale/recompress under the cap first.
+      console.error('[InventoryModule] thumbnail upload failed, using inline data URL', err);
+      compressImageToDataUrlUnder(file, maxBytes)
+        .then(onChange)
+        .catch(() => {
+          const reader = new FileReader();
+          reader.onload = () => onChange(reader.result as string);
+          reader.readAsDataURL(file);
+        });
+    }
   };
 
   const handleUrlApply = () => {
@@ -137,7 +155,7 @@ import { loadTools, saveTools, deleteTool, setToolAssignment } from '../lib/tool
 import { serviceOrderNo } from '../lib/woHelpers';
 import { RmaCreateModal } from './RmaCreateModal';
 import { uploadPhotoToStorage } from '../lib/photoStorage';
-import { compressImageToDataUrlUnder } from '../lib/photoCompress';
+import { compressImageToDataUrlUnder, compressImageToBlob } from '../lib/photoCompress';
 import { Contractor } from '../types/contractor';
 
 interface InventoryModuleProps {
