@@ -187,6 +187,15 @@ const STATUS_MAP: Record<string, JobStatusContractor> = {
   paid:        'paid',
 };
 
+// Pipeline order for the linear part of JobStatusContractor. Side-states
+// (on_hold/cancelled/returned) aren't part of the progression, rank -1 so
+// they never win a "furthest along" comparison.
+const STATUS_RANK: Record<JobStatusContractor, number> = {
+  assigned: 0, en_route: 1, in_progress: 2, documentation: 3,
+  completed: 4, invoiced: 5, paid: 6,
+  on_hold: -1, cancelled: -1, returned: -1,
+};
+
 /**
  * Project an admin Job into a ContractorJob view. Used for PDF/email
  * payloads and any code that still expects the ContractorJob shape.
@@ -262,7 +271,19 @@ export function toContractorJobView(job: Job, existingCj?: ContractorJob, custom
     priority: job.urgency === 'critical' ? 'critical' : job.urgency === 'high' ? 'high' : job.urgency === 'medium' ? 'normal' : 'low',
     // A held order surfaces to the contractor as 'on_hold' (parked) regardless of
     // its underlying pipeline stage, which is preserved in job.woStatus.
-    status: job.onHold ? 'on_hold' : (STATUS_MAP[job.woStatus ?? job.status] ?? 'assigned'),
+    //
+    // Prefer whichever side is FURTHER ALONG. The admin Job is the mirror
+    // target for contractor updates (see handleContractorJobUpdate), and that
+    // mirror write can fail to persist locally (localStorage quota) while the
+    // contractor's own `existingCj` write succeeds. Without this, a reload on
+    // the contractor's device re-hydrates the stale admin status and a
+    // completed call reverts to "in progress" even though it was saved.
+    status: job.onHold ? 'on_hold' : (() => {
+      const mirrored = STATUS_MAP[job.woStatus ?? job.status] ?? 'assigned';
+      return (existingCj?.status && STATUS_RANK[existingCj.status] > STATUS_RANK[mirrored])
+        ? existingCj.status
+        : mirrored;
+    })(),
     isRecurringClient: !!job.isRecurringClient,
     urgency: job.urgency ?? 'medium',
     isPowercare: !!job.isPowercare,
