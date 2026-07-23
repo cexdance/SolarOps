@@ -1,6 +1,7 @@
 // SolarFlow MVP - Customers Component (List View with Split Panel)
 import React, { useState, useRef, useEffect } from 'react';
 import { serviceOrderNo } from '../lib/woHelpers';
+import { loadData } from '../lib/dataStore';
 import { authedFetch } from '../lib/supabase';
 import { compressImageToDataUrl } from '../lib/photoCompress';
 import {
@@ -1330,21 +1331,16 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
     const fromStatic = FL_SITES.find(s => s.siteId === siteId);
     if (fromStatic) return fromStatic;
     try {
-      const raw = localStorage.getItem('solarflow_data');
-      if (raw) {
-        const state = JSON.parse(raw);
-        const extras: SolarEdgeSite[] = state.solarEdgeExtraSites || [];
-        return extras.find(s => s.siteId === siteId) || null;
-      }
-    } catch (e) { console.error('[Customers] getSiteInfo localStorage parse failed', e); }
+      const extras: SolarEdgeSite[] = loadData().solarEdgeExtraSites || [];
+      return extras.find(s => s.siteId === siteId) || null;
+    } catch (e) { console.error('[Customers] getSiteInfo snapshot read failed', e); }
     return null;
   }, [siteId]);
 
-  // Helper: read SolarEdge API key from localStorage
+  // Helper: read SolarEdge API key from the in-memory app-state snapshot
   const getApiKey = () => {
     try {
-      const raw = localStorage.getItem('solarflow_data');
-      return raw ? JSON.parse(raw).solarEdgeConfig?.apiKey?.trim() : '';
+      return loadData().solarEdgeConfig?.apiKey?.trim() ?? '';
     } catch { return ''; }
   };
 

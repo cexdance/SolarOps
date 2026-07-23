@@ -7,6 +7,7 @@
  *   all others      → localStorage only (not synced)
  */
 import { pushToSupabase, pushKeyValue, pullFromSupabase, mergeRemote, isKVSyncKey } from './syncEngine';
+import { idbGetState, idbSetState } from './stateStore';
 import type { AppState } from '../types';
 
 /**
@@ -32,41 +33,34 @@ export async function dbGet(_key: string): Promise<unknown | null> {
 }
 
 /**
- * On app startup: pull from Supabase → merge into localStorage.
+ * On app startup: pull from Supabase → merge into the IndexedDB state store.
  * Phase 2 pull is incremental (only records changed since last sync).
+ *
+ * Boot-only: App.tsx calls hydrateData() (which populates the local IDB copy,
+ * migrating it out of the legacy localStorage blob) BEFORE this, and re-hydrates
+ * AFTER this, so the merged result reaches React state. This function's job is
+ * just to fold the remote delta into the local IDB copy.
  */
 export async function syncFromDB(): Promise<void> {
   try {
     const remote = await pullFromSupabase();
     if (!remote) return;
 
-    // Re-read localStorage immediately before merge+write so we don't clobber
-    // user mutations that happened during the network round-trip.
-    const raw = localStorage.getItem('solarflow_data');
+    // Read the current local copy from IDB immediately before merge+write so we
+    // don't clobber mutations that landed during the network round-trip.
+    const local = await idbGetState();
 
-    if (!raw) {
-      // First-time device: no local data yet. Initialize localStorage with
-      // the remote data (using defaults as base, then overlaying remote).
+    if (!local) {
+      // First-time device: no local data yet. Initialize with the remote data
+      // (defaults as base, then overlay remote).
       const { generateDefaultState } = await import('./dataStore');
       const defaults = generateDefaultState();
-      const initialState = { ...defaults, ...remote };
-      localStorage.setItem('solarflow_data', JSON.stringify(initialState));
+      await idbSetState({ ...defaults, ...remote } as AppState);
       return;
     }
 
-    const local  = JSON.parse(raw) as AppState;
-    const merged = mergeRemote(local, remote);
-
-    // One more re-read just before write, in case a mutation landed during merge.
-    const fresh = localStorage.getItem('solarflow_data');
-    if (fresh && fresh !== raw) {
-      const freshLocal = JSON.parse(fresh) as AppState;
-      const finalMerged = mergeRemote(freshLocal, remote);
-      localStorage.setItem('solarflow_data', JSON.stringify(finalMerged));
-      return;
-    }
-    localStorage.setItem('solarflow_data', JSON.stringify(merged));
+    await idbSetState(mergeRemote(local, remote));
   } catch {
-    // Network error or parse error, local data is untouched
+    // Network error or IDB error, local data is untouched
   }
 }

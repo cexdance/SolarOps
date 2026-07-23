@@ -1,10 +1,9 @@
 import React, { useState } from 'react';
 import { ImageDown, Loader2, Check, AlertTriangle } from 'lucide-react';
 import type { AppState } from '../../types';
-import { saveData } from '../../lib/dataStore';
+import { saveData, loadData } from '../../lib/dataStore';
 import { estimateDataUrlBytes, recompressDataUrl } from '../../lib/photoCompress';
 
-const STORAGE_KEY = 'solarflow_data';
 const OVERSIZE_THRESHOLD = 400 * 1024;
 
 type RunStatus = 'idle' | 'running' | 'done' | 'error';
@@ -36,9 +35,10 @@ export const PhotoCleanupCard: React.FC = () => {
 
     let state: AppState;
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) throw new Error('No local app state, open the app once before running cleanup.');
-      state = JSON.parse(raw) as AppState;
+      state = loadData();
+      if (!state.jobs?.length && !state.customers?.length) {
+        throw new Error('No local app state, open the app once before running cleanup.');
+      }
     } catch (err) {
       setStatus('error');
       setErrorMessage(err instanceof Error ? err.message : String(err));

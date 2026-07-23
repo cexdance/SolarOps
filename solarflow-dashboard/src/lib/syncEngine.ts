@@ -25,6 +25,7 @@ import { supabase } from './supabase';
 import { markPushPending, clearPendingPush, isRowPoisoned, incRowFailure, clearRowPoison } from './outbox';
 import { isAllowedCustomer } from './solarEdgeSiteFilter';
 import { dedupeWoPhotos } from './woHelpers';
+import { idbSetState } from './stateStore';
 import type { AppState, Customer, Job, WOPhoto } from '../types';
 import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 
@@ -1086,12 +1087,14 @@ export async function pullAndMerge(): Promise<Partial<AppState> | null> {
     const remote = await pullFromSupabase();
     if (!remote) return null;
 
-    const raw = localStorage.getItem('solarflow_data');
-    if (!raw) return null;
-
-    const local  = JSON.parse(raw) as AppState;
+    // Merge into the freshest local copy = the in-memory snapshot (loadData),
+    // which saveData updates synchronously. Reading localStorage here would now
+    // return null (the blob was migrated to IndexedDB), silently killing sync.
+    const { loadData, primeSnapshot } = await import('./dataStore');
+    const local  = loadData();
     const merged = mergeRemote(local, remote);
-    localStorage.setItem('solarflow_data', JSON.stringify(merged));
+    primeSnapshot(merged);            // keep the snapshot coherent for sync reads
+    void idbSetState(merged);         // durable local copy (fire-and-forget)
     return merged;
   } catch (err) {
     console.warn('[SyncEngine] pullAndMerge error:', err);

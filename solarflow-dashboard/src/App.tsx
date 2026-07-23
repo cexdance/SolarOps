@@ -36,7 +36,7 @@ const RMADashboardPage   = lazy(() => import('./components/RMADashboard').then(m
 import { supabase, authedFetch } from './lib/supabase';
 import { canSeeFinancials, isFinancialView } from './lib/access';
 import { syncFromDB } from './lib/db';
-import { loadData, saveData } from './lib/dataStore';
+import { loadData, saveData, hydrateData } from './lib/dataStore';
 import { migrateWoPhotos } from './lib/photoStore';
 import { pickupJobsForContractor, toContractorJobView, serviceOrderNo, photoUrlStem, bareOrderNo, dedupeWoPhotos, mergeRmaEntries } from './lib/woHelpers';
 import { fireMentionNotifications, sendCustomerAppointmentEmail } from './components/ui/MentionTextarea';
@@ -794,7 +794,10 @@ function App() {
 
   // One-time migration: reassign any admin-side jobs from legacy contractor-1 → contractor-2.
   // Persist synchronously so a concurrent syncFromDB pull cannot overwrite the migrated state.
+  // Runs after hydration (dbReady): before that `data` holds boot defaults with no
+  // real jobs, so the patch would find nothing and never re-run (deps were []).
   useEffect(() => {
+    if (!dbReady) return;
     setData(prev => {
       const needsPatch = prev.jobs.some(j => j.contractorId === 'contractor-1');
       if (!needsPatch) return prev;
@@ -802,7 +805,7 @@ function App() {
       saveData(next);
       return next;
     });
-  }, []);
+  }, [dbReady]);
 
   // Re-resolve dual-role link whenever contractors list updates (handles async sync hydration on mobile)
   useEffect(() => {
@@ -826,10 +829,14 @@ function App() {
       setTimeout(() => reject(new Error('sync-timeout')), SYNC_TIMEOUT_MS)
     );
 
-    Promise.race([syncFromDB(), timeout])
-      .then(() => {
-        // Re-read localStorage after remote merge (may have new records from other devices)
-        const merged = loadData();
+    // Hydrate the local state tier from IndexedDB first (migrating it out of the
+    // legacy 5MB localStorage blob on first run), so both syncFromDB's merge and
+    // the loadData() below read the IDB-backed snapshot, not the retired blob.
+    hydrateData()
+      .then(() => Promise.race([syncFromDB(), timeout]))
+      .then(async () => {
+        // Re-read from IDB after remote merge (may have new records from other devices)
+        const merged = await hydrateData();
         // Auto-archive completed jobs >30 days old
         const withArchived = {
           ...merged,
@@ -862,11 +869,17 @@ function App() {
       .finally(() => setDbReady(true));
   }, []);
 
-  // Save data whenever it changes (debounced 500ms)
+  // Save data whenever it changes (debounced 500ms).
+  // Gated on dbReady: before hydration completes, `data` still holds the empty
+  // boot defaults (the real state is loaded async from IndexedDB inside the
+  // startup effect above). Saving during that window would persist defaults over
+  // the migrated data. dbReady flips true only after setData(merged), so the
+  // first save carries real data.
   useEffect(() => {
+    if (!dbReady) return undefined;
     const timer = setTimeout(() => saveData(data), 500);
     return () => clearTimeout(timer);
-  }, [data]);
+  }, [data, dbReady]);
 
   // Initialize sync status listeners
   useEffect(() => {

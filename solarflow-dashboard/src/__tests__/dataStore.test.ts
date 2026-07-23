@@ -26,8 +26,13 @@ vi.mock('../lib/syncEngine', () => ({
   isKVSyncKey:     vi.fn(() => false),
 }));
 
-import { loadData, saveData, clearData } from '../lib/dataStore';
+import { loadData, saveData, clearData, __resetSnapshotForTests } from '../lib/dataStore';
 import type { AppState, Customer, Job } from '../types';
+
+// dataStore memoizes an in-memory snapshot (the local tier moved off localStorage
+// to IndexedDB). Reset it before every test so each reads storage fresh, matching
+// the per-test isolation the global setup gives localStorage.
+beforeEach(() => { __resetSnapshotForTests(); });
 
 const STORAGE_KEY  = 'solarflow_data';
 const VERSION_KEY  = 'solarflow_data_version';
@@ -219,14 +224,14 @@ describe('loadData, safe migration', () => {
 // ---------------------------------------------------------------------------
 
 describe('saveData', () => {
-  it('persists state to localStorage', () => {
+  it('persists state to the in-memory snapshot', () => {
     const state = minState({ customers: [minCustomer('c-save-test')] });
     saveData(state);
 
-    const raw = localStorage.getItem(STORAGE_KEY);
-    expect(raw).toBeTruthy();
-    const parsed = JSON.parse(raw!);
-    expect(parsed.customers.some((c: Customer) => c.id === 'c-save-test')).toBe(true);
+    // saveData now writes the slim blob to IndexedDB and updates the synchronous
+    // snapshot; loadData() returns that snapshot.
+    const saved = loadData();
+    expect(saved.customers.some((c: Customer) => c.id === 'c-save-test')).toBe(true);
   });
 
   it('strips base64 dataUrl from woPhotos', () => {
@@ -237,9 +242,7 @@ describe('saveData', () => {
     const state = minState({ jobs: [job] });
     saveData(state);
 
-    const raw = localStorage.getItem(STORAGE_KEY);
-    const parsed = JSON.parse(raw!);
-    const savedJob = parsed.jobs.find((j: Job) => j.id === 'j-photo');
+    const savedJob = loadData().jobs.find((j: Job) => j.id === 'j-photo') as any;
     // dataUrl should be stripped (empty string), storageUrl should remain
     expect(savedJob.woPhotos[0].storageUrl).toBe('https://supabase.co/storage/photo1.jpg');
     expect(savedJob.woPhotos[0].dataUrl).toBe('');
@@ -247,8 +250,8 @@ describe('saveData', () => {
 
   it('strips base64 dataUrl from woPhotos offloaded to IndexedDB (photoStoreId, no storageUrl)', () => {
     // A photo whose upload failed and was parked in IDB carries a photoStoreId but
-    // no storageUrl. It must still be stripped from localStorage (bytes live in IDB),
-    // otherwise the base64 accumulates and blows the ~5MB mobile quota.
+    // no storageUrl. It must still be stripped from the persisted blob (bytes live
+    // in IDB), otherwise the base64 accumulates and bloats the local copy.
     const job = minJob('j-idb', 'c1');
     (job as any).woPhotos = [
       { photoStoreId: 'ph-idb-123', storageUrl: null, dataUrl: 'data:image/jpeg;base64,ABCDEF' },
@@ -256,9 +259,7 @@ describe('saveData', () => {
     const state = minState({ jobs: [job] });
     saveData(state);
 
-    const raw = localStorage.getItem(STORAGE_KEY);
-    const parsed = JSON.parse(raw!);
-    const savedJob = parsed.jobs.find((j: Job) => j.id === 'j-idb');
+    const savedJob = loadData().jobs.find((j: Job) => j.id === 'j-idb') as any;
     expect(savedJob.woPhotos[0].photoStoreId).toBe('ph-idb-123');
     expect(savedJob.woPhotos[0].dataUrl).toBe('');
   });
@@ -271,9 +272,7 @@ describe('saveData', () => {
     const state = minState({ jobs: [job] });
     saveData(state);
 
-    const raw = localStorage.getItem(STORAGE_KEY);
-    const parsed = JSON.parse(raw!);
-    const savedJob = parsed.jobs.find((j: Job) => j.id === 'j-pending');
+    const savedJob = loadData().jobs.find((j: Job) => j.id === 'j-pending') as any;
     // In-flight photos are retained with their base64 intact until they upload.
     expect(savedJob.woPhotos).toHaveLength(1);
     expect(savedJob.woPhotos[0].dataUrl).toBe('data:image/jpeg;base64,PENDING');

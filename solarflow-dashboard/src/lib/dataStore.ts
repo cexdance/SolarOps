@@ -11,9 +11,18 @@ import { mergedCustomerData } from './mergedCustomers';
 import { dbSet } from './db';
 import { authedFetch } from './supabase';
 import { isAllowedCustomer } from './solarEdgeSiteFilter';
+import { idbSetState, hydrateStateFromIdb } from './stateStore';
 
 const STORAGE_KEY = 'solarflow_data';
 const VERSION_KEY = 'solarflow_data_version';
+
+// ── In-memory synchronous snapshot ──────────────────────────────────────────
+// The app-state blob now persists to IndexedDB (async), but many callers still
+// expect a synchronous `loadData()`. This module-level snapshot is the bridge:
+// `hydrateData()` fills it once at boot, and `saveData()` keeps it live on every
+// write, so the scattered synchronous readers get current data without touching
+// IndexedDB or the (now-migrated-away) 5MB localStorage blob.
+let _snapshot: AppState | null = null;
 
 // ── Bump only when genuinely new seed data needs to be ADDED (not wiped) ────
 // The version is now used to trigger an additive merge, not a destructive wipe.
@@ -251,95 +260,147 @@ function applySafeMigration(stored: AppState): AppState {
   };
 }
 
-// ── loadData ──────────────────────────────────────────────────────────────────
-
-export const loadData = (): AppState => {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-
-    if (stored) {
-      const parsed: AppState = JSON.parse(stored);
-
-      // ── SAFE VERSION CHECK ──────────────────────────────────────────────
-      // Old code: if (version !== DATA_VERSION) { localStorage.removeItem() }  ← DESTROYS data
-      // New code: if (version !== DATA_VERSION) { additiveMigration() }        ← PRESERVES data
-      const storedVersion = localStorage.getItem(VERSION_KEY);
-      let state = parsed;
-      if (storedVersion !== DATA_VERSION) {
-        state = applySafeMigration(parsed);
-        localStorage.setItem(VERSION_KEY, DATA_VERSION);
-      }
-
-      const defaults       = generateDefaultState();
-      const seConfig       = (state.solarEdgeConfig || {}) as Record<string, any>;
-      const apiKey         = (seConfig['apiKey'] as string | undefined)?.trim() ?? '';
-
-      // Ensure customers list is populated, filter out deleted records
-      const deletedIds = getDeletedCustomerIds();
-      const rawCustomers =
-        Array.isArray(state.customers) && state.customers.length > 0
-          ? state.customers
-          : defaults.customers;
-      let customers = deletedIds.size > 0
-        ? rawCustomers.filter(c => !deletedIds.has(c.id))
-        : rawCustomers;
-
-      // Always-on exclusion filter, runs every load, self-heals after any bad sync
-      {
-        const { customers: cleaned, removed } = applyExclusionFilter(customers);
-        if (removed.length > 0) {
-          addToTombstone(removed);
-          customers = cleaned;
-          console.info(`[DataStore] Excluded ${removed.length} non-FL/territory accounts:`, removed);
-        }
-      }
-
-      // One-time enrichment: US-xxxxx name → clientId, solarEdgeSiteId → O&M category
-      if (!localStorage.getItem(ENRICH_FLAG)) {
-        const { customers: enriched, changed } = applyUsIdOmEnrichment(customers);
-        if (changed > 0) {
-          customers = enriched;
-          console.info(`[DataStore] Enriched ${changed} customers (US-ID / O&M category)`);
-        }
-        localStorage.setItem(ENRICH_FLAG, '1');
-      }
-
-      // One-time dedup: collapse exact duplicates (same solarEdgeSiteId or clientId)
-      if (!localStorage.getItem(DEDUP_FLAG)) {
-        const { customers: deduped, removed } = applyDedup(customers);
-        if (removed.length > 0) {
-          addToTombstone(removed);
-          customers = deduped;
-          console.info(`[DataStore] Deduped ${removed.length} duplicate records`);
-        }
-        localStorage.setItem(DEDUP_FLAG, '1');
-      }
-
-      return {
-        ...defaults,
-        ...state,
-        customers,
-        notifications:      Array.isArray(state.notifications)      ? state.notifications      : [],
-        solarEdgeExtraSites: Array.isArray(state.solarEdgeExtraSites) ? state.solarEdgeExtraSites : [],
-        solarEdgeConfig: {
-          apiKey,
-          lastSync:        seConfig['lastSync'],
-          siteCount:       seConfig['siteCount'],
-          nextSyncAllowed: seConfig['nextSyncAllowed'],
-          dailyCallCount:  seConfig['dailyCallCount'],
-          dailyCallDate:   seConfig['dailyCallDate'],
-        },
-      };
-    }
-  } catch (e) {
-    console.error('[DataStore] Failed to load:', e);
+// ── massageState ────────────────────────────────────────────────────────────
+// The load-time pipeline: version migration, deleted-record filtering, the
+// always-on exclusion self-heal, one-time enrichment/dedup, and shape defaults.
+// Extracted so both the synchronous localStorage fallback and the async IDB
+// hydrate run the IDENTICAL massaging (behavior parity with the old loadData).
+// Idempotent: safe to run on every read (the filters are self-healing).
+function massageState(parsed: AppState): AppState {
+  // ── SAFE VERSION CHECK ──────────────────────────────────────────────
+  // Old code: if (version !== DATA_VERSION) { localStorage.removeItem() }  ← DESTROYS data
+  // New code: if (version !== DATA_VERSION) { additiveMigration() }        ← PRESERVES data
+  const storedVersion = localStorage.getItem(VERSION_KEY);
+  let state = parsed;
+  if (storedVersion !== DATA_VERSION) {
+    state = applySafeMigration(parsed);
+    localStorage.setItem(VERSION_KEY, DATA_VERSION);
   }
 
-  // First load or corrupted storage, start fresh from seed data
+  const defaults       = generateDefaultState();
+  const seConfig       = (state.solarEdgeConfig || {}) as Record<string, any>;
+  const apiKey         = (seConfig['apiKey'] as string | undefined)?.trim() ?? '';
+
+  // Ensure customers list is populated, filter out deleted records
+  const deletedIds = getDeletedCustomerIds();
+  const rawCustomers =
+    Array.isArray(state.customers) && state.customers.length > 0
+      ? state.customers
+      : defaults.customers;
+  let customers = deletedIds.size > 0
+    ? rawCustomers.filter(c => !deletedIds.has(c.id))
+    : rawCustomers;
+
+  // Always-on exclusion filter, runs every load, self-heals after any bad sync
+  {
+    const { customers: cleaned, removed } = applyExclusionFilter(customers);
+    if (removed.length > 0) {
+      addToTombstone(removed);
+      customers = cleaned;
+      console.info(`[DataStore] Excluded ${removed.length} non-FL/territory accounts:`, removed);
+    }
+  }
+
+  // One-time enrichment: US-xxxxx name → clientId, solarEdgeSiteId → O&M category
+  if (!localStorage.getItem(ENRICH_FLAG)) {
+    const { customers: enriched, changed } = applyUsIdOmEnrichment(customers);
+    if (changed > 0) {
+      customers = enriched;
+      console.info(`[DataStore] Enriched ${changed} customers (US-ID / O&M category)`);
+    }
+    localStorage.setItem(ENRICH_FLAG, '1');
+  }
+
+  // One-time dedup: collapse exact duplicates (same solarEdgeSiteId or clientId)
+  if (!localStorage.getItem(DEDUP_FLAG)) {
+    const { customers: deduped, removed } = applyDedup(customers);
+    if (removed.length > 0) {
+      addToTombstone(removed);
+      customers = deduped;
+      console.info(`[DataStore] Deduped ${removed.length} duplicate records`);
+    }
+    localStorage.setItem(DEDUP_FLAG, '1');
+  }
+
+  return {
+    ...defaults,
+    ...state,
+    customers,
+    notifications:      Array.isArray(state.notifications)      ? state.notifications      : [],
+    solarEdgeExtraSites: Array.isArray(state.solarEdgeExtraSites) ? state.solarEdgeExtraSites : [],
+    solarEdgeConfig: {
+      apiKey,
+      lastSync:        seConfig['lastSync'],
+      siteCount:       seConfig['siteCount'],
+      nextSyncAllowed: seConfig['nextSyncAllowed'],
+      dailyCallCount:  seConfig['dailyCallCount'],
+      dailyCallDate:   seConfig['dailyCallDate'],
+    },
+  };
+}
+
+// ── hydrateData (async, boot) ───────────────────────────────────────────────
+// Read the app-state blob from IndexedDB (migrating it out of the legacy 5MB
+// localStorage blob on first run), massage it, and populate the synchronous
+// snapshot. Call once at startup before rendering. Never throws: on any failure
+// it seeds fresh defaults so the app still boots.
+export const hydrateData = async (): Promise<AppState> => {
+  try {
+    const raw = await hydrateStateFromIdb((s) => JSON.parse(s) as AppState);
+    if (!raw) {
+      // No local state anywhere: a genuine first boot, OR the IDB store was evicted
+      // while the localStorage-based sync cursor survived (they now live in separate
+      // backends with independent eviction). Reset the cursor so the startup pull is
+      // a FULL reconcile, not an incremental one into an empty store, which would
+      // otherwise surface as "most of my data vanished". No-op on a true first boot
+      // (no cursor to clear).
+      const { resetSyncCursor } = await import('./syncEngine');
+      resetSyncCursor();
+    }
+    const state = raw ? massageState(raw) : freshDefaultState();
+    _snapshot = state;
+    return state;
+  } catch (e) {
+    console.error('[DataStore] hydrateData failed, seeding defaults:', e);
+    const fresh = freshDefaultState();
+    _snapshot = fresh;
+    return fresh;
+  }
+};
+
+function freshDefaultState(): AppState {
   const fresh = generateDefaultState();
   localStorage.setItem(VERSION_KEY, DATA_VERSION);
   return fresh;
+}
+
+// ── loadData (synchronous) ──────────────────────────────────────────────────
+// Returns the in-memory snapshot. After boot (`hydrateData`) this is always set.
+// Pre-hydrate callers fall back to the legacy localStorage blob if one still
+// exists (older build not yet migrated), else fresh defaults, so a synchronous
+// read is never empty.
+export const loadData = (): AppState => {
+  if (_snapshot) return _snapshot;
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) {
+      _snapshot = massageState(JSON.parse(stored) as AppState);
+      return _snapshot;
+    }
+  } catch (e) {
+    console.error('[DataStore] Failed to load (sync fallback):', e);
+  }
+  _snapshot = freshDefaultState();
+  return _snapshot;
 };
+
+// Replace the in-memory snapshot after an out-of-band merge (e.g. the sync poll's
+// pullAndMerge), so a subsequent synchronous loadData() reflects the merged state
+// immediately, before the debounced saveData() flush lands.
+export const primeSnapshot = (state: AppState): void => { _snapshot = state; };
+
+/** Test-only: clear the memoized snapshot so each test reads storage fresh. */
+export const __resetSnapshotForTests = (): void => { _snapshot = null; };
 
 // ── localStorage pressure monitor ─────────────────────────────────────────────
 // iOS Safari caps localStorage at ~5MB/origin. Base64 photos no longer land here
@@ -361,9 +422,11 @@ function warnIfBlobLarge(bytes: number): void {
 
 // ── saveData ──────────────────────────────────────────────────────────────────
 //
-// Writes to localStorage synchronously. Strips woPhotos and customer files before
-// saving to localStorage (they live in Supabase Storage, not localStorage).
-// Then kicks off an async Supabase cloud backup with the full state (including photos).
+// Updates the in-memory snapshot synchronously (so an immediate loadData() sees
+// the write), then persists the slim blob to IndexedDB and kicks off the async
+// Supabase cloud backup with the full state (including photos). base64 photos are
+// still stripped from the persisted blob (they live in Supabase Storage / the
+// photo IDB), keeping the local copy lean even though IDB has no 5MB cap.
 
 export const saveData = (state: AppState): void => {
   // Always strip base64 photos from localStorage, they're stored in Supabase
@@ -404,47 +467,34 @@ export const saveData = (state: AppState): void => {
     })),
   };
 
-  let saved = false;
-  const serialized = JSON.stringify(slimState);
-  try {
-    localStorage.setItem(STORAGE_KEY, serialized);
-    saved = true;
-    warnIfBlobLarge(serialized.length);
-  } catch (e) {
-    // QuotaExceededError: localStorage is still full even after stripping photos
-    // This should be rare now, but handle it gracefully
+  // Keep the synchronous snapshot current so loadData() reflects this write
+  // immediately, without waiting on the async IDB flush below.
+  _snapshot = slimState;
+  warnIfBlobLarge(JSON.stringify(slimState).length);
+
+  // Local durable copy → IndexedDB (native objects, no ~5MB localStorage cap, so
+  // the old QuotaExceededError trim dance is gone). Fire-and-forget; on the rare
+  // IDB failure the full state still reaches Supabase below, and we surface the
+  // 'failed' warning so the export-backup escape hatch stays available.
+  idbSetState(slimState).catch((e) => {
+    console.error('[DataStore] IDB save failed, work at risk locally (cloud backup still attempted):', e);
     try {
-      const moreTrimmed: AppState = {
-        ...slimState,
-        customers: slimState.customers.map(c => ({ ...c, activityHistory: undefined })),
-      };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(moreTrimmed));
-      saved = true;
-      console.warn('[DataStore] Saved heavily trimmed state (photos + activity history + customer files omitted) due to storage quota');
-      try {
-        window.dispatchEvent(new CustomEvent('solarops:storage-warning', {
-          detail: { kind: 'trimmed', reason: 'quota-exceeded' },
-        }));
-      } catch (e) { console.error('[dataStore] storage-warning dispatch (trimmed) failed', e); }
-    } catch (e2) {
-      console.error('[DataStore] FAILED TO SAVE, storage quota exceeded, work is at risk:', e2);
-      try {
-        window.dispatchEvent(new CustomEvent('solarops:storage-warning', {
-          detail: { kind: 'failed', reason: 'quota-exceeded' },
-        }));
-      } catch (e) { console.error('[dataStore] storage-warning dispatch (failed) failed', e); }
-    }
-  }
+      window.dispatchEvent(new CustomEvent('solarops:storage-warning', {
+        detail: { kind: 'failed', reason: 'idb-write-failed' },
+      }));
+    } catch { /* non-browser env */ }
+  });
 
   // Cloud backup: async Supabase write with FULL state (including photos)
   // Supabase has its own storage limits but handles large data better than localStorage
   dbSet(STORAGE_KEY, state).catch((e) => console.error('[dataStore] dbSet cloud backup failed', e));
-  void saved;
 };
 
 export const clearData = (): void => {
   localStorage.removeItem(STORAGE_KEY);
   localStorage.removeItem(VERSION_KEY);
+  _snapshot = null;
+  void idbSetState(generateDefaultState()).catch(() => { /* best effort */ });
 };
 
 // ── PowerCare UPS Tracking Sync ────────────────────────────────────────────────

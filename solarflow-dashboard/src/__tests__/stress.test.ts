@@ -29,7 +29,16 @@ vi.mock('../lib/syncEngine', () => ({
   isKVSyncKey:      vi.fn(() => false),
 }));
 
+// The local tier is IndexedDB (no IDB in jsdom). Mock it with a controllable
+// idbSetState so saveData's async persistence can be made to succeed or fail.
+vi.mock('../lib/stateStore', () => ({
+  idbGetState:        vi.fn().mockResolvedValue(null),
+  idbSetState:        vi.fn().mockResolvedValue(undefined),
+  hydrateStateFromIdb: vi.fn().mockResolvedValue(null),
+}));
+
 import { saveData, loadData, clearData } from '../lib/dataStore';
+import { idbSetState } from '../lib/stateStore';
 import {
   mergeRemote,
 } from '../lib/syncEngine';
@@ -191,19 +200,15 @@ describe('Volume: saveData/loadData under large datasets', () => {
   it('1k customers: saves and reloads without loss', () => {
     const state = makeState({ customers: generateCustomers(1000) });
     expect(() => saveData(state)).not.toThrow();
-    const raw = localStorage.getItem('solarflow_data');
-    expect(raw).not.toBeNull();
-    const loaded = JSON.parse(raw!);
-    expect(loaded.customers.length).toBe(1000);
+    // The local tier is IndexedDB now; loadData() returns the synchronous snapshot
+    // saveData updates in-place, so a reload sees the same data with no loss.
+    expect(loadData().customers.length).toBe(1000);
   });
 
   it('10k customers: saves and reloads without loss', () => {
     const state = makeState({ customers: generateCustomers(10_000) });
     expect(() => saveData(state)).not.toThrow();
-    const raw = localStorage.getItem('solarflow_data');
-    expect(raw).not.toBeNull();
-    const loaded = JSON.parse(raw!);
-    expect(loaded.customers.length).toBe(10_000);
+    expect(loadData().customers.length).toBe(10_000);
   });
 
   it('50k customers: saves without throwing (may trim activity history)', () => {
@@ -217,17 +222,15 @@ describe('Volume: saveData/loadData under large datasets', () => {
   it('ST-3 FIXED: saveData strips base64 from uploaded photos (storageUrl present)', () => {
     const state = makeState({ jobs: generateJobs(10, { withUrlPhotos: 2 }) });
     saveData(state);
-    const raw = localStorage.getItem('solarflow_data');
     // Uploaded photos are recoverable from Supabase, so their base64 is dropped.
-    expect(raw).not.toContain('data:image/jpeg;base64,AAAA');
+    const serialized = JSON.stringify(loadData());
+    expect(serialized).not.toContain('data:image/jpeg;base64,AAAA');
   });
 
   it('saveData preserves woPhotos that have storageUrl (url-only photos not dropped)', () => {
     const state = makeState({ jobs: generateJobs(10, { withUrlPhotos: 2 }) });
     saveData(state);
-    const raw = localStorage.getItem('solarflow_data');
-    const loaded = JSON.parse(raw!);
-    const job = loaded.jobs[0];
+    const job = loadData().jobs[0] as any;
     // Photos with storageUrl should be retained (just with empty dataUrl)
     expect(job.woPhotos?.length).toBe(2);
     expect(job.woPhotos[0].storageUrl).toBeTruthy();
@@ -237,11 +240,9 @@ describe('Volume: saveData/loadData under large datasets', () => {
   it('ST-3 FIXED: in-flight photos (base64, no storageUrl) are KEPT so a reload does not lose them', () => {
     const state = makeState({ jobs: generateJobs(5, { withBase64Photos: 2 }) });
     saveData(state);
-    const raw = localStorage.getItem('solarflow_data');
-    const loaded = JSON.parse(raw!);
     // Previously these were dropped (permanent loss on reload before upload).
     // Now they are retained with their dataUrl intact until they upload.
-    for (const job of loaded.jobs) {
+    for (const job of loadData().jobs as any[]) {
       expect(job.woPhotos?.length).toBe(2);
       expect(job.woPhotos[0].dataUrl).toContain('data:image/jpeg;base64,');
     }
@@ -268,92 +269,46 @@ describe('Volume: saveData/loadData under large datasets', () => {
 
 // ── 2. QUOTA FAULT INJECTION ─────────────────────────────────────────────────
 
-describe('Fault: QuotaExceededError handling in saveData', () => {
+describe('Fault: IndexedDB write failure in saveData', () => {
+  // The blob now persists to IndexedDB, which has no ~5MB localStorage cap, so the
+  // old quota-trim/fallback dance is gone. What remains is graceful degradation
+  // when the local IDB write itself fails (private mode, disk full, blocked): the
+  // synchronous snapshot is still updated, the cloud backup is still attempted,
+  // saveData never throws, and the 'failed' warning surfaces the export escape hatch.
   afterEach(() => {
-    localStorage.setItem = realSetItem;
+    vi.mocked(idbSetState).mockResolvedValue(undefined);
     clearData();
   });
 
-  it('first-level quota: falls back to trimmed state (strips activityHistory)', () => {
-    let callCount = 0;
-    // Fail only the first setItem call (full state), succeed on fallback
-    localStorage.setItem = vi.fn((key: string, value: string) => {
-      if (key === 'solarflow_data' && callCount === 0) {
-        callCount++;
-        const err = new Error('QuotaExceededError');
-        err.name = 'QuotaExceededError';
-        throw err;
-      }
-      callCount++;
-      realSetItem(key, value);
-    }) as typeof localStorage.setItem;
+  it('IDB write failure: does not throw and updates the in-memory snapshot anyway', () => {
+    vi.mocked(idbSetState).mockRejectedValueOnce(new Error('IDB blocked'));
+    const state = makeState({ customers: generateCustomers(10) });
 
-    const state = makeState({
-      customers: generateCustomers(10, { activityEntries: 5 }),
-    });
-
-    // Should not throw; falls back to trimmed save
     expect(() => saveData(state)).not.toThrow();
-
-    // The fallback save should have succeeded; data should be in storage
-    const raw = localStorage.getItem('solarflow_data');
-    expect(raw).not.toBeNull();
-    const loaded = JSON.parse(raw!);
-    // activityHistory should be stripped in fallback
-    for (const c of loaded.customers) {
-      expect(c.activityHistory).toBeUndefined();
-    }
+    // Snapshot is set synchronously before the async IDB flush, so the in-session
+    // read still reflects the write even though the durable write failed.
+    expect(loadData().customers.length).toBe(10);
   });
 
-  it('second-level quota (total failure): dispatches solarops:storage-warning failed event and does not throw', () => {
-    // Both setItem calls fail
-    localStorage.setItem = vi.fn((_key: string, _value: string) => {
-      const err = new Error('QuotaExceededError');
-      err.name = 'QuotaExceededError';
-      throw err;
-    }) as typeof localStorage.setItem;
+  it('IDB write failure: dispatches solarops:storage-warning failed and still attempts cloud backup', async () => {
+    const { dbSet } = await import('../lib/db');
+    vi.mocked(idbSetState).mockRejectedValueOnce(new Error('IDB blocked'));
 
-    const events: Event[] = [];
-    window.addEventListener('solarops:storage-warning', (e) => events.push(e));
+    const events: CustomEvent[] = [];
+    const handler = (e: Event) => events.push(e as CustomEvent);
+    window.addEventListener('solarops:storage-warning', handler);
 
     const state = makeState({ customers: generateCustomers(5) });
-    expect(() => saveData(state)).not.toThrow();
-
-    window.removeEventListener('solarops:storage-warning', (e) => events.push(e));
-
-    // Should have dispatched warning event
-    expect(events.length).toBeGreaterThanOrEqual(1);
-    const detail = (events[0] as CustomEvent).detail;
-    expect(detail.kind).toBe('failed');
-  });
-
-  it('activityHistory data loss on first-level quota: CONFIRMED data-loss scenario', () => {
-    // This test deliberately confirms the known behaviour:
-    // when localStorage is almost full, activityHistory is silently stripped
-    let callCount = 0;
-    localStorage.setItem = vi.fn((key: string, value: string) => {
-      if (key === 'solarflow_data' && callCount === 0) {
-        callCount++;
-        const err = new Error('QuotaExceededError');
-        err.name = 'QuotaExceededError';
-        throw err;
-      }
-      callCount++;
-      realSetItem(key, value);
-    }) as typeof localStorage.setItem;
-
-    const state = makeState({
-      customers: generateCustomers(3, { activityEntries: 10 }),
-    });
     saveData(state);
+    // Let the rejected idbSetState microtask settle so the .catch runs.
+    await Promise.resolve();
+    await Promise.resolve();
 
-    const raw = localStorage.getItem('solarflow_data');
-    const loaded = JSON.parse(raw!);
-    // CONFIRMED: activityHistory is gone, this is a known data-loss path
-    const anyHasActivity = loaded.customers.some(
-      (c: Customer) => c.activityHistory && c.activityHistory.length > 0,
-    );
-    expect(anyHasActivity).toBe(false);
+    window.removeEventListener('solarops:storage-warning', handler);
+
+    expect(events.some(e => e.detail?.kind === 'failed')).toBe(true);
+    // Cloud backup (dbSet) is attempted regardless of the local write outcome.
+    expect(dbSet).toHaveBeenCalledWith('solarflow_data', state);
   });
 });
 
@@ -766,48 +721,7 @@ describe('Fault: oversized/malformed remote payloads into mergeRemote', () => {
 
 // ── 7. SAVEDATA TOTAL-FAILURE: no write at all ───────────────────────────────
 
-describe('Fault: saveData total localStorage failure', () => {
-  afterEach(() => {
-    localStorage.setItem = realSetItem;
-    clearData();
-  });
-
-  it('saveData total failure: does not throw, dispatches solarops:storage-warning', () => {
-    localStorage.setItem = vi.fn((_k: string, _v: string) => {
-      throw Object.assign(new Error('QuotaExceededError'), { name: 'QuotaExceededError' });
-    }) as typeof localStorage.setItem;
-
-    const events: CustomEvent[] = [];
-    const handler = (e: Event) => events.push(e as CustomEvent);
-    window.addEventListener('solarops:storage-warning', handler);
-
-    const state = makeState({ customers: generateCustomers(5) });
-    expect(() => saveData(state)).not.toThrow();
-
-    window.removeEventListener('solarops:storage-warning', handler);
-    expect(events.some(e => e.detail?.kind === 'failed')).toBe(true);
-  });
-
-  it('saveData total failure: previous valid save is not corrupted (write is atomic-fail)', () => {
-    // First save succeeds
-    const state = makeState({ customers: generateCustomers(3) });
-    saveData(state);
-    const firstSave = localStorage.getItem('solarflow_data');
-    expect(firstSave).not.toBeNull();
-
-    // Now simulate total failure
-    localStorage.setItem = vi.fn((_k: string, _v: string) => {
-      throw Object.assign(new Error('QuotaExceededError'), { name: 'QuotaExceededError' });
-    }) as typeof localStorage.setItem;
-
-    const state2 = makeState({ customers: generateCustomers(5) });
-    saveData(state2);
-
-    // Previous save should not be changed (FakeStorage does not write on throw)
-    // Restore setItem to check
-    localStorage.setItem = realSetItem;
-    const afterFailure = localStorage.getItem('solarflow_data');
-    // The storage key should still hold the first save value
-    expect(afterFailure).toBe(firstSave);
-  });
-});
+// (The former 'saveData total localStorage failure' block was removed: the blob
+// no longer persists to localStorage, so the quota-atomic-fail behaviour it
+// characterised no longer exists. Graceful degradation on a failed local write is
+// now covered by 'Fault: IndexedDB write failure in saveData' above.)
