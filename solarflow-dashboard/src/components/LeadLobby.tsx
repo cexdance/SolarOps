@@ -930,7 +930,7 @@ export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserRole, customers
   const SourceBadge: React.FC<{ lead: Lead }> = ({ lead }) => {
     const badge = getSourceBadge(lead, customSources);
     return (
-      <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full flex-shrink-0 ${badge.bg} ${badge.color}`}>
+      <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ml-auto min-w-0 truncate ${badge.bg} ${badge.color}`}>
         {badge.label}
       </span>
     );
@@ -984,7 +984,7 @@ export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserRole, customers
           )}
         </div>
         <div className="flex items-center gap-2">
-          <p className="text-xs text-slate-400 truncate font-mono flex-1 min-w-0">{lead.phone}</p>
+          <p className="text-xs text-slate-400 font-mono flex-shrink-0">{lead.phone}</p>
           <SourceBadge lead={lead} />
         </div>
         {lead.monthlyBill && (
