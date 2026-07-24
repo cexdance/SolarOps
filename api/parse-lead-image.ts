@@ -39,6 +39,60 @@ Rules:
 - contractName: the "Contract Name:" field value
 - Do not include any text outside the JSON object`;
 
+export type ParsedLead = {
+  firstName: string; lastName: string; email: string; phone: string;
+  address: string; city: string; state: string; zip: string;
+  notes: string; hsId: string; contractName: string;
+};
+
+const VALID_IMAGE_MIME = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'] as const;
+
+/**
+ * Run Claude Vision on a base64 lead screenshot and return the structured
+ * fields. Throws on any upstream/parse failure so callers can fall back.
+ * Shared by this endpoint's handler and the Trello auto-import webhook
+ * (trello-card.ts), which imports it directly to stay under the 12-function cap.
+ */
+export async function extractLeadFromImage(imageBase64: string, mimeType?: string): Promise<ParsedLead> {
+  const safeMime = (VALID_IMAGE_MIME as readonly string[]).includes(mimeType ?? '')
+    ? (mimeType as (typeof VALID_IMAGE_MIME)[number])
+    : 'image/jpeg';
+
+  const upstream = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'x-api-key': ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01',
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'claude-haiku-4-5',
+      max_tokens: 512,
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'image', source: { type: 'base64', media_type: safeMime, data: imageBase64 } },
+          { type: 'text', text: EXTRACT_PROMPT },
+        ],
+      }],
+    }),
+  });
+
+  if (!upstream.ok) {
+    const errBody = await upstream.text();
+    throw new Error(`parse-lead-image upstream ${upstream.status}: ${errBody}`);
+  }
+
+  const result = await upstream.json() as { content: Array<{ type: string; text?: string }> };
+  const raw = result.content.find(b => b.type === 'text')?.text ?? '';
+  const jsonMatch = raw.match(/\{[\s\S]*\}/); // Claude sometimes wraps in markdown
+  if (!jsonMatch) throw new Error(`parse-lead-image: no JSON in response: ${raw.slice(0, 200)}`);
+
+  const parsed = JSON.parse(jsonMatch[0]) as ParsedLead;
+  if (parsed.phone) parsed.phone = String(parsed.phone).replace(/\D/g, '');
+  return parsed;
+}
+
 /**
  * Estimate a part's unit price from 3 live web sources via Claude's web_search
  * server tool. Returns { estimate, points }. Best-effort: on any failure it
@@ -120,76 +174,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: 'Missing imageBase64' });
   }
 
-  const validMimeTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-  const safeMime = validMimeTypes.includes(mimeType ?? '')
-    ? (mimeType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp')
-    : 'image/jpeg';
-
   try {
-    const upstream = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'x-api-key': ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'claude-haiku-4-5',
-        max_tokens: 512,
-        messages: [
-          {
-            role: 'user',
-            content: [
-              {
-                type: 'image',
-                source: {
-                  type: 'base64',
-                  media_type: safeMime,
-                  data: imageBase64,
-                },
-              },
-              {
-                type: 'text',
-                text: EXTRACT_PROMPT,
-              },
-            ],
-          },
-        ],
-      }),
-    });
-
-    if (!upstream.ok) {
-      const errBody = await upstream.text();
-      console.error('[parse-lead-image] Anthropic error:', upstream.status, errBody);
-      return res.status(502).json({
-        error: `AI service error ${upstream.status}. Check ANTHROPIC_API_KEY.`,
-      });
-    }
-
-    const result = await upstream.json() as {
-      content: Array<{ type: string; text?: string }>;
-    };
-
-    const textBlock = result.content.find(b => b.type === 'text');
-    const raw = textBlock?.text ?? '';
-
-    // Extract JSON from the response (Claude sometimes wraps in markdown)
-    const jsonMatch = raw.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      return res.status(422).json({ error: 'Could not extract structured data from image', raw });
-    }
-
-    const parsed = JSON.parse(jsonMatch[0]);
-
-    // Normalize phone, digits only
-    if (parsed.phone) {
-      parsed.phone = parsed.phone.replace(/\D/g, '');
-    }
-
+    const parsed = await extractLeadFromImage(imageBase64, mimeType);
     return res.status(200).json(parsed);
   } catch (err) {
     console.error('[parse-lead-image] error:', err);
-    return res.status(500).json({
+    return res.status(502).json({
       error: 'Failed to parse lead image. Please try again.',
     });
   }

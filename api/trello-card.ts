@@ -37,6 +37,7 @@
  */
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { extractLeadFromImage, type ParsedLead } from './parse-lead-image';
 
 const TRELLO_BASE = 'https://api.trello.com/1';
 // Support both server-side (TRELLO_*) and client-side legacy (VITE_TRELLO_*) names.
@@ -80,6 +81,18 @@ export function splitName(name: string): { firstName: string; lastName: string }
   return { firstName: parts[0] ?? '', lastName: parts.slice(1).join(' ') };
 }
 
+// Trello auto-names a card after its attachment when someone just drops a photo
+// in (e.g. "image.jpeg"), so card.name is often a filename, not a person. Don't
+// let that become the lead's name (that's the "image.jpeg" / "i"-avatar bug).
+export function isFilename(name: string): boolean {
+  return /^\S+\.(?:jpe?g|png|gif|heic|webp|pdf|tiff?)$/i.test(name.trim());
+}
+
+// ponytail: enough to read a US number on a lead card, not a locale-aware lib.
+function formatPhone(digits: string): string {
+  return digits.length === 10 ? `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}` : digits;
+}
+
 const PHONE_REGEX = /(?:\+?1[\s.-]?)?(?:\(\d{3}\)|\d{3})[\s.-]?\d{3}[\s.-]?\d{4}\b/;
 const EMAIL_REGEX = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/;
 
@@ -97,6 +110,38 @@ async function fetchCardForLeadImport(cardId: string): Promise<{ name: string; d
   const res = await fetch(url, { headers: { Accept: 'application/json' } });
   if (!res.ok) throw new Error(`Trello card fetch ${res.status}`);
   return res.json();
+}
+
+const IMG_EXT_RE = /\.(jpe?g|png|gif|webp)$/i;
+
+/**
+ * Download the card's first image attachment as base64 so Claude Vision can read
+ * the lead's details straight off the dropped screenshot. Best-effort: returns
+ * undefined on any hiccup so the caller falls back to card text.
+ * Note: Trello serves uploaded attachment bytes only with the OAuth header, the
+ * key/token query params that work on the REST API return 401 here.
+ */
+async function fetchFirstImageAttachment(cardId: string): Promise<{ base64: string; mimeType: string } | undefined> {
+  const listUrl = `${TRELLO_BASE}/cards/${cardId}/attachments?key=${API_KEY}&token=${API_TOKEN}&fields=url,mimeType,name,bytes`;
+  const listRes = await fetch(listUrl, { headers: { Accept: 'application/json' } });
+  if (!listRes.ok) return undefined;
+
+  const atts = await listRes.json() as { url?: string; mimeType?: string; name?: string }[];
+  const img = atts.find(a => (a.mimeType || '').startsWith('image/') || IMG_EXT_RE.test(a.name || a.url || ''));
+  if (!img?.url) return undefined;
+
+  const bin = await fetch(img.url, {
+    headers: { Authorization: `OAuth oauth_consumer_key="${API_KEY}", oauth_token="${API_TOKEN}"` },
+  });
+  if (!bin.ok) return undefined;
+
+  const buf = Buffer.from(await bin.arrayBuffer());
+  if (buf.byteLength === 0 || buf.byteLength > 5_000_000) return undefined; // ponytail: skip empties/huge; vision only needs the text
+
+  const mimeType = img.mimeType?.startsWith('image/')
+    ? img.mimeType
+    : IMG_EXT_RE.test(img.name || img.url) && /\.png$/i.test(img.name || img.url) ? 'image/png' : 'image/jpeg';
+  return { base64: buf.toString('base64'), mimeType };
 }
 
 /** Pure decision: does this board action land a card in a tracked leads list? */
@@ -199,21 +244,56 @@ async function handleLeadImportWebhook(req: VercelRequest, res: VercelResponse) 
 
     const cardId = action.data.card.id;
     const card = await fetchCardForLeadImport(cardId);
-    const { firstName, lastName } = splitName(card.name);
-    const { phone, email } = extractContact(`${card.name}\n${card.desc}`);
+    const nameIsFile = isFilename(card.name);
+
+    // A filename-titled card ("image.jpeg") carries the lead's details inside the
+    // dropped screenshot, so read them off the image with Claude Vision.
+    // ponytail: only for filename cards, a real named card is trusted as-is.
+    // Ceiling: re-runs if Trello redelivers the same card (one cheap Haiku call);
+    // pre-check lead existence before this call if that ever matters.
+    let vision: Partial<ParsedLead> = {};
+    if (nameIsFile) {
+      try {
+        const img = await fetchFirstImageAttachment(cardId);
+        if (img) vision = await extractLeadFromImage(img.base64, img.mimeType);
+      } catch (err) {
+        console.warn('[trello-webhook] vision parse failed, using card text:', err);
+      }
+    }
+
+    const textName = nameIsFile ? { firstName: '', lastName: '' } : splitName(card.name);
+    const textContact = extractContact(`${card.name}\n${card.desc}`);
+    const firstName = (vision.firstName || '').trim() || textName.firstName;
+    const lastName  = (vision.lastName  || '').trim() || textName.lastName;
+    const phone     = (vision.phone     || '').trim() || textContact.phone;
+    const email     = (vision.email     || '').trim() || textContact.email;
+    const address   = (vision.address   || '').trim();
+    const city      = (vision.city      || '').trim();
+    const state     = (vision.state     || '').trim();
+    const zip       = (vision.zip       || '').trim();
 
     // Deterministic ids from the card id, so a redelivery resolves to the same
     // records and the create-if-absent checks above can recognise them.
     const leadId = `lead-trello-${cardId}`;
     const jobId  = `job-trello-${cardId}`;
     const now = new Date().toISOString();
-    const displayName = `${firstName} ${lastName}`.trim() || card.name;
-    const cardNote = card.desc.trim() || `Auto-imported from Trello card "${card.name}"`;
+    // Still no name (vision failed, plain image)? Fall back to the phone so the
+    // team can see who to call, never "image.jpeg".
+    const displayName =
+      `${firstName} ${lastName}`.trim() ||
+      (phone ? formatPhone(phone) : 'New Lead (Trello)');
+    const extraNote = [
+      vision.contractName?.trim() && `Contract: ${vision.contractName.trim()}`,
+      vision.hsId?.trim() && `HS_ID: ${vision.hsId.trim()}`,
+      vision.notes?.trim(),
+    ].filter(Boolean).join('\n');
+    const cardNote = [card.desc.trim(), extraNote].filter(Boolean).join('\n').trim()
+      || `Auto-imported from Trello card "${card.name}"`;
 
     const lead = {
       id: leadId,
       firstName, lastName, phone, email,
-      address: '', city: '', state: '', zip: '',
+      address, city, state, zip,
       status: 'new',
       source: 'other',
       customSource: `Trello: ${target.label}`,
@@ -234,7 +314,7 @@ async function handleLeadImportWebhook(req: VercelRequest, res: VercelResponse) 
       customerId: '',
       technicianId: '',
       clientName: displayName,
-      title: card.name,
+      title: nameIsFile ? displayName : card.name,
       serviceType: 'Lead',
       status: 'new',
       pipelineStage: 'leads',

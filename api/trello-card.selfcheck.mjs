@@ -5,7 +5,14 @@
 // Run: npx tsc --target ES2020 --module commonjs --esModuleInterop --skipLibCheck \
 //        --outDir /tmp/twcheck api/trello-card.ts && node api/trello-card.selfcheck.mjs
 import assert from 'node:assert/strict';
-import { splitName, extractContact, matchTargetList } from '/tmp/twcheck/trello-card.js';
+import { splitName, extractContact, matchTargetList, isFilename } from '/tmp/twcheck/trello-card.js';
+
+// Filename card names (the "image.jpeg" bug) must be recognised, real names must not.
+assert.equal(isFilename('image.jpeg'), true);
+assert.equal(isFilename('IMG_2039.PNG'), true);
+assert.equal(isFilename('scan.pdf'), true);
+assert.equal(isFilename('Alisa Schlueter'), false);
+assert.equal(isFilename('David'), false);
 
 assert.deepEqual(splitName('Alisa Schlueter'), { firstName: 'Alisa', lastName: 'Schlueter' });
 assert.deepEqual(splitName('David'), { firstName: 'David', lastName: '' });

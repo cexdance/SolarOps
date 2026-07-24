@@ -839,8 +839,16 @@ export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserRole, customers
     });
   };
 
+  // "Delete" archives to the Lost column rather than removing the record: it
+  // keeps the history, and a plain filter() delete resurrects across browsers
+  // (a shorter array is indistinguishable from "never had it" to the sync merge).
+  // Converted leads reach the Converted column via handleConvertToCustomer.
   const handleDeleteLead = (leadId: string) => {
-    save({ ...crmData, leads: crmData.leads.filter(l => l.id !== leadId) });
+    save({
+      ...crmData,
+      leads: crmData.leads.map(l =>
+        l.id === leadId ? { ...l, status: 'closed_lost', updatedAt: new Date().toISOString() } : l),
+    });
     setSelectedLeadId(null);
   };
 
@@ -968,15 +976,17 @@ export const LeadLobby: React.FC<LeadLobbyProps> = ({ currentUserRole, customers
         {kanban && <div className={`absolute top-0 left-0 right-0 h-[3px] ${barColor}`} />}
         <div className="flex items-center gap-2 mb-1.5">
           <span className={`w-2 h-2 rounded-full flex-shrink-0 ${priorityDot[lead.priority] ?? 'bg-slate-400'}`} />
-          <span className="text-sm font-semibold text-slate-900 truncate flex-1">
-            {lead.firstName} {lead.lastName}
+          <span className="text-sm font-semibold text-slate-900 truncate flex-1 min-w-0">
+            {`${lead.firstName ?? ''} ${lead.lastName ?? ''}`.trim() || lead.phone || 'Unnamed lead'}
           </span>
           {lead.isPowercare && (
             <span title="Powercare" className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full flex-shrink-0">⚡</span>
           )}
+        </div>
+        <div className="flex items-center gap-2">
+          <p className="text-xs text-slate-400 truncate font-mono flex-1 min-w-0">{lead.phone}</p>
           <SourceBadge lead={lead} />
         </div>
-        <p className="text-xs text-slate-400 truncate font-mono">{lead.phone}</p>
         {lead.monthlyBill && (
           <p className="text-xs text-emerald-600 font-semibold mt-1">{formatMoney(lead.monthlyBill, { decimals: 0 })}/mo</p>
         )}
@@ -2130,12 +2140,12 @@ const DetailPanel: React.FC<DetailPanelProps> = ({
       <div className="mt-4 pt-4 border-t border-slate-100">
         {confirmDelete ? (
           <div className="flex items-center gap-2">
-            <span className="text-sm text-slate-600 flex-1">Delete this lead?</span>
+            <span className="text-sm text-slate-600 flex-1">Move this lead to Lost?</span>
             <button
               onClick={() => onDeleteLead(lead.id)}
               className="px-3 py-1.5 bg-red-600 text-white text-xs font-medium rounded-lg hover:bg-red-700 transition-colors"
             >
-              Yes, delete
+              Move to Lost
             </button>
             <button
               onClick={() => setConfirmDelete(false)}
@@ -2149,7 +2159,7 @@ const DetailPanel: React.FC<DetailPanelProps> = ({
             onClick={() => setConfirmDelete(true)}
             className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-red-500 transition-colors"
           >
-            <Trash2 className="w-3.5 h-3.5" /> Delete lead
+            <Trash2 className="w-3.5 h-3.5" /> Move to Lost
           </button>
         )}
       </div>
