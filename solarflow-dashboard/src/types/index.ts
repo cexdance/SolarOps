@@ -581,6 +581,9 @@ export interface InventoryItem {
    */
   deletedAt?: string;
   imageUrl?: string;
+  /** Datasheet / spec-sheet URL (Supabase Storage or an external link). Parsed on
+   *  upload to prefill name/SKU/part number/category/description. */
+  datasheetUrl?: string;
   /**
    * Content photos. Used by box rows (see `inventoryStore.BOXES`) to show what is
    * inside without opening the box. Plain LWW like the rest of the record: two
@@ -589,6 +592,44 @@ export interface InventoryItem {
   photos?: string[];
   /** Receiving / provenance history, each delivery into stock with its proof image and optional RMA match. */
   receipts?: StockReceipt[];
+  /**
+   * Prices seen at each vendor, kept for background comparison. The displayed
+   * "estimated price" is derived from these (`estimatedPrice`, the cheapest on
+   * record). Plain LWW like `receipts`/`photos`: two devices editing the list in
+   * the same minute, newest wins.
+   */
+  vendorPrices?: VendorPrice[];
+  /**
+   * Outflow / adjustment audit ledger (who used or removed how much, when).
+   * Complements `receipts` (inflows). Append-only and unioned by id at merge
+   * (`mergeInventoryItems`), so a concurrent edit on another device cannot drop
+   * entries the way plain LWW would.
+   */
+  movements?: StockMovement[];
+}
+
+/**
+ * A stock outflow or manual adjustment, stamped with the user. `use` is a work
+ * order consuming stock; `adjust` is a manual change in the editor (qty signed:
+ * negative removed, positive added by hand).
+ */
+export interface StockMovement {
+  id: string;
+  at: string;                 // ISO timestamp
+  type: 'use' | 'adjust';
+  qty: number;                // signed: negative out, positive in
+  location?: string;
+  by?: string;                // user name/email
+  note?: string;
+}
+
+/** One price observation at a vendor: what it costs there and where we saw it. */
+export interface VendorPrice {
+  vendorId?: string;    // links to a Provider, when the vendor is a saved one
+  vendorName?: string;  // free-text vendor when not a saved Provider
+  price: number;
+  url?: string;         // the page where this price was seen
+  seenAt: string;       // ISO timestamp
 }
 
 /** A single receiving event into stock: provenance image (invoice / RMA label) + optional RMA match. */

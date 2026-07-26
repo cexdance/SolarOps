@@ -4,11 +4,11 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import QRCode from 'qrcode';
-import { Package, MapPin, Camera, QrCode, Printer, ArrowLeft, Trash2 } from 'lucide-react';
+import { Package, MapPin, Camera, QrCode, Printer, ArrowLeft, Trash2, Plus, Download } from 'lucide-react';
 import { InventoryItem } from '../types';
 import {
   BOXES, BOX_HOMES, boxLocation, boxHome, boxContents, findBoxRow,
-  moveBox, setBoxPhotos, boxRowId,
+  moveBox, setBoxPhotos, boxRowId, listBoxes, addBox, isDefaultBox,
 } from '../lib/inventoryStore';
 import { uploadPhotoToStorage } from '../lib/photoStorage';
 import { compressImageToDataUrlUnder } from '../lib/photoCompress';
@@ -25,7 +25,7 @@ export const boxUrl = (box: string): string =>
  * Pull a box name out of whatever was scanned. Accepts a full label URL or a bare
  * box name, so a hand-written sticker still works.
  */
-export function boxFromScan(text: string): string | null {
+export function boxFromScan(text: string, boxes: string[] = BOXES): string | null {
   let candidate = text.trim();
   try {
     const found = new URL(candidate).searchParams.get('box');
@@ -33,33 +33,60 @@ export function boxFromScan(text: string): string | null {
   } catch {
     // Not a URL. Treat the whole string as a box name.
   }
-  return BOXES.find(b => b.toLowerCase() === candidate.toLowerCase()) ?? null;
+  return boxes.find(b => b.toLowerCase() === candidate.toLowerCase()) ?? null;
 }
 
 interface BoxesPanelProps {
   items: InventoryItem[];
   onChange: (items: InventoryItem[]) => void;
+  /** Delete a custom box. Separate from onChange because the store persists the
+   *  tombstone itself and hands back the fresh live list (like item delete). */
+  onDeleteBox: (box: string) => void;
   /** Box to open on mount, from the `?box=` deep link on a scanned label. */
   initialBox?: string | null;
 }
 
-export const BoxesPanel: React.FC<BoxesPanelProps> = ({ items, onChange, initialBox }) => {
+export const BoxesPanel: React.FC<BoxesPanelProps> = ({ items, onChange, onDeleteBox, initialBox }) => {
   const [openBox, setOpenBox] = useState<string | null>(initialBox ?? null);
   const [scanning, setScanning] = useState(false);
-  const [printing, setPrinting] = useState(false);
+  // null = not printing; an array = which box labels to send to the print sheet
+  // (all boxes from the header printer, or a single box from its detail view).
+  const [printing, setPrinting] = useState<string[] | null>(null);
   const [scanMiss, setScanMiss] = useState<string | null>(null);
+  const [newName, setNewName] = useState('');
+  const [addErr, setAddErr] = useState<string | null>(null);
+
+  const boxes = useMemo(() => listBoxes(items), [items]);
 
   const handleScan = (text: string) => {
     setScanning(false);
-    const box = boxFromScan(text);
+    const box = boxFromScan(text, boxes);
     if (box) { setScanMiss(null); setOpenBox(box); }
     else setScanMiss(`That code is not one of our box labels (read: "${text.slice(0, 40)}")`);
   };
 
+  const handleAdd = () => {
+    const res = addBox(items, newName);
+    if (res.error) { setAddErr(res.error); return; }
+    setAddErr(null);
+    setNewName('');
+    onChange(res.items);
+    setOpenBox(newName.trim().replace(/\s+/g, ' '));
+  };
+
   if (scanning) return <QrScan onScan={handleScan} onClose={() => setScanning(false)} />;
-  if (printing) return <BoxLabelSheet onClose={() => setPrinting(false)} />;
+  if (printing) return <BoxLabelSheet boxes={printing} onClose={() => setPrinting(null)} />;
   if (openBox) {
-    return <BoxDetail box={openBox} items={items} onChange={onChange} onBack={() => setOpenBox(null)} />;
+    return (
+      <BoxDetail
+        box={openBox}
+        items={items}
+        onChange={onChange}
+        onDelete={() => { onDeleteBox(openBox); setOpenBox(null); }}
+        onPrint={() => setPrinting([openBox])}
+        onBack={() => setOpenBox(null)}
+      />
+    );
   }
 
   return (
@@ -72,17 +99,35 @@ export const BoxesPanel: React.FC<BoxesPanelProps> = ({ items, onChange, initial
           <QrCode className="w-4 h-4" /> Scan a box
         </button>
         <button
-          onClick={() => setPrinting(true)}
+          onClick={() => setPrinting(boxes)}
+          aria-label="Print all box labels"
           className="px-4 rounded-xl border border-slate-200 text-slate-600 text-sm font-medium"
         >
           <Printer className="w-4 h-4" />
         </button>
       </div>
 
-      {scanMiss && <p className="mb-3 text-sm text-amber-700 bg-amber-50 rounded-lg p-3">{scanMiss}</p>}
+      {/* Create a box: its QR is generated on demand once it opens. */}
+      <div className="flex gap-2 mb-1">
+        <input
+          value={newName}
+          onChange={e => { setNewName(e.target.value); setAddErr(null); }}
+          onKeyDown={e => { if (e.key === 'Enter') handleAdd(); }}
+          placeholder="New box name (e.g. Ladders)"
+          className="flex-1 px-3 py-2 rounded-lg border border-slate-200 text-sm"
+        />
+        <button
+          onClick={handleAdd}
+          className="flex items-center gap-1 px-3 rounded-lg bg-slate-100 text-slate-700 text-sm font-medium"
+        >
+          <Plus className="w-4 h-4" /> Add box
+        </button>
+      </div>
+      {addErr && <p className="mb-2 text-xs text-amber-700">{addErr}</p>}
+      {scanMiss && <p className="my-3 text-sm text-amber-700 bg-amber-50 rounded-lg p-3">{scanMiss}</p>}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {BOXES.map(box => {
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+        {boxes.map(box => {
           const row = findBoxRow(items, box);
           const contents = boxContents(items, box);
           return (
@@ -99,7 +144,12 @@ export const BoxesPanel: React.FC<BoxesPanelProps> = ({ items, onChange, initial
                 </div>
               )}
               <div className="p-3">
-                <div className="font-medium text-slate-900 text-sm">{box}</div>
+                <div className="font-medium text-slate-900 text-sm">
+                  {box}
+                  {!isDefaultBox(box) && (
+                    <span className="ml-2 text-[10px] uppercase tracking-wide text-slate-400">custom</span>
+                  )}
+                </div>
                 <div className="flex items-center gap-1 mt-1 text-xs text-slate-500">
                   <MapPin className="w-3 h-3" /> {boxHome(items, box)}
                   <span className="ml-auto">{contents.length} items</span>
@@ -119,14 +169,31 @@ const BoxDetail: React.FC<{
   box: string;
   items: InventoryItem[];
   onChange: (items: InventoryItem[]) => void;
+  onDelete: () => void;
+  onPrint: () => void;
   onBack: () => void;
-}> = ({ box, items, onChange, onBack }) => {
+}> = ({ box, items, onChange, onDelete, onPrint, onBack }) => {
   const fileRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const row = findBoxRow(items, box);
   const photos = row?.photos ?? [];
   const contents = useMemo(() => boxContents(items, box), [items, box]);
   const home = boxHome(items, box);
+  const canDelete = !isDefaultBox(box) && contents.length === 0;
+
+  const downloadQr = async () => {
+    // Generate a bigger PNG than the on-screen preview so it prints crisp.
+    const url = await QRCode.toDataURL(boxUrl(box), { width: 512, margin: 2 });
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `box-${box.toLowerCase().replace(/\s+/g, '-')}-qr.png`;
+    a.click();
+  };
+
+  const handleDelete = () => {
+    if (!canDelete) return;
+    if (confirm(`Delete the "${box}" box? Its QR label stops working. This cannot be undone.`)) onDelete();
+  };
 
   const addPhotos = async (files: FileList | null) => {
     if (!files?.length) return;
@@ -235,7 +302,36 @@ const BoxDetail: React.FC<{
       <div className="mt-6">
         <h3 className="text-sm font-medium text-slate-700 mb-2">Label</h3>
         <BoxQr box={box} size={160} />
+        <div className="flex gap-2 mt-3">
+          <button
+            onClick={downloadQr}
+            className="flex items-center gap-1 px-3 py-2 rounded-lg bg-slate-100 text-slate-700 text-sm font-medium"
+          >
+            <Download className="w-4 h-4" /> Save PNG
+          </button>
+          <button
+            onClick={onPrint}
+            className="flex items-center gap-1 px-3 py-2 rounded-lg bg-slate-100 text-slate-700 text-sm font-medium"
+          >
+            <Printer className="w-4 h-4" /> Print
+          </button>
+        </div>
       </div>
+
+      {!isDefaultBox(box) && (
+        <div className="mt-8 pt-4 border-t border-slate-100">
+          <button
+            onClick={handleDelete}
+            disabled={!canDelete}
+            className="flex items-center gap-1 text-sm text-red-600 disabled:text-slate-300"
+          >
+            <Trash2 className="w-4 h-4" /> Delete box
+          </button>
+          {!canDelete && (
+            <p className="text-xs text-slate-400 mt-1">Empty this box before deleting it.</p>
+          )}
+        </div>
+      )}
     </div>
   );
 };
@@ -260,8 +356,8 @@ const BoxQr: React.FC<{ box: string; size?: number }> = ({ box, size = 128 }) =>
   );
 };
 
-/** Printable sheet of all six stickers. Print once, cut, stick. */
-const BoxLabelSheet: React.FC<{ onClose: () => void }> = ({ onClose }) => (
+/** Printable sheet of stickers (one box, or all). Print, cut, stick. */
+const BoxLabelSheet: React.FC<{ boxes: string[]; onClose: () => void }> = ({ boxes, onClose }) => (
   <div className="p-4">
     <div className="flex gap-2 mb-4 print:hidden">
       <button onClick={onClose} className="flex items-center gap-1 text-sm text-slate-500">
@@ -275,7 +371,7 @@ const BoxLabelSheet: React.FC<{ onClose: () => void }> = ({ onClose }) => (
       </button>
     </div>
     <div className="grid grid-cols-2 gap-6">
-      {BOXES.map(box => (
+      {boxes.map(box => (
         <div key={box} className="border border-slate-300 rounded-lg p-4 flex justify-center">
           <BoxQr box={box} size={150} />
         </div>

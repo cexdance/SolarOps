@@ -21,6 +21,7 @@ import {
   ChevronUp,
   Camera,
   ImageIcon,
+  FileText,
 } from 'lucide-react';
 
 // ── Image uploader, URL input + optional file upload ─────────────────────
@@ -136,6 +137,110 @@ const ImageUploader: React.FC<{
     </div>
   );
 };
+
+// ── Datasheet upload + parse-to-autofill ─────────────────────────────────────────
+// Upload a PDF / image spec sheet: /api/parse-lead-image (action: parse-datasheet)
+// reads it and prefills name / SKU / part number / category / description, and the
+// file itself is stored in Supabase Storage (a short URL, not inline in the synced
+// blob). Parsing and storage are independent: if one fails the other still runs.
+const DatasheetField: React.FC<{
+  value?: string;
+  onChange: (url: string | undefined) => void;
+  onParsed: (fields: { name?: string; partNumber?: string; sku?: string; category?: InventoryCategory; description?: string }) => void;
+}> = ({ value, onChange, onParsed }) => {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [working, setWorking] = React.useState(false);
+  const [note, setNote] = React.useState('');
+  const [mode, setMode] = React.useState<'file' | 'url'>('file');
+  const [urlInput, setUrlInput] = React.useState('');
+
+  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setWorking(true);
+    setNote('Reading datasheet…');
+
+    // 1) Parse -> autofill (best effort; failure just means manual entry).
+    try {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve(String(r.result).split(',')[1] ?? '');
+        r.onerror = () => reject(r.error);
+        r.readAsDataURL(file);
+      });
+      const res = await fetch('/api/parse-lead-image', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'parse-datasheet', imageBase64: base64, mimeType: file.type }),
+      });
+      if (res.ok) {
+        const p = await res.json() as { name?: string; partNumber?: string; sku?: string; category?: string; description?: string };
+        onParsed({
+          name: p.name || undefined,
+          partNumber: p.partNumber || undefined,
+          sku: p.sku || undefined,
+          category: (p.category as InventoryCategory) || undefined,
+          description: p.description || undefined,
+        });
+        setNote('Fields auto-filled from the datasheet. Review and edit as needed.');
+      } else {
+        setNote('Could not read the datasheet automatically; fill the fields in manually.');
+      }
+    } catch (err) {
+      console.error('[datasheet] parse failed', err);
+      setNote('Could not read the datasheet automatically; fill the fields in manually.');
+    }
+
+    // 2) Store the file (independent of parsing).
+    try {
+      const { url } = await uploadPhotoToStorage(file, 'datasheets', `ds-${Date.now()}`);
+      if (url) onChange(url);
+    } catch (err) {
+      console.error('[datasheet] upload failed', err);
+    }
+    setWorking(false);
+  };
+
+  return (
+    <div className="rounded-lg border border-orange-200 bg-orange-50/50 p-3">
+      <div className="flex items-center justify-between mb-1">
+        <label className="text-sm font-medium text-slate-700 flex items-center gap-1.5">
+          <FileText className="w-4 h-4 text-orange-500" /> Datasheet
+        </label>
+        <div className="flex gap-2 text-xs">
+          <button type="button" onClick={() => setMode('file')} className={`px-2 py-1 rounded ${mode === 'file' ? 'bg-orange-100 text-orange-600 font-medium' : 'text-slate-400 hover:text-slate-600'}`}>Upload</button>
+          <button type="button" onClick={() => setMode('url')} className={`px-2 py-1 rounded ${mode === 'url' ? 'bg-orange-100 text-orange-600 font-medium' : 'text-slate-400 hover:text-slate-600'}`}>URL</button>
+        </div>
+      </div>
+      <p className="text-xs text-slate-500 mb-2">Upload a PDF or photo of the spec sheet to auto-fill the fields below.</p>
+      {mode === 'file' ? (
+        <>
+          <button type="button" disabled={working} onClick={() => inputRef.current?.click()}
+            className="flex items-center gap-2 px-3 py-1.5 border border-slate-200 bg-white rounded-lg text-xs text-slate-600 hover:bg-slate-50 disabled:opacity-60">
+            <Upload className="w-3 h-3" />
+            {working ? 'Working…' : value ? 'Replace datasheet' : 'Choose datasheet (PDF / image)'}
+          </button>
+          <input ref={inputRef} type="file" accept="application/pdf,image/*" className="hidden" onChange={handleFile} />
+        </>
+      ) : (
+        <div className="flex gap-2">
+          <input type="url" value={urlInput} onChange={e => setUrlInput(e.target.value)}
+            placeholder="https://…/datasheet.pdf"
+            className="flex-1 text-xs px-2 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" />
+          <button type="button" onClick={() => { const t = urlInput.trim(); if (t) { onChange(t); setNote('Datasheet link saved. Only uploads are auto-parsed.'); } }}
+            className="px-3 py-1.5 bg-orange-500 text-white text-xs rounded-lg hover:bg-orange-600">Apply</button>
+        </div>
+      )}
+      {note && <p className="text-xs mt-2 text-slate-500">{note}</p>}
+      {value && (
+        <div className="flex items-center gap-3 mt-2 text-xs">
+          <a href={value} target="_blank" rel="noreferrer" className="text-orange-600 hover:underline inline-flex items-center gap-1"><FileText className="w-3 h-3" />View datasheet</a>
+          <button type="button" onClick={() => onChange(undefined)} className="text-slate-400 hover:text-red-500">Remove</button>
+        </div>
+      )}
+    </div>
+  );
+};
 import {
   InventoryItem,
   ToolItem,
@@ -145,11 +250,12 @@ import {
   UnitOfMeasure,
   ToolStatus,
   StockReceipt,
+  VendorPrice,
   Job,
   User,
   RMAEntry,
 } from '../types';
-import { loadInventory, saveInventory, deleteInventoryItem, adjustLocationQty, applyPartsToInventory, pendingStockParts, BOXES, isBoxRow } from '../lib/inventoryStore';
+import { loadInventory, saveInventory, deleteInventoryItem, adjustLocationQty, applyPartsToInventory, pendingStockParts, isBoxRow, listBoxes, deleteBox, knownLocations, setLocationQty, totalQty, estimatedPrice, diffStockMovements, usageSummary } from '../lib/inventoryStore';
 import { BoxesPanel } from './BoxesPanel';
 import { loadTools, saveTools, deleteTool, setToolAssignment } from '../lib/toolStore';
 import { serviceOrderNo } from '../lib/woHelpers';
@@ -661,7 +767,7 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ jobs = [], onU
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            Boxes ({BOXES.length})
+            Boxes ({listBoxes(inventoryItems).length})
           </button>
           <button
             onClick={() => setActiveTab('tools')}
@@ -754,7 +860,12 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ jobs = [], onU
       {/* Content */}
       <div className="px-4 pb-24">
         {activeTab === 'boxes' && (
-          <BoxesPanel items={inventoryItems} onChange={updateInventory} initialBox={scannedBox} />
+          <BoxesPanel
+            items={inventoryItems}
+            onChange={updateInventory}
+            onDeleteBox={(box) => setInventoryItems(deleteBox(box))}
+            initialBox={scannedBox}
+          />
         )}
 
         {/* Equipment Tab */}
@@ -799,7 +910,14 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ jobs = [], onU
             {filteredInventory.map((item) => (
               <div
                 key={item.id}
-                className="bg-white rounded-xl border border-slate-200 p-4"
+                onClick={(e) => {
+                  // Click anywhere on the card opens the editor; the inline
+                  // buttons (history, edit, delete) still win via this guard.
+                  if ((e.target as HTMLElement).closest('button,a')) return;
+                  setEditingItem(item);
+                  setShowEditModal(true);
+                }}
+                className="bg-white rounded-xl border border-slate-200 p-4 cursor-pointer hover:border-slate-300 transition-colors"
               >
                 <div className="flex items-start gap-3 mb-2">
                   {/* Thumbnail */}
@@ -857,6 +975,17 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ jobs = [], onU
                       <DollarSign className="w-3 h-3" />
                       ${item.unitCost}/unit
                     </span>
+                    {(() => {
+                      // Estimated (cheapest logged vendor) price, linking out to
+                      // where it was seen. An <a> so the card-click guard skips it.
+                      const est = estimatedPrice(item);
+                      if (!est) return null;
+                      const link = est.url || providerItems.find(p => p.id === est.vendorId)?.website;
+                      const label = <>est. {formatMoney(est.price)}</>;
+                      return link
+                        ? <a href={link} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-orange-600 hover:underline"><Link className="w-3 h-3" />{label}</a>
+                        : <span className="flex items-center gap-1 text-slate-500"><Link className="w-3 h-3" />{label}</span>;
+                    })()}
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="font-medium text-slate-700">
@@ -900,6 +1029,16 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ jobs = [], onU
                 {/* Receiving history (chevron) */}
                 {expandedItems.has(item.id) && (
                   <div className="mt-3 pt-3 border-t border-slate-100">
+                    {(() => {
+                      const s = usageSummary(item);
+                      return (
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs mb-2">
+                          <span className="text-emerald-700 font-medium">Purchased {s.purchasedTimes}× · {s.purchasedQty} units</span>
+                          <span className="text-slate-300">|</span>
+                          <span className="text-slate-600 font-medium">Used {s.usedTimes}× · {s.usedQty} units</span>
+                        </div>
+                      );
+                    })()}
                     <p className="text-xs font-medium text-slate-600 mb-2">Receiving history</p>
                     {(item.receipts?.length ?? 0) === 0 ? (
                       <p className="text-xs text-slate-400">No receiving history recorded for this item.</p>
@@ -946,6 +1085,27 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ jobs = [], onU
                             )}
                           </div>
                         ))}
+                      </div>
+                    )}
+                    {(item.movements?.length ?? 0) > 0 && (
+                      <div className="mt-3">
+                        <p className="text-xs font-medium text-slate-600 mb-2">Usage & adjustments</p>
+                        <div className="space-y-1.5">
+                          {[...(item.movements ?? [])].reverse().map((m) => (
+                            <div key={m.id} className="flex items-center gap-2 text-xs flex-wrap bg-slate-50 rounded-lg px-2 py-1.5">
+                              <span className={`font-semibold ${m.qty < 0 ? 'text-red-600' : 'text-emerald-700'}`}>{m.qty < 0 ? '' : '+'}{m.qty}</span>
+                              <span className="px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">{m.type === 'use' ? 'used' : 'adjusted'}</span>
+                              <span className="text-slate-500">{new Date(m.at).toLocaleDateString()}</span>
+                              {m.location && (
+                                <span className="flex items-center gap-1 text-slate-500"><MapPin className="w-3 h-3" />{m.location}</span>
+                              )}
+                              {m.by && (
+                                <span className="flex items-center gap-1 text-slate-500"><Users className="w-3 h-3" />{m.by}</span>
+                              )}
+                              {m.note && <span className="text-slate-400 italic truncate">{m.note}</span>}
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     )}
                   </div>
@@ -1161,6 +1321,9 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ jobs = [], onU
           item={editingItem}
           tool={editingTool}
           provider={editingProvider}
+          allLocations={knownLocations(inventoryItems, contractors.map(c => c.businessName).filter(Boolean))}
+          providers={providerItems}
+          currentUserName={currentUser?.name ?? currentUser?.email ?? 'office'}
           onClose={() => {
             setShowEditModal(false);
             setEditingItem(null);
@@ -1744,6 +1907,7 @@ const AddInventoryModal: React.FC<AddInventoryModalProps> = ({ onClose, onAdd })
     unitCost: 0,
     purchaseDate: new Date().toISOString().split('T')[0],
     imageUrl: undefined as string | undefined,
+    datasheetUrl: undefined as string | undefined,
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -1751,6 +1915,7 @@ const AddInventoryModal: React.FC<AddInventoryModalProps> = ({ onClose, onAdd })
     const newItem: InventoryItem = {
       id: `inv-${Date.now()}`,
       sku: formData.sku,
+      datasheetUrl: formData.datasheetUrl,
       partNumber: formData.partNumber || undefined,
       name: formData.name,
       category: formData.category,
@@ -1777,6 +1942,19 @@ const AddInventoryModal: React.FC<AddInventoryModalProps> = ({ onClose, onAdd })
           </button>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
+          <DatasheetField
+            value={formData.datasheetUrl}
+            onChange={(url) => setFormData((prev) => ({ ...prev, datasheetUrl: url }))}
+            onParsed={(p) => setFormData((prev) => ({
+              ...prev,
+              // Fill only what's still empty so a manual edit is never clobbered.
+              name: prev.name || p.name || '',
+              sku: prev.sku || p.sku || '',
+              partNumber: prev.partNumber || p.partNumber || '',
+              category: p.category ?? prev.category,
+              description: prev.description || p.description || '',
+            }))}
+          />
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Name</label>
             <input
@@ -2171,11 +2349,245 @@ const AddProviderModal: React.FC<AddProviderModalProps> = ({ onClose }) => {
   );
 };
 
+// ── Per-warehouse / per-box quantity editor ─────────────────────────────────────
+// Assign an item's stock across warehouses and boxes. Backed entirely by the
+// existing `stockByLocation` map + `setLocationQty` (which recomputes the total
+// and drops empty locations), so it adds no new field and no new sync branch.
+// A brand-new warehouse persists automatically: once it holds stock it becomes a
+// `stockByLocation` key, which `knownLocations` rediscovers next render.
+const NEW_LOCATION = '__new__';
+
+const StockByLocationEditor: React.FC<{
+  item: InventoryItem;
+  locations: string[];
+  onChange: (next: InventoryItem) => void;
+}> = ({ item, locations, onChange }) => {
+  const stock = item.stockByLocation ?? {};
+  const rows = Object.entries(stock);
+  const [addLoc, setAddLoc] = useState('');
+  const [newLoc, setNewLoc] = useState('');
+  const [addQty, setAddQty] = useState('');
+
+  const available = locations.filter((l) => !(l in stock));
+
+  const commitAdd = () => {
+    const loc = (addLoc === NEW_LOCATION ? newLoc : addLoc).trim();
+    const qty = parseInt(addQty, 10);
+    if (!loc || !qty || qty <= 0) return;
+    onChange(setLocationQty(item, loc, (stock[loc] ?? 0) + qty));
+    setAddLoc(''); setNewLoc(''); setAddQty('');
+  };
+
+  return (
+    <div>
+      <div className="flex items-baseline justify-between mb-1">
+        <label className="block text-sm font-medium text-slate-700">Stock by location</label>
+        <span className="text-xs text-slate-500">Total: <span className="font-semibold text-slate-800">{totalQty(item)}</span></span>
+      </div>
+      <div className="space-y-2">
+        {rows.length === 0 && (
+          <p className="text-xs text-slate-400">No stock assigned yet. Add a warehouse or box below.</p>
+        )}
+        {rows.map(([loc, qty]) => (
+          <div key={loc} className="flex items-center gap-2">
+            <span className="flex-1 min-w-0 truncate text-sm text-slate-700 bg-slate-50 rounded-lg px-3 py-2">{loc}</span>
+            <input
+              type="number"
+              min={0}
+              defaultValue={qty}
+              onBlur={(e) => onChange(setLocationQty(item, loc, Math.max(0, parseInt(e.target.value, 10) || 0)))}
+              className="w-20 px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+            />
+            <button
+              type="button"
+              title="Remove from this location"
+              onClick={() => onChange(setLocationQty(item, loc, 0))}
+              className="p-2 text-red-500 hover:bg-red-50 rounded-lg"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </div>
+        ))}
+      </div>
+      <div className="flex items-center gap-2 mt-2">
+        <select
+          value={addLoc}
+          onChange={(e) => setAddLoc(e.target.value)}
+          className="flex-1 min-w-0 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+        >
+          <option value="">Add location…</option>
+          {available.map((l) => <option key={l} value={l}>{l}</option>)}
+          <option value={NEW_LOCATION}>+ New warehouse…</option>
+        </select>
+        <input
+          type="number"
+          min={1}
+          placeholder="Qty"
+          value={addQty}
+          onChange={(e) => setAddQty(e.target.value)}
+          className="w-20 px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+        />
+        <button
+          type="button"
+          onClick={commitAdd}
+          className="px-3 py-2 rounded-lg bg-orange-500 text-white text-sm font-medium hover:bg-orange-600"
+        >
+          Add
+        </button>
+      </div>
+      {addLoc === NEW_LOCATION && (
+        <input
+          autoFocus
+          placeholder="New warehouse name"
+          value={newLoc}
+          onChange={(e) => setNewLoc(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commitAdd(); } }}
+          className="mt-2 w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+        />
+      )}
+    </div>
+  );
+};
+
+// ── Vendor prices → estimated price ─────────────────────────────────────────────
+// Log the price seen at each vendor (background comparison); the displayed
+// "estimated price" is the cheapest of them (`estimatedPrice`) and links out to
+// the vendor/page it came from. A plain LWW sub-array on the item, no new key.
+const OTHER_VENDOR = '__other__';
+
+const VendorPricesEditor: React.FC<{
+  item: InventoryItem;
+  providers: Provider[];
+  onChange: (next: InventoryItem) => void;
+}> = ({ item, providers, onChange }) => {
+  const prices = item.vendorPrices ?? [];
+  const [vendor, setVendor] = useState('');
+  const [vendorName, setVendorName] = useState('');
+  const [price, setPrice] = useState('');
+  const [url, setUrl] = useState('');
+
+  const nameFor = (vp: VendorPrice) =>
+    vp.vendorName || providers.find(p => p.id === vp.vendorId)?.name || 'Vendor';
+  const linkFor = (vp: VendorPrice) =>
+    vp.url || providers.find(p => p.id === vp.vendorId)?.website;
+
+  const commitAdd = () => {
+    const p = parseFloat(price);
+    if (!p || p <= 0) return;
+    const isOther = vendor === OTHER_VENDOR;
+    const vp: VendorPrice = {
+      vendorId: isOther || !vendor ? undefined : vendor,
+      vendorName: isOther ? (vendorName.trim() || undefined) : undefined,
+      price: p,
+      url: url.trim() || undefined,
+      seenAt: new Date().toISOString(),
+    };
+    if (!vp.vendorId && !vp.vendorName && !vp.url) return; // need a where
+    onChange({ ...item, vendorPrices: [...prices, vp] });
+    setVendor(''); setVendorName(''); setPrice(''); setUrl('');
+  };
+
+  const removeAt = (i: number) =>
+    onChange({ ...item, vendorPrices: prices.filter((_, idx) => idx !== i) });
+
+  const est = estimatedPrice(item);
+  const estLink = est ? linkFor(est) : undefined;
+
+  return (
+    <div>
+      <label className="block text-sm font-medium text-slate-700 mb-1">Vendor prices</label>
+      {est ? (
+        <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm bg-orange-50 border border-orange-100 rounded-lg px-3 py-2">
+          <span className="text-slate-600">Estimated price</span>
+          <span className="font-semibold text-slate-900">{formatMoney(est.price)}</span>
+          <span className="text-slate-400">from</span>
+          {estLink
+            ? <a href={estLink} target="_blank" rel="noreferrer" className="text-orange-600 hover:underline inline-flex items-center gap-1">{nameFor(est)}<Link className="w-3 h-3" /></a>
+            : <span className="text-slate-700">{nameFor(est)}</span>}
+        </div>
+      ) : (
+        <p className="text-xs text-slate-400 mb-2">Add a vendor price to set the estimate.</p>
+      )}
+      {prices.length > 0 && (
+        <div className="space-y-1.5 mb-2">
+          {prices.map((vp, i) => {
+            const link = linkFor(vp);
+            return (
+              <div key={i} className="flex items-center gap-2 text-sm">
+                <span className="flex-1 min-w-0 truncate">
+                  {link
+                    ? <a href={link} target="_blank" rel="noreferrer" className="text-orange-600 hover:underline">{nameFor(vp)}</a>
+                    : <span className="text-slate-700">{nameFor(vp)}</span>}
+                </span>
+                <span className="font-medium text-slate-800">{formatMoney(vp.price)}</span>
+                <button type="button" title="Remove" onClick={() => removeAt(i)} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg">
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <select
+          value={vendor}
+          onChange={(e) => setVendor(e.target.value)}
+          className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+        >
+          <option value="">Vendor…</option>
+          {providers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          <option value={OTHER_VENDOR}>Other…</option>
+        </select>
+        <input
+          type="number"
+          min={0}
+          step="0.01"
+          placeholder="Price"
+          value={price}
+          onChange={(e) => setPrice(e.target.value)}
+          className="px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+        />
+      </div>
+      {vendor === OTHER_VENDOR && (
+        <input
+          autoFocus
+          placeholder="Vendor name"
+          value={vendorName}
+          onChange={(e) => setVendorName(e.target.value)}
+          className="mt-2 w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+        />
+      )}
+      <div className="mt-2 flex items-center gap-2">
+        <input
+          type="url"
+          placeholder="Link where you saw this price (optional)"
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          className="flex-1 min-w-0 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+        />
+        <button
+          type="button"
+          onClick={commitAdd}
+          className="px-3 py-2 rounded-lg bg-orange-500 text-white text-sm font-medium hover:bg-orange-600"
+        >
+          Add
+        </button>
+      </div>
+    </div>
+  );
+};
+
 // Edit Item Modal
 interface EditItemModalProps {
   item: InventoryItem | null;
   tool: ToolItem | null;
   provider: Provider | null;
+  /** Every warehouse/box location on offer for the inventory location controls. */
+  allLocations?: string[];
+  /** Saved vendors, for the vendor-price picker. */
+  providers?: Provider[];
+  /** Name/email stamped on manual stock adjustments in the audit ledger. */
+  currentUserName?: string;
   onClose: () => void;
   onSaveInventory: (item: InventoryItem) => void;
   onSaveTool: (tool: ToolItem) => void;
@@ -2186,6 +2598,9 @@ const EditItemModal: React.FC<EditItemModalProps> = ({
   item,
   tool,
   provider,
+  allLocations = [],
+  providers = [],
+  currentUserName = 'office',
   onClose,
   onSaveInventory,
   onSaveTool,
@@ -2207,7 +2622,12 @@ const EditItemModal: React.FC<EditItemModalProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (item) {
-      onSaveInventory(formData as InventoryItem);
+      // Log manual stock changes to the audit ledger, attributed to this user.
+      const moves = diffStockMovements(item.stockByLocation, formData.stockByLocation, currentUserName);
+      const next = moves.length
+        ? { ...formData, movements: [...(formData.movements ?? []), ...moves] }
+        : formData;
+      onSaveInventory(next as InventoryItem);
     } else if (tool) {
       onSaveTool(formData as ToolItem);
     } else if (provider) {
@@ -2226,6 +2646,19 @@ const EditItemModal: React.FC<EditItemModalProps> = ({
     if (item) {
       return (
         <>
+          <DatasheetField
+            value={formData.datasheetUrl}
+            onChange={(url) => setFormData({ ...formData, datasheetUrl: url })}
+            onParsed={(p) => setFormData((prev: any) => ({
+              ...prev,
+              // Fill only empty fields so an existing item's data is never clobbered.
+              name: prev.name || p.name || '',
+              sku: prev.sku || p.sku || '',
+              partNumber: prev.partNumber || p.partNumber || '',
+              category: prev.category || p.category || 'bos',
+              description: prev.description || p.description || '',
+            }))}
+          />
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Name</label>
             <input
@@ -2273,17 +2706,14 @@ const EditItemModal: React.FC<EditItemModalProps> = ({
               rows={2}
             />
           </div>
+          {/* Quantity per warehouse/box. The single scalar Quantity is now the
+              derived total shown inside the editor. */}
+          <StockByLocationEditor
+            item={formData}
+            locations={allLocations}
+            onChange={(next) => setFormData(next)}
+          />
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Quantity</label>
-              <input
-                type="number"
-                required
-                value={formData.quantity || 0}
-                onChange={(e) => setFormData({ ...formData, quantity: parseInt(e.target.value) || 0 })}
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-              />
-            </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Unit of Measure</label>
               <select
@@ -2298,18 +2728,6 @@ const EditItemModal: React.FC<EditItemModalProps> = ({
                 <option value="kit">Kit</option>
               </select>
             </div>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Location</label>
-              <input
-                type="text"
-                required
-                value={formData.location || ''}
-                onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-              />
-            </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Min Stock</label>
               <input
@@ -2320,6 +2738,24 @@ const EditItemModal: React.FC<EditItemModalProps> = ({
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
               />
             </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Primary location</label>
+            <p className="text-xs text-slate-400 mb-1">Default target when receiving stock. Shown on the item card.</p>
+            <select
+              value={formData.location || ''}
+              onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+            >
+              <option value="">Unassigned</option>
+              {Array.from(new Set([
+                ...allLocations,
+                ...Object.keys(formData.stockByLocation ?? {}),
+                ...(formData.location ? [formData.location] : []),
+              ])).map((loc) => (
+                <option key={loc} value={loc}>{loc}</option>
+              ))}
+            </select>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
@@ -2343,6 +2779,11 @@ const EditItemModal: React.FC<EditItemModalProps> = ({
               />
             </div>
           </div>
+          <VendorPricesEditor
+            item={formData}
+            providers={providers}
+            onChange={(next) => setFormData(next)}
+          />
           <ImageUploader
             value={formData.imageUrl}
             onChange={(url) => setFormData({ ...formData, imageUrl: url })}

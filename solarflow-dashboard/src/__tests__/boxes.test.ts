@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   BOXES, boxLocation, parseBoxLocation, boxRowId, isBoxRow, findBoxRow,
   boxHome, boxContents, moveBox, setBoxPhotos, knownLocations, totalQty,
+  listBoxes, addBox, isDefaultBox, ensureBoxRow,
 } from '../lib/inventoryStore';
 import { boxFromScan, boxUrl } from '../components/BoxesPanel';
 import type { InventoryItem } from '../types';
@@ -90,5 +91,45 @@ describe('scanning', () => {
   it('rejects a QR that is not one of our labels', () => {
     expect(boxFromScan('https://example.com/whatever')).toBeNull();
     expect(boxFromScan('Box 7')).toBeNull();
+  });
+
+  it('matches a custom box when the live list is passed', () => {
+    const boxes = [...BOXES, 'Ladders'];
+    expect(boxFromScan(boxUrl('Ladders'), boxes)).toBe('Ladders');
+    expect(boxFromScan(boxUrl('Ladders'))).toBeNull(); // not in the default list
+  });
+});
+
+describe('custom boxes', () => {
+  it('lists defaults first, then discovered custom boxes alphabetically', () => {
+    const withCustom = ensureBoxRow(ensureBoxRow([], 'Ladders'), 'Consumables');
+    const list = listBoxes(withCustom);
+    expect(list.slice(0, BOXES.length)).toEqual(BOXES);
+    expect(list.slice(BOXES.length)).toEqual(['Consumables', 'Ladders']);
+  });
+
+  it('discovers a custom box from stock sitting at its location, with no row', () => {
+    const stray = item({ id: 'x', stockByLocation: { [boxLocation('Attic')]: 3 }, quantity: 3 });
+    expect(listBoxes([stray])).toContain('Attic');
+  });
+
+  it('never double-lists a default box even if it has a row and contents', () => {
+    const seeded = ensureBoxRow([item({ id: 'g', stockByLocation: { [boxLocation('PPE')]: 1 }, quantity: 1 })], 'PPE');
+    expect(listBoxes(seeded).filter(b => b === 'PPE')).toHaveLength(1);
+  });
+
+  it('addBox creates the box and rejects empties, dupes and reserved chars', () => {
+    expect(addBox([], '  ').error).toBeTruthy();
+    expect(addBox([], 'PPE').error).toMatch(/exists/i);      // collides with a default
+    expect(addBox([], 'a/b').error).toBeTruthy();            // reserved char
+    const ok = addBox([], '  Roof  Kit ');
+    expect(ok.error).toBeUndefined();
+    expect(findBoxRow(ok.items, 'Roof Kit')).toBeDefined();  // whitespace collapsed
+    expect(addBox(ok.items, 'roof kit').error).toMatch(/exists/i); // case-insensitive dupe
+  });
+
+  it('isDefaultBox is case-insensitive and false for custom names', () => {
+    expect(isDefaultBox(' ppe ')).toBe(true);
+    expect(isDefaultBox('Ladders')).toBe(false);
   });
 });

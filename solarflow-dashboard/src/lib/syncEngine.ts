@@ -321,8 +321,43 @@ function invTime(i: InventoryItemLike): string {
  * this merge resolves as an ordinary newest-wins update. `loadInventory` filters
  * tombstoned records out of the UI.
  */
+/** Union two append-only ledgers by entry `id`, keeping every unique entry. */
+function unionLedger(a: unknown, b: unknown): unknown[] | undefined {
+  const aa = Array.isArray(a) ? a : [];
+  const bb = Array.isArray(b) ? b : [];
+  if (!aa.length && !bb.length) return undefined;
+  const seen = new Set<string>();
+  const out: unknown[] = [];
+  for (const e of [...aa, ...bb]) {
+    const key = (e as { id?: string })?.id ?? JSON.stringify(e);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(e);
+  }
+  return out;
+}
+
+/**
+ * Whole-record newest-wins like the rest, EXCEPT the append-only ledgers
+ * (`movements`, `receipts`) are unioned by entry id. Those are audit feeds: a
+ * concurrent edit on another device must not drop entries just because its record
+ * carried a newer `updatedAt` on some scalar field (the house rule: activity
+ * feeds are union-only, never overwritten).
+ */
 export function mergeInventoryItems(localArr: unknown, remoteArr: unknown): InventoryItemLike[] {
-  return mergeByIdNewest(localArr, remoteArr);
+  const local: InventoryItemLike[]  = Array.isArray(localArr)  ? (localArr  as InventoryItemLike[]) : [];
+  const remote: InventoryItemLike[] = Array.isArray(remoteArr) ? (remoteArr as InventoryItemLike[]) : [];
+  const localById  = new Map(local.filter(i => i?.id).map(i => [i.id, i] as const));
+  const remoteById = new Map(remote.filter(i => i?.id).map(i => [i.id, i] as const));
+  return mergeByIdNewest(local, remote).map(w => {
+    const a = localById.get(w.id);
+    const b = remoteById.get(w.id);
+    if (!a || !b) return w; // present on only one side, nothing to union
+    const movements = unionLedger(a['movements'], b['movements']);
+    const receipts  = unionLedger(a['receipts'], b['receipts']);
+    if (!movements && !receipts) return w;
+    return { ...w, ...(movements ? { movements } : {}), ...(receipts ? { receipts } : {}) };
+  });
 }
 
 /** Tools sync on exactly the same contract as inventory: union by id, newest wins,

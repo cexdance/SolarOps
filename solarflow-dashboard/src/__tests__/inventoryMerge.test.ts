@@ -59,6 +59,29 @@ describe('mergeInventoryItems', () => {
   });
 });
 
+// ── Append-only ledger union ─────────────────────────────────────────────────
+// Whole-record newest-wins would drop audit entries the loser holds. Movements
+// and receipts must union by id so no "who used how much" record is lost when
+// two devices touch the same item inside the sync window.
+describe('mergeInventoryItems ledger union', () => {
+  it('unions movements/receipts by id even when the other record wins scalars', () => {
+    const local = [item('x', {
+      updatedAt: '2026-07-20T10:00:00.000Z',
+      movements: [{ id: 'm1', at: '2026-07-20T09:00:00.000Z', type: 'adjust', qty: -2 }],
+      receipts: [{ id: 'r1', quantity: 5 }],
+    })];
+    const remote = [item('x', {
+      updatedAt: '2026-07-20T12:00:00.000Z', quantity: 9,
+      movements: [{ id: 'm2', at: '2026-07-20T11:00:00.000Z', type: 'use', qty: -1 }],
+      receipts: [{ id: 'r1', quantity: 5 }, { id: 'r2', quantity: 3 }],
+    })];
+    const merged = mergeInventoryItems(local, remote)[0] as Record<string, any>;
+    expect(merged.quantity).toBe(9); // newest scalar still wins
+    expect(merged.movements.map((m: any) => m.id).sort()).toEqual(['m1', 'm2']); // nothing lost
+    expect(merged.receipts.map((r: any) => r.id).sort()).toEqual(['r1', 'r2']); // deduped by id
+  });
+});
+
 // ── Tombstoned deletes ───────────────────────────────────────────────────────
 // The union merge above is exactly why a delete cannot be a plain removal: a
 // shorter array is indistinguishable from "this device never had it", so the

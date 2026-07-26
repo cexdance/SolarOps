@@ -8,7 +8,7 @@
 // `mergeInventoryItems`, which unions rather than overwrites so the local-only
 // items every device accumulated during that period get adopted, not deleted.
 
-import { InventoryItem, InventoryCategory, UnitOfMeasure } from '../types';
+import { InventoryItem, InventoryCategory, UnitOfMeasure, VendorPrice, StockMovement } from '../types';
 import type { JobPart } from '../types/contractor';
 import { PARTS_CATALOG } from './partsCatalog';
 import { dbSet } from './db';
@@ -67,6 +67,54 @@ export function totalQty(item: Pick<InventoryItem, 'stockByLocation'>): number {
   return Object.values(item.stockByLocation ?? {}).reduce((s, n) => s + (n || 0), 0);
 }
 
+let mvSeq = 0;
+/** Unique-enough movement id. Per-device local events, so uniqueness beats determinism. */
+function movementId(at: string): string {
+  return `mv-${at}-${(mvSeq++).toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+}
+
+/**
+ * Adjustment movements for every location whose count changed between two
+ * `stockByLocation` maps. Called at edit-modal save so a manual add or removal
+ * lands in the audit ledger attributed to `by`.
+ */
+export function diffStockMovements(
+  before: Record<string, number> = {},
+  after: Record<string, number> = {},
+  by: string,
+  at: string = new Date().toISOString(),
+): StockMovement[] {
+  const out: StockMovement[] = [];
+  for (const loc of new Set([...Object.keys(before), ...Object.keys(after)])) {
+    const delta = (after[loc] ?? 0) - (before[loc] ?? 0);
+    if (delta !== 0) out.push({ id: movementId(at), at, type: 'adjust', qty: delta, location: loc, by });
+  }
+  return out;
+}
+
+/** Purchase vs. usage counts for the item card: how many times, and how many units. */
+export function usageSummary(item: Pick<InventoryItem, 'receipts' | 'movements'>) {
+  const receipts = item.receipts ?? [];
+  const used = (item.movements ?? []).filter(m => m.qty < 0);
+  return {
+    purchasedTimes: receipts.length,
+    purchasedQty: receipts.reduce((s, r) => s + (r.quantity || 0), 0),
+    usedTimes: used.length,
+    usedQty: used.reduce((s, m) => s + Math.abs(m.qty), 0),
+  };
+}
+
+/**
+ * The reference "estimated price": the cheapest vendor price on record, so the
+ * displayed number is what the item should cost us at best. Undefined when no
+ * vendor price has been logged. The caller resolves the vendor link/name.
+ */
+export function estimatedPrice(item: Pick<InventoryItem, 'vendorPrices'>): VendorPrice | undefined {
+  const priced = (item.vendorPrices ?? []).filter(v => v.price > 0);
+  if (!priced.length) return undefined;
+  return priced.reduce((min, v) => (v.price < min.price ? v : min));
+}
+
 /**
  * Backfill `stockByLocation` for a legacy row from its flat `quantity` + `location`.
  * Idempotent, so it is safe to run on every load and every merge result.
@@ -111,8 +159,18 @@ export function adjustLocationQty(item: InventoryItem, location: string, delta: 
 // Moving a box is therefore a single-row write: the contents stay "in PPE" and
 // only the box row changes address. Nothing has to walk the contents.
 
-/** The six physical boxes. A fixed list on purpose: six strings do not need CRUD. */
+/**
+ * The default boxes, always present. Users can add their own on top with
+ * `addBox` (stored as ordinary `box-` rows) and remove those with `deleteBox`;
+ * `listBoxes` returns defaults + custom. Defaults themselves are fixed
+ * categories and cannot be deleted, they would just reappear.
+ */
 export const BOXES = ['PPE', 'Electrical Big', 'Electrical Small', 'Rail System', 'Cables', 'Random'];
+
+/** A default box cannot be renamed or deleted, only emptied and moved. */
+export function isDefaultBox(name: string): boolean {
+  return BOXES.some(b => b.toLowerCase() === name.trim().toLowerCase());
+}
 
 /** Where a box row can live. Boxes shuttle between these two. */
 export const BOX_HOMES = ['Storage Locker', 'Service Van'];
@@ -180,6 +238,48 @@ export function ensureBoxRow(items: InventoryItem[], box: string): InventoryItem
 }
 
 /**
+ * Every box in play: the fixed defaults, plus any custom box a user created (its
+ * `box-` row) or that still holds stock at a `Box: X` location. Derived from the
+ * data, so a custom box propagates across devices via ordinary item sync with no
+ * extra key. Defaults first, then custom boxes alphabetically.
+ */
+export function listBoxes(items: InventoryItem[]): string[] {
+  const custom = new Set<string>();
+  const add = (n: string | null) => { if (n && !isDefaultBox(n)) custom.add(n); };
+  for (const i of items) {
+    if (isBoxRow(i)) add(i.name.startsWith('Box: ') ? i.name.slice(5) : null);
+    else for (const loc of Object.keys(i.stockByLocation ?? {})) add(parseBoxLocation(loc));
+  }
+  return [...BOXES, ...Array.from(custom).sort()];
+}
+
+/**
+ * Create a new custom box. Returns the updated items, or an `error` when the name
+ * is empty, reserved-charactered, or already taken (case-insensitive, defaults
+ * included). `:` and `/` are refused because `Box: <name>` location strings and
+ * display splits reserve them.
+ */
+export function addBox(items: InventoryItem[], rawName: string): { items: InventoryItem[]; error?: string } {
+  const name = rawName.trim().replace(/\s+/g, ' ');
+  if (!name) return { items, error: 'Name the box first.' };
+  if (/[:/]/.test(name)) return { items, error: 'A box name cannot contain : or /.' };
+  if (listBoxes(items).some(b => b.toLowerCase() === name.toLowerCase())) {
+    return { items, error: `"${name}" already exists.` };
+  }
+  return { items: ensureBoxRow(items, name) };
+}
+
+/**
+ * Delete a custom box by tombstoning its `box-` row, so the delete propagates
+ * like any inventory delete. A no-op for a default box (fixed category) or one
+ * with no row yet. Contents are left alone; the caller refuses a non-empty box.
+ * Returns the fresh live list, already persisted by `deleteInventoryItem`.
+ */
+export function deleteBox(box: string): InventoryItem[] {
+  return deleteInventoryItem(boxRowId(box));
+}
+
+/**
  * Move a whole box to another home. One row changes; the contents do not move,
  * they stay "in PPE" wherever PPE happens to be.
  *
@@ -243,7 +343,12 @@ export function applyPartsToInventory(
     const item = byId.get(part.inventoryItemId);
     if (!item) return part; // item was deleted; leave unapplied rather than guess
     const location = part.fromLocation || item.location;
-    byId.set(item.id, adjustLocationQty(item, location, -(part.quantity || 0)));
+    const qty = part.quantity || 0;
+    const moved = adjustLocationQty(item, location, -qty);
+    const movement: StockMovement = {
+      id: movementId(now), at: now, type: 'use', qty: -qty, location, by: appliedBy, note: part.name || undefined,
+    };
+    byId.set(item.id, { ...moved, movements: [...(moved.movements ?? []), movement] });
     appliedCount++;
     return { ...part, appliedToInventoryAt: now, appliedBy };
   });
