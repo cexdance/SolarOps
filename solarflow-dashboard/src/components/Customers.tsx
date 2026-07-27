@@ -2057,7 +2057,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
           </div>
           <div class="m-value">${formatMoney(dollarsSaved, { decimals: 0 })}</div>
           <div class="m-label">Estimated Savings</div>
-          <div class="m-sub">Versus grid electricity costs</div>
+          <div class="m-sub">Based on $${COST_PER_KWH.toFixed(2)}/kWh grid rate</div>
         </div>
 
         <div class="metric blue">
@@ -3041,7 +3041,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
     </div>
     <div class="metric-card">
       <div class="metric-value green">${formatMoney(dollarsSaved, { decimals: 0 })}</div>
-      <div class="metric-label">Est. Savings</div>
+      <div class="metric-label">Est. Savings ($${COST_PER_KWH.toFixed(2)}/kWh)</div>
     </div>
     <div class="metric-card">
       <div class="metric-value blue">${specificYield > 0 ? specificYield.toFixed(2) : '-'}</div>
