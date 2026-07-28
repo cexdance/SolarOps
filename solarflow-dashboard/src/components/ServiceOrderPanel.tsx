@@ -1543,6 +1543,15 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                 </span>
               </div>
             )}
+            {/* Pre-quote, the caller's own words are what gets quoted. Put them
+                in the header so whoever opens the order reads the scope first
+                instead of hunting for it further down. */}
+            {(job?.description || job?.notes) && ['draft', 'quote_sent'].includes(woStatus) && (
+              <div className="mt-2 rounded-lg bg-slate-800 border border-slate-700 px-3 py-2 max-w-2xl">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">Requested work</p>
+                <p className="text-sm text-slate-200 whitespace-pre-line">{job.description || job.notes}</p>
+              </div>
+            )}
           </div>
 
           {/* Right: logo + close */}

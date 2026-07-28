@@ -13,6 +13,7 @@ import {
   Printer,
   ChevronRight,
   ArrowUpDown,
+  FileText,
 } from 'lucide-react';
 import { Job, Customer, User as UserType } from '../types';
 import type { Contractor } from '../types/contractor';
@@ -23,6 +24,72 @@ import { formatMoney } from '../lib/money';
 import { WorkOrderCalendar } from './WorkOrderCalendar';
 import { BillingReportModal } from './BillingReportModal';
 import { printServiceReport } from '../lib/printServiceReport';
+
+// ── Billing pipeline (kanban) ─────────────────────────────────────────────────
+// New → Quote Sent → Pending Completion → Ready to Invoice → Invoiced → Paid →
+// Costs Covered. PowerCare SOs bill to SolarEdge through Conexsol USA; their
+// cards get an orange hue so Daniel spots them at a glance.
+export type BillingCol = 'new' | 'quote_sent' | 'pending' | 'to_invoice' | 'invoiced' | 'paid' | 'costs_covered';
+
+export const getBillingColumn = (job: Job): BillingCol => {
+  if (job.status === 'paid') return job.costsCoveredAt ? 'costs_covered' : 'paid';
+  if (job.status === 'invoiced') return 'invoiced';
+  if (job.status === 'completed') return 'to_invoice';
+  if (job.woStatus === 'quote_sent') return 'quote_sent';
+  // No woStatus at all means the service call was created but never worked,
+  // same place as an explicit draft.
+  if (!job.woStatus || job.woStatus === 'draft') return 'new';
+  return 'pending';
+};
+
+// ── Card aging ────────────────────────────────────────────────────────────────
+// Each column runs off its own clock: the moment the ball landed in billing's
+// court. Columns not listed have no billing clock (Pending Completion is the
+// contractor's time, Paid / Costs Covered are already done) and never age.
+//
+// The stage stamp is FIRST CHOICE, not the only one. Most of the existing
+// backlog predates those stamps (as of 2026-07-28: 0 of 13 Quote Sent cards
+// have quoteSentAt, 7 of 31 Invoiced have invoicedAt), and a card that can't
+// age is worse than one aged approximately. So fall back to the last touch,
+// then to creation, and mark the result inexact so the card can say so.
+export const AGE_ANCHORS: Partial<Record<BillingCol, (keyof Job)[]>> = {
+  new:        ['createdAt'],
+  quote_sent: ['quoteSentAt', 'updatedAt', 'createdAt'],
+  to_invoice: ['completedAt', 'updatedAt', 'createdAt'],
+  invoiced:   ['invoicedAt', 'updatedAt', 'createdAt'],
+};
+
+// Calendar days, escalating one level every 3. 0-2 clean, 3-5, 6-8, 9+.
+// ponytail: capped at 3 because a 4th shade of red reads the same as the 3rd.
+export const ageTier = (days: number): 0 | 1 | 2 | 3 =>
+  days < 3 ? 0 : Math.min(3, Math.floor(days / 3)) as 1 | 2 | 3;
+
+/** Days the card has sat in this column, or null when the column has no
+ *  billing clock or nothing usable to measure from. `exact` is false when the
+ *  stage stamp was missing and a fallback timestamp was used. */
+export const cardAge = (
+  job: Job,
+  col: BillingCol,
+  now = Date.now(),
+): { days: number; exact: boolean } | null => {
+  const chain = AGE_ANCHORS[col];
+  if (!chain) return null;
+  for (let i = 0; i < chain.length; i++) {
+    const raw = job[chain[i]];
+    if (typeof raw !== 'string' || !raw) continue;
+    const t = new Date(raw).getTime();
+    if (Number.isNaN(t)) continue;
+    return { days: Math.max(0, Math.floor((now - t) / 86400000)), exact: i === 0 };
+  }
+  return null;
+};
+
+const TIER_STYLE: Record<0 | 1 | 2 | 3, { border: string; pill: string }> = {
+  0: { border: '',                               pill: '' },
+  1: { border: 'border-l-4 border-l-amber-400',  pill: 'bg-amber-100 text-amber-800' },
+  2: { border: 'border-l-4 border-l-orange-500', pill: 'bg-orange-100 text-orange-800' },
+  3: { border: 'border-l-4 border-l-red-600',    pill: 'bg-red-100 text-red-700 font-bold' },
+};
 
 interface BillingProps {
   jobs: Job[];
@@ -48,6 +115,8 @@ export const Billing: React.FC<BillingProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [processingIds, setProcessingIds] = useState<string[]>([]);
   const [showReport, setShowReport] = useState(false);
+  // Click a column's aging badge to see only the cards that are actually late.
+  const [agingOnly, setAgingOnly] = useState<Record<string, boolean>>({});
   const [viewMode, setViewMode] = useState<'kanban' | 'list' | 'calendar'>(() => {
     const saved = localStorage.getItem('solarops_billing_view');
     if (saved === 'kanban' || saved === 'list' || saved === 'calendar') return saved as 'kanban' | 'list' | 'calendar';
@@ -176,19 +245,6 @@ export const Billing: React.FC<BillingProps> = ({
     return 'unbilled';
   };
 
-  // ── Billing pipeline (kanban) ───────────────────────────────────────────────
-  // Pending Completion → Ready to Invoice → Invoiced → Paid → Costs Covered.
-  // PowerCare SOs bill to SolarEdge through Conexsol USA; their cards get an
-  // orange hue so Daniel spots them at a glance.
-  type BillingCol = 'pending' | 'to_invoice' | 'invoiced' | 'paid' | 'costs_covered';
-
-  const getBillingColumn = (job: Job): BillingCol => {
-    if (job.status === 'paid') return job.costsCoveredAt ? 'costs_covered' : 'paid';
-    if (job.status === 'invoiced') return 'invoiced';
-    if (job.status === 'completed') return 'to_invoice';
-    return 'pending';
-  };
-
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverCol, setDragOverCol] = useState<BillingCol | null>(null);
 
@@ -198,6 +254,12 @@ export const Billing: React.FC<BillingProps> = ({
     const now = new Date().toISOString();
     let patch: Partial<Job>;
     switch (col) {
+      case 'new':
+        patch = { status: 'new', woStatus: 'draft', costsCoveredAt: undefined };
+        break;
+      case 'quote_sent':
+        patch = { status: 'new', woStatus: 'quote_sent', quoteSentAt: job.quoteSentAt ?? now, costsCoveredAt: undefined };
+        break;
       case 'pending':
         patch = { status: 'in_progress', woStatus: 'in_progress', costsCoveredAt: undefined };
         break;
@@ -216,6 +278,17 @@ export const Billing: React.FC<BillingProps> = ({
     }
     onUpdateJob({ ...job, ...patch });
   };
+
+  // Client accepted the quote. The order leaves billing's hands and goes back
+  // to dispatch/scheduling, so it lands in Pending Completion and returns on
+  // its own once the contractor completes it.
+  const approveQuote = (job: Job) =>
+    onUpdateJob({
+      ...job,
+      status: 'assigned',
+      woStatus: 'quote_approved',
+      quoteApprovedAt: job.quoteApprovedAt ?? new Date().toISOString(),
+    });
 
   const fmtDate = (d?: string) => (d ? new Date(d).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' }) : '');
 
@@ -334,18 +407,24 @@ export const Billing: React.FC<BillingProps> = ({
       {viewMode === 'kanban' && (
         <div className="flex gap-4 overflow-x-auto pb-4">
           {([
-            { key: 'pending'       as BillingCol, label: 'Pending Completion', sub: 'Waiting on contractor',        headerCls: 'bg-slate-100 border-slate-200 text-slate-700' },
+            { key: 'new'           as BillingCol, label: 'New',                sub: 'Service calls to quote',       headerCls: 'bg-blue-50 border-blue-200 text-blue-700' },
+            { key: 'quote_sent'    as BillingCol, label: 'Quote Sent',         sub: 'Awaiting client approval',     headerCls: 'bg-violet-50 border-violet-200 text-violet-700' },
+            { key: 'pending'       as BillingCol, label: 'Pending Completion', sub: 'Approved, waiting on contractor', headerCls: 'bg-slate-100 border-slate-200 text-slate-700' },
             { key: 'to_invoice'    as BillingCol, label: 'Ready to Invoice',   sub: 'Create and send in Xero',      headerCls: 'bg-red-50 border-red-200 text-red-700' },
             { key: 'invoiced'      as BillingCol, label: 'Invoiced',           sub: 'Awaiting payment',             headerCls: 'bg-purple-50 border-purple-200 text-purple-700' },
             { key: 'paid'          as BillingCol, label: 'Paid',               sub: 'Client / SolarEdge paid',      headerCls: 'bg-green-50 border-green-200 text-green-700' },
             { key: 'costs_covered' as BillingCol, label: 'Costs Covered',      sub: 'Contractor + expenses settled', headerCls: 'bg-emerald-50 border-emerald-200 text-emerald-700' },
           ]).map(col => {
             const colSort = columnSortBy[col.key] ?? 'none';
-            const colJobs = sortJobsBy(
+            const allColJobs = sortJobsBy(
               filteredJobs.filter(j => j.status !== 'archived' && getBillingColumn(j) === col.key),
               colSort,
               contractors,
             );
+            const isAging = (j: Job) => ageTier(cardAge(j, col.key)?.days ?? 0) > 0;
+            const agingCount = allColJobs.filter(isAging).length;
+            const showAgingOnly = !!agingOnly[col.key] && agingCount > 0;
+            const colJobs = showAgingOnly ? allColJobs.filter(isAging) : allColJobs;
             return (
               <div
                 key={col.key}
@@ -360,9 +439,25 @@ export const Billing: React.FC<BillingProps> = ({
                 }}
               >
                 <div className={`px-3 py-2 rounded-lg border mb-3 ${col.headerCls}`}>
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-2">
                     <span className="font-semibold text-sm">{col.label}</span>
-                    <span className="text-xs font-bold">{colJobs.length}</span>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {/* How many are rotting below the fold. Toggles the stack
+                          down to just those, so the count is also the triage. */}
+                      {agingCount > 0 && (
+                        <button
+                          onClick={() => setAgingOnly(prev => ({ ...prev, [col.key]: !prev[col.key] }))}
+                          title={showAgingOnly ? 'Show all cards' : `Show only the ${agingCount} aging`}
+                          className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold cursor-pointer transition-colors ${
+                            showAgingOnly ? 'bg-red-600 text-white' : 'bg-red-100 text-red-700 hover:bg-red-200'
+                          }`}
+                        >
+                          <AlertTriangle className="w-2.5 h-2.5" />
+                          {agingCount} aging
+                        </button>
+                      )}
+                      <span className="text-xs font-bold">{colJobs.length}</span>
+                    </div>
                   </div>
                   <p className="text-[10px] opacity-70 mt-0.5">{col.sub}</p>
                 </div>
@@ -384,6 +479,8 @@ export const Billing: React.FC<BillingProps> = ({
                     </div>
                   ) : colJobs.map(job => {
                     const customer = getCustomer(job.customerId);
+                    const age = cardAge(job, col.key);
+                    const tier = ageTier(age?.days ?? 0);
                     return (
                       <div
                         key={job.id}
@@ -394,7 +491,7 @@ export const Billing: React.FC<BillingProps> = ({
                         title="Open service order"
                         className={`rounded-xl border p-3 hover:shadow-md transition-all cursor-grab select-none ${
                           job.isPowercare ? 'bg-orange-50/70 border-orange-200' : 'bg-white border-slate-200'
-                        } ${draggedId === job.id ? 'opacity-40 scale-95' : ''}`}
+                        } ${TIER_STYLE[tier].border} ${draggedId === job.id ? 'opacity-40 scale-95' : ''}`}
                       >
                         <div className="flex items-center gap-1.5 mb-0.5">
                           {customer?.clientId && (
@@ -402,6 +499,16 @@ export const Billing: React.FC<BillingProps> = ({
                           )}
                           {job.isPowercare && (
                             <span className="text-[9px] font-bold uppercase tracking-wide bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded-full">PowerCare</span>
+                          )}
+                          {tier > 0 && age && (
+                            <span
+                              title={age.exact
+                                ? `${age.days} days in ${col.label}`
+                                : `About ${age.days} days: no stage date on this order, measured from its last update`}
+                              className={`text-[10px] px-1.5 py-0.5 rounded-full whitespace-nowrap ${TIER_STYLE[tier].pill}`}
+                            >
+                              {age.exact ? '' : '~'}{age.days}d
+                            </span>
                           )}
                           {job.woNumber && (
                             <span className="text-[10px] text-slate-400 ml-auto shrink-0">{serviceOrderNo(job.woNumber)}</span>
@@ -413,8 +520,11 @@ export const Billing: React.FC<BillingProps> = ({
                           {job.serviceType && (
                             <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-teal-100 text-teal-700 whitespace-nowrap">{String(job.serviceType)}</span>
                           )}
-                          {job.completedAt && col.key !== 'pending' && (
+                          {job.completedAt && !['pending', 'new', 'quote_sent'].includes(col.key) && (
                             <span className="text-[10px] text-slate-500">Done {fmtDate(job.completedAt)}</span>
+                          )}
+                          {job.quoteSentAt && col.key === 'quote_sent' && (
+                            <span className="text-[10px] text-slate-500">Sent {fmtDate(job.quoteSentAt)}</span>
                           )}
                           {job.invoicedAt && ['invoiced', 'paid', 'costs_covered'].includes(col.key) && (
                             <span className="text-[10px] text-slate-500">· Inv {fmtDate(job.invoicedAt)}</span>
@@ -423,9 +533,32 @@ export const Billing: React.FC<BillingProps> = ({
                             <span className="text-[10px] text-slate-500">· Paid {fmtDate(job.clientPaidAt)}</span>
                           )}
                         </div>
+                        {/* What Daniel has to quote: the free-text scope the
+                            caller gave. Shown before he opens the panel. */}
+                        {['new', 'quote_sent'].includes(col.key) && (job.description || job.notes) && (
+                          <p className="text-[11px] text-slate-600 mb-2 whitespace-pre-line line-clamp-3">
+                            {job.description || job.notes}
+                          </p>
+                        )}
                         <div className="flex gap-2">
+                          {col.key === 'new' && (
+                            <button
+                              onClick={() => onJobClick?.(job.id)}
+                              className="flex-1 flex items-center justify-center gap-1 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700 cursor-pointer"
+                            >
+                              <FileText className="w-3 h-3" /> Create Quote
+                            </button>
+                          )}
+                          {col.key === 'quote_sent' && (
+                            <>
+                              <span className="flex-1 flex items-center justify-center gap-1 py-1.5 bg-violet-100 text-violet-700 rounded-lg text-xs font-medium">
+                                <Clock className="w-3 h-3" /> Awaiting Approval
+                              </span>
+                              <button onClick={() => approveQuote(job)} className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 cursor-pointer">Approved</button>
+                            </>
+                          )}
                           {col.key === 'pending' && (
-                            <span className="text-[11px] text-slate-400">In the field · moves here when contractor completes</span>
+                            <span className="text-[11px] text-slate-400">With dispatch · moves to Ready to Invoice when the contractor completes</span>
                           )}
                           {col.key === 'to_invoice' && (
                             <>

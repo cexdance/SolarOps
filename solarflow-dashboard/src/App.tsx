@@ -2889,6 +2889,77 @@ function App() {
   }
 
   // Render appropriate view
+  // The service order slide-over. It is already `fixed inset-0`, so it can be
+  // returned as a whole view (Service Orders) or layered over another view
+  // (Billing) without a second copy of this prop wiring. `backView` is where
+  // Close lands. ponytail: one function, two call sites, no new component.
+  const renderServiceOrder = (backView: string) => {
+    if (!selectedJob || !selectedCustomer) return null;
+    const job = selectedJob;
+    const customer = selectedCustomer;
+    const clientPaidCount = data.jobs.filter(
+      j => j.customerId === customer.id && (j.status === 'paid' || j.status === 'invoiced')
+    ).length;
+    return (
+      <ServiceOrderPanel
+        job={job}
+        siteId={customer.id}
+        siteName={customer.name}
+        clientId={customer.clientId}
+        siteAddress={`${customer.address}, ${customer.city}, ${customer.state}`}
+        clientPaidJobCount={clientPaidCount}
+        contractors={contractors}
+        technicians={data.users.filter(u => u.role === 'technician' || u.role === 'coo').map(u => ({ id: u.id, name: u.name }))}
+        users={data.users.map(u => ({ id: u.id, name: u.name, username: u.username, email: u.email }))}
+        currentUserName={currentUser?.name}
+        currentUserRole={currentUser?.role}
+        customer={customer}
+        onClose={() => { setSelectedJobId(null); setCurrentView(backView); }}
+        onSave={(partial) => {
+          handleUpdateJob({ ...job, ...partial, id: job.id } as Job);
+          // Panel stays open, user closes manually
+        }}
+        onDeleteJob={(jobId) => {
+          handleDeleteJob(jobId);
+          setSelectedJobId(null);
+          setCurrentView(backView);
+        }}
+        onDispatch={(contractorJob) => {
+          const updated = [...contractorJobs, contractorJob];
+          setContractorJobs(updated);
+          saveContractorJobs(updated);
+          logChange('contractor_job.dispatch', 'contractor_job', contractorJob.id, contractorJob, resolveActor());
+        }}
+        onQuoteSent={(_quoteId, quoteNumber) => {
+          const crmCustomers = loadCustomers();
+          const crmMatch = crmCustomers.find(
+            c => c.email?.toLowerCase() === customer.email?.toLowerCase()
+          );
+          if (crmMatch) {
+            const interactions = loadInteractions();
+            const label = quoteNumber ? `Quote #${quoteNumber}` : 'Quote';
+            const updated = addInteraction(
+              interactions,
+              crmMatch.id,
+              'quote',
+              `${label} emailed to ${customer.email ?? 'customer'}`,
+              currentUser?.id ?? '',
+              currentUser?.name ?? 'Staff',
+              { subject: `${label} sent via email`, direction: 'outbound' }
+            );
+            saveInteractions(updated);
+          }
+        }}
+        onViewCustomer={(customerId) => {
+          setSelectedJobId(null);
+          setSelectedCustomerId(customerId);
+          setCurrentView('customers');
+        }}
+        onViewChange={handleViewChange}
+      />
+    );
+  };
+
   const renderView = () => {
     // Sales reps can only access crm, customers2, and lobby
     if (currentUser?.role === 'sales' && !['crm', 'customers2', 'lobby'].includes(currentView)) {
@@ -3089,67 +3160,7 @@ function App() {
 
       case 'jobDetail':
         if (selectedJob && selectedCustomer) {
-          const clientPaidCount = data.jobs.filter(
-            j => j.customerId === selectedCustomer.id && (j.status === 'paid' || j.status === 'invoiced')
-          ).length;
-          return (
-            <ServiceOrderPanel
-              job={selectedJob}
-              siteId={selectedCustomer.id}
-              siteName={selectedCustomer.name}
-              clientId={selectedCustomer.clientId}
-              siteAddress={`${selectedCustomer.address}, ${selectedCustomer.city}, ${selectedCustomer.state}`}
-              clientPaidJobCount={clientPaidCount}
-              contractors={contractors}
-              technicians={data.users.filter(u => u.role === 'technician' || u.role === 'coo').map(u => ({ id: u.id, name: u.name }))}
-              users={data.users.map(u => ({ id: u.id, name: u.name, username: u.username, email: u.email }))}
-              currentUserName={currentUser?.name}
-              currentUserRole={currentUser?.role}
-              customer={selectedCustomer}
-              onClose={() => { setSelectedJobId(null); setCurrentView('jobs'); }}
-              onSave={(partial) => {
-                handleUpdateJob({ ...selectedJob, ...partial, id: selectedJob.id } as Job);
-                // Panel stays open, user closes manually
-              }}
-              onDeleteJob={(jobId) => {
-                handleDeleteJob(jobId);
-                setSelectedJobId(null);
-                setCurrentView('jobs');
-              }}
-              onDispatch={(contractorJob) => {
-                const updated = [...contractorJobs, contractorJob];
-                setContractorJobs(updated);
-                saveContractorJobs(updated);
-                logChange('contractor_job.dispatch', 'contractor_job', contractorJob.id, contractorJob, resolveActor());
-              }}
-              onQuoteSent={(_quoteId, quoteNumber) => {
-                const crmCustomers = loadCustomers();
-                const crmMatch = crmCustomers.find(
-                  c => c.email?.toLowerCase() === selectedCustomer?.email?.toLowerCase()
-                );
-                if (crmMatch) {
-                  const interactions = loadInteractions();
-                  const label = quoteNumber ? `Quote #${quoteNumber}` : 'Quote';
-                  const updated = addInteraction(
-                    interactions,
-                    crmMatch.id,
-                    'quote',
-                    `${label} emailed to ${selectedCustomer?.email ?? 'customer'}`,
-                    currentUser?.id ?? '',
-                    currentUser?.name ?? 'Staff',
-                    { subject: `${label} sent via email`, direction: 'outbound' }
-                  );
-                  saveInteractions(updated);
-                }
-              }}
-              onViewCustomer={(customerId) => {
-                setSelectedJobId(null);
-                setSelectedCustomerId(customerId);
-                setCurrentView('customers');
-              }}
-              onViewChange={handleViewChange}
-            />
-          );
+          return renderServiceOrder('jobs');
         }
         return (
           <Jobs
@@ -3198,17 +3209,22 @@ function App() {
         );
 
       case 'billing':
+        // The service order opens ON TOP of the board, so Daniel keeps his
+        // place in the kanban when he closes it.
         return (
-          <Billing
-            jobs={data.jobs}
-            customers={data.customers}
-            users={data.users}
-            onUpdateJob={handleUpdateJob}
-            isMobile={isMobile}
-            currentUserName={currentUser?.name}
-            onJobClick={(jobId) => handleViewChange('jobDetail', jobId)}
-            contractors={contractors}
-          />
+          <>
+            <Billing
+              jobs={data.jobs}
+              customers={data.customers}
+              users={data.users}
+              onUpdateJob={handleUpdateJob}
+              isMobile={isMobile}
+              currentUserName={currentUser?.name}
+              onJobClick={(jobId) => setSelectedJobId(jobId)}
+              contractors={contractors}
+            />
+            {renderServiceOrder('billing')}
+          </>
         );
 
       case 'technician':
