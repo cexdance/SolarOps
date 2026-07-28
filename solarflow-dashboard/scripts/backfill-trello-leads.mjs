@@ -32,6 +32,28 @@ function phoneDigits(text) {
   if (p.length === 11 && p.startsWith('1')) p = p.slice(1);
   return p.length === 10 ? p : '';
 }
+// Mirrors parseLeadDesc in api/trello-card.ts: the SolarEdge lead email lands in
+// the card desc as labeled lines, which is cheaper and surer than vision.
+const LABELS = {
+  'first name': 'firstName', 'last name': 'lastName', email: 'email', phone: 'phone',
+  address: 'address', city: 'city', state: 'state', zip: 'zip', 'zip code': 'zip',
+};
+function parseDesc(desc) {
+  const out = {};
+  for (const line of String(desc || '').split('\n')) {
+    const m = line.match(/^\s*([A-Za-z_ ]+?)\s*:\s*(.+?)\s*$/);
+    const f = m && LABELS[m[1].toLowerCase()];
+    if (f && !out[f]) out[f] = m[2].trim();
+  }
+  if (out.phone) out.phone = phoneDigits(out.phone);
+  return out;
+}
+// A lead is broken if it has no name, or a filename for a name, or no way to
+// reach the person at all.
+const isBroken = (l) =>
+  isFilename(l.firstName) ||
+  !`${l.firstName || ''}${l.lastName || ''}`.trim() ||
+  (!`${l.phone || ''}`.trim() && !`${l.email || ''}`.trim());
 
 if (process.argv.includes('--selftest')) {
   const assert = (c, m) => { if (!c) { console.error('FAIL:', m); process.exit(1); } };
@@ -41,6 +63,13 @@ if (process.argv.includes('--selftest')) {
   assert(phoneDigits('call (786) 444-3784 now') === '7864443784', 'formatted phone');
   assert(phoneDigits('id 13058786934 x') === '3058786934', '11-digit phone');
   assert(phoneDigits('no phone here') === '', 'no phone');
+  const d = parseDesc('First Name: Gil\nLast Name: Hyatt\nPhone: 9546050226\nAddress:\nZip Code: 33060');
+  assert(d.firstName === 'Gil' && d.lastName === 'Hyatt', 'desc name');
+  assert(d.phone === '9546050226' && d.zip === '33060', 'desc phone/zip');
+  assert(d.address === undefined, 'blank desc label stays unset');
+  assert(isBroken({ firstName: '', lastName: '', phone: '', email: '' }), 'blank lead is broken');
+  assert(isBroken({ firstName: 'Osmel', lastName: 'Rodriguez', phone: '', email: '' }), 'name but no contact is broken');
+  assert(!isBroken({ firstName: 'Dante', lastName: 'Moricoli', phone: '8138094163', email: '' }), 'name + phone is fine');
   console.log('selftest: all assertions passed');
   process.exit(0);
 }
@@ -114,9 +143,7 @@ async function putKey(key, value) {
 
 const crm = (await getKey(CRM_KEY)) ?? { leads: [] };
 const leads = Array.isArray(crm.leads) ? crm.leads : [];
-const targets = leads.filter((l) =>
-  typeof l?.id === 'string' && l.id.startsWith('lead-trello-') &&
-  (isFilename(l.firstName) || (!(l.firstName || '').trim() && !(l.lastName || '').trim())));
+const targets = leads.filter((l) => typeof l?.id === 'string' && l.id.startsWith('lead-trello-') && isBroken(l));
 
 console.log(`${targets.length} lead(s) to backfill (of ${leads.length} total). ${APPLY ? 'APPLYING.' : 'Dry run.'}\n`);
 
@@ -126,26 +153,38 @@ for (const lead of targets) {
   const was = `${lead.firstName || ''} ${lead.lastName || ''}`.trim() || '(blank)';
   try {
     const c = await getCard(cardId);
+    const d = parseDesc(c.desc);
+    const t = isFilename(c.name) ? [] : String(c.name).trim().split(/\s+/);
+
+    // Vision only when the free sources left a hole (matches the webhook).
     let v = {};
-    const img = await firstImage(cardId);
-    if (img) v = await visionParse(img.base64, img.mimeType);
+    if (!(d.firstName || t[0]) || !(d.phone || d.email)) {
+      const img = await firstImage(cardId);
+      if (img) v = await visionParse(img.base64, img.mimeType);
+    }
 
-    const first = (v.firstName || '').trim();
-    const last = (v.lastName || '').trim();
-    const phone = (v.phone || '').trim() || phoneDigits(`${c.name}\n${c.desc || ''}`) || (lead.phone || '');
+    const pick = (...vals) => vals.map((x) => String(x ?? '').trim()).find(Boolean) ?? '';
     const patch = {
-      firstName: first, lastName: last,
-      phone, email: (v.email || '').trim() || lead.email || '',
-      address: (v.address || '').trim() || lead.address || '',
-      city: (v.city || '').trim() || lead.city || '',
-      state: (v.state || '').trim() || lead.state || '',
-      zip: (v.zip || '').trim() || lead.zip || '',
+      firstName: pick(d.firstName, t[0], v.firstName),
+      lastName: pick(d.lastName, t.slice(1).join(' '), v.lastName),
+      phone: pick(d.phone, v.phone, phoneDigits(`${c.name}\n${c.desc || ''}`)),
+      email: pick(d.email, v.email),
+      address: pick(d.address, v.address),
+      city: pick(d.city, v.city),
+      state: pick(d.state, v.state),
+      zip: pick(d.zip, v.zip),
     };
-    const now = `${first} ${last}`.trim() || (phone || '(no name found)');
-    console.log(`  ${cardId}: "${was}" -> "${now}"  ph:${phone || '-'}  ${[patch.city, patch.state].filter(Boolean).join(', ')}`);
+    // Fill-empty-only: never blank a value the team typed in by hand.
+    const filled = {};
+    for (const [k, val] of Object.entries(patch)) {
+      if (val && !String(lead[k] ?? '').trim()) filled[k] = val;
+    }
+    const disp = pick(`${patch.firstName} ${patch.lastName}`.trim(), patch.phone, '(no name found)');
+    console.log(`  ${cardId}: "${was}" -> "${disp}"  ph:${patch.phone || '-'}  ${[patch.city, patch.state].filter(Boolean).join(', ')}  [+${Object.keys(filled).join(',') || 'nothing'}]`);
 
-    if (APPLY) {
-      Object.assign(lead, patch, { updatedAt: new Date().toISOString() });
+    if (APPLY && Object.keys(filled).length) {
+      Object.assign(lead, filled, { updatedAt: new Date().toISOString() });
+      const first = patch.firstName, last = patch.lastName, phone = patch.phone;
       const jkey = `job:job-trello-${cardId}`;
       const job = await getKey(jkey);
       if (job) {

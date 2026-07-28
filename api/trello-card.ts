@@ -20,24 +20,33 @@
  * HEAD (new): Trello verifies the callback URL this way when the webhook is
  * registered; must return 2xx synchronously or registration is rejected.
  *
- * ponytail: the POST branch has no HMAC signature verification. Trello signs
- * webhook deliveries with the app's OAuth secret, which is not currently in
- * Vercel env (only the API key + token are). Without it this endpoint trusts
- * any POST whose action names a known board+list id pair, both unguessable
- * 24-hex-char Trello ids, not the URL. Worst case an attacker who somehow
- * learns those ids could POST spam Lead rows, never destructive, never
- * touches existing data. Upgrade path: once TRELLO_API_SECRET is set, verify
- * X-Trello-Webhook = HMAC-SHA1(rawBody + callbackURL, secret) before
- * processing.
+ * POST deliveries are HMAC-verified when TRELLO_API_SECRET is set (see
+ * verifyTrelloSignature). Until it is set the endpoint stays open, as before:
+ * it trusts any POST whose action names a known board+list id pair, both
+ * unguessable 24-hex-char Trello ids. Worst case there is spam Lead rows, never
+ * destructive, never touches existing data. Failing closed on a missing secret
+ * would instead take the live lead pipeline down, which is the worse outcome.
  *
  * Credentials required:
  *   - TRELLO_API_KEY (set via Vercel env)
  *   - TRELLO_API_TOKEN (set via Vercel env)
  *   - SUPABASE_SERVICE_ROLE_KEY (POST branch only, writes Lead Lobby directly)
+ * Optional:
+ *   - TRELLO_API_SECRET (the "Secret" on trello.com/power-ups/admin, NOT the
+ *     API key or token) enables webhook signature verification.
+ *   - TRELLO_WEBHOOK_CALLBACK_URL, the callback URL exactly as registered with
+ *     Trello. Only needed if the auto-derived one does not match; a mismatch
+ *     shows up as every delivery failing verification.
  */
 
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { extractLeadFromImage, type ParsedLead } from './parse-lead-image';
+
+// Trello signs rawBody + callbackURL, so the bytes must be the ones on the wire.
+// Vercel's body parser would re-serialize them and break every signature, hence
+// the manual read in readRawBody below.
+export const config = { api: { bodyParser: false } };
 
 const TRELLO_BASE = 'https://api.trello.com/1';
 // Support both server-side (TRELLO_*) and client-side legacy (VITE_TRELLO_*) names.
@@ -56,6 +65,40 @@ const supabaseHeaders = {
 };
 
 const CRM_KEY = 'solarflow_crm_data';
+
+const API_SECRET = (process.env.TRELLO_API_SECRET ?? '').trim();
+const CALLBACK_URL_OVERRIDE = (process.env.TRELLO_WEBHOOK_CALLBACK_URL ?? '').trim();
+
+/** Body bytes exactly as Trello sent them. Requires bodyParser:false above. */
+async function readRawBody(req: VercelRequest): Promise<string> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of req) chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
+  return Buffer.concat(chunks).toString('utf8');
+}
+
+/** The callback URL Trello has on file, which is what it signed against. */
+function callbackUrlFor(req: VercelRequest): string {
+  if (CALLBACK_URL_OVERRIDE) return CALLBACK_URL_OVERRIDE;
+  const host = (req.headers['x-forwarded-host'] as string | undefined) || req.headers.host || '';
+  const proto = (req.headers['x-forwarded-proto'] as string | undefined) || 'https';
+  return `${proto}://${host}${(req.url ?? '').split('?')[0]}`;
+}
+
+/**
+ * Trello sets X-Trello-Webhook to base64(HMAC-SHA1(rawBody + callbackURL, secret)).
+ *
+ * Returns true when the secret is unset: verification is opt-in so that adding
+ * the env var is what turns it on, and a deploy without it keeps working rather
+ * than silently dropping every lead.
+ */
+export function verifyTrelloSignature(rawBody: string, callbackUrl: string, header: string | undefined, secret: string): boolean {
+  if (!secret) return true;
+  if (!header) return false;
+  const expected = createHmac('sha1', secret).update(rawBody + callbackUrl).digest();
+  const got = Buffer.from(header, 'base64');
+  // timingSafeEqual throws on a length mismatch, so check that first.
+  return got.length === expected.length && timingSafeEqual(got, expected);
+}
 
 // Boards/lists that feed Lead Lobby. "Conexsol Florida Services" is the
 // template the company is standardizing on for other states; add a row per
@@ -95,6 +138,32 @@ function formatPhone(digits: string): string {
 
 const PHONE_REGEX = /(?:\+?1[\s.-]?)?(?:\(\d{3}\)|\d{3})[\s.-]?\d{3}[\s.-]?\d{4}\b/;
 const EMAIL_REGEX = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/;
+
+// The SolarEdge lead email lands in the card desc as labeled lines
+// ("First Name: Gil"), so read it directly, no vision call needed. Trello writes
+// the desc a beat AFTER createCard fires, which is why the backfill path below
+// re-runs this on updateCard.
+const LABEL_TO_FIELD: Record<string, keyof ParsedLead> = {
+  'first name': 'firstName', 'last name': 'lastName', email: 'email', phone: 'phone',
+  address: 'address', city: 'city', state: 'state', zip: 'zip', 'zip code': 'zip',
+  notes: 'notes', hs_id: 'hsId', 'contract name': 'contractName',
+};
+
+export function parseLeadDesc(desc: string): Partial<ParsedLead> {
+  const out: Partial<ParsedLead> = {};
+  for (const line of (desc || '').split('\n')) {
+    const m = line.match(/^\s*([A-Za-z_ ]+?)\s*:\s*(.+?)\s*$/);
+    if (!m) continue;
+    const field = LABEL_TO_FIELD[m[1].toLowerCase()];
+    if (field && !out[field]) out[field] = m[2].trim();
+  }
+  if (out.phone) {
+    const digits = out.phone.replace(/\D/g, '');
+    out.phone = digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits;
+    if (out.phone.length !== 10) delete out.phone;
+  }
+  return out;
+}
 
 export function extractContact(text: string): { phone: string; email: string } {
   const phoneMatch = text.match(PHONE_REGEX);
@@ -142,6 +211,130 @@ async function fetchFirstImageAttachment(cardId: string): Promise<{ base64: stri
     ? img.mimeType
     : IMG_EXT_RE.test(img.name || img.url) && /\.png$/i.test(img.name || img.url) ? 'image/png' : 'image/jpeg';
   return { base64: buf.toString('base64'), mimeType };
+}
+
+type LeadFields = Pick<ParsedLead, 'firstName' | 'lastName' | 'phone' | 'email' | 'address' | 'city' | 'state' | 'zip'>;
+
+/**
+ * Everything the card can tell us about the lead, cheapest source first:
+ * card title -> labeled desc lines -> Claude Vision on the dropped screenshot.
+ * Vision only runs when the cheap sources left a hole, and never overrides them.
+ */
+async function extractCardFields(
+  cardId: string,
+  card: { name: string; desc: string },
+): Promise<{ fields: LeadFields; vision: Partial<ParsedLead>; nameIsFile: boolean }> {
+  const nameIsFile = isFilename(card.name);
+  const fromTitle = nameIsFile ? { firstName: '', lastName: '' } : splitName(card.name);
+  const fromDesc = parseLeadDesc(card.desc);
+  const fromText = extractContact(`${card.name}\n${card.desc}`);
+
+  const haveName = (fromDesc.firstName || fromTitle.firstName || '').trim() !== '';
+  const haveContact = (fromDesc.phone || fromText.phone) && (fromDesc.email || fromText.email);
+
+  let vision: Partial<ParsedLead> = {};
+  if (!haveName || !haveContact) {
+    try {
+      const img = await fetchFirstImageAttachment(cardId);
+      if (img) vision = await extractLeadFromImage(img.base64, img.mimeType);
+    } catch (err) {
+      console.warn('[trello-webhook] vision parse failed, using card text:', err);
+    }
+  }
+
+  const pick = (...vals: (string | undefined)[]) => vals.map(v => (v ?? '').trim()).find(Boolean) ?? '';
+  return {
+    nameIsFile,
+    vision,
+    fields: {
+      firstName: pick(fromDesc.firstName, fromTitle.firstName, vision.firstName),
+      lastName:  pick(fromDesc.lastName,  fromTitle.lastName,  vision.lastName),
+      phone:     pick(fromDesc.phone, fromText.phone, vision.phone),
+      email:     pick(fromDesc.email, fromText.email, vision.email),
+      address:   pick(fromDesc.address, vision.address),
+      city:      pick(fromDesc.city, vision.city),
+      state:     pick(fromDesc.state, vision.state),
+      zip:       pick(fromDesc.zip, vision.zip),
+    },
+  };
+}
+
+export function displayNameFor(f: Pick<LeadFields, 'firstName' | 'lastName' | 'phone'>): string {
+  return `${f.firstName} ${f.lastName}`.trim() || (f.phone ? formatPhone(f.phone) : 'New Lead (Trello)');
+}
+
+/**
+ * Fill in fields the original import missed, never overwrite what is already there.
+ *
+ * Trello fires createCard BEFORE it finishes uploading the card's image
+ * attachment and writing its description (measured: +1s typically, +82min when a
+ * human drops the screenshot later). The create-time import therefore sees a
+ * bare "image.jpeg" card and writes a nameless lead. Rather than sleep-and-retry
+ * inside the create handler, the later addAttachmentToCard/updateCard events on
+ * an ALREADY-IMPORTED card are treated as a backfill. Empty-only, so a lead the
+ * team has since edited by hand is never clobbered.
+ */
+const BACKFILL_ACTIONS = new Set(['updateCard', 'addAttachmentToCard', 'commentCard']);
+
+async function backfillLead(leadId: string, fields: LeadFields, now: string): Promise<'filled' | 'complete' | 'absent'> {
+  const selectRes = await fetch(
+    `${SUPABASE_URL}/rest/v1/app_data?key=eq.${CRM_KEY}&select=value`,
+    { headers: supabaseHeaders },
+  );
+  if (!selectRes.ok) throw new Error(`Supabase read ${selectRes.status}`);
+  const rows = await selectRes.json() as { value?: { leads?: any[] } }[];
+  const current = rows[0]?.value ?? { leads: [] };
+  const leads = Array.isArray(current.leads) ? current.leads : [];
+
+  const lead = leads.find((l: any) => l?.id === leadId);
+  if (!lead) return 'absent';
+
+  let changed = false;
+  for (const [k, v] of Object.entries(fields)) {
+    if (v && !String(lead[k] ?? '').trim()) { lead[k] = v; changed = true; }
+  }
+  if (!changed) return 'complete';
+  lead.updatedAt = now;
+
+  const upsertRes = await fetch(
+    `${SUPABASE_URL}/rest/v1/app_data?on_conflict=key`,
+    {
+      method: 'POST',
+      headers: { ...supabaseHeaders, Prefer: 'resolution=merge-duplicates,return=minimal' },
+      body: JSON.stringify({ key: CRM_KEY, value: { ...current, leads }, updated_at: now }),
+    },
+  );
+  if (!upsertRes.ok) {
+    const detail = await upsertRes.text().catch(() => '');
+    throw new Error(`Supabase lead backfill ${upsertRes.status}: ${detail}`);
+  }
+  return 'filled';
+}
+
+/** Same backfill for the S1-board job row: only replace the placeholder display name. */
+async function backfillLeadJob(jobId: string, displayName: string, now: string): Promise<void> {
+  const key = `job:${jobId}`;
+  const selectRes = await fetch(
+    `${SUPABASE_URL}/rest/v1/app_data?key=eq.${encodeURIComponent(key)}&select=value`,
+    { headers: supabaseHeaders },
+  );
+  if (!selectRes.ok) return;
+  const job = (await selectRes.json() as { value?: any }[])[0]?.value;
+  if (!job) return;
+
+  const isPlaceholder = (s: unknown) =>
+    !String(s ?? '').trim() || String(s) === 'New Lead (Trello)' || isFilename(String(s));
+  if (!isPlaceholder(job.clientName) && !isPlaceholder(job.title)) return;
+
+  if (isPlaceholder(job.clientName)) job.clientName = displayName;
+  if (isPlaceholder(job.title)) job.title = displayName;
+  job.updatedAt = now;
+
+  await fetch(`${SUPABASE_URL}/rest/v1/app_data?on_conflict=key`, {
+    method: 'POST',
+    headers: { ...supabaseHeaders, Prefer: 'resolution=merge-duplicates,return=minimal' },
+    body: JSON.stringify({ key, value: job, updated_at: now }),
+  });
 }
 
 /** Pure decision: does this board action land a card in a tracked leads list? */
@@ -231,11 +424,35 @@ async function upsertLeadJob(jobId: string, job: unknown, now: string): Promise<
 
 async function handleLeadImportWebhook(req: VercelRequest, res: VercelResponse) {
   try {
-    const action = (req.body as { action?: TrelloWebhookAction })?.action;
+    const rawBody = await readRawBody(req);
+
+    // Belt and braces: if the runtime ignored bodyParser:false it already drained
+    // the stream, leaving rawBody empty. Signatures are unverifiable then (the
+    // exact bytes are gone), but dropping every lead is worse than the status quo
+    // ante, so fall back to the parsed body and say so loudly in the logs.
+    let payload: { action?: TrelloWebhookAction };
+    if (rawBody) {
+      if (!verifyTrelloSignature(rawBody, callbackUrlFor(req), req.headers['x-trello-webhook'] as string | undefined, API_SECRET)) {
+        console.warn('[trello-webhook] rejected: bad signature for', callbackUrlFor(req));
+        return res.status(401).json({ error: 'Invalid webhook signature' });
+      }
+      try {
+        payload = JSON.parse(rawBody) as { action?: TrelloWebhookAction };
+      } catch {
+        return res.status(400).json({ error: 'Body is not valid JSON' });
+      }
+    } else {
+      if (API_SECRET) console.error('[trello-webhook] raw body unavailable, signature NOT verified; check that bodyParser:false is honored');
+      payload = (req.body ?? {}) as { action?: TrelloWebhookAction };
+    }
+
+    const action = payload.action;
     if (!action?.data?.card) return res.status(200).json({ skipped: 'no card in payload' });
 
     const target = matchTargetList(action);
-    if (!target) return res.status(200).json({ skipped: 'not a create/move into a tracked leads list' });
+    if (!target && !BACKFILL_ACTIONS.has(action.type)) {
+      return res.status(200).json({ skipped: 'not a create/move into a tracked leads list' });
+    }
 
     if (!API_KEY || !API_TOKEN || !SERVICE_ROLE_KEY) {
       console.error('[trello-webhook] missing credentials', { hasKey: !!API_KEY, hasToken: !!API_TOKEN, hasServiceRole: !!SERVICE_ROLE_KEY });
@@ -243,45 +460,28 @@ async function handleLeadImportWebhook(req: VercelRequest, res: VercelResponse) 
     }
 
     const cardId = action.data.card.id;
-    const card = await fetchCardForLeadImport(cardId);
-    const nameIsFile = isFilename(card.name);
-
-    // A filename-titled card ("image.jpeg") carries the lead's details inside the
-    // dropped screenshot, so read them off the image with Claude Vision.
-    // ponytail: only for filename cards, a real named card is trusted as-is.
-    // Ceiling: re-runs if Trello redelivers the same card (one cheap Haiku call);
-    // pre-check lead existence before this call if that ever matters.
-    let vision: Partial<ParsedLead> = {};
-    if (nameIsFile) {
-      try {
-        const img = await fetchFirstImageAttachment(cardId);
-        if (img) vision = await extractLeadFromImage(img.base64, img.mimeType);
-      } catch (err) {
-        console.warn('[trello-webhook] vision parse failed, using card text:', err);
-      }
-    }
-
-    const textName = nameIsFile ? { firstName: '', lastName: '' } : splitName(card.name);
-    const textContact = extractContact(`${card.name}\n${card.desc}`);
-    const firstName = (vision.firstName || '').trim() || textName.firstName;
-    const lastName  = (vision.lastName  || '').trim() || textName.lastName;
-    const phone     = (vision.phone     || '').trim() || textContact.phone;
-    const email     = (vision.email     || '').trim() || textContact.email;
-    const address   = (vision.address   || '').trim();
-    const city      = (vision.city      || '').trim();
-    const state     = (vision.state     || '').trim();
-    const zip       = (vision.zip       || '').trim();
-
     // Deterministic ids from the card id, so a redelivery resolves to the same
     // records and the create-if-absent checks above can recognise them.
     const leadId = `lead-trello-${cardId}`;
     const jobId  = `job-trello-${cardId}`;
     const now = new Date().toISOString();
+
+    const card = await fetchCardForLeadImport(cardId);
+    const { fields, vision, nameIsFile } = await extractCardFields(cardId, card);
+    const { firstName, lastName, phone, email, address, city, state, zip } = fields;
     // Still no name (vision failed, plain image)? Fall back to the phone so the
     // team can see who to call, never "image.jpeg".
-    const displayName =
-      `${firstName} ${lastName}`.trim() ||
-      (phone ? formatPhone(phone) : 'New Lead (Trello)');
+    const displayName = displayNameFor(fields);
+
+    // A later event on a card we already imported: fill the holes the create-time
+    // race left, then stop. Never creates, never overwrites.
+    if (!target) {
+      const result = await backfillLead(leadId, fields, now);
+      if (result === 'filled') await backfillLeadJob(jobId, displayName, now);
+      console.info(`[trello-webhook] backfill ${action.type}: lead ${leadId} ${result} (${displayName})`);
+      return res.status(200).json({ lead: { id: leadId, result } });
+    }
+
     const extraNote = [
       vision.contractName?.trim() && `Contract: ${vision.contractName.trim()}`,
       vision.hsId?.trim() && `HS_ID: ${vision.hsId.trim()}`,

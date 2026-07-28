@@ -5,7 +5,58 @@
 // Run: npx tsc --target ES2020 --module commonjs --esModuleInterop --skipLibCheck \
 //        --outDir /tmp/twcheck api/trello-card.ts && node api/trello-card.selfcheck.mjs
 import assert from 'node:assert/strict';
-import { splitName, extractContact, matchTargetList, isFilename } from '/tmp/twcheck/trello-card.js';
+import { createHmac } from 'node:crypto';
+import { splitName, extractContact, matchTargetList, isFilename, parseLeadDesc, displayNameFor, verifyTrelloSignature } from '/tmp/twcheck/trello-card.js';
+
+// Webhook signature: base64(HMAC-SHA1(rawBody + callbackURL, secret)).
+const BODY = '{"action":{"type":"createCard"}}';
+const CB = 'https://solarflow-dashboard-sooty.vercel.app/api/trello-card';
+const SECRET = 'test-secret';
+const sign = (body, cb) => createHmac('sha1', SECRET).update(body + cb).digest('base64');
+
+assert.equal(verifyTrelloSignature(BODY, CB, sign(BODY, CB), SECRET), true);
+// A tampered body, a wrong callback URL, or a missing header must all fail.
+assert.equal(verifyTrelloSignature('{"action":{"type":"deleteCard"}}', CB, sign(BODY, CB), SECRET), false);
+assert.equal(verifyTrelloSignature(BODY, 'https://evil.example.com/api/trello-card', sign(BODY, CB), SECRET), false);
+assert.equal(verifyTrelloSignature(BODY, CB, undefined, SECRET), false);
+assert.equal(verifyTrelloSignature(BODY, CB, sign(BODY, CB), 'wrong-secret'), false);
+// A short/garbage header must be rejected, not crash timingSafeEqual on length.
+assert.equal(verifyTrelloSignature(BODY, CB, 'AAAA', SECRET), false);
+// Opt-in: no secret configured means verification is skipped, pipeline keeps running.
+assert.equal(verifyTrelloSignature(BODY, CB, undefined, ''), true);
+
+// The SolarEdge lead email body, as Trello stores it in card.desc. This arrives a
+// beat AFTER createCard fires, which is why the backfill path re-reads it.
+const DESC = `Hello  team! You've received a new solar lead!
+
+
+First Name: Gil
+Last Name: Hyatt
+Email: gil4@gilhyatt.com
+Phone: 9546050226
+
+Address:
+City:
+State:
+Zip Code: 33060
+
+notes: Repair existing system currently not working
+`;
+const d = parseLeadDesc(DESC);
+assert.equal(d.firstName, 'Gil');
+assert.equal(d.lastName, 'Hyatt');
+assert.equal(d.email, 'gil4@gilhyatt.com');
+assert.equal(d.phone, '9546050226');
+assert.equal(d.zip, '33060');
+assert.equal(d.address, undefined);            // blank labels must not become ""-shaped truthy junk
+assert.equal(parseLeadDesc('').firstName, undefined);
+assert.equal(parseLeadDesc('Phone: +1 (954) 605-0226').phone, '9546050226');
+assert.equal(parseLeadDesc('Phone: 12345').phone, undefined); // not a real number, drop it
+
+// A nameless lead must never display as "image.jpeg"; phone is the fallback.
+assert.equal(displayNameFor({ firstName: 'Gil', lastName: 'Hyatt', phone: '9546050226' }), 'Gil Hyatt');
+assert.equal(displayNameFor({ firstName: '', lastName: '', phone: '9546050226' }), '(954) 605-0226');
+assert.equal(displayNameFor({ firstName: '', lastName: '', phone: '' }), 'New Lead (Trello)');
 
 // Filename card names (the "image.jpeg" bug) must be recognised, real names must not.
 assert.equal(isFilename('image.jpeg'), true);
