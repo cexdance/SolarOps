@@ -20,6 +20,52 @@ interface Props {
   onBlur?: () => void;
 }
 
+/** The @handle for a user, and the single place that decides it.
+ *
+ *  Staff display names carry a role suffix ("Daniel Matos (Admin)"), so the
+ *  no-username fallback has to strip anything that is not handle-legal, or it
+ *  produces "@danielmatos(admin)" which parseMentions can never match back and
+ *  the mention silently notifies nobody.
+ */
+export function handleFor(u: MentionUser): string {
+  const explicit = u.username?.trim().replace(/^@/, '');
+  return explicit || nameHandle(u.name);
+}
+
+/** "Daniel Matos (Admin)" -> "danielmatos". Role suffix out, handle-illegal
+ *  characters out, so the result always survives the /@([\w.]+)/ reader. */
+function nameHandle(name: string): string {
+  return name.toLowerCase().replace(/\(.*?\)/g, '').replace(/[^\w.]+/g, '');
+}
+
+/** Filter + rank users for the @mention dropdown.
+ *
+ *  Matches on any word start, not just the start of the whole field, so both
+ *  "@dmatos" and "@matos" find Daniel Matos. Prefix hits still rank first, so
+ *  typing "d" puts @dmatos above a mid-word match. Returns everyone on an empty
+ *  query: the caller is responsible for scrolling, never for truncating, since
+ *  a silent cap is what hid the 7th-through-9th staff member.
+ */
+export function filterMentionUsers<T extends MentionUser>(users: T[], query: string): T[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return users;
+  const hits: { u: T; rank: number }[] = [];
+  for (const u of users) {
+    const fields = [u.username ?? '', u.name ?? '', (u.email ?? '').split('@')[0]]
+      .map(f => f.toLowerCase())
+      .filter(Boolean);
+    let rank = Infinity;
+    for (const f of fields) {
+      if (f.startsWith(q)) rank = Math.min(rank, 0);
+      else if (f.split(/[\s._-]+/).some(w => w.startsWith(q))) rank = Math.min(rank, 1);
+      else if (f.includes(q)) rank = Math.min(rank, 2);
+    }
+    if (rank !== Infinity) hits.push({ u, rank });
+  }
+  // Array.prototype.sort is stable, so equal ranks keep the caller's order.
+  return hits.sort((a, b) => a.rank - b.rank).map(h => h.u);
+}
+
 /** Textarea with live @mention dropdown.
  *
  *  The dropdown is rendered through a React portal at document.body and
@@ -43,19 +89,41 @@ export const MentionTextarea: React.FC<Props> = ({
   const [activeIdx, setActiveIdx] = useState(0);
   const [dropPos, setDropPos]     = useState<{ top: number; left: number; width: number } | null>(null);
   const ref = useRef<HTMLTextAreaElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
 
-  // Re-measure textarea position whenever the dropdown opens or value changes.
-  // This keeps the dropdown anchored when the panel scrolls.
+  // Re-measure the textarea whenever the dropdown opens or the value changes.
+  // The list is position:fixed, so it does NOT follow the textarea on its own:
+  // scrolling the WO panel (a scrollable modal) or resizing the window would
+  // otherwise leave it stranded where the textarea used to be. `true` on the
+  // scroll listener catches scrolls in any ancestor, which is where the panel
+  // actually scrolls, not on window.
   useEffect(() => {
-    if (!open || !ref.current) { setDropPos(null); return; }
-    const r = ref.current.getBoundingClientRect();
-    setDropPos({ top: r.bottom + 4, left: r.left, width: r.width });
+    if (!open || !ref.current) { setDropPos(null); return undefined; }
+    const measure = () => {
+      if (!ref.current) return;
+      const r = ref.current.getBoundingClientRect();
+      setDropPos({ top: r.bottom + 4, left: r.left, width: r.width });
+    };
+    measure();
+    window.addEventListener('scroll', measure, true);
+    window.addEventListener('resize', measure);
+    return () => {
+      window.removeEventListener('scroll', measure, true);
+      window.removeEventListener('resize', measure);
+    };
   }, [open, value]);
 
-  // Close on outside click
+  // Close on outside click. Must ignore mousedowns inside the dropdown itself:
+  // it is portaled to document.body, so it is NOT a DOM descendant of this
+  // component, and a naive document-level handler closed the list before the
+  // option's own onMouseDown could fire. That is the "clicking a name sometimes
+  // does nothing" half of the reported inconsistency.
   useEffect(() => {
     if (!open) return undefined;
-    const handler = () => setOpen(false);
+    const handler = (e: MouseEvent) => {
+      if (listRef.current?.contains(e.target as Node)) return;
+      setOpen(false);
+    };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
@@ -65,7 +133,7 @@ export const MentionTextarea: React.FC<Props> = ({
     const cursor = e.target.selectionStart ?? val.length;
     onChange(val);
     const before  = val.slice(0, cursor);
-    const atMatch = before.match(/@(\w*)$/);
+    const atMatch = before.match(/@([\w.]*)$/);
     if (atMatch) {
       setQuery(atMatch[1]);
       setStart(cursor - atMatch[0].length);
@@ -76,17 +144,17 @@ export const MentionTextarea: React.FC<Props> = ({
     }
   };
 
-  const filtered = (
-    query
-      ? users.filter(u => {
-          const q = query.toLowerCase();
-          return u.username?.toLowerCase().startsWith(q) || u.name.toLowerCase().startsWith(q);
-        })
-      : users.slice(0, 8)
-  ).slice(0, 6);
+  // No cap: the list scrolls instead. Slicing to 6 silently hid every staff
+  // member past the 6th alphabetically (Daniel Matos is 7th of 9), so typing a
+  // bare "@" appeared to prove he did not exist.
+  const filtered = filterMentionUsers(users, query);
+
+  // Narrowing the query shrinks the list, so a previously-highlighted index can
+  // fall off the end. Clamp it, or Enter selects undefined and throws.
+  const safeIdx = Math.min(activeIdx, Math.max(filtered.length - 1, 0));
 
   const select = (user: MentionUser) => {
-    const handle = user.username?.trim() || user.name.replace(/\s+/g, '').toLowerCase();
+    const handle = handleFor(user);
     const cursorPos = ref.current?.selectionStart ?? value.length;
     const before = value.slice(0, start);
     const after  = value.slice(cursorPos);
@@ -105,7 +173,7 @@ export const MentionTextarea: React.FC<Props> = ({
       setActiveIdx(i => Math.max(i - 1, 0));
     } else if (e.key === 'Enter' || e.key === 'Tab') {
       e.preventDefault();
-      select(filtered[activeIdx]);
+      select(filtered[safeIdx]);
     } else if (e.key === 'Escape') {
       setOpen(false);
     }
@@ -113,8 +181,9 @@ export const MentionTextarea: React.FC<Props> = ({
 
   const dropdown = open && filtered.length > 0 && dropPos ? createPortal(
     <ul
+      ref={listRef}
       style={{ position: 'fixed', top: dropPos.top, left: dropPos.left, width: dropPos.width, zIndex: 9999 }}
-      className="bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden"
+      className="bg-white border border-slate-200 rounded-xl shadow-xl overflow-y-auto max-h-64"
       onMouseDown={e => e.preventDefault()} // prevent textarea blur
     >
       {filtered.map((u, i) => (
@@ -123,7 +192,7 @@ export const MentionTextarea: React.FC<Props> = ({
             type="button"
             onMouseDown={() => select(u)}
             className={`w-full text-left px-3 py-2 text-sm flex items-center gap-2 transition-colors ${
-              i === activeIdx ? 'bg-orange-50' : 'hover:bg-slate-50'
+              i === safeIdx ? 'bg-orange-50' : 'hover:bg-slate-50'
             }`}
           >
             <span className="w-6 h-6 rounded-full bg-orange-100 text-orange-700 text-xs font-bold flex items-center justify-center shrink-0">
@@ -131,9 +200,7 @@ export const MentionTextarea: React.FC<Props> = ({
             </span>
             <div className="min-w-0">
               <p className="font-medium text-slate-800 truncate">{u.name}</p>
-              {u.username && (
-                <p className="text-xs text-slate-400">@{u.username}</p>
-              )}
+              <p className="text-xs text-slate-400">@{handleFor(u)}</p>
             </div>
           </button>
         </li>
@@ -170,16 +237,26 @@ export function renderWithMentions(text: string): React.ReactNode {
   );
 }
 
+/** Resolve one written @handle back to the user it names. */
+function matchHandle<T extends MentionUser>(handle: string, users: T[]): T | undefined {
+  const h = handle.toLowerCase();
+  return users.find(u =>
+    // handleFor first: it is what select() actually inserted.
+    handleFor(u).toLowerCase() === h ||
+    u.username?.toLowerCase().replace(/^@/, '') === h ||
+    // Typed by hand rather than picked from the list: "@danielmatos" for
+    // "Daniel Matos (Admin)". Without this the role suffix loses the mention.
+    nameHandle(u.name) === h ||
+    u.name.toLowerCase().replace(/\s+/g, '') === h ||
+    u.name.toLowerCase() === h,
+  );
+}
+
 /** Extract user IDs for every @handle found in text. */
 export function parseMentions(text: string, users: MentionUser[]): string[] {
   const ids: string[] = [];
   for (const m of text.match(/@([\w.]+)/g) ?? []) {
-    const handle = m.slice(1).toLowerCase();
-    const user = users.find(u =>
-      u.username?.toLowerCase() === handle ||
-      u.name.toLowerCase().replace(/\s+/g, '') === handle ||
-      u.name.toLowerCase() === handle,
-    );
+    const user = matchHandle(m.slice(1), users);
     if (user && !ids.includes(user.id)) ids.push(user.id);
   }
   return ids;
@@ -189,12 +266,7 @@ export function parseMentions(text: string, users: MentionUser[]): string[] {
 export function parseMentionEmails(text: string, users: (MentionUser & { email?: string })[]): string[] {
   const emails: string[] = [];
   for (const m of text.match(/@([\w.]+)/g) ?? []) {
-    const handle = m.slice(1).toLowerCase();
-    const user = users.find(u =>
-      u.username?.toLowerCase() === handle ||
-      u.name.toLowerCase().replace(/\s+/g, '') === handle ||
-      u.name.toLowerCase() === handle,
-    );
+    const user = matchHandle(m.slice(1), users);
     if (user?.email && !emails.includes(user.email)) emails.push(user.email);
   }
   return emails;

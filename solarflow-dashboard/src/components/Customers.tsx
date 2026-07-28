@@ -70,7 +70,7 @@ import { PhoneLink } from './PhoneLink';
 import { ImageLightbox } from './ImageLightbox';
 import { ActivityFeed } from './ui/ActivityFeed';
 import { uploadCustomerFilesPartial, StoredCustomerFile, CustomerFileUpload } from '../lib/customerFileStorage';
-import { fireMentionNotifications, parseMentionEmails } from './ui/MentionTextarea';
+import { fireMentionNotifications, parseMentionEmails, filterMentionUsers, handleFor } from './ui/MentionTextarea';
 import { toast } from 'sonner';
 
 // Client Status Badge Component
@@ -3516,7 +3516,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
     setNotes(val);
     const cursor = e.target.selectionStart ?? val.length;
     const textBefore = val.slice(0, cursor);
-    const atMatch = textBefore.match(/@(\w*)$/);
+    const atMatch = textBefore.match(/@([\w.]*)$/);
     if (atMatch) {
       setMentionQuery(atMatch[1]);
       setMentionStartIndex(cursor - atMatch[0].length);
@@ -3530,22 +3530,16 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
   const handleMentionSelect = (user: User) => {
     const before = notes.slice(0, mentionStartIndex);
     const after = notes.slice(textareaRef.current?.selectionStart ?? notes.length);
-    const handle = user.username?.trim() || user.name.replace(/\s+/g, '').toLowerCase();
-    const inserted = `@${handle} `;
+    const inserted = `@${handleFor(user)} `;
     setNotes(before + inserted + after);
     setShowMentionDropdown(false);
     setTimeout(() => textareaRef.current?.focus(), 0);
   };
 
-  const filteredMentionUsers = mentionQuery
-    ? users.filter(u => {
-        const q = mentionQuery.toLowerCase();
-        return (
-          (u.username && u.username.toLowerCase().startsWith(q)) ||
-          u.name.toLowerCase().startsWith(q)
-        );
-      })
-    : users;
+  // Shared with MentionTextarea on purpose: this panel and the service-order
+  // panel used to run two different filters, so the same "@" gesture found
+  // different people depending on where you typed it.
+  const filteredMentionUsers = filterMentionUsers(users, mentionQuery);
 
   const handleNotePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
     const fileItems = Array.from(e.clipboardData.items).filter(i => i.kind === 'file');
@@ -4013,7 +4007,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                     <div className="absolute left-0 bottom-full mb-1 w-64 bg-white border border-slate-200 rounded-xl shadow-lg z-50 overflow-hidden">
                       <p className="text-[10px] text-slate-400 px-3 pt-2 pb-1 uppercase tracking-wide font-medium">Mention a teammate</p>
                       {filteredMentionUsers.map(u => {
-                        const handle = u.username?.trim() || u.name.replace(/\s+/g, '').toLowerCase();
+                        const handle = handleFor(u);
                         return (
                           <button
                             key={u.id}
