@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { filterMentionUsers, handleFor, parseMentions, parseMentionEmails, type MentionUser } from '../components/ui/MentionTextarea';
+import { filterMentionUsers, handleFor, parseMentions, parseMentionEmails, placeDropdown, type MentionUser } from '../components/ui/MentionTextarea';
 
 // The real staff list, shape and order as /api/users returns it (name-sorted).
 // Daniel Matos is 7th of 9, which is exactly why the old slice(0, 6) hid him.
@@ -94,5 +94,45 @@ describe('parseMentions round-trip', () => {
   it('ignores an unknown handle and a bare email address', () => {
     expect(parseMentions('@nobody here', STAFF)).toEqual([]);
     expect(parseMentions('mail me at bob@example.com', STAFF)).toEqual([]);
+  });
+});
+
+describe('placeDropdown', () => {
+  const VH = 800;
+
+  it('drops downward when there is room, anchored just under the textarea', () => {
+    const p = placeDropdown({ top: 100, bottom: 160, left: 40, width: 500 }, VH);
+    expect(p.below).toBe(true);
+    expect(p.top).toBe(164);
+    expect(p.left).toBe(40);
+    expect(p.width).toBe(500);
+  });
+
+  it('flips above when the textarea sits near the bottom (the Customers composer)', () => {
+    // 60px below, 700px above: dropping down would render off-screen.
+    const p = placeDropdown({ top: 700, bottom: 740, left: 40, width: 500 }, VH);
+    expect(p.below).toBe(false);
+    expect(p.maxHeight).toBe(256);
+    expect(p.top).toBe(700 - 256 - 4);
+    expect(p.top).toBeGreaterThanOrEqual(8);
+  });
+
+  it('shrinks to the space available rather than overflowing it', () => {
+    // 180px below: enough to open downward, but not the full 256.
+    const p = placeDropdown({ top: 500, bottom: 612, left: 0, width: 300 }, VH);
+    expect(p.below).toBe(true);
+    expect(p.maxHeight).toBe(180);
+    expect(p.top + p.maxHeight).toBeLessThanOrEqual(VH);
+  });
+
+  it('never positions off the top edge, even in a cramped viewport', () => {
+    const p = placeDropdown({ top: 60, bottom: 90, left: 0, width: 300 }, 120);
+    expect(p.top).toBeGreaterThanOrEqual(8);
+    expect(p.maxHeight).toBeGreaterThanOrEqual(140); // stays usable, never 0-height
+  });
+
+  it('prefers the roomier side when neither has the full height', () => {
+    const p = placeDropdown({ top: 300, bottom: 330, left: 0, width: 300 }, 420);
+    expect(p.below).toBe(false); // 82 below vs 292 above
   });
 });

@@ -70,7 +70,7 @@ import { PhoneLink } from './PhoneLink';
 import { ImageLightbox } from './ImageLightbox';
 import { ActivityFeed } from './ui/ActivityFeed';
 import { uploadCustomerFilesPartial, StoredCustomerFile, CustomerFileUpload } from '../lib/customerFileStorage';
-import { fireMentionNotifications, parseMentionEmails, filterMentionUsers, handleFor } from './ui/MentionTextarea';
+import { MentionTextarea, fireMentionNotifications, parseMentions, parseMentionEmails } from './ui/MentionTextarea';
 import { toast } from 'sonner';
 
 // Client Status Badge Component
@@ -3436,10 +3436,6 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
   const [notes, setNotes] = useState('');
   const [noteSaved, setNoteSaved] = useState(false);
   const [pastedFiles, setPastedFiles] = useState<Array<{id: string; name: string; dataUrl: string; mimeType: string; size: number}>>([]);
-  const textareaRef = React.useRef<HTMLTextAreaElement>(null);
-  const [mentionQuery, setMentionQuery] = useState('');
-  const [showMentionDropdown, setShowMentionDropdown] = useState(false);
-  const [mentionStartIndex, setMentionStartIndex] = useState(-1);
   const [showCreateWorkOrder, setShowCreateWorkOrder] = useState(false);
   const [showSendMessage, setShowSendMessage] = useState(false);
   const [deleteStep, setDeleteStep] = useState(0);
@@ -3492,54 +3488,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
     }
   }, [showEditModal, customer]);
 
-  // Parse @mentions from note text and resolve to user IDs
-  // Resolve @username or @Name mentions → user IDs
-  const parseMentions = (text: string): string[] => {
-    const mentioned: string[] = [];
-    // Match @word (username) or @First Last style, stop at whitespace-then-non-word or end
-    const matches = text.match(/@([\w.]+)/g) || [];
-    matches.forEach(m => {
-      const handle = m.slice(1).trim().toLowerCase();
-      // Try matching by username first, then by name (first word match)
-      const user = users.find(u =>
-        (u.username && u.username.toLowerCase() === handle) ||
-        u.name.toLowerCase().replace(/\s+/g, '') === handle ||
-        u.name.toLowerCase() === handle
-      );
-      if (user && !mentioned.includes(user.id)) mentioned.push(user.id);
-    });
-    return mentioned;
-  };
 
-  const handleNotesChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const val = e.target.value;
-    setNotes(val);
-    const cursor = e.target.selectionStart ?? val.length;
-    const textBefore = val.slice(0, cursor);
-    const atMatch = textBefore.match(/@([\w.]*)$/);
-    if (atMatch) {
-      setMentionQuery(atMatch[1]);
-      setMentionStartIndex(cursor - atMatch[0].length);
-      setShowMentionDropdown(true);
-    } else {
-      setShowMentionDropdown(false);
-    }
-  };
-
-  // Insert @username when a user is selected from the dropdown
-  const handleMentionSelect = (user: User) => {
-    const before = notes.slice(0, mentionStartIndex);
-    const after = notes.slice(textareaRef.current?.selectionStart ?? notes.length);
-    const inserted = `@${handleFor(user)} `;
-    setNotes(before + inserted + after);
-    setShowMentionDropdown(false);
-    setTimeout(() => textareaRef.current?.focus(), 0);
-  };
-
-  // Shared with MentionTextarea on purpose: this panel and the service-order
-  // panel used to run two different filters, so the same "@" gesture found
-  // different people depending on where you typed it.
-  const filteredMentionUsers = filterMentionUsers(users, mentionQuery);
 
   const handleNotePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
     const fileItems = Array.from(e.clipboardData.items).filter(i => i.kind === 'file');
@@ -3612,7 +3561,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
 
   const handleSaveNote = async () => {
     if (!notes.trim() && pastedFiles.length === 0) return;
-    const mentionedIds = parseMentions(notes);
+    const mentionedIds = parseMentions(notes, users);
     const noteText = notes.trim();
     const newActivity: Activity = {
       id: `activity-${Date.now()}`,
@@ -3961,16 +3910,11 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                   />
                 </div>
                 <div className="relative">
-                  <textarea
-                    ref={textareaRef}
+                  <MentionTextarea
                     value={notes}
-                    onChange={handleNotesChange}
+                    onChange={setNotes}
+                    users={users}
                     onPaste={handleNotePaste}
-                    onKeyDown={(e) => {
-                      if (showMentionDropdown && e.key === 'Escape') {
-                        setShowMentionDropdown(false);
-                      }
-                    }}
                     placeholder="Add notes… type @ to mention a teammate · Ctrl+V to paste images/files"
                     className="w-full p-3 border border-slate-200 rounded-lg text-sm min-h-[100px] focus:outline-none focus:ring-2 focus:ring-orange-400"
                   />
@@ -4002,31 +3946,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                       ))}
                     </div>
                   )}
-                  {/* @ Mention dropdown */}
-                  {showMentionDropdown && filteredMentionUsers.length > 0 && (
-                    <div className="absolute left-0 bottom-full mb-1 w-64 bg-white border border-slate-200 rounded-xl shadow-lg z-50 overflow-hidden">
-                      <p className="text-[10px] text-slate-400 px-3 pt-2 pb-1 uppercase tracking-wide font-medium">Mention a teammate</p>
-                      {filteredMentionUsers.map(u => {
-                        const handle = handleFor(u);
-                        return (
-                          <button
-                            key={u.id}
-                            onMouseDown={(e) => { e.preventDefault(); handleMentionSelect(u); }}
-                            className="w-full flex items-center gap-2 px-3 py-2 hover:bg-orange-50 text-left text-sm"
-                          >
-                            <div className="w-7 h-7 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center text-xs font-bold shrink-0">
-                              {u.name.charAt(0)}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="font-medium text-slate-800 text-sm truncate">{u.name}</div>
-                              <div className="text-xs text-orange-500 font-mono">@{handle}</div>
-                            </div>
-                            <span className="text-xs text-slate-400 capitalize shrink-0">{u.role}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
+                  {/* @ mention dropdown now lives inside MentionTextarea */}
                 </div>
                 <div className="flex items-center justify-between mt-2">
                   <p className="text-xs text-slate-400">Type @ to mention a teammate</p>

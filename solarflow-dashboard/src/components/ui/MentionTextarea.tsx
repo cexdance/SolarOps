@@ -1,6 +1,36 @@
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 
+/** Dropdown sizing. MIN is the floor we will shove the list into rather than
+ *  render something unusably short; MAX matches the old max-h-64. */
+const MIN_DROP_HEIGHT = 140;
+const MAX_DROP_HEIGHT = 256;
+
+/** Where to put the fixed-position dropdown relative to the textarea.
+ *
+ *  Pure so it can be tested: getting this wrong renders the list off-screen,
+ *  which is indistinguishable from "the @ menu is broken". The Customers note
+ *  composer sits near the bottom of its modal and needs the upward flip; the
+ *  service-order panel has room below and must keep dropping downward.
+ */
+export function placeDropdown(
+  rect: { top: number; bottom: number; left: number; width: number },
+  viewportHeight: number,
+): { top: number; left: number; width: number; maxHeight: number; below: boolean } {
+  const spaceBelow = viewportHeight - rect.bottom - 8;
+  const spaceAbove = rect.top - 8;
+  const below = spaceBelow >= MIN_DROP_HEIGHT || spaceBelow >= spaceAbove;
+  const room = below ? spaceBelow : spaceAbove;
+  const maxHeight = Math.max(Math.min(MAX_DROP_HEIGHT, room), MIN_DROP_HEIGHT);
+  return {
+    top: below ? rect.bottom + 4 : Math.max(8, rect.top - maxHeight - 4),
+    left: rect.left,
+    width: rect.width,
+    maxHeight,
+    below,
+  };
+}
+
 export interface MentionUser {
   id: string;
   name: string;
@@ -87,7 +117,7 @@ export const MentionTextarea: React.FC<Props> = ({
   const [start, setStart]         = useState(-1);
   const [open, setOpen]           = useState(false);
   const [activeIdx, setActiveIdx] = useState(0);
-  const [dropPos, setDropPos]     = useState<{ top: number; left: number; width: number } | null>(null);
+  const [dropPos, setDropPos]     = useState<{ top: number; left: number; width: number; maxHeight: number } | null>(null);
   const ref = useRef<HTMLTextAreaElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
 
@@ -101,8 +131,8 @@ export const MentionTextarea: React.FC<Props> = ({
     if (!open || !ref.current) { setDropPos(null); return undefined; }
     const measure = () => {
       if (!ref.current) return;
-      const r = ref.current.getBoundingClientRect();
-      setDropPos({ top: r.bottom + 4, left: r.left, width: r.width });
+      const { top, left, width, maxHeight } = placeDropdown(ref.current.getBoundingClientRect(), window.innerHeight);
+      setDropPos({ top, left, width, maxHeight });
     };
     measure();
     window.addEventListener('scroll', measure, true);
@@ -182,8 +212,8 @@ export const MentionTextarea: React.FC<Props> = ({
   const dropdown = open && filtered.length > 0 && dropPos ? createPortal(
     <ul
       ref={listRef}
-      style={{ position: 'fixed', top: dropPos.top, left: dropPos.left, width: dropPos.width, zIndex: 9999 }}
-      className="bg-white border border-slate-200 rounded-xl shadow-xl overflow-y-auto max-h-64"
+      style={{ position: 'fixed', top: dropPos.top, left: dropPos.left, width: dropPos.width, maxHeight: dropPos.maxHeight, zIndex: 9999 }}
+      className="bg-white border border-slate-200 rounded-xl shadow-xl overflow-y-auto"
       onMouseDown={e => e.preventDefault()} // prevent textarea blur
     >
       {filtered.map((u, i) => (
