@@ -43,20 +43,26 @@ export const getBillingColumn = (job: Job): BillingCol => {
 };
 
 // ── Card aging ────────────────────────────────────────────────────────────────
-// Each column runs off its own clock: the moment the ball landed in billing's
-// court. Columns not listed have no billing clock (Pending Completion is the
-// contractor's time, Paid / Costs Covered are already done) and never age.
+// Every column runs off its own clock: the moment the card landed in that
+// stage. What "late" means differs per column (an old Quote Sent is a client
+// who never answered, an old Paid is a contractor still owed), but the marker
+// is the same so the board reads uniformly left to right.
 //
 // The stage stamp is FIRST CHOICE, not the only one. Most of the existing
 // backlog predates those stamps (as of 2026-07-28: 0 of 13 Quote Sent cards
 // have quoteSentAt, 7 of 31 Invoiced have invoicedAt), and a card that can't
 // age is worse than one aged approximately. So fall back to the last touch,
 // then to creation, and mark the result inexact so the card can say so.
-export const AGE_ANCHORS: Partial<Record<BillingCol, (keyof Job)[]>> = {
-  new:        ['createdAt'],
-  quote_sent: ['quoteSentAt', 'updatedAt', 'createdAt'],
-  to_invoice: ['completedAt', 'updatedAt', 'createdAt'],
-  invoiced:   ['invoicedAt', 'updatedAt', 'createdAt'],
+export const AGE_ANCHORS: Record<BillingCol, (keyof Job)[]> = {
+  new:           ['createdAt'],
+  quote_sent:    ['quoteSentAt', 'updatedAt', 'createdAt'],
+  // Approved and handed to dispatch: how long the contractor has had it.
+  pending:       ['quoteApprovedAt', 'contractorSentAt', 'updatedAt', 'createdAt'],
+  to_invoice:    ['completedAt', 'updatedAt', 'createdAt'],
+  invoiced:      ['invoicedAt', 'updatedAt', 'createdAt'],
+  // Client paid but the contractor and expenses are not settled yet.
+  paid:          ['clientPaidAt', 'updatedAt', 'createdAt'],
+  costs_covered: ['costsCoveredAt', 'updatedAt', 'createdAt'],
 };
 
 // Calendar days, escalating one level every 3. 0-2 clean, 3-5, 6-8, 9+.
@@ -64,9 +70,9 @@ export const AGE_ANCHORS: Partial<Record<BillingCol, (keyof Job)[]>> = {
 export const ageTier = (days: number): 0 | 1 | 2 | 3 =>
   days < 3 ? 0 : Math.min(3, Math.floor(days / 3)) as 1 | 2 | 3;
 
-/** Days the card has sat in this column, or null when the column has no
- *  billing clock or nothing usable to measure from. `exact` is false when the
- *  stage stamp was missing and a fallback timestamp was used. */
+/** Days the card has sat in this column, or null when there is nothing usable
+ *  to measure from. `exact` is false when the stage stamp was missing and a
+ *  fallback timestamp was used. */
 export const cardAge = (
   job: Job,
   col: BillingCol,
@@ -82,6 +88,32 @@ export const cardAge = (
     return { days: Math.max(0, Math.floor((now - t) / 86400000)), exact: i === 0 };
   }
   return null;
+};
+
+// Sorting by age can't live in lib/jobSort: the anchor depends on which column
+// the card is in, and sortJobsBy has no column. So Billing owns these two and
+// delegates everything else unchanged.
+export type BillingSortOption = JobSortOption | 'age_desc' | 'age_asc';
+
+export const BILLING_SORT_OPTIONS: { value: BillingSortOption; label: string }[] = [
+  { value: 'age_desc', label: 'Aging, Most Critical First' },
+  { value: 'age_asc',  label: 'Aging, Newest First' },
+  ...JOB_SORT_OPTIONS,
+];
+
+/** Age sort for one column. Cards with no measurable age always sink to the
+ *  bottom in both directions, so "newest first" can't be led by cards that
+ *  simply have no date. */
+export const sortByAge = (list: Job[], col: BillingCol, dir: 'asc' | 'desc', now = Date.now()): Job[] => {
+  const dated: { job: Job; days: number }[] = [];
+  const undated: Job[] = [];
+  for (const job of list) {
+    const age = cardAge(job, col, now);
+    if (age) dated.push({ job, days: age.days });
+    else undated.push(job);
+  }
+  dated.sort((a, b) => (dir === 'desc' ? b.days - a.days : a.days - b.days));
+  return [...dated.map(d => d.job), ...undated];
 };
 
 const TIER_STYLE: Record<0 | 1 | 2 | 3, { border: string; pill: string }> = {
@@ -126,10 +158,10 @@ export const Billing: React.FC<BillingProps> = ({
   // Per-column sort, same options and persistence behavior as the Service
   // Orders board. Keyed by column so each stack can be ordered independently.
   const COL_SORT_KEY = 'solarops_billing_col_sort';
-  const [columnSortBy, setColumnSortBy] = useState<Record<string, JobSortOption>>(() => {
+  const [columnSortBy, setColumnSortBy] = useState<Record<string, BillingSortOption>>(() => {
     try { return JSON.parse(localStorage.getItem(COL_SORT_KEY) ?? '{}'); } catch { return {}; }
   });
-  const setColSort = (col: string, sort: JobSortOption) => {
+  const setColSort = (col: string, sort: BillingSortOption) => {
     setColumnSortBy(prev => {
       const next = { ...prev, [col]: sort };
       localStorage.setItem(COL_SORT_KEY, JSON.stringify(next));
@@ -415,12 +447,13 @@ export const Billing: React.FC<BillingProps> = ({
             { key: 'paid'          as BillingCol, label: 'Paid',               sub: 'Client / SolarEdge paid',      headerCls: 'bg-green-50 border-green-200 text-green-700' },
             { key: 'costs_covered' as BillingCol, label: 'Costs Covered',      sub: 'Contractor + expenses settled', headerCls: 'bg-emerald-50 border-emerald-200 text-emerald-700' },
           ]).map(col => {
-            const colSort = columnSortBy[col.key] ?? 'none';
-            const allColJobs = sortJobsBy(
-              filteredJobs.filter(j => j.status !== 'archived' && getBillingColumn(j) === col.key),
-              colSort,
-              contractors,
-            );
+            // Most critical first by default: the whole point of the markers is
+            // that the worst card should not be the one you have to scroll to.
+            const colSort = columnSortBy[col.key] ?? 'age_desc';
+            const inCol = filteredJobs.filter(j => j.status !== 'archived' && getBillingColumn(j) === col.key);
+            const allColJobs = colSort === 'age_desc' || colSort === 'age_asc'
+              ? sortByAge(inCol, col.key, colSort === 'age_desc' ? 'desc' : 'asc')
+              : sortJobsBy(inCol, colSort, contractors);
             const isAging = (j: Job) => ageTier(cardAge(j, col.key)?.days ?? 0) > 0;
             const agingCount = allColJobs.filter(isAging).length;
             const showAgingOnly = !!agingOnly[col.key] && agingCount > 0;
@@ -465,11 +498,11 @@ export const Billing: React.FC<BillingProps> = ({
                   <ArrowUpDown className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400 pointer-events-none" />
                   <select
                     value={colSort}
-                    onChange={e => setColSort(col.key, e.target.value as JobSortOption)}
+                    onChange={e => setColSort(col.key, e.target.value as BillingSortOption)}
                     title={`Sort ${col.label}`}
                     className="w-full pl-6 pr-2 py-1 bg-white border border-slate-200 rounded-md text-[11px] text-slate-600 focus:outline-none focus:ring-1 focus:ring-orange-500 cursor-pointer"
                   >
-                    {JOB_SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    {BILLING_SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                   </select>
                 </div>
                 <div className="space-y-3 min-h-[80px]">
