@@ -81,10 +81,16 @@ describe('cardAge', () => {
       .toEqual({ days: 5, exact: false });
   });
 
-  it('gives every column a clock, each off its own stage stamp', () => {
+  it('clocks the working columns off their own stage stamp', () => {
     expect(cardAge(job({ quoteApprovedAt: daysAgo(6) }), 'pending', now)).toEqual({ days: 6, exact: true });
     expect(cardAge(job({ clientPaidAt: daysAgo(8) }), 'paid', now)).toEqual({ days: 8, exact: true });
-    expect(cardAge(job({ costsCoveredAt: daysAgo(3) }), 'costs_covered', now)).toEqual({ days: 3, exact: true });
+  });
+
+  it('never ages Costs Covered, the closed-out column', () => {
+    // Nothing is wrong with an old closed-out order, so a marker there would
+    // just turn the column red and dilute the columns that mean act now.
+    expect(cardAge(job({ costsCoveredAt: daysAgo(400) }), 'costs_covered', now)).toBeNull();
+    expect(cardAge(job({ createdAt: daysAgo(400) }), 'costs_covered', now)).toBeNull();
   });
 
   it('does not let a later stage read an earlier stage\'s stamp as exact', () => {

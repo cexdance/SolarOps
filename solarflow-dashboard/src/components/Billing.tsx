@@ -43,26 +43,29 @@ export const getBillingColumn = (job: Job): BillingCol => {
 };
 
 // ── Card aging ────────────────────────────────────────────────────────────────
-// Every column runs off its own clock: the moment the card landed in that
+// Each column runs off its own clock: the moment the card landed in that
 // stage. What "late" means differs per column (an old Quote Sent is a client
 // who never answered, an old Paid is a contractor still owed), but the marker
 // is the same so the board reads uniformly left to right.
+//
+// Costs Covered is deliberately absent. It is the closed-out column: nothing
+// is wrong with an old card there, so a marker would just turn every finished
+// order red and drown out the columns where red means act now.
 //
 // The stage stamp is FIRST CHOICE, not the only one. Most of the existing
 // backlog predates those stamps (as of 2026-07-28: 0 of 13 Quote Sent cards
 // have quoteSentAt, 7 of 31 Invoiced have invoicedAt), and a card that can't
 // age is worse than one aged approximately. So fall back to the last touch,
 // then to creation, and mark the result inexact so the card can say so.
-export const AGE_ANCHORS: Record<BillingCol, (keyof Job)[]> = {
-  new:           ['createdAt'],
-  quote_sent:    ['quoteSentAt', 'updatedAt', 'createdAt'],
+export const AGE_ANCHORS: Partial<Record<BillingCol, (keyof Job)[]>> = {
+  new:        ['createdAt'],
+  quote_sent: ['quoteSentAt', 'updatedAt', 'createdAt'],
   // Approved and handed to dispatch: how long the contractor has had it.
-  pending:       ['quoteApprovedAt', 'contractorSentAt', 'updatedAt', 'createdAt'],
-  to_invoice:    ['completedAt', 'updatedAt', 'createdAt'],
-  invoiced:      ['invoicedAt', 'updatedAt', 'createdAt'],
+  pending:    ['quoteApprovedAt', 'contractorSentAt', 'updatedAt', 'createdAt'],
+  to_invoice: ['completedAt', 'updatedAt', 'createdAt'],
+  invoiced:   ['invoicedAt', 'updatedAt', 'createdAt'],
   // Client paid but the contractor and expenses are not settled yet.
-  paid:          ['clientPaidAt', 'updatedAt', 'createdAt'],
-  costs_covered: ['costsCoveredAt', 'updatedAt', 'createdAt'],
+  paid:       ['clientPaidAt', 'updatedAt', 'createdAt'],
 };
 
 // Calendar days, escalating one level every 3. 0-2 clean, 3-5, 6-8, 9+.
@@ -70,9 +73,9 @@ export const AGE_ANCHORS: Record<BillingCol, (keyof Job)[]> = {
 export const ageTier = (days: number): 0 | 1 | 2 | 3 =>
   days < 3 ? 0 : Math.min(3, Math.floor(days / 3)) as 1 | 2 | 3;
 
-/** Days the card has sat in this column, or null when there is nothing usable
- *  to measure from. `exact` is false when the stage stamp was missing and a
- *  fallback timestamp was used. */
+/** Days the card has sat in this column, or null when the column has no clock
+ *  (Costs Covered) or nothing usable to measure from. `exact` is false when
+ *  the stage stamp was missing and a fallback timestamp was used. */
 export const cardAge = (
   job: Job,
   col: BillingCol,
