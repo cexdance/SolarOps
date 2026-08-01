@@ -1693,6 +1693,7 @@ function App() {
       message: `${serviceOrderNo(adminJob.woNumber)} ${cjob.customerName} was auto-confirmed for ${when} by ${contractorName}. Client notified, no action needed.`,
       relatedJobId: adminJob.id,
       relatedContractorId: cjob.contractorId,
+      relatedActivityId: officeNote.id,
       read: false,
       createdAt: nowIso,
     }));
@@ -1765,6 +1766,7 @@ function App() {
       contextId: adminJob.id,
       contextType: 'workOrder',
       message: `${cjob.customerName} auto-confirmed for ${when}. Client notified, no action needed.`,
+      activityId: officeNote.id,
     }).catch(e => console.error('[schedule] mention notify failed', e));
   };
 
@@ -3421,6 +3423,7 @@ function App() {
         customers={data.customers}
         jobs={data.jobs}
         onSelectCustomer={(id) => { setSelectedCustomerId(id); setSelectCustomerSeq(s => s + 1); handleViewChange('customers'); }}
+        onOpenJob={(jobId) => handleViewChange('jobDetail', jobId)}
       >
         {renderView()}
       </Layout>

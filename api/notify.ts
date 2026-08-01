@@ -131,7 +131,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).json({ sent: 1 });
   }
 
-  const { mentionedUserIds, notifierName, customerName, customerId, message } = (req.body ?? {}) as Record<string, unknown>;
+  const { mentionedUserIds, notifierName, customerName, customerId, message, contextType, activityId } = (req.body ?? {}) as Record<string, unknown>;
   if (!Array.isArray(mentionedUserIds) || mentionedUserIds.length === 0) {
     return res.status(400).json({ error: 'mentionedUserIds required' });
   }
@@ -156,6 +156,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (mentioned.length === 0) return res.status(404).json({ error: 'No matching users found' });
 
   // ── Insert notification rows ───────────────────────────────────────────────
+  // `customerId` carries the id of whatever the mention happened on. For a work
+  // order that is a JOB id, so it must land in related_job_id, not
+  // related_customer_id, or the bell navigates the user to a customer that does
+  // not exist and the click does nothing.
+  const contextId = (customerId as string | undefined) ?? null;
+  const isWorkOrder = contextType === 'workOrder';
   const now = new Date().toISOString();
   const rows = mentioned.map(u => ({
     id: `notif-${u.id}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -165,7 +171,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     message: message
       ? `In ${customerName || 'a customer record'}: "${String(message).slice(0, 200)}${String(message).length > 200 ? '…' : ''}"`
       : `You were mentioned in ${customerName || 'a customer record'}`,
-    related_customer_id: customerId ?? null,
+    related_job_id:      isWorkOrder ? contextId : null,
+    related_customer_id: isWorkOrder ? null : contextId,
+    related_activity_id: (activityId as string | undefined) ?? null,
     read: false,
     created_at: now,
   }));

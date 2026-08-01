@@ -69,6 +69,7 @@ interface LayoutProps {
   customers?: Customer[];
   jobs?: Job[];
   onSelectCustomer?: (customerId: string) => void;
+  onOpenJob?: (jobId: string) => void;
 }
 
 const allNavItems = [
@@ -111,6 +112,7 @@ export const Layout: React.FC<LayoutProps> = ({
   customers = [],
   jobs = [],
   onSelectCustomer,
+  onOpenJob,
 }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -387,8 +389,18 @@ export const Layout: React.FC<LayoutProps> = ({
                         key={notif.id}
                         onClick={() => {
                           onMarkNotificationRead(notif.id);
-                          // Navigate to the related customer when available
-                          if (notif.relatedCustomerId && onSelectCustomer) {
+                          // Set the anchor BEFORE navigating: ActivityFeed reads the
+                          // hash when it renders and scrolls that comment into view.
+                          // Same `#activity-<id>` convention as the copy-permalink button.
+                          if (notif.relatedActivityId) {
+                            window.location.hash = `activity-${notif.relatedActivityId}`;
+                          }
+                          // A work-order mention opens the service order; everything
+                          // else opens the customer record.
+                          if (notif.relatedJobId && onOpenJob) {
+                            onOpenJob(notif.relatedJobId);
+                            setNotifOpen(false);
+                          } else if (notif.relatedCustomerId && onSelectCustomer) {
                             onSelectCustomer(notif.relatedCustomerId);
                             setNotifOpen(false);
                           }

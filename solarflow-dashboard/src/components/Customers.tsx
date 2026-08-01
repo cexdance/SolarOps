@@ -3645,6 +3645,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
         contextId: customer.id,
         contextType: 'customer',
         message: noteText,
+        activityId: newActivity.id,
       }).catch((e) => console.error('[Customers] createMention failed', e));
     }
   };

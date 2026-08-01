@@ -1093,6 +1093,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
         contextId:           siteId,
         contextType:         'workOrder',
         message:             text,
+        activityId:          entry.id,
       });
     }
   }, [newComment, commentAttachments, currentUserName, users, job, siteId]);
@@ -3851,6 +3852,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                 contextId: siteId,
                 contextType: 'workOrder',
                 message: mentionText,
+                activityId: cmt.id,
               });
             }
 
@@ -3860,8 +3862,9 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
             const noteMentionIds = parseMentions(noteText, users).filter(id => id !== owner?.id);
             if (noteText && noteMentionIds.length > 0) {
               const noteEmails = parseMentionEmails(noteText, users as (MentionUser & { email?: string })[]);
+              const noteCmtId = `wo-cmt-note-${Date.now()}`;
               setWoActivities(prev => [{
-                id: `wo-cmt-note-${Date.now()}`,
+                id: noteCmtId,
                 type: 'note_added',
                 description: noteText,
                 timestamp: new Date().toISOString(),
@@ -3877,6 +3880,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                 contextId: siteId,
                 contextType: 'workOrder',
                 message: noteText,
+                activityId: noteCmtId,
               });
             }
 

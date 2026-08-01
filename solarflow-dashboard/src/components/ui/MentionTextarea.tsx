@@ -311,6 +311,8 @@ export async function fireMentionNotifications(opts: {
   contextId: string;
   contextType: 'workOrder' | 'customer';
   message: string;
+  /** Id of the activity/comment being posted, so the bell can open that exact comment. */
+  activityId?: string;
 }): Promise<void> {
   if (opts.mentionedUserIds.length === 0 && (!opts.mentionedUserEmails || opts.mentionedUserEmails.length === 0)) return;
   try {
@@ -344,6 +346,7 @@ export async function fireMentionNotifications(opts: {
         customerId:          opts.contextId,
         message:             opts.message,
         contextType:         opts.contextType,
+        activityId:          opts.activityId,
       }),
     });
   } catch {

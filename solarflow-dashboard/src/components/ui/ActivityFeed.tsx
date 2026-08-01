@@ -8,6 +8,16 @@
 // renders the read/edit/react surface only.
 
 import React, { useState, useRef, useEffect } from 'react';
+
+/**
+ * Activity id out of an `#activity-<id>` permalink, else null.
+ * Ids themselves contain hyphens (`wo-cmt-1783524929412`), so everything after
+ * the first `activity-` is the id.
+ */
+export function activityIdFromHash(hash: string): string | null {
+  return hash.match(/^#activity-(.+)$/)?.[1] ?? null;
+}
+
 import { Pencil, Trash2, Smile, Link as LinkIcon, Check, Paperclip } from 'lucide-react';
 import { Activity } from '../../types';
 import { Avatar } from './Avatar';
@@ -198,6 +208,39 @@ export const ActivityFeed: React.FC<Props> = ({
   const [editingText, setEditingText] = useState('');
   const [emojiPickerFor, setEmojiPickerFor] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [focusedId, setFocusedId] = useState<string | null>(null);
+
+  // Open the exact comment a `#activity-<id>` link points at (notification bell,
+  // copy-permalink, or a pasted URL). Runs on hash change AND when `activities`
+  // arrives, because the feed usually renders before its data loads.
+  useEffect(() => {
+    const focusFromHash = () => {
+      const id = activityIdFromHash(window.location.hash);
+      if (!id || !activities.some(a => a.id === id)) return;
+      // Wait a frame so the target row exists in the DOM before scrolling.
+      requestAnimationFrame(() => {
+        document.getElementById(`activity-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        setFocusedId(id);
+      });
+    };
+    focusFromHash();
+    window.addEventListener('hashchange', focusFromHash);
+    return () => window.removeEventListener('hashchange', focusFromHash);
+  }, [activities]);
+
+  // Clear the highlight a few seconds after it lands, so it reads as "here it is"
+  // and not as permanent state.
+  useEffect(() => {
+    if (!focusedId) return undefined;
+    const t = setTimeout(() => {
+      setFocusedId(null);
+      // Drop the hash so re-opening the same view does not re-trigger the flash.
+      if (window.location.hash.startsWith('#activity-')) {
+        history.replaceState(null, '', window.location.pathname + window.location.search);
+      }
+    }, 3000);
+    return () => clearTimeout(t);
+  }, [focusedId]);
 
   if (activities.length === 0) {
     return (
@@ -245,7 +288,9 @@ export const ActivityFeed: React.FC<Props> = ({
           <div
             key={a.id}
             id={`activity-${a.id}`}
-            className="flex gap-3 group"
+            className={`flex gap-3 group transition-colors duration-500 ${
+              focusedId === a.id ? 'bg-orange-50 ring-2 ring-orange-400 rounded-lg -m-2 p-2' : ''
+            }`}
           >
             <Avatar user={author ?? { name: a.userName ?? '?' }} name={a.userName} size="md" />
             <div className="flex-1 min-w-0">

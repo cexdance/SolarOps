@@ -514,6 +514,8 @@ export interface AppNotification {
   relatedJobId?: string;
   relatedContractorId?: string;
   relatedCustomerId?: string;
+  /** Activity/comment this notification points at, so the bell can open the exact comment. */
+  relatedActivityId?: string;
   read: boolean;
   createdAt: string;
 }

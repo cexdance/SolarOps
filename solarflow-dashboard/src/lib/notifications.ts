@@ -18,6 +18,7 @@ function rowToNotification(row: Record<string, unknown>): AppNotification {
     relatedJobId: row['related_job_id'] as string | undefined,
     relatedContractorId: row['related_contractor_id'] as string | undefined,
     relatedCustomerId: row['related_customer_id'] as string | undefined,
+    relatedActivityId: row['related_activity_id'] as string | undefined,
     read: row['read'] as boolean,
     createdAt: row['created_at'] as string,
   };
@@ -36,7 +37,7 @@ export async function fetchMyNotifications(): Promise<AppNotification[]> {
 
     const { data, error } = await supabase
       .from('notifications')
-      .select('id, user_id, type, title, message, related_job_id, related_contractor_id, related_customer_id, read, created_at')
+      .select('id, user_id, type, title, message, related_job_id, related_contractor_id, related_customer_id, related_activity_id, read, created_at')
       .eq('user_id', session.user.id)
       .order('created_at', { ascending: false })
       .limit(50);
