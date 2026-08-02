@@ -336,6 +336,14 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
   const isNew = !job;
   const serviceRates: ServiceRate[] = loadServiceRates();
 
+  // Where a mention fired from this panel points. `siteId` is the CUSTOMER id
+  // (callers pass `customer.id`), so it must never be sent as a work-order id or
+  // the bell tries to open a service order that does not exist. Use the real job
+  // when there is one, else fall back to the customer record.
+  const mentionCtx = job?.id
+    ? { contextId: job.id, contextType: 'workOrder' as const }
+    : { contextId: siteId, contextType: 'customer' as const };
+
   // Normalize siteAddress: fix SolarEdge European street order (street then number)
   // so it displays correctly in the UI and links to Google Maps accurately.
   const normalizedSiteAddress = useMemo(() => {
@@ -1090,8 +1098,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
         mentionedUserEmails: parseMentionEmails(text, users as (MentionUser & { email?: string })[]),
         notifierName:        currentUserName ?? 'Someone',
         context:             job.woNumber,
-        contextId:           siteId,
-        contextType:         'workOrder',
+        ...mentionCtx,
         message:             text,
         activityId:          entry.id,
       });
@@ -1397,8 +1404,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
           mentionedUserEmails: parseMentionEmails(allText, users as (MentionUser & { email?: string })[]),
           notifierName: currentUserName || 'Staff',
           context: `${siteName}, ${woLabel}`,
-          contextId: siteId,
-          contextType: 'workOrder',
+          ...mentionCtx,
           message: allText.trim(),
         });
       }
@@ -1424,8 +1430,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
           mentionedUserEmails: distEmails,
           notifierName: currentUserName || 'Staff',
           context: `${siteName}, ${woLabel}`,
-          contextId: siteId,
-          contextType: 'workOrder',
+          ...mentionCtx,
           message: `✅ Service Order ${woLabel} has been marked COMPLETED for ${siteName}. SOW Distribution Report is ready for review.`,
         });
       }
@@ -3849,8 +3854,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                 mentionedUserEmails: ownerEmail ? [ownerEmail] : [],
                 notifierName: currentUserName || 'Staff',
                 context: `${siteName}, ${woLabel}`,
-                contextId: siteId,
-                contextType: 'workOrder',
+                ...mentionCtx,
                 message: mentionText,
                 activityId: cmt.id,
               });
@@ -3877,8 +3881,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                 mentionedUserEmails: noteEmails,
                 notifierName: currentUserName || 'Staff',
                 context: `${siteName}, ${woLabel}`,
-                contextId: siteId,
-                contextType: 'workOrder',
+                ...mentionCtx,
                 message: noteText,
                 activityId: noteCmtId,
               });
