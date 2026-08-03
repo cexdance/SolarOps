@@ -10,6 +10,10 @@ CREATE TABLE IF NOT EXISTS public.notifications (
   related_job_id       TEXT,
   related_contractor_id TEXT,
   related_customer_id  TEXT,
+  -- Anchors a notification to one comment so the bell can deep-link to it
+  -- rather than just to the record. Added for existing databases by
+  -- supabase/migrations/20260803_notifications_related_activity_id.sql.
+  related_activity_id  TEXT,
   read                 BOOLEAN     NOT NULL DEFAULT FALSE,
   created_at           TIMESTAMPTZ NOT NULL DEFAULT now()
 );

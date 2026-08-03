@@ -43,18 +43,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { data: { user: caller }, error: authErr } = await supabaseAdmin.auth.getUser(token);
   if (authErr || !caller) return res.status(401).json({ error: 'Unauthorized' });
 
-  const now = Date.now();
+  // `nowMs` not `now`: the row builder below declares its own `now` as an ISO
+  // string in this same scope. Both were called `now`, which is a hard build
+  // error ("The symbol now has already been declared"), and it shipped because
+  // tsconfig.app.json only includes "src", so nothing ever typechecked api/.
+  const nowMs = Date.now();
   const bucket = rateLimitMap.get(caller.id);
-  if (bucket && bucket.resetAt > now) {
+  if (bucket && bucket.resetAt > nowMs) {
     if (bucket.count >= RATE_LIMIT) {
       return res.status(429).json({ error: 'Too many requests. Try again shortly.' });
     }
     bucket.count++;
   } else {
-    rateLimitMap.set(caller.id, { count: 1, resetAt: now + RATE_WINDOW_MS });
+    rateLimitMap.set(caller.id, { count: 1, resetAt: nowMs + RATE_WINDOW_MS });
   }
 
-  const { mentionedUserIds, mentionedUserEmails, notifierName, customerName, customerId, message } = req.body ?? {};
+  const { mentionedUserIds, mentionedUserEmails, notifierName, customerName, customerId, message, contextType, activityId } = req.body ?? {};
   // Accept either IDs or emails — at least one list must be non-empty
   const hasIds    = Array.isArray(mentionedUserIds)    && mentionedUserIds.length > 0;
   const hasEmails = Array.isArray(mentionedUserEmails) && mentionedUserEmails.length > 0;
@@ -81,6 +85,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   );
 
   // Insert notification rows (one per mentioned user)
+  //
+  // `customerId` carries the id of whatever the mention happened on. For a work
+  // order that is a JOB id, so it must land in related_job_id, not
+  // related_customer_id, or the bell navigates the user to a customer that does
+  // not exist and the click does nothing.
+  const contextId = (customerId as string | undefined) ?? null;
+  const isWorkOrder = contextType === 'workOrder';
   const now = new Date().toISOString();
   const rows = mentioned.map(u => ({
     id: `notif-${u.id}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -90,7 +101,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     message: message
       ? `In ${customerName || 'a customer record'}: "${message.slice(0, 200)}${message.length > 200 ? '…' : ''}"`
       : `You were mentioned in ${customerName || 'a customer record'}`,
-    related_customer_id: customerId ?? null,
+    related_job_id:      isWorkOrder ? contextId : null,
+    related_customer_id: isWorkOrder ? null : contextId,
+    related_activity_id: (activityId as string | undefined) ?? null,
     read: false,
     created_at: now,
   }));
