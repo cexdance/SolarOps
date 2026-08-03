@@ -20,6 +20,9 @@ export default defineConfig({
     env: {
       VITE_SUPABASE_URL:      'http://localhost:54321',
       VITE_SUPABASE_ANON_KEY: 'test-anon-key-not-a-real-credential',
+      // api/_auth.ts returns 500 "Server auth not configured" when this is
+      // absent, which would mask the 401/503 paths its tests exist to pin.
+      SUPABASE_SERVICE_ROLE_KEY: 'test-service-role-key-not-a-real-credential',
     },
     coverage: {
       provider: 'v8',
