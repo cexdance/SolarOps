@@ -19,6 +19,7 @@
  *   - /sites/list: 6 hours              , site inventory (rarely changes)
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { requireUser } from './_auth';
 
 const SOLAREDGE_BASE = 'https://monitoringapi.solaredge.com';
 
@@ -35,6 +36,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
+
+  // Require a signed-in caller BEFORE anything else. This endpoint returns
+  // customer names and street addresses for every monitored site and spends the
+  // SolarEdge quota on each call; until 2026-08-03 it did both for anyone on the
+  // internet. Every client call site already sends the token via authedFetch, so
+  // this is server-side only and needs no frontend change.
+  if (!(await requireUser(req, res))) return;
 
   // Use server env var first; fall back to client-supplied key (stored in app Settings)
   // .trim() strips trailing \n that Vercel env-pull can embed in quoted values
