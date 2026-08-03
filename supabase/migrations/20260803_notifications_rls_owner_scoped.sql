@@ -1,65 +1,65 @@
--- Scope notifications RLS to the owning user.
+-- Remove the permissive notifications policies, and make sure RLS is on.
 --
--- THE HOLE
--- `rls_policies.sql` granted every authenticated user unrestricted access to
--- EVERY row of public.notifications:
+-- WHAT WAS ACTUALLY WRONG
+-- Not the live database. Verified 2026-08-03 against production, the live
+-- policies are correct and owner-scoped:
 --
---     create policy "notifications authenticated read"
---       on public.notifications for select to authenticated using (true);
---     create policy "notifications authenticated write"
---       on public.notifications for all to authenticated using (true) with check (true);
+--   Users can read own notifications    SELECT  (auth.uid() = user_id)
+--   Users can update own notifications  UPDATE  (auth.uid() = user_id)
 --
--- `for all ... using (true) with check (true)` means any signed-in account could
--- read, forge, alter or delete anyone else's notifications straight through the
--- client SDK, bypassing api/notify.ts entirely. Mention notifications quote the
--- message body and name the sender, so this exposed staff conversation content
--- across accounts, not just row ids.
+-- The problem was the REPO. `rls_policies.sql` declared a contradictory pair
+-- granting every authenticated user unrestricted access to every row:
 --
--- Anonymous access was never affected: both policies are scoped `to
--- authenticated`, and an anon-key read returns [] (verified 2026-08-03). The
--- problem is strictly authenticated-user-to-authenticated-user.
+--   create policy "notifications authenticated read"
+--     on public.notifications for select to authenticated using (true);
+--   create policy "notifications authenticated write"
+--     on public.notifications for all to authenticated using (true) with check (true);
 --
--- NOTE: the repo contained two contradictory definitions for this table.
--- `notifications_table.sql` declared the correct owner-scoped policies, while
--- `rls_policies.sql` declared these permissive ones. Whichever ran last won, so
--- the live state was not determinable from the repo. This migration drops all
--- four by name and recreates the correct pair, making it correct regardless of
--- which was in effect. It is safe to run more than once.
+-- Those were never applied, but they were one `psql -f rls_policies.sql` away
+-- from replacing the correct ones and exposing every user's notifications to
+-- every other signed-in account. Mention notifications quote the message body
+-- and name the sender, so that would have leaked staff conversation content.
 --
--- WHY ONLY SELECT AND UPDATE
--- The client does exactly three things with this table (src/lib/notifications.ts):
--- one select in fetchMyNotifications, and two updates in
--- markNotificationReadRemote / markAllNotificationsReadRemote. It never inserts
--- or deletes. Rows are created by api/notify.ts using the service-role key,
--- which bypasses RLS, so no insert policy is needed and adding one would only
--- widen the surface.
+-- This migration is deliberately NARROW. It does not rename or recreate the
+-- working policies, because churning correct DDL on a live table buys nothing.
+-- It only:
+--   1. guarantees RLS is actually enabled, and
+--   2. drops the dangerous definitions if they were ever applied.
+--
+-- Safe to run repeatedly, and safe to run on a database that never saw the bad
+-- policies: every statement is idempotent.
 
+-- (1) Policies are inert if row-level security is switched off on the table.
+-- No-op when already enabled.
 alter table public.notifications enable row level security;
 
--- Drop both the permissive pair and the older correct pair, so this converges
--- from any starting state.
+-- (2) Drop the permissive pair if present. `if exists` so this is a no-op on a
+-- healthy database. The correct policies, "Users can read own notifications" and
+-- "Users can update own notifications", are intentionally left untouched.
 drop policy if exists "notifications authenticated read"  on public.notifications;
 drop policy if exists "notifications authenticated write" on public.notifications;
-drop policy if exists "Users can read own notifications"   on public.notifications;
-drop policy if exists "Users can update own notifications" on public.notifications;
 
-create policy "notifications owner read"
-  on public.notifications for select
-  to authenticated
-  using (user_id = (select auth.uid()));
+-- (3) And "service_insert" from migration_v1.7.0.sql, which was worse than the
+-- pair above. `FOR INSERT WITH CHECK (true)` with no TO clause defaults to
+-- PUBLIC, so it granted INSERT to every caller: anyone could forge a
+-- notification to any user, with any sender name and body. It granted the
+-- service role nothing, since the service key bypasses RLS anyway.
+drop policy if exists "service_insert" on public.notifications;
 
--- `with check` as well as `using` is the part that matters. `using` alone would
--- let a user update a row they own and rewrite user_id to someone else's,
--- handing their own notification to another account. `using` gates which rows
--- are visible to the update; `with check` gates what the row is allowed to
--- become.
-create policy "notifications owner update"
-  on public.notifications for update
-  to authenticated
-  using (user_id = (select auth.uid()))
-  with check (user_id = (select auth.uid()));
-
--- Verify (expect exactly the two policies above):
+-- Verify. Expect rls_enabled = true, and exactly the two "own notifications"
+-- policies with qual (auth.uid() = user_id):
+--
+--   select relrowsecurity as rls_enabled
+--     from pg_class where oid = 'public.notifications'::regclass;
+--
 --   select policyname, cmd, qual, with_check
 --     from pg_policies
 --    where schemaname = 'public' and tablename = 'notifications';
+--
+-- Note on the live policies, both of which look wrong and are not:
+--   * with_check is NULL. Postgres applies the USING expression to the new row
+--     when an UPDATE policy omits WITH CHECK, so reassigning user_id to another
+--     account is already blocked.
+--   * roles is {public}, not {authenticated}. The qual carries it: auth.uid() is
+--     NULL for an anonymous request, so `NULL = user_id` is never true and anon
+--     gets no rows.

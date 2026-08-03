@@ -56,37 +56,27 @@ create policy "change_log authenticated write"
   using (true)
   with check (true);
 
--- ── notifications: in-app notifications (OWNER-SCOPED) ──────────────────────
--- Corrected 2026-08-03. This block previously granted every authenticated user
--- `select ... using (true)` plus `for all ... using (true) with check (true)`,
--- so any signed-in account could read, forge, alter or delete anyone else's
--- notifications through the client SDK, bypassing api/notify.ts. Mention
--- notifications quote the message body and name the sender, so that exposed
--- staff conversation content across accounts.
+-- ── notifications: DELIBERATELY NOT DEFINED HERE ────────────────────────────
+-- Removed 2026-08-03. This block used to declare:
 --
--- Kept in sync with supabase/migrations/20260803_notifications_rls_owner_scoped.sql.
--- Do not widen this back to `using (true)`.
-alter table public.notifications enable row level security;
-
-drop policy if exists "notifications authenticated read"  on public.notifications;
-drop policy if exists "notifications authenticated write" on public.notifications;
-drop policy if exists "Users can read own notifications"   on public.notifications;
-drop policy if exists "Users can update own notifications" on public.notifications;
-
-create policy "notifications owner read"
-  on public.notifications for select
-  to authenticated
-  using (user_id = (select auth.uid()));
-
--- `with check` matters as much as `using`: without it a user could update a row
--- they own and rewrite user_id to someone else's account.
--- No insert/delete policy on purpose. The client only selects and marks read;
--- rows are created by api/notify.ts with the service-role key, which bypasses RLS.
-create policy "notifications owner update"
-  on public.notifications for update
-  to authenticated
-  using (user_id = (select auth.uid()))
-  with check (user_id = (select auth.uid()));
+--   create policy "notifications authenticated read"
+--     on public.notifications for select to authenticated using (true);
+--   create policy "notifications authenticated write"
+--     on public.notifications for all to authenticated using (true) with check (true);
+--
+-- `for all ... using (true) with check (true)` would let any signed-in account
+-- read, forge, alter or delete anyone else's notifications through the client
+-- SDK, bypassing api/notify.ts. Mention notifications quote the message body and
+-- name the sender, so it would leak staff conversation content across accounts.
+--
+-- It was never applied. Production has always run the correct owner-scoped
+-- policies (verified 2026-08-03). But it sat one `psql -f rls_policies.sql` away
+-- from replacing them, and having two files disagree meant the live policy could
+-- not be determined from the repo at all.
+--
+-- notifications RLS lives in ONE place now:
+--   solarflow-dashboard/supabase/notifications_table.sql
+-- Do not add notifications policies to this file.
 
 -- ── quote_approvals: customer quote sign-off ────────────────────────────────
 -- Touched ONLY by service-role API functions (api/approve-quote.ts,
