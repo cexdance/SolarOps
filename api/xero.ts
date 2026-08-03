@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { requireUser } from './_auth';
 
 /**
  * Consolidated Xero proxy.
@@ -12,6 +13,13 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
  *   *    /api/xero?action=api&path=... -> generic authenticated Xero API proxy
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  // Staff-only. Every branch here either spends XERO_CLIENT_SECRET or proxies an
+  // authenticated Xero API call, and this is an OUTBOUND client, not an inbound
+  // webhook or OAuth redirect target, so requiring a session breaks nothing. No
+  // frontend code calls it today; it is guarded so that stays true if it is
+  // wired back up.
+  if (!(await requireUser(req, res))) return;
+
   const action = (req.query['action'] as string | undefined) ?? 'api';
 
   if (action === 'token') return handleToken(req, res);

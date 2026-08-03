@@ -168,7 +168,10 @@ const DatasheetField: React.FC<{
         r.onerror = () => reject(r.error);
         r.readAsDataURL(file);
       });
-      const res = await fetch('/api/parse-lead-image', {
+      // authedFetch, not fetch: /api/parse-lead-image requires a signed-in caller
+      // because every call spends ANTHROPIC_API_KEY. A plain fetch sends no
+      // Authorization header and now gets a 401.
+      const res = await authedFetch('/api/parse-lead-image', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ action: 'parse-datasheet', imageBase64: base64, mimeType: file.type }),
@@ -263,6 +266,7 @@ import { RmaCreateModal } from './RmaCreateModal';
 import { uploadPhotoToStorage } from '../lib/photoStorage';
 import { compressImageToDataUrlUnder, compressImageToBlob } from '../lib/photoCompress';
 import { Contractor } from '../types/contractor';
+import { authedFetch } from '../lib/supabase';
 
 interface InventoryModuleProps {
   isMobile?: boolean;
