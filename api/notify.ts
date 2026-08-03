@@ -11,6 +11,7 @@
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import webPush from 'web-push';
+import { escapeHtml, singleLine, isUuid } from './_notifyGuards';
 
 const SUPABASE_URL     = 'https://cjmhfagkkayelcsprbai.supabase.co';
 // .trim() strips trailing \n that Vercel env-pull embeds in quoted values
@@ -44,6 +45,14 @@ interface AuthUser {
   user_metadata?: Record<string, unknown>;
 }
 
+// Per-caller rate limit.
+// ponytail: in-memory Map, so the budget is per warm serverless instance, not
+// global. That is enough to stop one client hammering the endpoint; if this
+// needs to be a real global limit, move the counter into Postgres or Redis.
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+const RATE_LIMIT = 10;
+const RATE_WINDOW_MS = 60_000;
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).end();
 
@@ -59,6 +68,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   });
   if (!verifyRes.ok) return res.status(401).json({ error: 'Unauthorized' });
 
+  // Use the identity we just verified. This response used to be thrown away,
+  // and the notifier's name was taken from the request body instead, so any
+  // signed-in user could send notifications and mail from our domain under
+  // anyone else's name. The token is the only trustworthy claim here.
+  const caller = await verifyRes.json().catch(() => null) as AuthUser | null;
+  if (!caller?.id) return res.status(401).json({ error: 'Unauthorized' });
+
+  const nowMs = Date.now();
+  const bucket = rateLimitMap.get(caller.id);
+  if (bucket && bucket.resetAt > nowMs) {
+    if (bucket.count >= RATE_LIMIT) {
+      return res.status(429).json({ error: 'Too many requests. Try again shortly.' });
+    }
+    bucket.count++;
+  } else {
+    rateLimitMap.set(caller.id, { count: 1, resetAt: nowMs + RATE_WINDOW_MS });
+  }
+
+  // The display name for whoever is sending, derived from the verified caller
+  // rather than from the request body.
+  const notifier = singleLine(
+    (caller.user_metadata?.name as string | undefined) || caller.email || 'A teammate',
+  );
+
   // ── Customer appointment confirmation email ────────────────────────────────
   // Distinct from the staff @mention flow: emails the CLIENT directly (no
   // Supabase user lookup) when a contractor schedules/confirms a service date.
@@ -69,7 +102,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!to || !/.+@.+\..+/.test(to)) return res.status(400).json({ error: 'valid customerEmail required' });
     if (!RESEND_API_KEY) return res.status(200).json({ sent: 0, skipped: 'no RESEND_API_KEY' });
 
-    const safe = (v: unknown) => String(v ?? '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    // Was a local helper escaping only < and >. Aliased to the shared escaper so
+    // this branch also covers & and ", at every existing call site.
+    const safe = escapeHtml;
     const r = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { Authorization: `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
@@ -131,7 +166,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).json({ sent: 1 });
   }
 
-  const { mentionedUserIds, notifierName, customerName, customerId, message, contextType, activityId } = (req.body ?? {}) as Record<string, unknown>;
+  // `notifierName` is deliberately NOT read from the body any more; `notifier`
+  // above is derived from the verified token instead. The client still sends it,
+  // and ignoring it is the fix.
+  const { mentionedUserIds, customerName, customerId, message, contextType, activityId } = (req.body ?? {}) as Record<string, unknown>;
   if (!Array.isArray(mentionedUserIds) || mentionedUserIds.length === 0) {
     return res.status(400).json({ error: 'mentionedUserIds required' });
   }
@@ -140,11 +178,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Previously this listed up to 200 users and filtered in-memory, O(all-users)
   // and silently missed anyone past the page limit. Mentions are typically 1-3
   // users, so fetch each by id directly. Correct and scales to any org size.
-  const ids = mentionedUserIds as string[];
+  // Only well-formed UUIDs reach the admin URL. Anything else is dropped rather
+  // than concatenated into a service-role request. See isUuid.
+  const ids = (mentionedUserIds as unknown[]).filter(isUuid);
+  if (ids.length === 0) {
+    return res.status(400).json({ error: 'mentionedUserIds must be user UUIDs' });
+  }
   const lookups = await Promise.all(
     ids.map(async (id) => {
       try {
-        const r = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${id}`, { headers: supabaseHeaders });
+        const r = await fetch(
+          `${SUPABASE_URL}/auth/v1/admin/users/${encodeURIComponent(id)}`,
+          { headers: supabaseHeaders },
+        );
         if (!r.ok) return null;
         return await r.json() as AuthUser;
       } catch {
@@ -167,7 +213,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     id: `notif-${u.id}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     user_id: u.id,
     type: 'mention',
-    title: `${notifierName || 'A teammate'} mentioned you`,
+    title: `${notifier} mentioned you`,
     message: message
       ? `In ${customerName || 'a customer record'}: "${String(message).slice(0, 200)}${String(message).length > 200 ? '…' : ''}"`
       : `You were mentioned in ${customerName || 'a customer record'}`,
@@ -204,7 +250,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         await Promise.all(
           subs.map(async (row) => {
             const payload = JSON.stringify({
-              title: `${notifierName || 'A teammate'} mentioned you`,
+              title: `${notifier} mentioned you`,
               body:  message
                 ? `In ${customerName || 'a service order'}: "${String(message).slice(0, 120)}${String(message).length > 120 ? '…' : ''}"`
                 : `You were mentioned in ${customerName || 'a service order'}`,
@@ -247,7 +293,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         body: JSON.stringify({
           from:    'SolarOps <notifications@conexsol.us>',
           to:      email,
-          subject: `${notifierName || 'A teammate'} mentioned you in SolarOps`,
+          subject: `${notifier} mentioned you in SolarOps`,
           html: `
 <!DOCTYPE html>
 <html>
@@ -264,13 +310,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         </tr>
         <tr>
           <td style="padding:32px">
-            <p style="margin:0 0 8px;font-size:16px;color:#1e293b">Hi ${name},</p>
+            <p style="margin:0 0 8px;font-size:16px;color:#1e293b">Hi ${escapeHtml(name)},</p>
             <p style="margin:0 0 24px;font-size:14px;color:#64748b;line-height:1.6">
-              <strong>${notifierName || 'A teammate'}</strong> mentioned you in the customer record for
-              <strong>${customerName || 'a customer'}</strong>.
+              <strong>${escapeHtml(notifier)}</strong> mentioned you in the customer record for
+              <strong>${escapeHtml(customerName || 'a customer')}</strong>.
             </p>
             <div style="background:#f8fafc;border-left:3px solid #f97316;border-radius:0 8px 8px 0;padding:16px 20px;margin-bottom:24px">
-              <p style="margin:0;font-size:14px;color:#334155;line-height:1.7;white-space:pre-wrap">${(String(message ?? '')).replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>
+              <p style="margin:0;font-size:14px;color:#334155;line-height:1.7;white-space:pre-wrap">${escapeHtml(message)}</p>
             </div>
             <a href="https://solarflow-dashboard-sooty.vercel.app"
                style="display:inline-block;background:#f97316;color:#fff;font-size:14px;font-weight:600;padding:12px 24px;border-radius:8px;text-decoration:none">
