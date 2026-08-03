@@ -27,8 +27,21 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: pnpm
-          cache-dependency-path: solarflow-dashboard/pnpm-lock.yaml
+
+      # Cache the pnpm store explicitly rather than via setup-node's `cache: pnpm`.
+      # solarflow-dashboard/.npmrc sets store-dir=/tmp/.pnpm-store, but setup-node
+      # resolves the store from the repo ROOT, where that .npmrc does not apply
+      # (working-directory only affects `run:` steps). It therefore computed a
+      # default path that never got created, and failed the whole job at post-job
+      # cleanup with "Path Validation Error: Path(s) specified in the action for
+      # caching do(es) not exist". That was invisible until 2026-08-03 because the
+      # Test step always failed first, which made the post step skip.
+      - uses: actions/cache@v4
+        with:
+          path: /tmp/.pnpm-store
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('solarflow-dashboard/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-
 
       - name: Install
         run: pnpm install --no-frozen-lockfile
