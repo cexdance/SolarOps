@@ -408,7 +408,23 @@ export function mergeKVValue(key: string, local: unknown, remote: unknown): unkn
   return merger ? merger(local, remote) : remote;
 }
 
-/** Fetch the current remote blob for a KV key (raw, un-sanitized) for merge. */
+/**
+ * Returned when the remote read itself failed, which is NOT the same as "no
+ * remote row yet" (a real `null`). Both used to return null, and that collapse
+ * is a silent data-loss path: every merger runs `Array.isArray(remote)` and
+ * treats a non-array as the empty side, so a merge against a FAILED read
+ * returns the local array unchanged. The caller then upserts that as the whole
+ * blob, which is precisely the blind overwrite the merge exists to prevent. A
+ * transient network blip on the read would delete every record another device
+ * wrote and this one has not pulled yet.
+ */
+const FETCH_FAILED = Symbol('fetchRemoteKV failed');
+
+/**
+ * Fetch the current remote blob for a KV key (raw, un-sanitized) for merge.
+ * Returns FETCH_FAILED if the read did not succeed; callers MUST NOT treat that
+ * as an empty remote. `null` means the row genuinely does not exist yet.
+ */
 async function fetchRemoteKV(key: string): Promise<unknown> {
   try {
     const { data, error } = await supabase
@@ -418,12 +434,12 @@ async function fetchRemoteKV(key: string): Promise<unknown> {
       .maybeSingle();
     if (error) {
       console.warn(`[SyncEngine] fetchRemoteKV(${key}) failed:`, error.message);
-      return null;
+      return FETCH_FAILED;
     }
     return data?.value ?? null;
   } catch (err) {
     console.warn(`[SyncEngine] fetchRemoteKV(${key}) error:`, err);
-    return null;
+    return FETCH_FAILED;
   }
 }
 
@@ -453,7 +469,33 @@ export async function pushKeyValue(key: string, value: unknown): Promise<void> {
     // again, and the rows it overwrote in between are gone.
     let payload = value;
     if (KV_MERGERS[key]) {
-      payload = mergeKVValue(key, value, await fetchRemoteKV(key));
+      const remote = await fetchRemoteKV(key);
+      if (remote === FETCH_FAILED) {
+        // We did not get the remote side, so there is nothing safe to merge
+        // against. Pushing local-only here is the blind overwrite described
+        // above: it deletes every record another device wrote that this one has
+        // not pulled. Skip the push instead. The local edit stays in
+        // localStorage, so nothing is lost on this device either.
+        //
+        // ponytail: this deferral is NOT durable, and the two gaps are known.
+        //  1. Nothing re-pushes a KV key on its own. drainOutbox re-runs
+        //     pushToSupabase (per-record state only) and pushKeyValue is called
+        //     only by dbSet on a fresh edit, so this blob propagates on the
+        //     user's NEXT edit to this key, not on a timer.
+        //  2. markPushPending below bumps the outbox's SHARED attempts counter,
+        //     which exponentially backs off drainOutbox, the retry path for
+        //     customer and job pushes. A flaky KV read therefore slows unrelated
+        //     syncing.
+        // Upgrade path: a KV-specific pending set drained by syncNow, and drop
+        // the markPushPending call once that exists.
+        console.warn(`[SyncEngine] pushKeyValue(${key}) - remote read failed, deferring push.`);
+        markPushPending(`fetchRemoteKV(${key}) failed`);
+        window.dispatchEvent(new CustomEvent('supabase-sync-error', {
+          detail: { message: 'Failed to sync to cloud. Will retry automatically.' },
+        }));
+        return;
+      }
+      payload = mergeKVValue(key, value, remote);
     }
     if (key === 'solarflow_contractor_jobs') {
       // Strip base64 photos to stay under the row size limit.
