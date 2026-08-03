@@ -21,17 +21,29 @@ CREATE INDEX IF NOT EXISTS notifications_user_id_idx
 -- Row Level Security: each user can only see their own notifications
 ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
 
--- Policies for this table are NOT defined here. They live in exactly one place:
+-- THIS FILE IS THE SOURCE OF TRUTH for notifications RLS. Confirmed 2026-08-03:
+-- these two policies are exactly what is live in production. Change them here.
 --
---     supabase/migrations/20260803_notifications_rls_owner_scoped.sql
---     (mirrored in solarflow-dashboard/supabase/rls_policies.sql)
+-- rls_policies.sql used to declare a contradictory permissive pair for this same
+-- table (`using (true)` for every authenticated user), which meant the live
+-- policy could not be determined from the repo and was one accidental re-run
+-- away from exposing every user's notifications to every other signed-in
+-- account. That block has been removed; see
+-- supabase/migrations/20260803_notifications_rls_owner_scoped.sql.
 --
--- This file used to declare its own owner-scoped pair while rls_policies.sql
--- declared a contradictory permissive pair (`using (true)` for every
--- authenticated user). Whichever script ran last won, which meant the live
--- policy could not be determined from the repo at all. That ambiguity is the
--- bug, so the definitions were consolidated on 2026-08-03 rather than fixed in
--- two places. Add policy changes to the migration, not here.
---
--- Rows are inserted by api/notify.ts with the service-role key, which bypasses
--- RLS, so no insert policy exists or is needed.
+-- No INSERT or DELETE policy, on purpose. src/lib/notifications.ts only selects
+-- and marks read; rows are created by api/notify.ts with the service-role key,
+-- which bypasses RLS.
+
+DROP POLICY IF EXISTS "Users can read own notifications" ON public.notifications;
+CREATE POLICY "Users can read own notifications"
+  ON public.notifications FOR SELECT
+  USING (auth.uid() = user_id);
+
+-- WITH CHECK is intentionally omitted: Postgres applies the USING expression to
+-- the new row for UPDATE when WITH CHECK is absent, so reassigning user_id to
+-- another account is already blocked.
+DROP POLICY IF EXISTS "Users can update own notifications" ON public.notifications;
+CREATE POLICY "Users can update own notifications"
+  ON public.notifications FOR UPDATE
+  USING (auth.uid() = user_id);

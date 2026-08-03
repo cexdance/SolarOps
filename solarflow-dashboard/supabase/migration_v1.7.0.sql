@@ -29,12 +29,22 @@ BEGIN
   END IF;
 END $$;
 
--- ── Notifications: ensure service-role insert is unrestricted ──
--- The service key used by api/notify.ts bypasses RLS by default,
--- but this makes the intent explicit and survives policy resets.
+-- ── Notifications: "service_insert" REMOVED 2026-08-03 ──────────
+-- This block used to run:
+--
+--   CREATE POLICY "service_insert" ON public.notifications
+--     FOR INSERT WITH CHECK (true);
+--
+-- The stated intent was to make service-role insert explicit. It did not do
+-- that. The service key bypasses RLS entirely, so the policy granted the service
+-- role nothing. With no TO clause it defaults to PUBLIC, so what it actually
+-- granted was INSERT to every other caller: any signed-in account could forge a
+-- notification to any user, with any sender name and body.
+--
+-- It is not live (production runs only the two owner-scoped policies from
+-- notifications_table.sql, verified 2026-08-03), but re-running this file would
+-- have applied it. Dropped here so re-running is safe.
 DROP POLICY IF EXISTS "service_insert" ON public.notifications;
-CREATE POLICY "service_insert" ON public.notifications
-  FOR INSERT WITH CHECK (true);
 
 -- ── app_data: ensure updated_at is kept current on every write ─
 -- (Trigger was created in migration.sql; this is a safety re-apply.)
