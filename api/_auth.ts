@@ -47,7 +47,11 @@ export async function requireUser(
   // information leak on any unauthenticated probe.
   const rawHeader = req.headers[headerName.toLowerCase()];
   const headerValue = Array.isArray(rawHeader) ? rawHeader[0] : (rawHeader ?? '');
-  const token = headerValue.replace(/^Bearer\s+/i, '').trim();
+  // `\b` then `\s*`, not `\s+`: a bare "Bearer" with no token must reduce to an
+  // empty string and be rejected here, rather than surviving as the literal
+  // token "Bearer" and costing a pointless round trip to the auth server. The
+  // word boundary keeps "Bearerabc" from being mistaken for the prefix.
+  const token = headerValue.trim().replace(/^Bearer\b\s*/i, '').trim();
   if (!token) {
     res.status(401).json({ error: 'Unauthorized' });
     return null;
