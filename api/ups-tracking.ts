@@ -10,6 +10,7 @@
  * Mock implementation for MVP, can be upgraded to real UPS API later
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { requireUser } from './_auth';
 
 export interface UPSTrackingResponse {
   status: 'pending' | 'delivered' | 'error';
@@ -24,6 +25,10 @@ export default async function handler(
   req: VercelRequest,
   res: VercelResponse
 ) {
+  // Staff-only: this spends the UPS_ACCESS_TOKEN on every call. Its one caller,
+  // dataStore.ts:522, already sends the bearer token via authedFetch.
+  if (!(await requireUser(req, res))) return;
+
   // Only POST is allowed for tracking checks
   if (req.method !== 'POST') {
     return res.status(405).json({

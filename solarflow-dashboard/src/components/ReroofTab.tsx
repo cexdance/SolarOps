@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Plus, Trash2, Sparkles, ClipboardCheck, Loader2, Package } from 'lucide-react';
+import { authedFetch } from '../lib/supabase';
 import type { ReroofWorkflow, ReroofPart, ReroofPartCategory } from '../types';
 
 // ── Category metadata + the standard reroof reinstallation checklist ──────────
@@ -65,7 +66,10 @@ export default function ReroofTab({ value, onChange, readOnly }: Props) {
     if (!part.name.trim()) return;
     setEstimating(s => ({ ...s, [part.id]: true }));
     try {
-      const res = await fetch('/api/parse-lead-image', {
+      // authedFetch, not fetch: /api/parse-lead-image requires a signed-in caller
+      // because every call spends ANTHROPIC_API_KEY. A plain fetch sends no
+      // Authorization header and now gets a 401.
+      const res = await authedFetch('/api/parse-lead-image', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

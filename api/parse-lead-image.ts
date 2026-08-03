@@ -11,6 +11,7 @@
  */
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { requireUser } from './_auth';
 
 const ANTHROPIC_API_KEY = (process.env.ANTHROPIC_API_KEY || '').trim();
 
@@ -216,6 +217,13 @@ Rules: price is per single unit (not a case/box unless the item is only sold tha
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  // Staff-only. Every call spends ANTHROPIC_API_KEY, so leaving this open is a
+  // metered spend anyone can drive. NOTE: ReroofTab.tsx called this with a plain
+  // fetch and no credentials; it was switched to authedFetch in the same change,
+  // otherwise the price-estimate button breaks here. LeadLobby.tsx:533 already
+  // used authedFetch.
+  if (!(await requireUser(req, res))) return;
+
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
