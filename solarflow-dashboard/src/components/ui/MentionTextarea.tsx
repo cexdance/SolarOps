@@ -323,6 +323,7 @@ export async function fireMentionNotifications(opts: {
       notifierName:  opts.notifierName,
       sourceType:    opts.contextType,
       sourceId:      opts.contextId,
+      activityId:    opts.activityId,
       sourceLabel:   opts.context,
       snippet,
       createdAt:     new Date().toISOString(),

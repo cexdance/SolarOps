@@ -53,6 +53,9 @@ export const MentionsWidget: React.FC<Props> = ({ userId, users, onOpenCustomer,
 
   const handleOpen = (m: MentionRecord) => {
     markRead(m.id);
+    // Anchor first, then navigate: ActivityFeed reads the hash as it renders and
+    // scrolls to that exact comment. Same convention as the notification bell.
+    if (m.activityId) window.location.hash = `activity-${m.activityId}`;
     if (m.sourceType === 'customer') onOpenCustomer?.(m.sourceId);
     else if (m.sourceType === 'workOrder') onOpenWorkOrder?.(m.sourceId);
   };

@@ -10,6 +10,7 @@ export interface MentionRecord {
   sourceType: 'customer' | 'workOrder' | 'todo';
   sourceId: string;          // customerId / jobId / todoId
   sourceLabel: string;       // e.g. "US-15583 Ella Mae Arnold" or "WO-2604-96746"
+  activityId?: string;       // the comment itself, so opening scrolls straight to it
   snippet: string;           // first 240 chars of the comment body
   createdAt: string;         // ISO
   read: boolean;
