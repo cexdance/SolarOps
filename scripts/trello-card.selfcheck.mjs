@@ -3,7 +3,14 @@
 // No Trello/Supabase calls, no framework.
 //
 // Run: npx tsc --target ES2020 --module commonjs --esModuleInterop --skipLibCheck \
-//        --outDir /tmp/twcheck api/trello-card.ts && node api/trello-card.selfcheck.mjs
+//        --outDir /tmp/twcheck api/trello-card.ts && node scripts/trello-card.selfcheck.mjs
+//
+// Lives in scripts/, NOT api/. Moved 2026-08-04: Vercel treats every non-underscore
+// file in api/ as a deployable function, so this dev-only script was being shipped.
+// It answered HTTP 500 in production (it imports from /tmp/twcheck, which exists
+// only on a dev machine) and, worse, consumed one of the 12 function slots the
+// Hobby plan allows. The repo was sitting exactly at that cap, so the next
+// endpoint anyone added would have failed the deploy.
 import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
 import { splitName, extractContact, matchTargetList, isFilename, parseLeadDesc, displayNameFor, verifyTrelloSignature } from '/tmp/twcheck/trello-card.js';
