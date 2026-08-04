@@ -13,6 +13,12 @@
  * Measured against production while writing this: contractor-2 has 57 jobs, 5 of
  * them in contractor-visible statuses, referencing 5 distinct customers. So the
  * payload goes from 155 jobs + 416 customers to 5 + 5.
+ *
+ * 2026-08-04, Phase 3 gate: contractor-job rows are now selected by the job ids
+ * already scoped to the caller, not by the contractorId stamped on the row. See
+ * the reassignment describe block at the bottom for why. Live payload also went
+ * 194.2 KB to 98.3 KB, since 62 of contractor-2's 67 rows were for jobs the
+ * portal never renders.
  */
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import handler from '../../../api/contractor-jobs';
@@ -57,10 +63,15 @@ function mockFetch(opts: {
     const ok = (body: unknown) => new Response(JSON.stringify(body), { status: 200 });
     if (u.includes('/auth/v1/user')) return ok(opts.authUser ?? { id: 'u1', email: APPROVED.email });
     if (u.includes('solarflow_contractors')) return ok([{ value: opts.contractors ?? [APPROVED, PENDING] }]);
-    if (u.includes('key=like.contractor_job'))
-      return ok((opts.contractorJobs ?? []).map(v => ({ value: v })));
     if (u.includes('key=like.job'))
       return ok((opts.jobs ?? []).map(v => ({ value: v })));
+    // Both scoped lookups are `key=in.(...)`, told apart by the prefix inside.
+    // The handler asks for exact row keys, so answer only the ones it asked for:
+    // a mock that returns everything cannot catch a query that scopes wrongly.
+    if (u.includes('key=in.') && u.includes('contractor_job'))
+      return ok((opts.contractorJobs ?? [])
+        .filter((v) => u.includes(`contractor_job%3A${(v as { sourceJobId?: string }).sourceJobId}`))
+        .map(v => ({ value: v })));
     if (u.includes('key=in.'))
       return ok((opts.customers ?? []).map(v => ({ value: v })));
     return ok([]);
@@ -153,14 +164,23 @@ describe('the payload is scoped', () => {
   it('requests ONLY the customers those visible jobs reference', async () => {
     vi.stubGlobal('fetch', mockFetch({ authUser: { id: 'u1', email: APPROVED.email }, jobs }));
     await handler(req(), mockRes() as never);
-    const custQuery = calls.find(c => c.includes('key=in.')) ?? '';
+    const custQuery = calls.find(c => c.includes('key=in.') && c.includes('customer')) ?? '';
     expect(custQuery).toContain('c1');
     expect(custQuery).toContain('c2');
     // c3's job was filtered out by status, so its customer must not be fetched.
     expect(custQuery).not.toContain('c3');
   });
 
-  it('skips the customer query entirely when there are no visible jobs', async () => {
+  it('requests ONLY the contractor-job rows for those visible jobs', async () => {
+    vi.stubGlobal('fetch', mockFetch({ authUser: { id: 'u1', email: APPROVED.email }, jobs }));
+    await handler(req(), mockRes() as never);
+    const cjQuery = calls.find(c => c.includes('key=in.') && c.includes('contractor_job')) ?? '';
+    expect(cjQuery).toContain('j1');
+    expect(cjQuery).toContain('j2');
+    expect(cjQuery).not.toContain('j3');
+  });
+
+  it('skips both scoped queries entirely when there are no visible jobs', async () => {
     vi.stubGlobal('fetch', mockFetch({ authUser: { id: 'u1', email: APPROVED.email }, jobs: [] }));
     await handler(req(), mockRes() as never);
     expect(calls.some(c => c.includes('key=in.'))).toBe(false);
@@ -171,5 +191,48 @@ describe('the payload is scoped', () => {
     const res = mockRes();
     await handler(req(), res as never);
     expect(res.seen.headers['Cache-Control']).toContain('no-store');
+  });
+});
+
+/**
+ * Reassignment. When admin moves a job to a different contractor the JOB's
+ * contractorId changes but the contractor_job ROW keeps the old stamp, so the
+ * two disagree. Six such rows were live on 2026-08-04, two of them on jobs a
+ * contractor could see. Selecting the rows by that stamp broke both ways, which
+ * is why they are now selected by the (already token-scoped) job ids instead.
+ */
+describe('a job reassigned between contractors', () => {
+  const MINE = { id: 'j1', contractorId: 'contractor-2', customerId: 'c1', woStatus: 'scheduled' };
+
+  it('still returns the contractor-job row when the row carries a STALE contractorId', async () => {
+    // Without this, the portal re-projects the work order as cj-view-* and the
+    // contractor's next save overwrites photos, parts, signature and invoice.
+    vi.stubGlobal('fetch', mockFetch({
+      authUser: { id: 'u1', email: APPROVED.email },
+      jobs: [MINE],
+      contractorJobs: [{ id: 'cj-real', sourceJobId: 'j1', contractorId: 'contractor-5' }],
+    }));
+    const res = mockRes();
+    await handler(req(), res as never);
+    const body = res.seen.body as { contractorJobs: Array<{ id: string }> };
+    expect(body.contractorJobs.map(c => c.id)).toEqual(['cj-real']);
+  });
+
+  it('does NOT return a row stamped with the caller when the job is no longer theirs', async () => {
+    // The leak direction: contractor-2's live payload carried 5 of contractor-5's
+    // work orders this way, each with customer name, address and phone.
+    vi.stubGlobal('fetch', mockFetch({
+      authUser: { id: 'u1', email: APPROVED.email },
+      jobs: [MINE],
+      contractorJobs: [
+        { id: 'cj-real',  sourceJobId: 'j1', contractorId: 'contractor-2' },
+        { id: 'cj-stale', sourceJobId: 'j9', contractorId: 'contractor-2', customerName: 'Leaked', customerPhone: '555' },
+      ],
+    }));
+    const res = mockRes();
+    await handler(req(), res as never);
+    const body = res.seen.body as { contractorJobs: Array<{ id: string }> };
+    expect(body.contractorJobs.map(c => c.id)).toEqual(['cj-real']);
+    expect(JSON.stringify(body)).not.toContain('Leaked');
   });
 });
