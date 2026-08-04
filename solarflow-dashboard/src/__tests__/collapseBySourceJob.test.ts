@@ -17,7 +17,7 @@
  * data that would reveal a regression.
  */
 import { describe, it, expect } from 'vitest';
-import { collapseBySourceJob, mergeContractorJobs } from '../lib/syncEngine';
+import { collapseBySourceJob, mergeContractorJobs, contractorJobRowKey } from '../lib/syncEngine';
 
 type J = Parameters<typeof collapseBySourceJob>[0][number];
 
@@ -88,6 +88,34 @@ describe('collapseBySourceJob keeps one job per sourceJobId', () => {
     const many = Array.from({ length: 20 }, (_, i) =>
       job({ id: `j${i}`, sourceJobId: `src-${i}` }));
     expect(collapseBySourceJob(many)).toHaveLength(20);
+  });
+});
+
+describe('contractorJobRowKey makes the duplicate structurally impossible', () => {
+  it('keys on sourceJobId, NOT the job id, so two devices converge on one row', () => {
+    // The race: both devices mint a different cj-* id for the same staff job.
+    // Keyed this way they write the same row and merge instead of duplicating.
+    const a = contractorJobRowKey({ id: 'cj-1754000000000-aaaa', sourceJobId: 'job-7' });
+    const b = contractorJobRowKey({ id: 'cj-1754000009999-zzzz', sourceJobId: 'job-7' });
+    expect(a).toBe(b);
+    expect(a).toBe('contractor_job:job-7');
+  });
+
+  it('keeps different staff jobs on different rows', () => {
+    expect(contractorJobRowKey({ id: 'x', sourceJobId: 'job-1' }))
+      .not.toBe(contractorJobRowKey({ id: 'y', sourceJobId: 'job-2' }));
+  });
+
+  it('falls back to the job id when there is no sourceJobId', () => {
+    // ServiceOrderPanel.tsx:760 passes job?.id, which can be undefined. Those
+    // were never CB-4 collapse candidates, so per-id rows are correct for them.
+    expect(contractorJobRowKey({ id: 'cj-solo' })).toBe('contractor_job:cj-solo');
+  });
+
+  it('treats an empty-string sourceJobId as absent, not as a shared key', () => {
+    // Guards the bug where '' would collapse every such job onto one row.
+    expect(contractorJobRowKey({ id: 'cj-a', sourceJobId: '' })).toBe('contractor_job:cj-a');
+    expect(contractorJobRowKey({ id: 'cj-b', sourceJobId: '' })).toBe('contractor_job:cj-b');
   });
 });
 
