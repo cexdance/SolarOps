@@ -232,6 +232,40 @@ function cjTime(j: CJobLike): string {
 }
 
 /**
+ * Collapse contractor jobs that point at the same `sourceJobId` (CB-4).
+ *
+ * Two jobs with DIFFERENT ids can describe the same underlying staff job, which
+ * is what a double-assignment race produces. Keep the newer and union their
+ * photos, so neither side's field uploads are lost. Jobs with no sourceJobId
+ * pass through untouched.
+ *
+ * Extracted from mergeContractorJobs on 2026-08-03 because it is the one part of
+ * that merge which does NOT survive splitting the blob into per-record
+ * `contractor_job:{id}` rows: it is a CROSS-ROW operation, and per-record upserts
+ * merge each key independently. Phase 1 of the contractor data boundary plan
+ * re-applies this at READ time over the pulled rows. Keeping one implementation
+ * means the blob path and the row path cannot drift apart.
+ */
+export function collapseBySourceJob(jobs: CJobLike[]): CJobLike[] {
+  const result: CJobLike[] = [];
+  const bySource = new Map<string, number>(); // sourceJobId -> index in result
+  for (const j of jobs) {
+    const src = j.sourceJobId;
+    if (!src) { result.push(j); continue; }
+    const existingIdx = bySource.get(src);
+    if (existingIdx == null) {
+      bySource.set(src, result.length);
+      result.push(j);
+    } else {
+      const existing = result[existingIdx];
+      const winner = cjTime(j) >= cjTime(existing) ? j : existing;
+      result[existingIdx] = { ...winner, photos: unionPhotos(existing.photos, j.photos) };
+    }
+  }
+  return result;
+}
+
+/**
  * Per-record merge for the contractor_jobs blob.
  *
  * - Merge by job id. On conflict, the newer record wins (LWW by updatedAt, then
@@ -256,23 +290,7 @@ export function mergeContractorJobs(localArr: unknown, remoteArr: unknown): CJob
     byId.set(rj.id, { ...winner, photos: unionPhotos(lj.photos, rj.photos) });
   }
 
-  // Collapse duplicates that share a sourceJobId (CB-4).
-  const result: CJobLike[] = [];
-  const bySource = new Map<string, number>(); // sourceJobId -> index in result
-  for (const j of byId.values()) {
-    const src = j.sourceJobId;
-    if (!src) { result.push(j); continue; }
-    const existingIdx = bySource.get(src);
-    if (existingIdx == null) {
-      bySource.set(src, result.length);
-      result.push(j);
-    } else {
-      const existing = result[existingIdx];
-      const winner = cjTime(j) >= cjTime(existing) ? j : existing;
-      result[existingIdx] = { ...winner, photos: unionPhotos(existing.photos, j.photos) };
-    }
-  }
-  return result;
+  return collapseBySourceJob([...byId.values()]);
 }
 
 type CleanupItemLike = { id: string; updatedAt?: string; [k: string]: unknown };
