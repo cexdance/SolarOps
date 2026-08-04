@@ -168,10 +168,19 @@ async function pushRows(
       (r.value as { updatedAt?: string }).updatedAt = now;
     }
   }
+  // Last gate before anything per-record reaches the database. Every job and
+  // customer write funnels through here (pushJobs, pushCustomers, pushJob,
+  // pushCustomer, and the dirty-row push in pushToSupabase), so guarding here
+  // covers every path rather than the one site where the 2026-08-04 incident
+  // happened to originate.
+  //
+  // Applied to the copy that is SENT, not to r.value: the in-memory object keeps
+  // its blob: dataUrl so images already on screen keep rendering. Only the
+  // durable copy is cleaned.
   const { error } = await supabase
     .from('app_data')
     .upsert(
-      rows.map(r => ({ key: r.key, value: r.value, updated_at: now })),
+      rows.map(r => ({ key: r.key, value: stripEphemeralPhotoUrls(r.value), updated_at: now })),
       { onConflict: 'key' },
     );
   if (error) throw error;
@@ -212,14 +221,61 @@ export async function pushJob(job: Job): Promise<void> {
 
 /** Strip any remaining base64 dataUrl strings from contractor photos before pushing.
  *  After Phase 1 photos should be Storage URLs, but legacy data may still have base64. */
+/**
+ * A `blob:` URL is a handle into ONE browser tab's memory, produced by
+ * URL.createObjectURL(). It is meaningless anywhere else and dead the moment
+ * that tab closes. Persisting one is therefore always a bug: it records a
+ * pointer that can never resolve for anyone, including the author later.
+ *
+ * INCIDENT 2026-08-04, SO-2607-38097. hydrateWoPhotos() reads a blob out of
+ * IndexedDB and sets `dataUrl` to a blob: URL so <img> can render it, which is
+ * correct for DISPLAY. That hydrated object then reached a write path, and 19
+ * photos across 3 work orders were stored with a dead blob: handle and no
+ * storageUrl. They rendered for the contractor who took them and were broken
+ * images for everyone else, while the work order read as completed.
+ *
+ * The `dataUrl` field may hold real base64 or nothing. Never a blob: URL.
+ */
+export function isEphemeralUrl(u: unknown): boolean {
+  return typeof u === 'string' && u.startsWith('blob:');
+}
+
+/**
+ * Strip ephemeral blob: URLs out of a record's woPhotos before it is persisted.
+ *
+ * Deliberately keeps the photo ENTRY. `photoStoreId` is the only remaining
+ * pointer to the real image in IndexedDB, and it is what makes recovery
+ * possible; dropping the entry to tidy the row would destroy the last reference.
+ * Only the unusable `dataUrl` is removed.
+ */
+export function stripEphemeralPhotoUrls<T>(value: T): T {
+  const v = value as unknown as Record<string, unknown>;
+  if (!v || typeof v !== 'object') return value;
+  const photos = v['woPhotos'];
+  if (!Array.isArray(photos)) return value;
+  let touched = false;
+  const cleaned = photos.map((p: Record<string, unknown>) => {
+    if (!p || typeof p !== 'object' || !isEphemeralUrl(p['dataUrl'])) return p;
+    touched = true;
+    const { dataUrl: _dropped, ...rest } = p;
+    return rest;
+  });
+  if (!touched) return value;
+  console.warn('[SyncEngine] dropped ephemeral blob: photo url(s) before persisting');
+  return { ...v, woPhotos: cleaned } as unknown as T;
+}
+
 function sanitizeContractorJobsPayload(jobs: unknown): unknown {
   if (!Array.isArray(jobs)) return jobs;
   return jobs.map((job: Record<string, unknown>) => {
     if (!job?.['photos'] || typeof job['photos'] !== 'object') return job;
     const cleanPhotos: Record<string, string[]> = {};
     for (const [cat, urls] of Object.entries(job['photos'] as Record<string, string[]>)) {
+      // `data:` was already stripped to keep the row under the size limit.
+      // `blob:` is stripped because it is a dead pointer, not because of size:
+      // it survived this filter until 2026-08-04 and reached production rows.
       cleanPhotos[cat] = (urls ?? []).map((u: string) =>
-        typeof u === 'string' && u.startsWith('data:') ? '' : u
+        typeof u === 'string' && (u.startsWith('data:') || isEphemeralUrl(u)) ? '' : u
       ).filter(Boolean);
     }
     return { ...job, photos: cleanPhotos };
