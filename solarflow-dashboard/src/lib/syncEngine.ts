@@ -21,7 +21,8 @@
  * their own single-row approach from the Phase 1 KV extension.
  */
 
-import { supabase } from './supabase';
+import { supabase, authedFetch } from './supabase';
+import { isContractorAccount } from './authRouting';
 import { markPushPending, clearPendingPush, isRowPoisoned, incRowFailure, clearRowPoison } from './outbox';
 import { isAllowedCustomer } from './solarEdgeSiteFilter';
 import { dedupeWoPhotos } from './woHelpers';
@@ -964,8 +965,37 @@ async function pullPrefix<T>(
 }
 
 /**
+ * Phase 3 contractor read path.
+ *
+ * Returns [customers, jobs] already narrowed to the caller by the server, from
+ * GET /api/contractor-jobs. The endpoint takes identity from the verified token
+ * and has no contractorId parameter, so there is nothing to scope here.
+ *
+ * FAILS TO EMPTY, NEVER TO A FULL PULL. Falling back to pullPrefix on error
+ * would silently reopen the exact boundary this exists to close, and it would
+ * do it precisely when something is already wrong. Empty is safe: mergeRemote
+ * keeps local-only records, so the portal renders its last known list instead
+ * of going blank.
+ */
+async function pullContractorScope(): Promise<[Customer[], Job[]]> {
+  try {
+    const r = await authedFetch('/api/contractor-jobs');
+    if (!r.ok) {
+      console.warn(`[SyncEngine] contractor scope pull failed: ${r.status}`);
+      return [[], []];
+    }
+    const body = await r.json() as { customers?: Customer[]; jobs?: Job[] };
+    return [body.customers ?? [], body.jobs ?? []];
+  } catch (err) {
+    console.warn('[SyncEngine] contractor scope pull error:', err);
+    return [[], []];
+  }
+}
+
+/**
  * Full pull from Supabase.
  * Phase 2: pulls per-record rows incrementally.
+ * Phase 3: contractor sessions read their scope from the API instead.
  * Also pulls standalone KV keys and tombstones.
  * Emits `solarflow-remote-update` for changed KV keys.
  */
@@ -977,11 +1007,23 @@ export async function pullFromSupabase(): Promise<Partial<AppState> | null> {
     ensureCursorVersion(); // one-time full resync to recover any stale future cursor
     const since = getLastSync();
 
-    // ── Per-record pull (Phase 2) ─────────────────────────────────────────────
-    const [customers, jobs] = await Promise.all([
-      pullPrefix<Customer>(PREFIX.customer, since),
-      pullPrefix<Job>(PREFIX.job, since),
-    ]);
+    // ── Per-record pull ───────────────────────────────────────────────────────
+    // Phase 3: a contractor session never pulls customer:/job: rows. Its filtering
+    // was only ever client-side, so the full dataset was one authenticated request
+    // away. Staff sessions are unchanged.
+    //
+    // ONLY these two prefixes move. The KV pull below still runs for contractors:
+    // the portal needs solarflow_contractors and solarflow_service_rates, and
+    // ContractorDashboard.tsx writes solarflow_crm_data on the upsell flow. That
+    // key has NO merger on purpose (single-writer, whole-blob overwrite), so a
+    // client that stopped pulling it would push a stale blob over every staff lead.
+    const contractorSession = isContractorAccount(session.user?.user_metadata);
+    const [customers, jobs] = contractorSession
+      ? await pullContractorScope()
+      : await Promise.all([
+          pullPrefix<Customer>(PREFIX.customer, since),
+          pullPrefix<Job>(PREFIX.job, since),
+        ]);
 
     // ── Tombstones + standalone KV keys + solarEdgeConfig ───────────────────
     const { data: kvData, error: kvError } = await supabase
@@ -1097,7 +1139,12 @@ export async function pullFromSupabase(): Promise<Partial<AppState> | null> {
       .filter((t): t is string => !!t)
       .sort();
     const maxServerTs = serverTimes.length ? serverTimes[serverTimes.length - 1] : null;
-    if (maxServerTs) {
+    // Contractor sessions do not advance the cursor. Their records come from the
+    // API, which returns the record's own CLIENT-stamped updatedAt, not the
+    // app_data.updated_at that pullPrefix stamps. They never read the cursor
+    // either, so writing one buys nothing and risks exactly the skew this block
+    // warns about above.
+    if (maxServerTs && !contractorSession) {
       const SYNC_SAFETY_MS = 5000;
       setLastSync(new Date(new Date(maxServerTs).getTime() - SYNC_SAFETY_MS).toISOString());
     }
