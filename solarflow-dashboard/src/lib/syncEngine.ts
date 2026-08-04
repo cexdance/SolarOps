@@ -488,17 +488,38 @@ async function mirrorContractorJobRows(payload: unknown): Promise<void> {
     // point of the deterministic key, and upsert rejects duplicate keys within a
     // single statement. Collapse first so the batch has unique keys, reusing the
     // CB-4 logic the blob path uses rather than writing a second implementation.
-    const rows = collapseBySourceJob(jobs as Parameters<typeof collapseBySourceJob>[0])
+    const all = collapseBySourceJob(jobs as Parameters<typeof collapseBySourceJob>[0])
       .map(j => ({
         key: contractorJobRowKey(j as { id: string; sourceJobId?: string }),
-        value: j,
-        updated_at: new Date().toISOString(),
+        value: j as unknown,
       }));
 
-    const { error } = await supabase.from('app_data').upsert(rows, { onConflict: 'key' });
+    // Write only what changed. saveContractorJobs hands over the WHOLE array on
+    // every edit, so without this a single contractor completing one job rewrites
+    // all 127 rows. Observed in production 2026-08-04: one save, 127 row writes.
+    // Harmless at this size, quadratic-feeling as the job count grows.
+    //
+    // Reuses the same isDirty/markClean snapshot that pushToSupabase uses for
+    // customers and jobs rather than adding a second mechanism.
+    //
+    // The map is in-memory and starts empty, so the first save after a page load
+    // still writes every row. That is the tradeoff the rest of this file already
+    // accepts. It is safe HERE in a way it was not for the 2026-06-12 incident:
+    // that was stale local data blind-pushed over fresher remote, whereas these
+    // rows mirror a blob write that already succeeded moments earlier.
+    const changed = all.filter(r => isDirty(r.key, r.value));
+    if (changed.length === 0) return;
+
+    const now = new Date().toISOString();
+    const { error } = await supabase
+      .from('app_data')
+      .upsert(changed.map(r => ({ ...r, updated_at: now })), { onConflict: 'key' });
     if (error) {
       console.warn('[SyncEngine] contractor_job row mirror failed (blob is authoritative):', error.message);
+      return; // leave them dirty so the next save retries
     }
+    // Only after a confirmed write, so a failed mirror is retried next time.
+    for (const r of changed) markClean(r.key, r.value);
   } catch (err) {
     console.warn('[SyncEngine] contractor_job row mirror threw (blob is authoritative):', err);
   }
