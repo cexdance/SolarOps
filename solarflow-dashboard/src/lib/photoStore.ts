@@ -27,7 +27,12 @@ export interface PhotoRow {
   id:           string;
   jobId:        string;
   category:     string;
-  blob:         Blob;
+  /**
+   * The local bytes. Absent once `purgeUploadedBlobs()` has reclaimed them,
+   * which only happens after the row reached Supabase Storage, so `supabaseUrl`
+   * is the fallback source for any row without a blob.
+   */
+  blob?:        Blob;
   contentType:  string;
   createdAt:    string;
   uploadStatus: 'pending' | 'uploaded' | 'failed';
@@ -121,6 +126,46 @@ export async function deletePhotoForJobByUrl(jobId: string, url: string): Promis
   return targets.length;
 }
 
+/**
+ * Reclaim device storage: drop the local Blob from rows already mirrored to
+ * Supabase Storage.
+ *
+ * Nothing ever evicted these, so the photo DB grew for the life of the install.
+ * IndexedDB shares one quota per origin with the app-state DB (`solarops_state`),
+ * so a fat photo store eventually fails every `saveData()` write and raises the
+ * blocking "Storage full, changes not saved" modal. The bytes are recoverable
+ * from `supabaseUrl`, the row (and its metadata) stays, so `hydrateWoPhotos`
+ * still resolves the photo, just over the network.
+ *
+ * Rows newer than `keepDays` keep their blob so recent jobs still render with no
+ * signal. ponytail: 30 days is a guess, not a measurement. Lower it if devices
+ * still fill up, raise it if field crews report missing photos offline.
+ *
+ * Idempotent and safe to call on every boot: a reclaimed row no longer matches.
+ */
+export function isReclaimable(row: PhotoRow, cutoffMs: number): boolean {
+  // An unparseable createdAt yields NaN, and NaN < cutoff is false, so a row with
+  // a bad date is KEPT. Erring toward keeping bytes beats deleting the only copy.
+  return Boolean(row.blob)
+    && row.uploadStatus === 'uploaded'
+    && Boolean(row.supabaseUrl)
+    && Date.parse(row.createdAt) < cutoffMs;
+}
+
+export async function purgeUploadedBlobs(keepDays = 30): Promise<{ rows: number; bytes: number }> {
+  const cutoff = Date.now() - keepDays * 24 * 60 * 60 * 1000;
+  const store = await tx('readonly');
+  const idx = store.index('uploadStatus');
+  const uploaded = await reqToPromise(idx.getAll(IDBKeyRange.only('uploaded')));
+  const stale = uploaded.filter(r => isReclaimable(r, cutoff));
+  if (stale.length === 0) return { rows: 0, bytes: 0 };
+  const bytes = stale.reduce((n, r) => n + (r.blob?.size ?? 0), 0);
+  const rw = await tx('readwrite');
+  // Issue every put synchronously so the transaction cannot auto-commit mid-loop.
+  await Promise.all(stale.map(r => reqToPromise(rw.put({ ...r, blob: undefined }))));
+  return { rows: stale.length, bytes };
+}
+
 export async function flushPendingMirrors(): Promise<{ ok: number; failed: number }> {
   const store = await tx('readonly');
   const idx = store.index('uploadStatus');
@@ -206,6 +251,9 @@ export async function hydrateWoPhotos<T extends WoPhotoLike>(photos: T[]): Promi
       if (row?.blob) {
         const url = URL.createObjectURL(row.blob);
         out.push({ ...p, dataUrl: url });
+      } else if (row?.supabaseUrl) {
+        // Blob reclaimed by purgeUploadedBlobs(); Storage holds the only copy.
+        out.push({ ...p, dataUrl: row.supabaseUrl });
       } else {
         out.push(p);
       }
@@ -223,6 +271,8 @@ async function mirrorRow(id: string): Promise<{ ok: boolean; error?: string }> {
   const row = await getPhoto(id);
   if (!row) return { ok: false, error: 'row not found' };
   if (row.uploadStatus === 'uploaded') return { ok: true };
+  // Unreachable in practice: only uploaded rows ever lose their blob.
+  if (!row.blob) return { ok: false, error: 'blob reclaimed, nothing to upload' };
 
   // Upload through the SAME canonical uploader as the in-editor direct upload
   // (addPhoto) so both paths write the IDENTICAL storage key (wo-photos/<jobId>/

@@ -61,7 +61,7 @@ const { ComposedChart, Bar, Line, XAxis, YAxis, Tooltip: RechartsTooltip, Respon
 import { Customer, CustomerFile, Job, ClientStatus, Activity, User, CustomerCategory, SystemType, SolarEdgeAlert } from '../types';
 import { loadAlerts } from '../lib/operationsStore';
 import { formatMoney } from '../lib/money';
-import { importTrelloCard, TrelloImportResult, fetchTrelloCard, extractContactInfo, extractAddress, buildImportActivities } from '../lib/trelloImporter';
+import { importTrelloCard, TrelloImportResult, fetchTrelloCard, extractContactInfo, extractAddress, buildImportActivities, buildImportFiles } from '../lib/trelloImporter';
 import { FL_SITES, SolarEdgeSite } from '../lib/solarEdgeSites';
 import { AddressAutocomplete } from './AddressAutocomplete';
 import { AddressLink } from './AddressLink';
@@ -2248,13 +2248,10 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
     const fromName = localStorage.getItem('solarops_smtp_from_name') || 'Conexsol Energy';
     const subject = `Solar Production Report, ${customer.name}`;
 
-    localStorage.setItem(`solarops_report_${previewTrackingId}`, JSON.stringify({
-      to: recipientEmail,
-      bcc: 'cesar.jurado@conexsol.us',
-      subject,
-      trackingId: previewTrackingId,
-      sentAt: new Date().toISOString(),
-    }));
+    // NOTE: this used to write a `solarops_report_<trackingId>` localStorage key
+    // per send. Nothing in the app or the API ever read it, and an older build
+    // stored the full report HTML in it, so it just accumulated until the origin
+    // quota blew. Removed; App.tsx sweeps the orphans left on existing devices.
 
     if (smtpUser && smtpPass) {
       try {
@@ -5378,8 +5375,10 @@ const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({ onClose, onCr
   const [trelloError,   setTrelloError]   = useState('');
   const [trelloOk,      setTrelloOk]      = useState('');
   const [trelloOpen,    setTrelloOpen]    = useState(false);
-  // Trello comments captured on import, folded into the new customer's activity timeline on save.
+  // Trello comments/attachments captured on import, folded into the new customer on save.
   const [pendingActivities, setPendingActivities] = useState<Activity[]>([]);
+  const [pendingFiles,      setPendingFiles]      = useState<CustomerFile[]>([]);
+  const [pendingTrelloUrl,  setPendingTrelloUrl]  = useState('');
 
   // Screenshot import, parse a lead email screenshot with Claude Vision
   const [screenshotOpen,    setScreenshotOpen]    = useState(false);
@@ -5497,14 +5496,20 @@ const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({ onClose, onCr
         referralSource: prev.referralSource || 'Trello',
       }));
 
-      // Carry the card's comments into the new customer's activity timeline.
+      // Carry the card's comments and attachments into the new customer.
       // buildImportActivities also emits a desc note; drop it (desc already fills Notes).
       const comments = buildImportActivities(card, 'Trello')
         .filter(a => a.id.startsWith('trello-comment-'));
+      const cardFiles = buildImportFiles(card);
       setPendingActivities(comments);
+      setPendingFiles(cardFiles);
+      setPendingTrelloUrl(card.shortUrl);
 
-      const bits = [addr ? 'address' : '', comments.length ? `${comments.length} comment${comments.length > 1 ? 's' : ''}` : '']
-        .filter(Boolean).join(' + ');
+      const bits = [
+        addr ? 'address' : '',
+        comments.length  ? `${comments.length} comment${comments.length > 1 ? 's' : ''}` : '',
+        cardFiles.length ? `${cardFiles.length} attachment${cardFiles.length > 1 ? 's' : ''}` : '',
+      ].filter(Boolean).join(' + ');
       setTrelloOk(`Imported "${card.name}"${bits ? ` (${bits})` : ''}`);
     } catch (err) {
       setTrelloError(err instanceof Error ? err.message : 'Failed to fetch card');
@@ -5522,6 +5527,8 @@ const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({ onClose, onCr
       systemType: formData.systemType || undefined,
       clientStatus: formData.clientStatus || undefined,
       ...(pendingActivities.length ? { activityHistory: pendingActivities } : {}),
+      ...(pendingFiles.length      ? { files: pendingFiles }               : {}),
+      ...(pendingTrelloUrl         ? { trelloBackupUrl: pendingTrelloUrl } : {}),
       createdAt: new Date().toISOString(),
     });
     onClose();

@@ -37,7 +37,7 @@ import { supabase, authedFetch } from './lib/supabase';
 import { canSeeFinancials, isFinancialView } from './lib/access';
 import { syncFromDB } from './lib/db';
 import { loadData, saveData, hydrateData } from './lib/dataStore';
-import { migrateWoPhotos } from './lib/photoStore';
+import { migrateWoPhotos, purgeUploadedBlobs } from './lib/photoStore';
 import { pickupJobsForContractor, toContractorJobView, serviceOrderNo, photoUrlStem, bareOrderNo, dedupeWoPhotos, mergeRmaEntries } from './lib/woHelpers';
 import { fireMentionNotifications, sendCustomerAppointmentEmail } from './components/ui/MentionTextarea';
 import { logChange, logJobChange, flushChangeLog } from './lib/changeLog';
@@ -867,6 +867,31 @@ function App() {
         }
       })
       .finally(() => setDbReady(true));
+  }, []);
+
+  // Reclaim device storage once per boot. Both stores grew without bound and
+  // shared one origin quota, which is what surfaced the blocking "Storage full,
+  // changes not saved" modal: IndexedDB photo blobs that are already mirrored to
+  // Supabase Storage, and orphaned `solarops_report_*` localStorage keys written
+  // by a report send that nothing ever read back. Never blocks boot.
+  useEffect(() => {
+    void (async () => {
+      try {
+        const { rows, bytes } = await purgeUploadedBlobs();
+        if (rows > 0) {
+          console.info(`[App] reclaimed ${(bytes / 1024 / 1024).toFixed(1)}MB from ${rows} mirrored photos`);
+        }
+      } catch (e) {
+        console.error('[App] photo blob reclaim failed', e);
+      }
+      try {
+        const orphans = Object.keys(localStorage).filter(k => k.startsWith('solarops_report_'));
+        orphans.forEach(k => localStorage.removeItem(k));
+        if (orphans.length > 0) console.info(`[App] removed ${orphans.length} orphaned report keys`);
+      } catch (e) {
+        console.error('[App] report key sweep failed', e);
+      }
+    })();
   }, []);
 
   // Save data whenever it changes (debounced 500ms).
@@ -2039,6 +2064,12 @@ function App() {
       howFound: customer.referralSource,
       isPowerCare: customer.isPowerCare,
       solarEdgeSiteId: customer.solarEdgeSiteId,
+      // Imports (Trello) arrive with a timeline, files and a source link already
+      // built. This whitelist used to drop them silently, losing every comment
+      // and attachment on create.
+      activityHistory: customer.activityHistory,
+      files: customer.files,
+      trelloBackupUrl: customer.trelloBackupUrl,
       createdAt: customer.createdAt || new Date().toISOString(),
     };
     // Log before state update, append-only audit trail

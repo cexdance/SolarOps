@@ -295,6 +295,25 @@ export function buildImportActivities(card: TrelloCardData, userName: string): A
   return activities;
 }
 
+// ── Build CustomerFile entries ────────────────────────────────────────────────
+// IDs derive from the card's stable short key so re-importing the same card
+// produces identical IDs. Trello attachment URLs are publicly accessible, so
+// the preview (when present) or the raw URL is used directly.
+
+export function buildImportFiles(card: TrelloCardData): CustomerFile[] {
+  const cardKey = card.shortUrl.split('/').pop() ?? card.shortUrl;
+  const now = new Date().toISOString();
+  return card.attachments.map((a, i) => ({
+    id:        `trello-file-${cardKey}-${i}`,
+    name:      a.name,
+    url:       a.previewUrl ?? a.url,
+    mimeType:  a.mimeType,
+    size:      a.size,
+    source:    'trello' as const,
+    createdAt: now,
+  }));
+}
+
 // ── Main entry point ──────────────────────────────────────────────────────────
 
 export async function importTrelloCard(
@@ -329,29 +348,7 @@ export async function importTrelloCard(
   const existingActivityIds = new Set((customer.activityHistory ?? []).map(a => a.id));
   const activities = allActivities.filter(a => !existingActivityIds.has(a.id));
 
-  // Build CustomerFile records, download each attachment and re-host in Supabase
-  // so the URL is permanent and never blocked by browser CSP or Trello token expiry.
-  const cardKey = card.shortUrl.split('/').pop() ?? card.shortUrl;
-  const files: CustomerFile[] = await Promise.all(
-    card.attachments.map(async (a, i) => {
-      const fileId = `trello-file-${cardKey}-${i}`;
-      const sourceUrl = a.url; // raw Trello attachment URL (publicly accessible)
-
-      // Use preview URL if available, fallback to source URL
-      // (Trello attachment URLs are typically publicly accessible)
-      const url = a.previewUrl ?? sourceUrl;
-
-      return {
-        id: fileId,
-        name: a.name,
-        url,
-        mimeType: a.mimeType,
-        size: a.size,
-        source: 'trello' as const,
-        createdAt: new Date().toISOString(),
-      };
-    })
-  );
+  const files = buildImportFiles(card);
 
   const existingFiles = customer.files ?? [];
   // Avoid duplicating files already imported from the same card
