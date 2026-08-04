@@ -127,9 +127,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const jobs = allMine.filter(j => CONTRACTOR_VISIBLE_STATUSES.has(j.woStatus ?? j.status ?? ''));
 
   // ── Their contractor-job records ──────────────────────────────────────────
-  const contractorJobs = await readRows<{ id: string }>(
-    `key=like.contractor_job:*&value->>contractorId=eq.${encodeURIComponent(me.id)}&select=value`,
-  );
+  // Keyed off the jobs above, NOT off contractorId on the row. Rows are keyed
+  // contractor_job:{sourceJobId ?? id} (contractorJobRowKey in syncEngine.ts),
+  // and every live row keys by sourceJobId, which IS the job id.
+  //
+  // Scoping by the row's own contractorId was wrong in both directions, found
+  // 2026-08-04 by diffing this payload against what the portal renders. When
+  // admin reassigns a job the JOB moves but the row keeps the old stamp:
+  //   LOSS: 2 of contractor-5's 8 visible work orders came back with no
+  //   contractor-job record, so the portal re-projects them as cj-view-* and
+  //   the next contractor save overwrites photos/parts/signature/invoice.
+  //   LEAK: the same stale stamp kept 5 of contractor-5's jobs in
+  //   contractor-2's payload, each with customer name, address and phone.
+  //
+  // The job list is already scoped by the verified token, so keying off it is
+  // strictly narrower and cannot return another contractor's record.
+  let contractorJobs: unknown[] = [];
+  if (jobs.length > 0) {
+    const cjKeys = jobs.map(j => `"contractor_job:${j.id}"`).join(',');
+    contractorJobs = await readRows(`key=in.(${encodeURIComponent(cjKeys)})&select=value`);
+  }
 
   // ── Only the customers those work orders reference ────────────────────────
   // Not all 416. This is the line that closes the exposure.
