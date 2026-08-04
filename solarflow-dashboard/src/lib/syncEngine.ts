@@ -47,7 +47,31 @@ export const PREFIX = {
   customer: 'customer:',
   job:      'job:',
   solar:    'solar:',
+  // Phase 1 of the contractor data boundary plan. Written alongside the
+  // solarflow_contractor_jobs blob (dual-write); the blob is still authoritative
+  // and nothing reads these rows yet.
+  contractorJob: 'contractor_job:',
 } as const;
+
+/**
+ * Row key for a contractor job. Deterministic on `sourceJobId`, NOT on the job's
+ * own id.
+ *
+ * That is the whole point. Contractor job ids are minted client-side as
+ * `cj-${Date.now()}-${random}`, and the only guard against creating two for one
+ * staff job (`App.tsx:1933`) checks LOCAL in-memory state. Two devices can both
+ * check, both see nothing, and both create a job for the same staff job with
+ * different ids. In the blob that is repaired after the fact by
+ * collapseBySourceJob (CB-4). Keyed this way, both devices write the SAME row
+ * and the existing per-record merge unions them, so the duplicate cannot form.
+ *
+ * Falls back to the job's own id when there is no sourceJobId
+ * (`ServiceOrderPanel.tsx:760` passes `job?.id`, which can be undefined). Safe,
+ * because CB-4 never treated those as collapse candidates either.
+ */
+export function contractorJobRowKey(job: { id: string; sourceJobId?: string }): string {
+  return `${PREFIX.contractorJob}${job.sourceJobId || job.id}`;
+}
 
 // Standalone KV keys that are their own single rows
 export const KV_SYNC_KEYS = [
@@ -439,6 +463,48 @@ export function mergeKVValue(key: string, local: unknown, remote: unknown): unkn
 const FETCH_FAILED = Symbol('fetchRemoteKV failed');
 
 /**
+ * Phase 1 dual-write: mirror the contractor-jobs blob into per-record rows.
+ *
+ * Deliberately NOT pushRows(). That helper stamps `updatedAt = now` on every
+ * value it writes, which is right for customer/job pushes but wrong here: it
+ * would make every mirrored job look freshly edited and break the
+ * last-writer-wins comparison the contractor merge depends on. These rows must
+ * carry whatever `updatedAt` the client already stamped at edit time.
+ *
+ * Best-effort by contract. Nothing reads these rows during Phase 1, so a failure
+ * is logged and swallowed rather than surfaced. The authoritative blob write has
+ * already succeeded by the time this runs.
+ */
+async function mirrorContractorJobRows(payload: unknown): Promise<void> {
+  if (!Array.isArray(payload) || payload.length === 0) return;
+  try {
+    const jobs = payload.filter(
+      (j): j is { id: string; sourceJobId?: string } =>
+        !!j && typeof j === 'object' && typeof (j as { id?: unknown }).id === 'string',
+    );
+    if (jobs.length === 0) return;
+
+    // Two jobs can legitimately collapse onto one key here, which is the entire
+    // point of the deterministic key, and upsert rejects duplicate keys within a
+    // single statement. Collapse first so the batch has unique keys, reusing the
+    // CB-4 logic the blob path uses rather than writing a second implementation.
+    const rows = collapseBySourceJob(jobs as Parameters<typeof collapseBySourceJob>[0])
+      .map(j => ({
+        key: contractorJobRowKey(j as { id: string; sourceJobId?: string }),
+        value: j,
+        updated_at: new Date().toISOString(),
+      }));
+
+    const { error } = await supabase.from('app_data').upsert(rows, { onConflict: 'key' });
+    if (error) {
+      console.warn('[SyncEngine] contractor_job row mirror failed (blob is authoritative):', error.message);
+    }
+  } catch (err) {
+    console.warn('[SyncEngine] contractor_job row mirror threw (blob is authoritative):', err);
+  }
+}
+
+/**
  * Fetch the current remote blob for a KV key (raw, un-sanitized) for merge.
  * Returns FETCH_FAILED if the read did not succeed; callers MUST NOT treat that
  * as an empty remote. `null` means the row genuinely does not exist yet.
@@ -523,6 +589,16 @@ export async function pushKeyValue(key: string, value: unknown): Promise<void> {
     const { error } = await supabase
       .from('app_data')
       .upsert([{ key, value: payload, updated_at: new Date().toISOString() }], { onConflict: 'key' });
+
+    // Phase 1 dual-write. Mirror the blob into per-record contractor_job: rows
+    // AFTER the authoritative blob write, and only if it succeeded.
+    //
+    // Best-effort on purpose: nothing reads these rows yet, so a failure here
+    // must never fail the push or surface to the user. The blob is still the
+    // source of truth for the whole of Phase 1.
+    if (!error && key === 'solarflow_contractor_jobs') {
+      await mirrorContractorJobRows(payload);
+    }
 
     if (error) {
       console.warn(`[SyncEngine] pushKeyValue(${key}) failed:`, error.message);
