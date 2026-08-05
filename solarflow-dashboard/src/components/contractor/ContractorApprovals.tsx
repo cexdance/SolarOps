@@ -56,10 +56,16 @@ export const ContractorApprovals: React.FC<ContractorApprovalsProps> = ({
   const [rejectReason, setRejectReason]     = useState('');
   const [earningsPeriod, setEarningsPeriod] = useState<'week' | 'curr_month' | 'prev_month' | 'ytd'>('curr_month');
   const [selectedWO, setSelectedWO]         = useState<ContractorJob | null>(null);
-  const [, setShowExpenseModal] = useState(false);
   const [woViewMode, setWoViewMode] = useState<'list' | 'kanban' | 'calendar'>('list');
 
   const contractorWOs = contractorJobs.filter(j => j.contractorId === selected?.id);
+
+  // Expenses live on the work order (contractor writes them in the field), not
+  // on the Contractor record, so gather them across this contractor's WOs.
+  // Newest first, since the office reviews the most recent reimbursements.
+  const contractorExpenses = contractorWOs
+    .flatMap(wo => (wo.expenses ?? []).map(exp => ({ exp, wo })))
+    .sort((a, b) => (b.exp.submittedAt ?? '').localeCompare(a.exp.submittedAt ?? ''));
 
   const totalEarnings = (() => {
     const now = new Date();
@@ -314,7 +320,7 @@ export const ContractorApprovals: React.FC<ContractorApprovalsProps> = ({
                 {([
                   { key: 'overview',     label: 'Overview',     icon: <Building className="w-4 h-4" /> },
                   { key: 'jobs',        label: `Work Orders (${contractorWOs.length})`, icon: <Wrench className="w-4 h-4" /> },
-                  { key: 'expenses',    label: `Expenses (${selected.expenses?.length || 0})`, icon: <ReceiptText className="w-4 h-4" /> },
+                  { key: 'expenses',    label: `Expenses (${contractorExpenses.length})`, icon: <ReceiptText className="w-4 h-4" /> },
                   { key: 'performance', label: 'Performance',   icon: <span className="text-sm">⭐</span> },
                 ] as const).map(t => (
                   <button
@@ -623,23 +629,29 @@ export const ContractorApprovals: React.FC<ContractorApprovalsProps> = ({
               <div className="p-6 max-w-2xl">
                 <div className="flex items-center justify-between mb-4">
                   <p className="text-sm font-semibold text-slate-700">Submitted Expenses</p>
-                  <button
-                    onClick={() => setShowExpenseModal(true)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-500 text-white text-xs font-semibold rounded-lg hover:bg-orange-600 cursor-pointer"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    Add Expense
-                  </button>
+                  {contractorExpenses.length > 0 && (
+                    <span className="text-sm font-bold text-slate-900">
+                      {formatMoney(contractorExpenses.reduce((sum, { exp }) => sum + (Number(exp.amount) || 0), 0))}
+                    </span>
+                  )}
                 </div>
-                {(!selected.expenses || selected.expenses.length === 0) ? (
-                  <div className="text-center py-12 text-sm text-slate-400">No expenses submitted yet.</div>
+                {contractorExpenses.length === 0 ? (
+                  <div className="text-center py-12 text-sm text-slate-400">
+                    No expenses submitted yet. Contractors add these from the work order in the field.
+                  </div>
                 ) : (
                   <div className="space-y-3">
-                    {selected.expenses.map(exp => (
-                      <div key={exp.id} className="bg-white rounded-xl border border-slate-200 p-4">
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="font-semibold text-sm text-slate-900">{exp.workOrderName}</span>
-                          <div className="flex items-center gap-2">
+                    {contractorExpenses.map(({ exp, wo }) => (
+                      <button
+                        key={exp.id}
+                        onClick={() => setSelectedWO(wo)}
+                        className="w-full text-left bg-white rounded-xl border border-slate-200 p-4 hover:border-orange-300 transition-colors cursor-pointer"
+                      >
+                        <div className="flex items-center justify-between mb-1 gap-2">
+                          <span className="font-semibold text-sm text-slate-900 truncate">
+                            {exp.vendor || exp.workOrderName || wo.woNumber}
+                          </span>
+                          <div className="flex items-center gap-2 flex-shrink-0">
                             <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                               exp.status === 'approved' ? 'bg-emerald-100 text-emerald-700' :
                               exp.status === 'pending'  ? 'bg-amber-100 text-amber-700' :
@@ -654,9 +666,12 @@ export const ContractorApprovals: React.FC<ContractorApprovalsProps> = ({
                         </div>
                         <p className="text-xs text-slate-500 capitalize">
                           {exp.category} · {new Date(exp.dateIncurred).toLocaleDateString()}
-                          {exp.attachments?.length ? ` · ${exp.attachments.length} attachment${exp.attachments.length > 1 ? 's' : ''}` : ''}
+                          {wo.woNumber ? ` · ${wo.woNumber}` : ''}
                         </p>
-                      </div>
+                        {exp.description && (
+                          <p className="text-xs text-slate-500 mt-1 normal-case">{exp.description}</p>
+                        )}
+                      </button>
                     ))}
                   </div>
                 )}

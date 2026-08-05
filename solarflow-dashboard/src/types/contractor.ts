@@ -336,6 +336,13 @@ export interface ContractorJob {
   // contractor save can never drop an RMA the office added.
   rmaEntries?: RMAEntry[];
 
+  // Out-of-pocket costs the contractor logged in the field (materials, tolls,
+  // permits). Lives on the JOB, not on the Contractor record: contractor_jobs
+  // already merges per-record, whereas the contractors blob is multi-writer and
+  // a contractor-side write there would blind-overwrite the office's edits.
+  // Unioned by id in mergeContractorJobs so neither side can drop the other's.
+  expenses?: ContractorExpense[];
+
   // Invoice tracking
   invoiceId?: string;
   invoiceStatus?: InvoiceStatus;
