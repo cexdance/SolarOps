@@ -1,0 +1,52 @@
+-- Give `authenticated` SELECT on storage.objects. Without it, every photo upload
+-- has been failing for two weeks.
+--
+-- LIVE STATE (queried 2026-08-04, not read from a file):
+--
+--   tablename  policyname                      cmd     roles
+--   objects    Authenticated users can upload  INSERT  {authenticated}
+--   objects    Authenticated users can update  UPDATE  {authenticated}
+--   objects    Authenticated users can delete  DELETE  {authenticated}
+--
+-- There is no SELECT policy, so an existing object row is INVISIBLE to
+-- `authenticated`. RLS denies reads by default once it is enabled; the three
+-- policies above only ever granted writes.
+--
+-- THE OUTAGE
+-- Not one object has reached the `customer-files` bucket since 2026-07-21.
+-- change_log carries 16 `photo.upload_fail` rows on 2026-08-03 alone, across an
+-- admin browser and an iPhone, every one of them:
+--
+--   new row violates row-level security policy
+--
+-- This is NOT an expired session. The same client writes app_data and inserts
+-- change_log rows at the same timestamps, and both of those policies require
+-- `auth.role() = 'authenticated'`. The session is genuinely authenticated; it is
+-- storage.objects specifically that rejects the write.
+--
+-- MECHANISM (reproduced under `set local role authenticated`)
+--
+--   INSERT a brand-new object key                 -> allowed
+--   SELECT from storage.objects                   -> 0 rows, the row is invisible
+--   plain UPDATE of an existing object            -> affects 0 rows, silently
+--   INSERT ... ON CONFLICT DO UPDATE on that key  -> 42501, RLS violation
+--
+-- lib/photoStorage.ts uploads with `{ upsert: true }`, which is exactly that
+-- INSERT ... ON CONFLICT DO UPDATE. It cannot take the update branch on a row it
+-- cannot see, and Postgres surfaces the failure as an RLS violation rather than a
+-- unique violation. So an upload dies whenever its target key already exists.
+--
+-- That used to be rare, because keys embedded a fresh timestamp id. It became the
+-- normal case when uploads went content-addressed (`contentHashId`): identical
+-- bytes now always produce the identical key, which is the whole point of the
+-- change, and it turned a latent policy gap into a total upload outage.
+--
+-- WHY THIS IS SAFE
+-- `customer-files` is a PUBLIC bucket. Every object in it is already readable by
+-- anyone holding the URL, with no authentication at all. Granting SELECT to
+-- signed-in users exposes nothing that a public URL does not already expose; it
+-- only lets the storage API resolve a row it is about to overwrite. The grant is
+-- scoped to this one bucket, so a future private bucket is unaffected.
+create policy "Authenticated users can read"
+  on storage.objects for select to authenticated
+  using (bucket_id = 'customer-files');
