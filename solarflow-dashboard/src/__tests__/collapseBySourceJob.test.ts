@@ -140,3 +140,55 @@ describe('extracting it did not change mergeContractorJobs', () => {
     expect(merged.map(j => j.id).sort()).toEqual(['only-local', 'only-remote']);
   });
 });
+
+/**
+ * Expenses are a contractor-written array carried inside a whole-record LWW
+ * save, the same shape that lost 528 photos to clone-accumulation in 06-30 and
+ * that whole-record clobber eats routinely. Both merge paths must union them.
+ */
+describe('expenses survive both contractor-job merge paths', () => {
+  const exp = (id: string, amount: number, submittedAt: string) =>
+    ({ id, amount, submittedAt, status: 'pending' });
+
+  it('does not let a newer office save drop an expense the contractor just logged', () => {
+    // Office record is newer, so it wins the record-level LWW, but it has never
+    // seen the contractor's expense. Without the union that expense vanishes.
+    const merged = mergeContractorJobs(
+      [job({ id: 'wo-1', updatedAt: '2026-08-04T10:00:00.000Z', expenses: [exp('e1', 42, '2026-08-04T09:59:00.000Z')] })],
+      [job({ id: 'wo-1', updatedAt: '2026-08-04T10:00:05.000Z', expenses: [] })],
+    );
+    expect(merged).toHaveLength(1);
+    expect(merged[0].expenses?.map((e: { id: string }) => e.id)).toEqual(['e1']);
+  });
+
+  it('unions expenses added independently on each side', () => {
+    const merged = mergeContractorJobs(
+      [job({ id: 'wo-1', updatedAt: '2026-08-04T10:00:00.000Z', expenses: [exp('e1', 42, '2026-08-04T09:00:00.000Z')] })],
+      [job({ id: 'wo-1', updatedAt: '2026-08-04T11:00:00.000Z', expenses: [exp('e2', 17, '2026-08-04T10:30:00.000Z')] })],
+    );
+    expect(merged[0].expenses?.map((e: { id: string }) => e.id).sort()).toEqual(['e1', 'e2']);
+  });
+
+  it('does not duplicate the same expense id, and keeps the newer edit', () => {
+    const merged = mergeContractorJobs(
+      [job({ id: 'wo-1', expenses: [exp('e1', 42, '2026-08-04T09:00:00.000Z')] })],
+      [job({ id: 'wo-1', expenses: [exp('e1', 55, '2026-08-04T10:00:00.000Z')] })],
+    );
+    expect(merged[0].expenses).toHaveLength(1);
+    expect(merged[0].expenses?.[0].amount).toBe(55);
+  });
+
+  it('keeps expenses from the loser when collapsing duplicate WOs by sourceJobId', () => {
+    const out = collapseBySourceJob([
+      job({ id: 'a', sourceJobId: 'job-1', updatedAt: '2026-08-04T09:00:00.000Z', expenses: [exp('e1', 42, '2026-08-04T09:00:00.000Z')] }),
+      job({ id: 'b', sourceJobId: 'job-1', updatedAt: '2026-08-04T10:00:00.000Z', expenses: [exp('e2', 17, '2026-08-04T10:00:00.000Z')] }),
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0].expenses?.map((e: { id: string }) => e.id).sort()).toEqual(['e1', 'e2']);
+  });
+
+  it('leaves jobs with no expenses untouched', () => {
+    const merged = mergeContractorJobs([job({ id: 'wo-1' })], [job({ id: 'wo-1' })]);
+    expect(merged[0].expenses).toBeUndefined();
+  });
+});

@@ -299,9 +299,29 @@ function unionPhotos(a: PhotoMap | undefined, b: PhotoMap | undefined): PhotoMap
   return out;
 }
 
+/**
+ * Union two expense arrays by id. Same reasoning as unionPhotos: the record
+ * merge is LWW, so without this an office-side save one second later would drop
+ * an expense the contractor just logged in the field (and vice versa). Newer
+ * `submittedAt` wins per id, so an edit to an existing row still applies.
+ */
+function unionExpenses(a: ExpenseLike[] | undefined, b: ExpenseLike[] | undefined): ExpenseLike[] | undefined {
+  if (!a?.length && !b?.length) return a ?? b;
+  const byId = new Map<string, ExpenseLike>();
+  for (const e of [...(a ?? []), ...(b ?? [])]) {
+    if (!e?.id) continue;
+    const prev = byId.get(e.id);
+    if (!prev || (e.submittedAt ?? '') >= (prev.submittedAt ?? '')) byId.set(e.id, e);
+  }
+  return Array.from(byId.values());
+}
+
+type ExpenseLike = { id: string; submittedAt?: string; [k: string]: unknown };
+
 type CJobLike = {
   id: string;
   sourceJobId?: string;
+  expenses?: ExpenseLike[];
   updatedAt?: string;
   assignedAt?: string;
   photos?: PhotoMap;
@@ -340,7 +360,11 @@ export function collapseBySourceJob(jobs: CJobLike[]): CJobLike[] {
     } else {
       const existing = result[existingIdx];
       const winner = cjTime(j) >= cjTime(existing) ? j : existing;
-      result[existingIdx] = { ...winner, photos: unionPhotos(existing.photos, j.photos) };
+      result[existingIdx] = {
+        ...winner,
+        photos: unionPhotos(existing.photos, j.photos),
+        expenses: unionExpenses(existing.expenses, j.expenses),
+      };
     }
   }
   return result;
@@ -368,7 +392,11 @@ export function mergeContractorJobs(localArr: unknown, remoteArr: unknown): CJob
     const lj = byId.get(rj.id);
     if (!lj) { byId.set(rj.id, rj); continue; }
     const winner = cjTime(rj) >= cjTime(lj) ? rj : lj;
-    byId.set(rj.id, { ...winner, photos: unionPhotos(lj.photos, rj.photos) });
+    byId.set(rj.id, {
+      ...winner,
+      photos: unionPhotos(lj.photos, rj.photos),
+      expenses: unionExpenses(lj.expenses, rj.expenses),
+    });
   }
 
   return collapseBySourceJob([...byId.values()]);

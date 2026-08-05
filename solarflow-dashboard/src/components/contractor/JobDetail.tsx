@@ -10,7 +10,7 @@ import {
   Cloud, CloudRain, Sun, Wind, Sparkles, ChevronDown, ChevronUp,
   HardHat, CalendarClock, Send,
 } from 'lucide-react';
-import { ContractorJob, ServiceStatus, PhotoCategory, JobPart } from '../../types/contractor';
+import { ContractorJob, ServiceStatus, PhotoCategory, JobPart, ContractorExpense, ExpenseCategory } from '../../types/contractor';
 import type { RMAEntry } from '../../types';
 import { loadInventory } from '../../lib/inventoryStore';
 import {
@@ -299,6 +299,39 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
     };
     onUpdateJob({ ...job, rmaEntries: [...rmaEntries, entry] });
     setNewRma({ manufacturer: 'SolarEdge', caseNumber: '', rmaNumber: '', partDescription: '' });
+  };
+
+  // Out-of-pocket expenses logged in the field. Saved on their own button for
+  // the same reason as RMA above: a receipt is worth capturing the moment the
+  // tech has it, even if the report is never finished that visit.
+  const [newExpense, setNewExpense] = useState({ category: 'materials' as ExpenseCategory, amount: '', vendor: '', description: '' });
+  const [expenseOpen, setExpenseOpen] = useState(false);
+  const expenses = job.expenses ?? [];
+  const expenseTotal = expenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+
+  const saveExpense = () => {
+    // Reject anything that isn't a positive, finite number. `Number('')` is 0
+    // and `Number('abc')` is NaN, both of which must not create a row.
+    const amount = Number(newExpense.amount);
+    if (!Number.isFinite(amount) || amount <= 0) return;
+    const now = new Date().toISOString();
+    const entry: ContractorExpense = {
+      id: `exp-${job.id}-${Date.now()}`,
+      contractorId,
+      workOrderId: job.sourceJobId ?? job.id,
+      workOrderName: job.woNumber ?? job.customerName,
+      dateIncurred: now.slice(0, 10),
+      category: newExpense.category,
+      amount,
+      vendor: newExpense.vendor.trim() || undefined,
+      description: newExpense.description.trim() || undefined,
+      attachments: [],
+      status: 'pending',
+      submittedAt: now,
+    };
+    onUpdateJob({ ...job, expenses: [...expenses, entry] });
+    setNewExpense({ category: 'materials', amount: '', vendor: '', description: '' });
+    setExpenseOpen(false);
   };
 
   // Safety
@@ -982,6 +1015,117 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
             </button>
           </div>
         )}
+
+        {/* ── Out-of-pocket expenses ───────────────────────────────────────
+            Deliberately outside the phase branches: materials get bought on the
+            way to a call, not just during one, and a forgotten receipt gets
+            logged after. The form stays collapsed so it costs one line of
+            height until the contractor actually needs it. */}
+        <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-3">
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <DollarSign className="w-4 h-4 text-orange-500" />
+              <h2 className="font-bold text-slate-900 text-sm">Expenses</h2>
+            </div>
+            {expenses.length > 0 && (
+              <span className="text-sm font-bold text-slate-900 flex-shrink-0">{formatMoney(expenseTotal)}</span>
+            )}
+          </div>
+
+          {expenses.length > 0 && (
+            <div className="space-y-2">
+              {expenses.map(exp => (
+                <div key={exp.id} className="px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-semibold text-slate-800 capitalize truncate">
+                      {exp.vendor || exp.category}
+                    </span>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <span className="text-xs px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full font-medium">
+                        {exp.status}
+                      </span>
+                      <span className="text-sm font-bold text-slate-900">{formatMoney(exp.amount)}</span>
+                    </div>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-500 capitalize">
+                    {exp.category}
+                    {exp.description ? ` · ${exp.description}` : ''}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {!expenseOpen ? (
+            <button
+              onClick={() => setExpenseOpen(true)}
+              className="w-full flex items-center justify-center gap-1.5 px-3 py-2.5 border border-dashed border-slate-300 text-slate-600 hover:border-orange-400 hover:text-orange-600 text-sm font-semibold rounded-xl transition-colors cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              Add expense
+            </button>
+          ) : (
+            <div className="space-y-2">
+              <p className="text-xs text-slate-400">
+                Anything you paid for out of pocket. Goes to the office for reimbursement.
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                <select
+                  value={newExpense.category}
+                  onChange={e => setNewExpense(p => ({ ...p, category: e.target.value as ExpenseCategory }))}
+                  aria-label="Expense category"
+                  className="px-3 py-2 border border-slate-200 rounded-xl text-sm bg-white capitalize focus:outline-none focus:ring-2 focus:ring-orange-400"
+                >
+                  {(['materials', 'travel', 'permits', 'subcontractor', 'equipment', 'other'] as ExpenseCategory[]).map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="0.01"
+                  value={newExpense.amount}
+                  onChange={e => setNewExpense(p => ({ ...p, amount: e.target.value }))}
+                  placeholder="Amount"
+                  aria-label="Expense amount"
+                  className="px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                />
+              </div>
+              <input
+                type="text"
+                value={newExpense.vendor}
+                onChange={e => setNewExpense(p => ({ ...p, vendor: e.target.value }))}
+                placeholder="Where you bought it (e.g. Home Depot)"
+                aria-label="Expense vendor"
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+              />
+              <textarea
+                value={newExpense.description}
+                onChange={e => setNewExpense(p => ({ ...p, description: e.target.value }))}
+                placeholder="What it was for (e.g. 2x MC4 connectors, replaced damaged pair)"
+                rows={2}
+                aria-label="Expense description"
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm resize-none focus:outline-none focus:ring-2 focus:ring-orange-400"
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setExpenseOpen(false)}
+                  className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-sm font-semibold rounded-xl transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={saveExpense}
+                  disabled={!(Number(newExpense.amount) > 0)}
+                  className="flex-1 px-3 py-2.5 bg-orange-500 hover:bg-orange-600 disabled:bg-slate-200 disabled:text-slate-400 text-white text-sm font-semibold rounded-xl transition-colors"
+                >
+                  Save expense
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
 
         {/* ── PRE-START: Customer info + Start Call CTA ────────────────────── */}
         {phase === 'pre_start' && (
