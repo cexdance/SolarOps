@@ -776,7 +776,7 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
       <div className="fixed inset-0 z-[600] bg-slate-950 flex flex-col overflow-y-auto">
         {/* Hero */}
         <div className="bg-gradient-to-b from-orange-600 to-amber-500 px-6 pt-12 pb-8 text-center text-white flex-shrink-0">
-          <div className="text-6xl mb-3">🎉</div>
+          <Sparkles className="w-14 h-14 mx-auto mb-3" />
           <h1 className="text-3xl font-black tracking-tight">Call Complete!</h1>
           <div className="mt-2 text-5xl font-black">+{xpEarned + badgeXpBonus} XP</div>
           {badgeXpBonus > 0 && (
@@ -786,7 +786,7 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
           {/* Level progress */}
           <div className="mt-5 bg-white/20 rounded-2xl p-4">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-bold">{currentLevel.emoji} {currentLevel.name}</span>
+              <span className="text-sm font-bold">{currentLevel.name}</span>
               <span className="text-sm">{xpData.totalXp.toLocaleString()} XP</span>
             </div>
             <div className="h-3 bg-white/30 rounded-full overflow-hidden">
@@ -802,7 +802,7 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
           {/* Level up banner */}
           {leveledUp && prevLevel && (
             <div className="mt-3 bg-white text-orange-700 rounded-xl px-4 py-2.5 font-bold text-sm flex items-center justify-center gap-2">
-              ⬆️ Level Up! {prevLevel.emoji} {prevLevel.name} → {currentLevel.emoji} {currentLevel.name}
+              <ChevronUp className="w-4 h-4" />Level Up! {prevLevel.name} to {currentLevel.name}
             </div>
           )}
         </div>
@@ -814,7 +814,7 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
             {breakdown.items.filter(i => i.achieved).map((item, i) => (
               <div key={i} className="flex items-center justify-between px-4 py-3">
                 <span className="text-sm text-slate-200 flex items-center gap-2">
-                  <span className="text-green-400">✓</span>{item.label}
+                  <Check className="w-3.5 h-3.5 text-green-400" />{item.label}
                 </span>
                 <span className="text-sm font-bold text-orange-400">+{item.points}</span>
               </div>
@@ -842,7 +842,7 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
               <h2 className="text-white font-bold text-sm uppercase tracking-wide pt-2">New Badges Earned!</h2>
               {newBadges.map(badge => (
                 <div key={badge.id} className="bg-slate-800 border border-amber-500/40 rounded-2xl flex items-center gap-3 px-4 py-3">
-                  <span className="text-3xl">{badge.emoji}</span>
+                  <Star className="w-6 h-6 text-amber-400 flex-shrink-0" />
                   <div className="flex-1">
                     <p className="text-white font-bold text-sm">{badge.name}</p>
                     <p className="text-slate-400 text-xs">{badge.description}</p>
@@ -1183,7 +1183,7 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
               <WeatherIcon />
               <span className="capitalize">{currentWeather || 'Sunny'} conditions today</span>
               {(currentWeather === 'rainy' || currentWeather === 'windy') && (
-                <span className="ml-auto text-xs text-amber-700 font-semibold">⚠ Review safety protocols</span>
+                <span className="ml-auto flex items-center gap-1 text-xs text-amber-700 font-semibold"><AlertTriangle className="w-3.5 h-3.5" />Review safety protocols</span>
               )}
             </div>
 
@@ -1654,7 +1654,7 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
                     />
                     <div className="flex-1">
                       <p className={`font-semibold text-sm ${upsellFlagged ? 'text-violet-900' : 'text-slate-800'}`}>
-                        🌟 Flag upsell opportunity
+                        Flag upsell opportunity
                       </p>
                       <p className={`text-xs mt-0.5 ${upsellFlagged ? 'text-violet-700' : 'text-slate-500'}`}>
                         Spotted an upgrade, expansion, or new service the client might want? Flag it, earns you +150 XP and creates a sales lead.
@@ -1700,7 +1700,9 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
                       {previewXp.items.map((item, i) => (
                         <div key={i} className={`flex items-center justify-between text-xs ${item.achieved ? 'text-slate-700' : 'text-slate-400'}`}>
                           <span className="flex items-center gap-1.5">
-                            <span>{item.achieved ? '✅' : '⬜'}</span>
+                            {item.achieved
+                              ? <Check className="w-3.5 h-3.5 text-emerald-600" />
+                              : <span className="w-3.5 h-3.5 rounded-sm border border-slate-300 inline-block" />}
                             {item.label}
                           </span>
                           <span className={`font-semibold ${item.achieved ? 'text-orange-600' : 'text-slate-300'}`}>
@@ -1786,17 +1788,30 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
                 <CheckCircle className="w-9 h-9 text-white" />
               </div>
               <h2 className="text-xl font-bold">Call Complete</h2>
-              <p className="text-emerald-200 text-sm mt-1">
+
+              {/* Who and what, so the tech can confirm the right call was closed
+                  out without navigating back into the work order. */}
+              <p className="text-white font-bold text-lg mt-2 leading-tight">{job.customerName}</p>
+              <p className="text-emerald-100 text-sm">{job.serviceType}</p>
+
+              <p className="text-emerald-200 text-xs mt-1">
                 {job.completedAt && new Date(job.completedAt).toLocaleString('en-US', {
                   month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
                 })}
               </p>
+
               {job.startedAt && job.completedAt && (() => {
                 const mins = Math.round((new Date(job.completedAt).getTime() - new Date(job.startedAt).getTime()) / 60000);
+                // Guard a clock skew / bad stamp producing a negative or absurd span.
+                if (!Number.isFinite(mins) || mins < 0) return null;
+                const hrs = Math.floor(mins / 60);
                 return (
-                  <p className="text-white font-bold text-2xl mt-2">
-                    {Math.floor(mins/60) > 0 ? `${Math.floor(mins/60)}h ` : ''}{mins % 60}m on site
-                  </p>
+                  <div className="mt-3 pt-3 border-t border-white/20">
+                    <p className="text-emerald-200 text-[10px] font-semibold uppercase tracking-wide">Time on site</p>
+                    <p className="text-white font-bold text-2xl">
+                      {hrs > 0 ? `${hrs}h ` : ''}{mins % 60}m
+                    </p>
+                  </div>
                 );
               })()}
             </div>
@@ -1819,7 +1834,7 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
                     <span className="text-xl font-black">+{jobEntry.xp} XP</span>
                   </div>
                   <div className="flex items-center justify-between text-xs mb-1.5">
-                    <span className="text-orange-200">{level.emoji} {level.name} · {data.totalXp.toLocaleString()} XP total</span>
+                    <span className="text-orange-200">{level.name} · {data.totalXp.toLocaleString()} XP total</span>
                     {next && <span className="text-orange-200">{(next.minXp - data.totalXp).toLocaleString()} to {next.name}</span>}
                   </div>
                   <div className="h-2 bg-white/30 rounded-full overflow-hidden">

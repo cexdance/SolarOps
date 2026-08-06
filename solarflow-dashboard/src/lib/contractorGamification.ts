@@ -15,16 +15,15 @@ export interface LevelInfo {
   bg: string;          // bg color class
   border: string;      // border color class
   gradient: string;    // gradient for progress bar
-  emoji: string;
 }
 
 export const LEVELS: LevelInfo[] = [
-  { level: 1, name: 'Rookie',      minXp: 0,     maxXp: 500,    color: 'text-slate-500',   bg: 'bg-slate-100',   border: 'border-slate-300',   gradient: 'from-slate-400 to-slate-500',         emoji: '🔧' },
-  { level: 2, name: 'Field Tech',  minXp: 500,   maxXp: 1500,   color: 'text-blue-600',    bg: 'bg-blue-100',    border: 'border-blue-300',    gradient: 'from-blue-400 to-blue-600',           emoji: '⚡' },
-  { level: 3, name: 'Pro Tech',    minXp: 1500,  maxXp: 3500,   color: 'text-emerald-600', bg: 'bg-emerald-100', border: 'border-emerald-400', gradient: 'from-emerald-400 to-emerald-600',     emoji: '🌟' },
-  { level: 4, name: 'Senior Tech', minXp: 3500,  maxXp: 7500,   color: 'text-amber-600',   bg: 'bg-amber-100',   border: 'border-amber-400',   gradient: 'from-amber-400 to-orange-500',         emoji: '🏆' },
-  { level: 5, name: 'Elite Tech',  minXp: 7500,  maxXp: 15000,  color: 'text-orange-600',  bg: 'bg-orange-100',  border: 'border-orange-400',  gradient: 'from-orange-400 to-rose-500',          emoji: '🔥' },
-  { level: 6, name: 'Master Tech', minXp: 15000, maxXp: 999999, color: 'text-purple-600',  bg: 'bg-purple-100',  border: 'border-purple-400',  gradient: 'from-purple-500 to-indigo-600',        emoji: '💎' },
+  { level: 1, name: 'Rookie',      minXp: 0,     maxXp: 500,    color: 'text-slate-500',   bg: 'bg-slate-100',   border: 'border-slate-300',   gradient: 'from-slate-400 to-slate-500' },
+  { level: 2, name: 'Field Tech',  minXp: 500,   maxXp: 1500,   color: 'text-blue-600',    bg: 'bg-blue-100',    border: 'border-blue-300',    gradient: 'from-blue-400 to-blue-600' },
+  { level: 3, name: 'Pro Tech',    minXp: 1500,  maxXp: 3500,   color: 'text-emerald-600', bg: 'bg-emerald-100', border: 'border-emerald-400', gradient: 'from-emerald-400 to-emerald-600' },
+  { level: 4, name: 'Senior Tech', minXp: 3500,  maxXp: 7500,   color: 'text-amber-600',   bg: 'bg-amber-100',   border: 'border-amber-400',   gradient: 'from-amber-400 to-orange-500' },
+  { level: 5, name: 'Elite Tech',  minXp: 7500,  maxXp: 15000,  color: 'text-orange-600',  bg: 'bg-orange-100',  border: 'border-orange-400',  gradient: 'from-orange-400 to-rose-500' },
+  { level: 6, name: 'Master Tech', minXp: 15000, maxXp: 999999, color: 'text-purple-600',  bg: 'bg-purple-100',  border: 'border-purple-400',  gradient: 'from-purple-500 to-indigo-600' },
 ];
 
 export const getLevelInfo = (xp: number): LevelInfo =>
@@ -61,7 +60,6 @@ export interface Badge {
   id: BadgeId;
   name: string;
   description: string;
-  emoji: string;
   rarity: BadgeRarity;
   xpBonus: number;
   rarityColor: string;
@@ -70,55 +68,55 @@ export interface Badge {
 
 export const BADGES: Record<BadgeId, Badge> = {
   first_call: {
-    id: 'first_call', name: 'First Call', emoji: '🔧',
+    id: 'first_call', name: 'First Call',
     description: 'Complete your first service order',
     rarity: 'common', xpBonus: 50,
     rarityColor: 'text-slate-600', rarityBg: 'bg-slate-100',
   },
   speed_demon: {
-    id: 'speed_demon', name: 'Speed Demon', emoji: '⚡',
+    id: 'speed_demon', name: 'Speed Demon',
     description: 'Complete a job in under 90 minutes',
     rarity: 'common', xpBonus: 75,
     rarityColor: 'text-slate-600', rarityBg: 'bg-slate-100',
   },
   photo_pro: {
-    id: 'photo_pro', name: 'Photo Pro', emoji: '📸',
+    id: 'photo_pro', name: 'Photo Pro',
     description: 'Upload photos in 4+ categories on a single job',
     rarity: 'rare', xpBonus: 100,
     rarityColor: 'text-blue-600', rarityBg: 'bg-blue-100',
   },
   client_approved: {
-    id: 'client_approved', name: 'Client Approved', emoji: '✍️',
+    id: 'client_approved', name: 'Client Approved',
     description: 'Collect client signatures on 10 jobs',
     rarity: 'rare', xpBonus: 150,
     rarityColor: 'text-blue-600', rarityBg: 'bg-blue-100',
   },
   report_master: {
-    id: 'report_master', name: 'Report Master', emoji: '📋',
+    id: 'report_master', name: 'Report Master',
     description: 'Submit a perfect report 5 times (all fields + fully operational)',
     rarity: 'rare', xpBonus: 150,
     rarityColor: 'text-blue-600', rarityBg: 'bg-blue-100',
   },
   reliability: {
-    id: 'reliability', name: 'Reliable Pro', emoji: '🎯',
+    id: 'reliability', name: 'Reliable Pro',
     description: 'Complete 10 jobs on their scheduled date',
     rarity: 'epic', xpBonus: 300,
     rarityColor: 'text-purple-600', rarityBg: 'bg-purple-100',
   },
   hot_streak: {
-    id: 'hot_streak', name: 'Hot Streak', emoji: '🔥',
+    id: 'hot_streak', name: 'Hot Streak',
     description: 'Complete 5 jobs in a single week',
     rarity: 'epic', xpBonus: 250,
     rarityColor: 'text-purple-600', rarityBg: 'bg-purple-100',
   },
   powercare_pro: {
-    id: 'powercare_pro', name: 'Powercare Pro', emoji: '🌞',
+    id: 'powercare_pro', name: 'Powercare Pro',
     description: 'Complete 3 Powercare service jobs',
     rarity: 'epic', xpBonus: 200,
     rarityColor: 'text-purple-600', rarityBg: 'bg-purple-100',
   },
   perfect_score: {
-    id: 'perfect_score', name: 'Perfect Score', emoji: '💎',
+    id: 'perfect_score', name: 'Perfect Score',
     description: 'Earn 350+ XP on a single job',
     rarity: 'legendary', xpBonus: 500,
     rarityColor: 'text-amber-600', rarityBg: 'bg-amber-100',

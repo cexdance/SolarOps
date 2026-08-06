@@ -362,7 +362,6 @@ export const ContractorDashboard: React.FC<ContractorDashboardProps> = ({
                   onClick={() => setShowBadges(v => !v)}
                   className="flex items-center gap-1.5 bg-slate-800 rounded-full pl-1.5 pr-3 py-1 hover:bg-slate-700 transition-colors"
                 >
-                  <span className="text-base leading-none">{level.emoji}</span>
                   <span className="text-xs font-bold text-white">{level.name}</span>
                   <span className="text-[10px] text-slate-400 ml-0.5">Lv.{level.level}</span>
                 </button>
@@ -383,8 +382,8 @@ export const ContractorDashboard: React.FC<ContractorDashboardProps> = ({
               {xpData.earnedBadges.length > 0 && (
                 <div className="flex gap-1.5 mt-2 flex-wrap">
                   {xpData.earnedBadges.map(bid => (
-                    <span key={bid} title={BADGES[bid].name} className="text-base cursor-default" style={{ lineHeight: 1 }}>
-                      {BADGES[bid].emoji}
+                    <span key={bid} title={BADGES[bid].name} className="text-[10px] font-semibold text-slate-300 bg-slate-800 border border-slate-600 rounded px-1.5 py-0.5 cursor-default">
+                      {BADGES[bid].name}
                     </span>
                   ))}
                 </div>
@@ -431,7 +430,7 @@ export const ContractorDashboard: React.FC<ContractorDashboardProps> = ({
                 const earned = xpData.earnedBadges.includes(badge.id);
                 return (
                   <div key={badge.id} className={`flex items-center gap-3 p-3 rounded-xl border ${earned ? 'bg-slate-800 border-slate-600' : 'bg-slate-800/40 border-slate-700/50 opacity-50'}`}>
-                    <span className="text-2xl">{badge.emoji}</span>
+                    
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className={`text-sm font-semibold ${earned ? 'text-white' : 'text-slate-400'}`}>{badge.name}</span>

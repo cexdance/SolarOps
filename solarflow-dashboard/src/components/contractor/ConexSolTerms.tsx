@@ -594,7 +594,7 @@ export default function ConexsolTerms({ onAccept, onDecline }: ConexsolTermsProp
           disabled={!checked || accepted}
           onClick={handleAccept}
         >
-          {accepted ? "Agreement accepted ✓" : "Accept & continue"}
+          {accepted ? "Agreement accepted" : "Accept & continue"}
         </button>
         {onDecline && !accepted && (
           <button

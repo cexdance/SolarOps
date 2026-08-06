@@ -4,7 +4,7 @@ import { formatMoney } from '../../lib/money';
 import {
   User, Building, Shield, CheckCircle, XCircle, Clock, FileText,
   Mail, Phone, MapPin, AlertCircle, ChevronRight, DollarSign, X,
-  Plus, Trash2, Pencil, Save, Wrench, ReceiptText,
+  Plus, Trash2, Pencil, Save, Wrench, ReceiptText, Star,
   LayoutGrid, List as ListIcon, Calendar, Eye,
 } from 'lucide-react';
 import { Contractor, ContractorStatus, ContractorJob } from '../../types/contractor';
@@ -200,7 +200,7 @@ export const ContractorApprovals: React.FC<ContractorApprovalsProps> = ({
                       const lvl = getLevelInfo(xp.totalXp);
                       return (
                         <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold shrink-0 ${lvl.bg} ${lvl.color}`}>
-                          {lvl.emoji} {lvl.name}
+                          {lvl.name}
                         </span>
                       );
                     })()}
@@ -321,7 +321,7 @@ export const ContractorApprovals: React.FC<ContractorApprovalsProps> = ({
                   { key: 'overview',     label: 'Overview',     icon: <Building className="w-4 h-4" /> },
                   { key: 'jobs',        label: `Work Orders (${contractorWOs.length})`, icon: <Wrench className="w-4 h-4" /> },
                   { key: 'expenses',    label: `Expenses (${contractorExpenses.length})`, icon: <ReceiptText className="w-4 h-4" /> },
-                  { key: 'performance', label: 'Performance',   icon: <span className="text-sm">⭐</span> },
+                  { key: 'performance', label: 'Performance',   icon: <Star className="w-4 h-4" /> },
                 ] as const).map(t => (
                   <button
                     key={t.key}
@@ -693,7 +693,6 @@ export const ContractorApprovals: React.FC<ContractorApprovalsProps> = ({
                   {/* Level card */}
                   <div className="rounded-2xl p-5 text-white" style={{ background: levelColors[level.level] ?? '#64748b' }}>
                     <div className="flex items-center gap-3 mb-3">
-                      <span className="text-4xl">{level.emoji}</span>
                       <div>
                         <p className="text-white/70 text-xs uppercase tracking-widest">Level {level.level}</p>
                         <p className="text-xl font-black">{level.name}</p>
@@ -714,15 +713,14 @@ export const ContractorApprovals: React.FC<ContractorApprovalsProps> = ({
                   {/* Stats grid */}
                   <div className="grid grid-cols-3 gap-3">
                     {[
-                      { label: 'Jobs Done',    value: xpData.counters.completedJobs,     emoji: '✅' },
-                      { label: 'On Time',      value: xpData.counters.onTimeJobs,        emoji: '🎯' },
-                      { label: 'Powercare',    value: xpData.counters.powercareJobs,     emoji: '🌞' },
-                      { label: 'Client Sigs',  value: xpData.counters.clientSignatureJobs, emoji: '✍️' },
-                      { label: 'Perfect Rpts', value: xpData.counters.perfectReports,    emoji: '📋' },
-                      { label: 'Badges',       value: xpData.earnedBadges.length,        emoji: '🏅' },
-                    ].map(({ label, value, emoji }) => (
+                      { label: 'Jobs Done',    value: xpData.counters.completedJobs },
+                      { label: 'On Time',      value: xpData.counters.onTimeJobs },
+                      { label: 'Powercare',    value: xpData.counters.powercareJobs },
+                      { label: 'Client Sigs',  value: xpData.counters.clientSignatureJobs },
+                      { label: 'Perfect Rpts', value: xpData.counters.perfectReports },
+                      { label: 'Badges',       value: xpData.earnedBadges.length },
+                    ].map(({ label, value }) => (
                       <div key={label} className="bg-white border border-slate-200 rounded-xl p-3 text-center">
-                        <p className="text-xl">{emoji}</p>
                         <p className="text-xl font-black text-slate-900">{value}</p>
                         <p className="text-[10px] text-slate-500">{label}</p>
                       </div>
