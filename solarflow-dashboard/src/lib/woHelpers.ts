@@ -331,3 +331,41 @@ export function toContractorJobView(job: Job, existingCj?: ContractorJob, custom
     upsellLeadCreated: existingCj?.upsellLeadCreated,
   };
 }
+
+/**
+ * Maps URL for navigating to a work order, or null when there is nowhere to go.
+ *
+ * Prefers real coordinates and falls back to the address string. This exists
+ * because every contractor job currently carries `latitude: 0, longitude: 0`
+ * (nothing geocodes them on write), and the Navigate button used to interpolate
+ * those straight into `?q=0,0`. That is Null Island, a point in the Atlantic
+ * ~380 miles off Ghana, so every tech who tapped Navigate was routed there.
+ *
+ * Returns null rather than a broken link when there is neither a coordinate nor
+ * an address: the caller disables the control instead of offering a wrong
+ * destination. A wrong destination is worse than an absent one.
+ */
+export function jobMapsUrl(job: {
+  latitude?: number | null;
+  longitude?: number | null;
+  address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  zip?: string | null;
+}): string | null {
+  const { latitude: lat, longitude: lng } = job;
+  const usableCoords =
+    typeof lat === 'number' && typeof lng === 'number' &&
+    Number.isFinite(lat) && Number.isFinite(lng) &&
+    // An exact 0,0 pair is the "never geocoded" sentinel, not a real location.
+    // Only the exact pair is rejected: a genuine 0 on one axis stays valid.
+    !(lat === 0 && lng === 0) &&
+    Math.abs(lat) <= 90 && Math.abs(lng) <= 180;
+  if (usableCoords) return `https://maps.google.com/?q=${lat},${lng}`;
+
+  const addr = [job.address, job.city, job.state, job.zip]
+    .map(p => (p ?? '').trim())
+    .filter(Boolean)
+    .join(', ');
+  return addr ? `https://maps.google.com/?q=${encodeURIComponent(addr)}` : null;
+}

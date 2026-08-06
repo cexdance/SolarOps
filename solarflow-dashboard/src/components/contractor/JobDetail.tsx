@@ -11,6 +11,7 @@ import {
   HardHat, CalendarClock, Send,
 } from 'lucide-react';
 import { ContractorJob, ServiceStatus, PhotoCategory, JobPart, ContractorExpense, ExpenseCategory } from '../../types/contractor';
+import { jobMapsUrl } from '../../lib/woHelpers';
 import type { RMAEntry } from '../../types';
 import { loadInventory } from '../../lib/inventoryStore';
 import {
@@ -307,6 +308,10 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
   const [newExpense, setNewExpense] = useState({ category: 'materials' as ExpenseCategory, amount: '', vendor: '', description: '' });
   const [expenseOpen, setExpenseOpen] = useState(false);
   const expenses = job.expenses ?? [];
+
+  // Navigate destination. Falls back to the address because nothing geocodes
+  // these jobs, so latitude/longitude are 0,0 on every record today.
+  const mapsUrl = jobMapsUrl(job);
   const expenseTotal = expenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
 
   const saveExpense = () => {
@@ -956,12 +961,21 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
               >
                 <Phone className="w-4 h-4" />Call
               </a>
-              <a href={`https://maps.google.com/?q=${job.latitude},${job.longitude}`}
-                target="_blank" rel="noopener noreferrer"
-                className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-sky-50 hover:bg-sky-100 text-sky-700 rounded-xl text-sm font-medium transition-colors cursor-pointer"
-              >
-                <Navigation className="w-4 h-4" />Navigate
-              </a>
+              {mapsUrl ? (
+                <a href={mapsUrl}
+                  target="_blank" rel="noopener noreferrer"
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-sky-50 hover:bg-sky-100 text-sky-700 rounded-xl text-sm font-medium transition-colors cursor-pointer"
+                >
+                  <Navigation className="w-4 h-4" />Navigate
+                </a>
+              ) : (
+                <span
+                  title="No address or coordinates on this work order"
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-slate-50 text-slate-400 rounded-xl text-sm font-medium cursor-not-allowed"
+                >
+                  <Navigation className="w-4 h-4" />No address
+                </span>
+              )}
             </div>
           </div>
         )}
