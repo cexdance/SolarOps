@@ -243,10 +243,17 @@ export function extractContactInfo(card: TrelloCardData): { phone: string; email
 // as a complete US address (parseUsAddress requires a STATE+ZIP tail, so partial
 // junk is ignored).
 
-// Trello notes are markdown, so an address is routinely written as a bullet and
-// wrapped: "- Address: 6024 Williamsburg Way" / "  Tampa, FL 33625". Neither half
-// parses alone, so strip the marker and also try each line joined with the next.
-const stripListMarker = (s: string) => s.replace(/^\s*(?:[-*+>]|\d+[.)])\s*/, '').trim();
+// Trello notes are markdown, and an address shows up dressed either way:
+//   "**Address: 1963 Healy Wy Clermont, FL 34711**"  (bold, one line)
+//   "- Address: 6024 Williamsburg Way" / "  Tampa, FL 33625"  (bullet, wrapped)
+// Emphasis runs have to go before parsing at all, because parseUsAddress anchors
+// the zip to end-of-string and a trailing "**" defeats it. Neither half of a
+// wrapped address parses alone, so lines are also retried joined with the next.
+const cleanLine = (s: string) => s
+  .replace(/[*_`~]+/g, '')                    // bold/italic/code/strike delimiters
+  // Repeat the group so runs ("##", ">>") and stacks ("> - ") strip whole.
+  .replace(/^\s*(?:(?:[-+>#]+|\d+[.)])\s*)+/, '')
+  .trim();
 
 export function extractAddress(card: TrelloCardData): ParsedAddress | null {
   const sources: string[] = [
@@ -257,7 +264,7 @@ export function extractAddress(card: TrelloCardData): ParsedAddress | null {
   ];
   for (const src of sources) {
     if (!src) continue;
-    const lines = src.split('\n').map(stripListMarker);
+    const lines = src.split('\n').map(cleanLine);
     for (let i = 0; i < lines.length; i++) {
       if (!lines[i]) continue;
       // Single line first: a complete one-line address must not swallow the next.

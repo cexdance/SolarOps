@@ -83,4 +83,17 @@ describe('extractAddress', () => {
   it('does not invent an address from the blank desc template alone', () => {
     expect(extractAddress(withText('Address: \nCity: \nState: \nZip Code: 33625\n'))).toBeNull();
   });
+
+  // Real shape from card ZeH5cifO (US-15674 Hunter Agricultural Irrigation).
+  // The whole desc is one bold line; the trailing ** defeated parseUsAddress,
+  // which anchors the zip to end-of-string.
+  it('finds an address wrapped in markdown bold', () => {
+    expect(extractAddress(withText('**Address: 1963 Healy Wy Clermont, FL 34711**')))
+      .toEqual({ address: '1963 Healy Wy', city: 'Clermont', state: 'FL', zip: '34711' });
+  });
+
+  it('handles other emphasis wrappers and heading markers', () => {
+    expect(extractAddress(withText('## _Address: 88 Palm Ave Ocala, FL 34471_')))
+      .toEqual({ address: '88 Palm Ave', city: 'Ocala', state: 'FL', zip: '34471' });
+  });
 });
