@@ -239,9 +239,15 @@ export function extractContactInfo(card: TrelloCardData): { phone: string; email
 
 // ── Address mining ──────────────────────────────────────────────────────────────
 // The address may live anywhere on the card (desc, a custom field, a comment, a
-// checklist item). Scan every text source line-by-line and return the first line
-// that parses as a complete US address (parseUsAddress requires a STATE+ZIP tail,
-// so partial junk is ignored).
+// checklist item). Scan every text source and return the first thing that parses
+// as a complete US address (parseUsAddress requires a STATE+ZIP tail, so partial
+// junk is ignored).
+
+// Trello notes are markdown, so an address is routinely written as a bullet and
+// wrapped: "- Address: 6024 Williamsburg Way" / "  Tampa, FL 33625". Neither half
+// parses alone, so strip the marker and also try each line joined with the next.
+const stripListMarker = (s: string) => s.replace(/^\s*(?:[-*+>]|\d+[.)])\s*/, '').trim();
+
 export function extractAddress(card: TrelloCardData): ParsedAddress | null {
   const sources: string[] = [
     card.desc,
@@ -251,8 +257,12 @@ export function extractAddress(card: TrelloCardData): ParsedAddress | null {
   ];
   for (const src of sources) {
     if (!src) continue;
-    for (const line of src.split('\n')) {
-      const parsed = parseUsAddress(line);
+    const lines = src.split('\n').map(stripListMarker);
+    for (let i = 0; i < lines.length; i++) {
+      if (!lines[i]) continue;
+      // Single line first: a complete one-line address must not swallow the next.
+      const parsed = parseUsAddress(lines[i])
+        ?? (lines[i + 1] ? parseUsAddress(`${lines[i]} ${lines[i + 1]}`) : null);
       if (parsed) return parsed;
     }
   }
@@ -273,6 +283,18 @@ export function buildImportActivities(card: TrelloCardData, userName: string): A
       id:          `trello-desc-${cardKey}`,
       type:        'note_added',
       description: `📋 Trello import, "${card.name}":\n\n${card.desc.trim()}`,
+      timestamp:   now,
+      userName,
+    });
+  }
+
+  // Labels carry the card's pipeline state ("Site Transfer Completed", "Paid
+  // Site Transfer"), which is context the desc never repeats.
+  if (card.labels.length) {
+    activities.push({
+      id:          `trello-labels-${cardKey}`,
+      type:        'note_added',
+      description: `Trello labels: ${card.labels.join(', ')}`,
       timestamp:   now,
       userName,
     });

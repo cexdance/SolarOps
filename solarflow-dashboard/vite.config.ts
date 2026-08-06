@@ -2,7 +2,7 @@ import path from "path"
 import { execSync } from "node:child_process"
 import { readFileSync, writeFileSync } from "node:fs"
 import react from "@vitejs/plugin-react"
-import { defineConfig } from "vite"
+import { defineConfig, loadEnv } from "vite"
 import sourceIdentifierPlugin from 'vite-plugin-source-identifier'
 
 const isProd = process.env.BUILD_MODE === 'prod'
@@ -26,8 +26,10 @@ function computeBuildInfo() {
   return { version, sha, builtAt, buildId, dbVersion }
 }
 
-export default defineConfig(({ command }) => {
+export default defineConfig(({ command, mode }) => {
   const info = computeBuildInfo()
+  // .env* is not on process.env inside this config; load it for the dev proxies.
+  const env = loadEnv(mode, __dirname, '')
 
   // Only stamp version.json on production builds — keeps `vite dev` deterministic.
   if (command === 'build') {
@@ -82,6 +84,38 @@ export default defineConfig(({ command }) => {
           proxy.on('proxyReq', (proxyReq) => {
             proxyReq.removeHeader('cookie');
             proxyReq.removeHeader('origin');
+          });
+        },
+      },
+      // Dev-only stand-in for the /api/trello-card Vercel function, which does not
+      // run under `vite dev` — without this the Trello import fails at the fetch
+      // locally and can only be tested on a deploy. Mirrors that function's query
+      // exactly so the importer parses an identical payload either way.
+      // ponytail: hits Trello direct rather than the deployed function, so there is
+      // no prod URL to keep in sync. Keep the query in step with api/trello-card.ts.
+      '/api/trello-card': {
+        target: 'https://api.trello.com',
+        changeOrigin: true,
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq, req) => {
+            const raw = new URL(req.url!, 'http://localhost').searchParams.get('cardId') ?? '';
+            const id = (raw.match(/trello\.com\/c\/([a-zA-Z0-9]+)/)?.[1] ?? raw).trim();
+            const q = new URLSearchParams({
+              key: env.VITE_TRELLO_API_KEY || env.TRELLO_API_KEY || '',
+              token: env.VITE_TRELLO_TOKEN || env.TRELLO_TOKEN || '',
+              fields: 'name,desc,due,shortUrl,labels',
+              attachments: 'true',
+              attachment_fields: 'all',
+              checklists: 'all',
+              customFieldItems: 'true',
+              actions: 'commentCard,updateCard',
+              actions_limit: '1000',
+            });
+            proxyReq.path = `/1/cards/${encodeURIComponent(id)}?${q}`;
+            // authedFetch sends a Supabase bearer token; Trello 401s on a foreign
+            // Authorization header even when key/token are in the query.
+            proxyReq.removeHeader('authorization');
+            proxyReq.removeHeader('cookie');
           });
         },
       },

@@ -5496,19 +5496,21 @@ const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({ onClose, onCr
         referralSource: prev.referralSource || 'Trello',
       }));
 
-      // Carry the card's comments and attachments into the new customer.
+      // Carry the card's comments, labels and attachments into the new customer.
       // buildImportActivities also emits a desc note; drop it (desc already fills Notes).
-      const comments = buildImportActivities(card, 'Trello')
-        .filter(a => a.id.startsWith('trello-comment-'));
+      const timeline  = buildImportActivities(card, 'Trello')
+        .filter(a => !a.id.startsWith('trello-desc-'));
+      const comments  = timeline.filter(a => a.id.startsWith('trello-comment-'));
       const cardFiles = buildImportFiles(card);
-      setPendingActivities(comments);
+      setPendingActivities(timeline);
       setPendingFiles(cardFiles);
       setPendingTrelloUrl(card.shortUrl);
 
       const bits = [
         addr ? 'address' : '',
-        comments.length  ? `${comments.length} comment${comments.length > 1 ? 's' : ''}` : '',
-        cardFiles.length ? `${cardFiles.length} attachment${cardFiles.length > 1 ? 's' : ''}` : '',
+        comments.length     ? `${comments.length} comment${comments.length > 1 ? 's' : ''}` : '',
+        card.labels.length  ? `${card.labels.length} label${card.labels.length > 1 ? 's' : ''}` : '',
+        cardFiles.length    ? `${cardFiles.length} attachment${cardFiles.length > 1 ? 's' : ''}` : '',
       ].filter(Boolean).join(' + ');
       setTrelloOk(`Imported "${card.name}"${bits ? ` (${bits})` : ''}`);
     } catch (err) {
