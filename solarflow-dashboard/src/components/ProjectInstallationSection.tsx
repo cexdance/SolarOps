@@ -545,7 +545,7 @@ const ReportList: React.FC<{
             className="text-xs text-blue-500 hover:text-blue-700 px-1.5 flex items-center gap-1">
             <FileText className="w-3 h-3" />
           </button>
-          <button onClick={() => onUnlinkJob(item.key)} className="text-xs text-slate-400 hover:text-red-500 px-1.5">✕</button>
+          <button onClick={() => onUnlinkJob(item.key)} className="text-xs text-slate-400 hover:text-red-500 px-1.5"><X className="w-3 h-3" /></button>
         </div>
       ))}
     </div>
@@ -721,7 +721,7 @@ export const ProjectInstallationSection: React.FC<ProjectInstallationSectionProp
         <div className="flex justify-between text-xs text-slate-400">
           <span>Not started</span>
           <span className={installationProgress >= 100 ? 'text-green-600 font-semibold' : ''}>
-            {installationProgress >= 100 ? '✓ Complete' : `${installationProgress}% done`}
+            {installationProgress >= 100 ? 'Complete' : `${installationProgress}% done`}
           </span>
           <span>Complete</span>
         </div>

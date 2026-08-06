@@ -19,7 +19,7 @@ import {
   CheckCircle,
   XCircle,
   TrendingUp,
-  Target,
+  Target, BarChart3
 } from 'lucide-react';
 import {
   Lead,
@@ -1156,7 +1156,7 @@ const AddLeadModal: React.FC<{
               onClick={() => setTab(t)}
               className={`flex-1 py-2.5 text-sm font-medium transition-colors ${tab === t ? 'border-b-2 border-amber-500 text-amber-600' : 'text-slate-500 hover:text-slate-700'}`}
             >
-              {t === 'manual' ? '✏️ Manual' : t === 'excel' ? '📊 Import Excel' : '📧 Paste Email'}
+              {t === 'manual' ? 'Manual' : t === 'excel' ? 'Import Excel' : 'Paste Email'}
             </button>
           ))}
         </div>
@@ -1259,7 +1259,7 @@ const AddLeadModal: React.FC<{
               {/* Drop zone */}
               <label className="block cursor-pointer">
                 <div className="border-2 border-dashed border-amber-300 rounded-xl p-8 text-center hover:bg-amber-50 transition-colors">
-                  <div className="text-3xl mb-2">📊</div>
+                  <BarChart3 className="w-8 h-8 mx-auto mb-2 text-slate-400" />
                   <p className="text-sm font-medium text-slate-700">{excelFileName || 'Click to select Excel file'}</p>
                   <p className="text-xs text-slate-400 mt-1">.xlsx · .xls · .csv</p>
                 </div>
@@ -1359,7 +1359,7 @@ const AddLeadModal: React.FC<{
 
               {emailParsed && (
                 <div className="bg-slate-50 rounded-xl border border-slate-200 p-4 space-y-2 text-sm">
-                  <p className="font-semibold text-slate-800 text-xs uppercase tracking-wide text-amber-600">Parsed Successfully ✓</p>
+                  <p className="font-semibold text-slate-800 text-xs uppercase tracking-wide text-amber-600">Parsed Successfully</p>
                   <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-slate-600">
                     <span><strong>Name:</strong> {emailParsed.firstName} {emailParsed.lastName}</span>
                     <span><strong>Phone:</strong> {emailParsed.phone || '-'}</span>

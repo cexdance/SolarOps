@@ -326,6 +326,7 @@ export function toContractorJobView(job: Job, existingCj?: ContractorJob, custom
     operationalNotes: existingCj?.operationalNotes,
     optimizerCount: existingCj?.optimizerCount,
     partsReimbursementRequested: existingCj?.partsReimbursementRequested,
+    additionalItems: existingCj?.additionalItems,
     upsellFlagged: existingCj?.upsellFlagged,
     upsellNotes: existingCj?.upsellNotes,
     upsellLeadCreated: existingCj?.upsellLeadCreated,

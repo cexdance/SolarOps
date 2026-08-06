@@ -638,7 +638,7 @@ export const CustomerManagement: React.FC<CustomerManagementProps> = ({ currentU
                       </select>
                       {selectedCustomer.isPowercare && (
                         <span className="px-2.5 py-0.5 text-xs font-semibold bg-amber-100 text-amber-700 rounded-full border border-amber-300">
-                          ⚡ Powercare
+                          Powercare
                         </span>
                       )}
                     </div>

@@ -2,7 +2,7 @@
 // Reads from mentionsStore. Auto-refreshes on mentions-updated event.
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { AtSign, Check, ExternalLink, Search, X } from 'lucide-react';
+import { AtSign, Check, ExternalLink, Search, X, Wrench, User as UserIcon, FileText } from 'lucide-react';
 import { getMentionsFor, markRead, markAllRead, MentionRecord } from '../lib/mentionsStore';
 import { Avatar } from './ui/Avatar';
 import { User } from '../types';
@@ -156,7 +156,7 @@ export const MentionsWidget: React.FC<Props> = ({ userId, users, onOpenCustomer,
                   <ExternalLink className="w-3 h-3 text-slate-300 group-hover:text-orange-500 flex-shrink-0" />
                 </div>
                 <p className="text-[10px] uppercase tracking-wider text-slate-400 mb-0.5">
-                  {m.sourceType === 'workOrder' ? '🔧' : m.sourceType === 'customer' ? '👤' : '📝'} {m.sourceLabel}
+                  {m.sourceType === 'workOrder' ? <Wrench className="w-3 h-3" /> : m.sourceType === 'customer' ? <UserIcon className="w-3 h-3" /> : <FileText className="w-3 h-3" />} {m.sourceLabel}
                 </p>
                 <p className="text-xs text-slate-600 line-clamp-2 leading-relaxed">{m.snippet}</p>
               </div>

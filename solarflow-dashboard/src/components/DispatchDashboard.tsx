@@ -885,7 +885,7 @@ const AddWidgetModal: React.FC<{
                       <p className="text-sm font-semibold text-slate-800 leading-tight">{entry.label}</p>
                       <p className="text-xs text-slate-400 mt-0.5 leading-snug">{entry.description}</p>
                       {alreadyPlaced
-                        ? <p className="text-[10px] text-slate-400 mt-0.5 font-medium">✓ Already on board</p>
+                        ? <p className="text-[10px] text-slate-400 mt-0.5 font-medium">Already on board</p>
                         : entry.requires && <p className="text-[10px] text-orange-500 mt-0.5 font-medium">Select {entry.requires} →</p>
                       }
                     </div>
@@ -925,7 +925,7 @@ const AddWidgetModal: React.FC<{
                           {c.clientId && <span className={`text-[10px] font-mono ${selection === c.id ? 'text-orange-100' : 'text-orange-600'}`}>{c.clientId}</span>}
                           <span className={`text-sm font-medium truncate ${selection === c.id ? 'text-white' : 'text-slate-800'}`}>{c.name}</span>
                         </div>
-                        <p className={`text-xs ${selection === c.id ? 'text-orange-100' : 'text-slate-400'} truncate`}>{c.city}, {c.state}{c.solarEdgeSiteId ? ' · SolarEdge ✓' : ''}</p>
+                        <p className={`text-xs ${selection === c.id ? 'text-orange-100' : 'text-slate-400'} truncate`}>{c.city}, {c.state}{c.solarEdgeSiteId ? ' · SolarEdge' : ''}</p>
                       </div>
                       {selection === c.id && <Check className="w-4 h-4 text-white flex-shrink-0" />}
                     </button>

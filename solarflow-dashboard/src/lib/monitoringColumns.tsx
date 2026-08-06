@@ -114,7 +114,7 @@ const AlertCell: React.FC<{
           className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-400 hover:bg-slate-200 transition-colors"
           title="Acknowledged locally, click for options"
         >
-          ✓ Acked ({count})
+          Acked ({count})
         </button>
       ) : (
         <button
@@ -135,7 +135,7 @@ const AlertCell: React.FC<{
             onClick={() => { onAckAlert?.(site.siteId); setOpen(false); }}
             className="w-full text-left text-xs px-2 py-1.5 rounded-md font-medium transition-colors bg-amber-50 hover:bg-amber-100 text-amber-700"
           >
-            {isAcked ? '✕ Remove acknowledgement' : '✓ Acknowledge in SolarOps'}
+            {isAcked ? 'Remove acknowledgement' : 'Acknowledge in SolarOps'}
           </button>
           <a
             href={`https://monitoring.solaredge.com/monitoring/site/${site.siteId}/alerts`}

@@ -161,7 +161,7 @@ export const Settings: React.FC<SettingsProps> = ({
         body: JSON.stringify({
           to: smtpUser.trim(),
           subject: 'SolarOps SMTP Test',
-          html: '<div style="font-family:sans-serif;padding:20px"><h2 style="color:#f97316">✓ SMTP is working!</h2><p>Your SolarOps email integration is configured correctly.</p></div>',
+          html: '<div style="font-family:sans-serif;padding:20px"><h2 style="color:#f97316">SMTP is working!</h2><p>Your SolarOps email integration is configured correctly.</p></div>',
           smtpHost: smtpHost.trim(),
           smtpPort: parseInt(smtpPort),
           smtpUser: smtpUser.trim(),
@@ -419,7 +419,7 @@ export const Settings: React.FC<SettingsProps> = ({
 
           {envGmapsKey && !showGmapsKeyInput && !storedGmapsKey && (
             <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg mb-3">
-              <span className="text-green-600 text-sm font-medium">✓ Google Maps configured via environment</span>
+              <span className="text-green-600 text-sm font-medium">Google Maps configured via environment</span>
               <button onClick={() => setShowGmapsKeyInput(true)} className="ml-auto text-xs text-slate-500 hover:text-slate-700">Override</button>
             </div>
           )}
@@ -517,7 +517,7 @@ export const Settings: React.FC<SettingsProps> = ({
               </div>
               {smtpTestResult && (
                 <div className={`mt-2 p-2 rounded-lg text-sm ${smtpTestResult.ok ? 'bg-green-50 border border-green-200 text-green-700' : 'bg-red-50 border border-red-200 text-red-700'}`}>
-                  {smtpTestResult.ok ? '✓ ' : '✕ '}{smtpTestResult.msg}
+                  {smtpTestResult.ok ? 'OK: ' : 'Error: '}{smtpTestResult.msg}
                 </div>
               )}
             </div>

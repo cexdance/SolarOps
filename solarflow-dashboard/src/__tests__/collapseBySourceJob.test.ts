@@ -192,3 +192,53 @@ describe('expenses survive both contractor-job merge paths', () => {
     expect(merged[0].expenses).toBeUndefined();
   });
 });
+
+/**
+ * `additionalItems` (contractor-logged extra labour/parts) is the same shape of
+ * risk as expenses: a contractor-written array riding inside a whole-record LWW
+ * save. An office save one second later must not swallow work the tech logged
+ * on site, or the client is under-invoiced and the contractor is under-paid.
+ */
+describe('contractor additionalItems survive both merge paths', () => {
+  const li = (id: string, description: string, createdAt: string) =>
+    ({ id, type: 'labor', description, quantity: 1, createdAt, createdBy: 'c-1' });
+
+  it('does not let a newer office save drop an item the contractor just logged', () => {
+    const merged = mergeContractorJobs(
+      [job({ id: 'wo-1', updatedAt: '2026-08-06T10:00:00.000Z', additionalItems: [li('a1', 'inverter comms', '2026-08-06T09:59:00.000Z')] })],
+      [job({ id: 'wo-1', updatedAt: '2026-08-06T10:00:05.000Z', additionalItems: [] })],
+    );
+    expect(merged[0].additionalItems?.map((i: { id: string }) => i.id)).toEqual(['a1']);
+  });
+
+  it('unions items added independently on each side', () => {
+    const merged = mergeContractorJobs(
+      [job({ id: 'wo-1', additionalItems: [li('a1', 'inverter comms', '2026-08-06T09:00:00.000Z')] })],
+      [job({ id: 'wo-1', additionalItems: [li('a2', 'RS485 cable', '2026-08-06T10:00:00.000Z')] })],
+    );
+    expect(merged[0].additionalItems?.map((i: { id: string }) => i.id).sort()).toEqual(['a1', 'a2']);
+  });
+
+  it('does not duplicate the same item id, keeping the newer edit', () => {
+    const merged = mergeContractorJobs(
+      [job({ id: 'wo-1', additionalItems: [li('a1', 'old text', '2026-08-06T09:00:00.000Z')] })],
+      [job({ id: 'wo-1', additionalItems: [li('a1', 'corrected text', '2026-08-06T10:00:00.000Z')] })],
+    );
+    expect(merged[0].additionalItems).toHaveLength(1);
+    expect(merged[0].additionalItems?.[0].description).toBe('corrected text');
+  });
+
+  it('keeps items from the loser when collapsing duplicate WOs by sourceJobId', () => {
+    const out = collapseBySourceJob([
+      job({ id: 'a', sourceJobId: 'job-1', updatedAt: '2026-08-06T09:00:00.000Z', additionalItems: [li('a1', 'comms', '2026-08-06T09:00:00.000Z')] }),
+      job({ id: 'b', sourceJobId: 'job-1', updatedAt: '2026-08-06T10:00:00.000Z', additionalItems: [li('a2', 'cable', '2026-08-06T10:00:00.000Z')] }),
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0].additionalItems?.map((i: { id: string }) => i.id).sort()).toEqual(['a1', 'a2']);
+  });
+
+  it('leaves jobs with no additional items untouched', () => {
+    const merged = mergeContractorJobs([job({ id: 'wo-1' })], [job({ id: 'wo-1' })]);
+    expect(merged[0].additionalItems).toBeUndefined();
+  });
+});

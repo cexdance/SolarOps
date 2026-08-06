@@ -318,10 +318,29 @@ function unionExpenses(a: ExpenseLike[] | undefined, b: ExpenseLike[] | undefine
 
 type ExpenseLike = { id: string; submittedAt?: string; [k: string]: unknown };
 
+type LineItemLike = { id: string; createdAt?: string; [k: string]: unknown };
+
+/**
+ * Union contractor-added billable items by id (same reasoning as unionExpenses:
+ * the record merge is whole-record LWW, so without this an office save would
+ * drop an item the contractor just logged). Newer `createdAt` wins per id.
+ */
+function unionAdditionalItems(a: LineItemLike[] | undefined, b: LineItemLike[] | undefined): LineItemLike[] | undefined {
+  if (!a?.length && !b?.length) return a ?? b;
+  const byId = new Map<string, LineItemLike>();
+  for (const e of [...(a ?? []), ...(b ?? [])]) {
+    if (!e?.id) continue;
+    const prev = byId.get(e.id);
+    if (!prev || (e.createdAt ?? '') >= (prev.createdAt ?? '')) byId.set(e.id, e);
+  }
+  return Array.from(byId.values());
+}
+
 type CJobLike = {
   id: string;
   sourceJobId?: string;
   expenses?: ExpenseLike[];
+  additionalItems?: LineItemLike[];
   updatedAt?: string;
   assignedAt?: string;
   photos?: PhotoMap;
@@ -364,6 +383,7 @@ export function collapseBySourceJob(jobs: CJobLike[]): CJobLike[] {
         ...winner,
         photos: unionPhotos(existing.photos, j.photos),
         expenses: unionExpenses(existing.expenses, j.expenses),
+        additionalItems: unionAdditionalItems(existing.additionalItems, j.additionalItems),
       };
     }
   }
@@ -396,6 +416,7 @@ export function mergeContractorJobs(localArr: unknown, remoteArr: unknown): CJob
       ...winner,
       photos: unionPhotos(lj.photos, rj.photos),
       expenses: unionExpenses(lj.expenses, rj.expenses),
+      additionalItems: unionAdditionalItems(lj.additionalItems, rj.additionalItems),
     });
   }
 

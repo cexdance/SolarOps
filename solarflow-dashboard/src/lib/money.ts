@@ -12,6 +12,30 @@ export const SHOW_MONEY = false;
 /** Rendered wherever a dollar amount used to appear while money is hidden. */
 export const MONEY_HIDDEN = '-';
 
+/**
+ * Operational costs are NOT part of the hidden-financials rule.
+ *
+ * `SHOW_MONEY` hides the commercial layer: client rates, quotes, revenue,
+ * margins, contractor pay. That stays dark until stakeholders sign off and the
+ * Xero automation lands. It does NOT cover a cost the user typed in themselves:
+ * a contractor who logs a $48.25 receipt or a $120 part has to be able to read
+ * it back, and the office needs it to price the quote. Blanking those to "-"
+ * makes the field useless.
+ *
+ * Use `formatCost` for costs entered in the field (expenses, parts, additional
+ * labor). Use `formatMoney` for anything commercial.
+ */
+export function formatCost(value: number | null | undefined, opts: MoneyOpts = {}): string {
+  if (value == null || Number.isNaN(Number(value))) return opts.blank ?? MONEY_HIDDEN;
+  const decimals = opts.decimals ?? 2;
+  return Number(value).toLocaleString('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
+}
+
 interface MoneyOpts {
   /** Decimal places when money is shown (default 2). */
   decimals?: number;

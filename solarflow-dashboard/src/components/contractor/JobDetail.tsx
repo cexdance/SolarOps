@@ -1,7 +1,7 @@
 // SolarFlow - Job Detail / Active Call Flow
 // Flow: Pre-Start → [Before Photo Modal] → Active Call → [After Photo Modal] → Completed
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
-import { formatMoney } from '../../lib/money';
+import { formatMoney, formatCost } from '../../lib/money';
 import {
   ArrowLeft, Phone, AlertTriangle,
   Play, Pause, Camera, CheckCircle, FileText, X, Plus,
@@ -10,7 +10,7 @@ import {
   Cloud, CloudRain, Sun, Wind, Sparkles, ChevronDown, ChevronUp,
   HardHat, CalendarClock, Send,
 } from 'lucide-react';
-import { ContractorJob, ServiceStatus, PhotoCategory, JobPart, ContractorExpense, ExpenseCategory } from '../../types/contractor';
+import { ContractorJob, ServiceStatus, PhotoCategory, JobPart, ContractorExpense, ExpenseCategory, ContractorLineItem } from '../../types/contractor';
 import { jobMapsUrl } from '../../lib/woHelpers';
 import type { RMAEntry } from '../../types';
 import { loadInventory } from '../../lib/inventoryStore';
@@ -32,6 +32,8 @@ interface JobDetailProps {
   onXpEarned?: () => void;
   onUpsellLead?: (job: ContractorJob, notes: string) => void;
   onProposeSchedule?: (job: ContractorJob, dateISO: string, time: string) => void;
+  /** Contractor logged extra billable labor/parts; notify the office to price it into the quote. */
+  onReportAdditionalItem?: (job: ContractorJob, item: ContractorLineItem) => void;
   currentWeather?: string;
 }
 
@@ -195,7 +197,7 @@ const AfterPhotoSheet: React.FC<{
 };
 
 // ─── Main Component ────────────────────────────────────────────────────────────
-export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack, onUpdateJob, onXpEarned, onUpsellLead, onProposeSchedule, currentWeather }) => {
+export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack, onUpdateJob, onXpEarned, onUpsellLead, onProposeSchedule, onReportAdditionalItem, currentWeather }) => {
   const isCompleted = job.status === 'completed';
   // Contractor-proposed service date/time (pings the office to confirm w/ client).
   const [proposeDate, setProposeDate] = useState(job.scheduledDate ?? '');
@@ -337,6 +339,40 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
     onUpdateJob({ ...job, expenses: [...expenses, entry] });
     setNewExpense({ category: 'materials', amount: '', vendor: '', description: '' });
     setExpenseOpen(false);
+  };
+
+  // Extra billable work found on site (labor or parts beyond the WO scope, e.g.
+  // troubleshooting inverter comms during an optimizer change). Contractor
+  // describes only, no price; saving notifies the office to price it into the
+  // quote. Logged on its own button like RMA/expenses so it is captured live.
+  const [newAddItem, setNewAddItem] = useState<{ type: 'labor' | 'part'; description: string; quantity: string; unitCost: string }>({ type: 'labor', description: '', quantity: '1', unitCost: '' });
+  const [addItemOpen, setAddItemOpen] = useState(false);
+  const additionalItems = job.additionalItems ?? [];
+
+  const saveAdditionalItem = () => {
+    const description = newAddItem.description.trim();
+    const quantity = Number(newAddItem.quantity);
+    if (!description || !Number.isFinite(quantity) || quantity <= 0) return;
+    const now = new Date().toISOString();
+    const cost = Number(newAddItem.unitCost);
+    const item: ContractorLineItem = {
+      id: `cli-${job.id}-${Date.now()}`,
+      type: newAddItem.type,
+      description,
+      quantity,
+      // Optional: blank stays undefined rather than 0, so the office can tell
+      // "contractor didn't price it" apart from "it genuinely cost nothing".
+      ...(Number.isFinite(cost) && cost > 0 ? { unitCost: cost } : {}),
+      createdAt: now,
+      createdBy: contractorId,
+    };
+    const updated = { ...job, additionalItems: [...additionalItems, item] };
+    onUpdateJob(updated);
+    // Fire-and-forget office notification. The item is already persisted on the
+    // job above, so a notify failure never loses the record.
+    onReportAdditionalItem?.(updated, item);
+    setNewAddItem({ type: 'labor', description: '', quantity: '1', unitCost: '' });
+    setAddItemOpen(false);
   };
 
   // Safety
@@ -1042,7 +1078,7 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
               <h2 className="font-bold text-slate-900 text-sm">Expenses</h2>
             </div>
             {expenses.length > 0 && (
-              <span className="text-sm font-bold text-slate-900 flex-shrink-0">{formatMoney(expenseTotal)}</span>
+              <span className="text-sm font-bold text-slate-900 flex-shrink-0">{formatCost(expenseTotal)}</span>
             )}
           </div>
 
@@ -1058,7 +1094,7 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
                       <span className="text-xs px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full font-medium">
                         {exp.status}
                       </span>
-                      <span className="text-sm font-bold text-slate-900">{formatMoney(exp.amount)}</span>
+                      <span className="text-sm font-bold text-slate-900">{formatCost(exp.amount)}</span>
                     </div>
                   </div>
                   <p className="mt-1 text-xs text-slate-500 capitalize">
@@ -1135,6 +1171,121 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
                   className="flex-1 px-3 py-2.5 bg-orange-500 hover:bg-orange-600 disabled:bg-slate-200 disabled:text-slate-400 text-white text-sm font-semibold rounded-xl transition-colors"
                 >
                   Save expense
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* ── Additional labor & parts ─────────────────────────────────────
+            Extra billable work found on site beyond the WO scope. Cost is
+            optional (see lib/money.ts: operational costs are visible, the
+            commercial layer is not). Saving notifies the office to update the
+            quote; there is no invoice automation by design. */}
+        <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-3">
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Wrench className="w-4 h-4 text-orange-500" />
+              <h2 className="font-bold text-slate-900 text-sm">Additional labor &amp; parts</h2>
+            </div>
+            {additionalItems.length > 0 && (
+              <span className="text-xs font-semibold text-slate-500 flex-shrink-0">{additionalItems.length}</span>
+            )}
+          </div>
+
+          {additionalItems.length > 0 && (
+            <div className="space-y-2">
+              {additionalItems.map(item => (
+                <div key={item.id} className="px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-semibold text-slate-800">{item.description}</span>
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase flex-shrink-0 ${item.type === 'labor' ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                      {item.type}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {item.type === 'labor'
+                      ? `${item.quantity} hr${item.quantity !== 1 ? 's' : ''}`
+                      : `Qty ${item.quantity}`}
+                    {item.unitCost != null && ` · ${formatCost(item.unitCost)} each · ${formatCost(item.unitCost * item.quantity)} total`}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {!addItemOpen ? (
+            <button
+              onClick={() => setAddItemOpen(true)}
+              className="w-full flex items-center justify-center gap-1.5 px-3 py-2.5 border border-dashed border-slate-300 text-slate-600 hover:border-orange-400 hover:text-orange-600 text-sm font-semibold rounded-xl transition-colors cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              Add labor or part
+            </button>
+          ) : (
+            <div className="space-y-2">
+              <p className="text-xs text-slate-400">
+                Extra work beyond this order (e.g. troubleshooting inverter comms). The office is notified to update the quote.
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="flex rounded-xl border border-slate-200 overflow-hidden">
+                  {(['labor', 'part'] as const).map(t => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => setNewAddItem(p => ({ ...p, type: t }))}
+                      className={`flex-1 px-3 py-2 text-sm font-semibold capitalize transition-colors ${newAddItem.type === t ? 'bg-orange-500 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}
+                    >
+                      {t}
+                    </button>
+                  ))}
+                </div>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min="0"
+                  step={newAddItem.type === 'labor' ? '0.5' : '1'}
+                  value={newAddItem.quantity}
+                  onChange={e => setNewAddItem(p => ({ ...p, quantity: e.target.value }))}
+                  placeholder={newAddItem.type === 'labor' ? 'Hours' : 'Qty'}
+                  aria-label={newAddItem.type === 'labor' ? 'Hours' : 'Quantity'}
+                  className="px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                />
+              </div>
+              <input
+                type="number"
+                inputMode="decimal"
+                min="0"
+                step="0.01"
+                value={newAddItem.unitCost}
+                onChange={e => setNewAddItem(p => ({ ...p, unitCost: e.target.value }))}
+                placeholder={newAddItem.type === 'labor' ? 'Cost per hour (optional)' : 'Cost each (optional)'}
+                aria-label="Unit cost"
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+              />
+              <textarea
+                value={newAddItem.description}
+                onChange={e => setNewAddItem(p => ({ ...p, description: e.target.value }))}
+                placeholder={newAddItem.type === 'labor'
+                  ? 'What you did (e.g. inverter communication troubleshooting)'
+                  : 'Part and where it went (e.g. RS485 cable, inverter to gateway)'}
+                rows={2}
+                aria-label="Additional item description"
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm resize-none focus:outline-none focus:ring-2 focus:ring-orange-400"
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setAddItemOpen(false)}
+                  className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-sm font-semibold rounded-xl transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={saveAdditionalItem}
+                  disabled={!newAddItem.description.trim() || !(Number(newAddItem.quantity) > 0)}
+                  className="flex-1 px-3 py-2.5 bg-orange-500 hover:bg-orange-600 disabled:bg-slate-200 disabled:text-slate-400 text-white text-sm font-semibold rounded-xl transition-colors"
+                >
+                  Save &amp; notify office
                 </button>
               </div>
             </div>

@@ -42,11 +42,11 @@ function payloadSummary(entry: ChangeEntry): string {
 
   // Photo events
   if (entry.opType === 'photo.upload_start')   return `${p['name'] ?? '?'} · ${p['type'] ?? '?'} · ${Math.round((p['size'] as number ?? 0) / 1024)}KB`;
-  if (entry.opType === 'photo.upload_success') return `✓ ${String(p['storageUrl'] ?? '').split('/').pop()?.split('?')[0] ?? 'uploaded'}`;
-  if (entry.opType === 'photo.upload_fail')    return `✗ ${p['error'] ?? 'unknown error'}`;
+  if (entry.opType === 'photo.upload_success') return `OK: ${String(p['storageUrl'] ?? '').split('/').pop()?.split('?')[0] ?? 'uploaded'}`;
+  if (entry.opType === 'photo.upload_fail')    return `FAIL: ${p['error'] ?? 'unknown error'}`;
   if (entry.opType === 'avatar.upload_start')  return `${p['name'] ?? '?'} · ${Math.round((p['size'] as number ?? 0) / 1024)}KB`;
-  if (entry.opType === 'avatar.upload_success') return `✓ avatar updated`;
-  if (entry.opType === 'avatar.upload_fail')   return `✗ ${p['error'] ?? 'unknown error'}`;
+  if (entry.opType === 'avatar.upload_success') return `OK: avatar updated`;
+  if (entry.opType === 'avatar.upload_fail')   return `FAIL: ${p['error'] ?? 'unknown error'}`;
 
   // Generic, show first meaningful key
   const keys = Object.keys(p).filter(k => !k.startsWith('_'));
@@ -60,11 +60,11 @@ function payloadSummary(entry: ChangeEntry): string {
 function deviceLabel(entry: ChangeEntry): string {
   const ua  = entry.device?.ua ?? '';
   const scr = entry.device?.screen ?? '';
-  if (/iPhone/.test(ua))  return `📱 iPhone ${scr}`;
-  if (/iPad/.test(ua))    return `📱 iPad ${scr}`;
-  if (/Android/.test(ua)) return `📱 Android ${scr}`;
-  if (/Mac/.test(ua))     return `💻 Mac ${scr}`;
-  if (/Windows/.test(ua)) return `🖥 Win ${scr}`;
+  if (/iPhone/.test(ua))  return `iPhone ${scr}`;
+  if (/iPad/.test(ua))    return `iPad ${scr}`;
+  if (/Android/.test(ua)) return `Android ${scr}`;
+  if (/Mac/.test(ua))     return `Mac ${scr}`;
+  if (/Windows/.test(ua)) return `Win ${scr}`;
   return scr || 'unknown';
 }
 
@@ -95,8 +95,8 @@ export const LogViewer: React.FC = () => {
 
   const FILTERS = [
     { key: 'all',      label: 'All' },
-    { key: 'photo',    label: '📷 Photos' },
-    { key: 'fail',     label: '🔴 Errors' },
+    { key: 'photo',    label: 'Photos' },
+    { key: 'fail',     label: 'Errors' },
     { key: 'job',      label: 'Jobs' },
     { key: 'customer', label: 'Customers' },
   ] as const;

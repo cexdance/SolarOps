@@ -16,10 +16,10 @@ import { updateClientStatus } from '../lib/siteProfileStore';
 import { normalizeStreetOrder } from '../lib/addressValidator';
 import { QuotePreviewModal } from './QuotePreviewModal';
 import { Contractor, ContractorJob, JobPriority, ServiceRate } from '../types/contractor';
-import { loadServiceRates } from '../lib/contractorStore';
+import { loadServiceRates, loadContractorJobs } from '../lib/contractorStore';
 import { searchParts, CatalogPart } from '../lib/partsCatalog';
 import { MentionTextarea, MentionUser, renderWithMentions, parseMentions, parseMentionEmails, fireMentionNotifications } from './ui/MentionTextarea';
-import { formatMoney } from '../lib/money';
+import { formatMoney, formatCost } from '../lib/money';
 import { printServiceReport } from '../lib/printServiceReport';
 import { serviceOrderNo, workOrderNo, generateServiceOrderNumber, photoUrlStem } from '../lib/woHelpers';
 import { SowDistributionModal, SOW_DISTRIBUTION_NAMES } from './SowDistributionModal';
@@ -502,6 +502,22 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
 
   // Line items
   const [lineItems, setLineItems]   = useState<WOLineItem[]>(job?.lineItems ?? []);
+
+  // Extra billable work the contractor logged in the field. Read-only here: the
+  // contractor records what they did, the office prices it into the quote. Read
+  // from the contractor job rather than mirrored onto the admin Job, so there is
+  // one writer and no risk of a stale admin save clobbering a field entry.
+  const contractorAdditions = useMemo(() => {
+    if (!job?.id) return [];
+    try {
+      return loadContractorJobs()
+        .filter(cj => (cj.sourceJobId ?? cj.id) === job.id)
+        .flatMap(cj => cj.additionalItems ?? [])
+        .sort((a, b) => (a.createdAt ?? '').localeCompare(b.createdAt ?? ''));
+    } catch {
+      return [];
+    }
+  }, [job?.id]);
 
   // Stable upload folder, generated once per panel open. New WOs get a UUID
   // so photos don't all land in wo-photos/unsaved/. Existing WOs use job.id.
@@ -1431,7 +1447,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
           notifierName: currentUserName || 'Staff',
           context: `${siteName}, ${woLabel}`,
           ...mentionCtx,
-          message: `✅ Service Order ${woLabel} has been marked COMPLETED for ${siteName}. SOW Distribution Report is ready for review.`,
+          message: `Service Order ${woLabel} has been marked COMPLETED for ${siteName}. SOW Distribution Report is ready for review.`,
         });
       }
       // Auto-open the SOW distribution report
@@ -1781,7 +1797,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                   </div>
                 )}
                 {commentError && (
-                  <p className="mt-1 text-xs text-red-600 font-medium">⚠️ {commentError}</p>
+                  <p className="mt-1 text-xs text-red-600 font-medium">{commentError}</p>
                 )}
                 <div className="flex items-center justify-end mt-2">
                   <button
@@ -1993,10 +2009,10 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 resize-none"
                 />
                 {pasteToast && (
-                  <p className="mt-1 text-xs text-emerald-600 font-medium">📎 {pasteToast}</p>
+                  <p className="mt-1 text-xs text-emerald-600 font-medium">{pasteToast}</p>
                 )}
                 {pasteError && (
-                  <p className="mt-1 text-xs text-red-600 font-medium">⚠️ {pasteError}</p>
+                  <p className="mt-1 text-xs text-red-600 font-medium">{pasteError}</p>
                 )}
               </div>
 
@@ -2124,7 +2140,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                       </div>
                     </div>
                   </div>
-                  <p className="text-[10px] text-teal-700">ℹ️ These values are saved with the service order and used by the admin agentic workflow to execute the SolarEdge ownership transfer.</p>
+                  <p className="text-[10px] text-teal-700">These values are saved with the service order and used by the admin agentic workflow to execute the SolarEdge ownership transfer.</p>
                 </div>
               )}
               <div className={isSiteTransfer ? 'hidden' : ''}>
@@ -2240,10 +2256,10 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                 )}
                 <div className="grid grid-cols-2 gap-2">
                   {([
-                    { value: 'repeating_client', label: 'Repeating Client', icon: '🔁' },
-                    { value: 'military',          label: 'Military',         icon: '🎖️' },
-                    { value: 'friends_family',    label: 'Friends & Family', icon: '🤝' },
-                  ] as const).map(({ value, label, icon }) => (
+                    { value: 'repeating_client', label: 'Repeating Client' },
+                    { value: 'military',          label: 'Military' },
+                    { value: 'friends_family',    label: 'Friends & Family' },
+                  ] as const).map(({ value, label }) => (
                     <button
                       key={value}
                       type="button"
@@ -2254,7 +2270,6 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                           : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
                       }`}
                     >
-                      <span>{icon}</span>
                       <span className="flex-1 text-left">{label}</span>
                       {discountType === value && <span className="font-bold text-emerald-600">−10%</span>}
                     </button>
@@ -2268,7 +2283,6 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                         : 'bg-white border-slate-200 text-slate-400 hover:border-slate-300'
                     }`}
                   >
-                    <span>🚫</span>
                     <span className="flex-1 text-left">No discount</span>
                   </button>
                 </div>
@@ -2445,6 +2459,45 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                 </div>
               )}
 
+              {/* Contractor-reported additions. Read-only on purpose: there is no
+                  invoice automation, Daniel prices these into the quote by hand.
+                  Sourced from the contractor job so the office sees exactly what
+                  was logged in the field. */}
+              {contractorAdditions.length > 0 && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Wrench className="w-4 h-4 text-amber-600" />
+                    <p className="text-xs font-semibold text-amber-800 uppercase tracking-wide">
+                      Contractor-reported additions ({contractorAdditions.length})
+                    </p>
+                  </div>
+                  <p className="text-[11px] text-amber-700 -mt-1">
+                    Logged on site, not priced. Add them to the line items above and update the quote.
+                  </p>
+                  <div className="space-y-1.5">
+                    {contractorAdditions.map(item => (
+                      <div key={item.id} className="flex items-center justify-between gap-2 bg-white border border-amber-200 rounded-lg px-3 py-2">
+                        <div className="min-w-0">
+                          <p className="text-sm text-slate-800 truncate">{item.description}</p>
+                          <p className="text-[10px] text-slate-500">
+                            {new Date(item.createdAt).toLocaleDateString()}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase ${item.type === 'labor' ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                            {item.type}
+                          </span>
+                          <span className="text-xs font-semibold text-slate-700">
+                            {item.type === 'labor' ? `${item.quantity} hr` : `x${item.quantity}`}
+                            {item.unitCost != null && ` · ${formatCost(item.unitCost * item.quantity)}`}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Table */}
               {lineItems.length > 0 && (
                 <div className="rounded-xl border border-slate-200 overflow-x-auto">
@@ -2579,7 +2632,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                                 </div>
                                 {item.manufacturer?.toLowerCase().includes('solaredge') && (item.seCompAmount ?? 0) > 0 && siteAgeYears !== null && siteAgeYears < 5 && (
                                   <p className="text-[10px] text-yellow-700 mt-1.5 font-medium">
-                                    ⚡ SE Compensation of {formatMoney(item.seCompAmount)} is claimable, site is {siteAgeYears.toFixed(1)} yrs old.
+                                    SE Compensation of {formatMoney(item.seCompAmount)} is claimable, site is {siteAgeYears.toFixed(1)} yrs old.
                                   </p>
                                 )}
                                 {item.manufacturer?.toLowerCase().includes('solaredge') && siteAgeYears !== null && siteAgeYears >= 5 && (
@@ -2836,7 +2889,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
               {uploadError && !uploading && (
                 <div className="flex items-center justify-between gap-2 px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
                   <span>{uploadError}</span>
-                  <button onClick={() => setUploadError(null)} className="shrink-0 text-red-400 hover:text-red-600 cursor-pointer">✕</button>
+                  <button onClick={() => setUploadError(null)} className="shrink-0 text-red-400 hover:text-red-600 cursor-pointer"><X className="w-4 h-4" /></button>
                 </div>
               )}
 
@@ -3172,10 +3225,10 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 resize-none"
                 />
                 {pasteToast && (
-                  <p className="mt-1 text-xs text-emerald-600 font-medium">📎 {pasteToast}</p>
+                  <p className="mt-1 text-xs text-emerald-600 font-medium">{pasteToast}</p>
                 )}
                 {pasteError && (
-                  <p className="mt-1 text-xs text-red-600 font-medium">⚠️ {pasteError}</p>
+                  <p className="mt-1 text-xs text-red-600 font-medium">{pasteError}</p>
                 )}
               </div>
 
@@ -3624,7 +3677,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                       </div>
                     </div>
                     <p className="mt-3 text-[10px] text-teal-700">
-                      ℹ️ Admin team runs the SolarEdge ownership transfer via agentic workflow. No contractor assigned. Flat-fee transfer (priced in Xero).
+                      Admin team runs the SolarEdge ownership transfer via agentic workflow. No contractor assigned. Flat-fee transfer (priced in Xero).
                     </p>
                   </div>
                 )}

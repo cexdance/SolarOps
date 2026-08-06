@@ -40,6 +40,7 @@ import { loadData, saveData, hydrateData } from './lib/dataStore';
 import { migrateWoPhotos, purgeUploadedBlobs } from './lib/photoStore';
 import { pickupJobsForContractor, toContractorJobView, serviceOrderNo, photoUrlStem, bareOrderNo, dedupeWoPhotos, mergeRmaEntries } from './lib/woHelpers';
 import { fireMentionNotifications, sendCustomerAppointmentEmail } from './components/ui/MentionTextarea';
+import { formatCost } from './lib/money';
 import { logChange, logJobChange, flushChangeLog } from './lib/changeLog';
 import { autoArchiveCompletedJobs, stampJobFields } from './lib/jobService';
 import { fetchMyNotifications, markNotificationReadRemote, markAllNotificationsReadRemote, startNotificationPolling, stopNotificationPolling, subscribeToNotifications, unsubscribeFromNotifications } from './lib/notifications';
@@ -50,7 +51,7 @@ import { AppState, Job, Customer, User, AppNotification, SolarEdgeExtraSite, RMA
 import { FL_SITES } from './lib/solarEdgeSites';
 import { isFloridaSite, isAllowedCustomer, deriveClientId, findCustomerForSite } from './lib/solarEdgeSiteFilter';
 import { getDeletedCustomerIds, markJobDeleted } from './lib/dataStore';
-import { Contractor, ContractorStatus, ContractorJob } from './types/contractor';
+import { Contractor, ContractorStatus, ContractorJob, ContractorLineItem } from './types/contractor';
 import { addInteraction, loadCustomers, loadInteractions, saveInteractions } from './lib/customerStore';
 import { validateAddress, normalizeStreetOrder, sameStreetAddress } from './lib/addressValidator';
 import { useUnreadBadge } from './hooks/useUnreadBadge';
@@ -1795,6 +1796,85 @@ function App() {
     }).catch(e => console.error('[schedule] mention notify failed', e));
   };
 
+  // Contractor logged extra billable labor/parts on site (beyond the WO scope).
+  // The item is already persisted on the contractor job by JobDetail; here we
+  // only NOTIFY the office (Daniel) so the client quote is updated. There is no
+  // invoice automation by design: Daniel prices it into the quote by hand.
+  const handleContractorReportAdditionalItem = (cjob: ContractorJob, item: ContractorLineItem) => {
+    const adminJob = data.jobs.find(j => j.id === (cjob.sourceJobId ?? cjob.id));
+    const nowIso = new Date().toISOString();
+    const contractorName = currentContractor?.contactName || currentContractor?.businessName || 'The contractor';
+    const orderNo = serviceOrderNo(cjob.woNumber);
+    const qtyLabel = item.type === 'labor'
+      ? `${item.quantity} hr${item.quantity !== 1 ? 's' : ''}`
+      : `qty ${item.quantity}`;
+    // Cost is optional. When the contractor priced it, carry the total so Daniel
+    // can update the quote without opening the order.
+    const costLabel = item.unitCost != null
+      ? `, ${formatCost(item.unitCost * item.quantity)}`
+      : '';
+    const summary = `${item.type === 'labor' ? 'Labor' : 'Part'}: ${item.description} (${qtyLabel}${costLabel})`;
+
+    // Notify Daniel (billing). A contractor session cannot load the staff user
+    // list (/api/users is staff-only), so resolve by name when present but ALWAYS
+    // include Daniel's known id so the bell fires from a contractor device.
+    // Daniel = user-3 per billingService ADMIN_USER_IDS.
+    const DANIEL_FALLBACK_ID = 'user-3';
+    const matchedIds = data.users
+      .filter(u => /daniel/i.test(`${u.name} ${u.username ?? ''}`))
+      .map(u => u.id);
+    const recipientIds = Array.from(new Set([...matchedIds, DANIEL_FALLBACK_ID]));
+    const relatedId = adminJob?.id ?? cjob.sourceJobId ?? cjob.id;
+
+    const note: Activity = {
+      id: `activity-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      type: 'note_added',
+      description: `${contractorName} logged additional billable work on ${orderNo}: ${summary}. @daniel please update the quote.`,
+      timestamp: nowIso,
+      userId: cjob.contractorId,
+      userName: contractorName,
+      mentions: recipientIds,
+    };
+
+    const newNotifs: AppNotification[] = recipientIds.map(uid => ({
+      id: `notif-${Date.now()}-${uid}-${Math.random().toString(36).slice(2, 6)}`,
+      userId: uid,
+      type: 'mention' as const,
+      title: 'Contractor added billable work',
+      message: `${orderNo} ${cjob.customerName}: ${summary}. Update the quote accordingly.`,
+      relatedJobId: relatedId,
+      relatedContractorId: cjob.contractorId,
+      relatedActivityId: note.id,
+      read: false,
+      createdAt: nowIso,
+    }));
+
+    setData(prev => {
+      const next = {
+        ...prev,
+        jobs: adminJob
+          ? prev.jobs.map(j => j.id === adminJob.id
+              ? { ...j, activityHistory: [...(j.activityHistory ?? []), note], updatedAt: nowIso }
+              : j)
+          : prev.jobs,
+        notifications: [...(prev.notifications || []), ...newNotifs],
+      };
+      saveData(next);
+      return next;
+    });
+
+    // Best-effort: also add to the staff @mention inbox / fire /api/notify (prod).
+    void fireMentionNotifications({
+      mentionedUserIds: recipientIds,
+      notifierName: contractorName,
+      context: `${orderNo} ${cjob.customerName}`,
+      contextId: relatedId,
+      contextType: 'workOrder',
+      message: `${summary}. Update the quote accordingly.`,
+      activityId: note.id,
+    }).catch(e => console.error('[additional-item] mention notify failed', e));
+  };
+
   // Handlers
   const handleCreateJob = (job: Partial<Job>): Job => {
     const newJob: Job = {
@@ -2891,6 +2971,7 @@ function App() {
           }}
           onSync={isImpersonating ? undefined : deepSync}
           onProposeSchedule={isImpersonating ? undefined : handleContractorProposeSchedule}
+          onReportAdditionalItem={isImpersonating ? undefined : handleContractorReportAdditionalItem}
         />
       </Suspense>
     );
@@ -3346,6 +3427,7 @@ function App() {
               }}
               onSync={deepSync}
               onProposeSchedule={handleContractorProposeSchedule}
+              onReportAdditionalItem={handleContractorReportAdditionalItem}
             />
           );
         }

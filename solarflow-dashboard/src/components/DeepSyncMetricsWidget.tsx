@@ -64,8 +64,8 @@ export const DeepSyncMetricsWidget: React.FC<Props> = ({ userName: _userName }) 
       <div className="flex items-center justify-between pt-2 border-t border-slate-100">
         <p className={`text-xs ${isHighUsage ? 'text-amber-700' : 'text-emerald-700'}`}>
           {isHighUsage
-            ? '⚠ High usage: contractors hitting deepSync frequently — check cursor drift'
-            : '✓ Normal usage: deepSync used sparingly'}
+            ? 'High usage: contractors hitting deepSync frequently — check cursor drift'
+            : 'Normal usage: deepSync used sparingly'}
         </p>
         <button
           onClick={() => { resetDeepSyncMetrics(); setMetrics(getDeepSyncMetrics()); }}

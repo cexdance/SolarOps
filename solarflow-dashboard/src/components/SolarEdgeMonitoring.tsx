@@ -111,7 +111,7 @@ export const SolarEdgeMonitoring: React.FC<Props> = ({
   const [expandedSite, setExpandedSite] = useState<string | null>(null);
   const [panelSite, setPanelSite]       = useState<SolarEdgeSite | null>(null);
   const [isUpdating, setIsUpdating]     = useState(false);
-  const [updateMsg, setUpdateMsg]       = useState<string | null>(null);
+  const [updateMsg, setUpdateMsg]       = useState<{ ok: boolean; text: string } | null>(null);
   const [groupFilter, setGroupFilter]   = useState<string>('Conexsol Florida');
 
   // ── Live alert overrides fetched from SolarEdge /sites/list ────────────────
@@ -128,9 +128,9 @@ export const SolarEdgeMonitoring: React.FC<Props> = ({
     } catch { return new Set(); }
   });
   const [isRefreshingAlerts, setIsRefreshingAlerts] = useState(false);
-  const [alertRefreshMsg, setAlertRefreshMsg] = useState<string | null>(null);
+  const [alertRefreshMsg, setAlertRefreshMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [isSyncingData, setIsSyncingData] = useState(false);
-  const [syncMsg, setSyncMsg] = useState<string | null>(null);
+  const [syncMsg, setSyncMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   /** Fetch alert counts from SolarEdge /sites/list (paginated). Pass bustCache=true to bypass CDN. */
   const fetchAlertCounts = useCallback(async (bustCache = false) => {
@@ -151,7 +151,7 @@ export const SolarEdgeMonitoring: React.FC<Props> = ({
         );
         if (!result.ok) {
           // Preserve cached overrides already in state/localStorage; degrade, don't break.
-          setAlertRefreshMsg(`⚠ Showing cached alerts - ${result.message}`);
+          setAlertRefreshMsg({ ok: false, text: `Showing cached alerts - ${result.message}` });
           return;
         }
         const data = result.data ?? {};
@@ -178,10 +178,10 @@ export const SolarEdgeMonitoring: React.FC<Props> = ({
         return next;
       });
       const withAlerts = [...newOverrides.values()].filter(v => v.count > 0).length;
-      setAlertRefreshMsg(`✓ ${withAlerts} site${withAlerts !== 1 ? 's' : ''} with active alerts`);
+      setAlertRefreshMsg({ ok: true, text: `${withAlerts} site${withAlerts !== 1 ? 's' : ''} with active alerts` });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Unknown';
-      setAlertRefreshMsg(`✗ Alert fetch failed: ${msg}`);
+      setAlertRefreshMsg({ ok: false, text: `Alert fetch failed: ${msg}` });
     } finally {
       setIsRefreshingAlerts(false);
     }
@@ -207,10 +207,10 @@ export const SolarEdgeMonitoring: React.FC<Props> = ({
         }
       }
 
-      setSyncMsg(`✓ Synced ${successCount} sites. Detailed data cached for 1 hour.`);
+      setSyncMsg({ ok: true, text: `Synced ${successCount} sites. Detailed data cached for 1 hour.` });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Unknown error';
-      setSyncMsg(`✗ Sync failed: ${msg}`);
+      setSyncMsg({ ok: false, text: `Sync failed: ${msg}` });
     } finally {
       setIsSyncingData(false);
     }
@@ -321,13 +321,14 @@ export const SolarEdgeMonitoring: React.FC<Props> = ({
     setUpdateMsg(null);
     try {
       const { newCount, total } = await onUpdateSites();
-      setUpdateMsg(
-        newCount > 0
-          ? `✓ Added ${newCount} new site${newCount !== 1 ? 's' : ''} (${total} total in group)`
-          : `✓ Up to date: ${total} site${total !== 1 ? 's' : ''} in group, no new additions`
-      );
+      setUpdateMsg({
+        ok: true,
+        text: newCount > 0
+          ? `Added ${newCount} new site${newCount !== 1 ? 's' : ''} (${total} total in group)`
+          : `Up to date: ${total} site${total !== 1 ? 's' : ''} in group, no new additions`,
+      });
     } catch (err: any) {
-      setUpdateMsg(`✗ ${err?.message || 'Update failed'}`);
+      setUpdateMsg({ ok: false, text: err?.message || 'Update failed' });
     } finally {
       setIsUpdating(false);
     }
@@ -506,20 +507,20 @@ export const SolarEdgeMonitoring: React.FC<Props> = ({
           {(alertRefreshMsg || syncMsg) && (
             <div className="space-y-1">
               {alertRefreshMsg && (
-                <p className={`text-xs ${alertRefreshMsg.startsWith('✓') ? 'text-emerald-600' : 'text-red-500'}`}>
-                  {alertRefreshMsg}
+                <p className={`text-xs ${alertRefreshMsg.ok ? 'text-emerald-600' : 'text-red-500'}`}>
+                  {alertRefreshMsg.text}
                 </p>
               )}
               {syncMsg && (
-                <p className={`text-xs ${syncMsg.startsWith('✓') ? 'text-emerald-600' : 'text-red-500'}`}>
-                  {syncMsg}
+                <p className={`text-xs ${syncMsg.ok ? 'text-emerald-600' : 'text-red-500'}`}>
+                  {syncMsg.text}
                 </p>
               )}
             </div>
           )}
           {updateMsg && (
-            <p className={`text-xs ${updateMsg.startsWith('✓') ? 'text-emerald-600' : 'text-red-500'}`}>
-              {updateMsg}
+            <p className={`text-xs ${updateMsg.ok ? 'text-emerald-600' : 'text-red-500'}`}>
+              {updateMsg.text}
             </p>
           )}
         </div>

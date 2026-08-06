@@ -8,7 +8,7 @@ import {
   PauseCircle, PlayCircle,
 } from 'lucide-react';
 import { APP_VERSION } from '../../lib/versionConfig';
-import { Contractor, ContractorJob, JobPriority, JobStatusContractor } from '../../types/contractor';
+import { Contractor, ContractorJob, ContractorLineItem, JobPriority, JobStatusContractor } from '../../types/contractor';
 import { Lead } from '../../types';
 import ConexSolTerms from './ConexSolTerms';
 import { useJobGeofence } from '../../lib/geofence';
@@ -35,6 +35,8 @@ interface ContractorDashboardProps {
   onSync?: () => Promise<void> | void;
   /** Contractor proposes a service date/time -> pings the office to confirm. */
   onProposeSchedule?: (job: ContractorJob, dateISO: string, time: string) => void;
+  /** Contractor logged extra billable labor/parts -> notify the office to price it in. */
+  onReportAdditionalItem?: (job: ContractorJob, item: ContractorLineItem) => void;
 }
 
 // ─── Priority badge ────────────────────────────────────────────────────────────
@@ -58,6 +60,7 @@ export const ContractorDashboard: React.FC<ContractorDashboardProps> = ({
   onUpdateContractor,
   onSync,
   onProposeSchedule,
+  onReportAdditionalItem,
 }) => {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   // Arrival auto-starts today's assigned jobs; departure after the on-site
@@ -188,6 +191,7 @@ export const ContractorDashboard: React.FC<ContractorDashboardProps> = ({
         onXpEarned={() => setXpData(loadXpData(contractorId))}
         onUpsellLead={handleUpsellLead}
         onProposeSchedule={onProposeSchedule}
+        onReportAdditionalItem={onReportAdditionalItem}
         currentWeather="sunny"
       />
     );

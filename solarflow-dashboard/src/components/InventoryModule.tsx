@@ -21,7 +21,7 @@ import {
   ChevronUp,
   Camera,
   ImageIcon,
-  FileText,
+  FileText, Mail, Phone
 } from 'lucide-react';
 
 // ── Image uploader, URL input + optional file upload ─────────────────────
@@ -1245,11 +1245,11 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ jobs = [], onU
                     {provider.contactName}
                   </p>
                   <p className="text-slate-600 flex items-center gap-2">
-                    <span className="w-4 h-4 text-slate-400 flex items-center justify-center text-xs">📧</span>
+                    <Mail className="w-4 h-4 text-slate-400" />
                     {provider.email}
                   </p>
                   <p className="text-slate-600 flex items-center gap-2">
-                    <span className="w-4 h-4 text-slate-400 flex items-center justify-center text-xs">📞</span>
+                    <Phone className="w-4 h-4 text-slate-400" />
                     {provider.phone}
                   </p>
                   <p className="text-slate-500 flex items-center gap-2">

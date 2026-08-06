@@ -54,7 +54,7 @@ import {
   Camera,
   Image as ImageIcon,
   Sparkles,
-  Printer,
+  Printer, Check
 } from 'lucide-react';
 import * as _recharts from 'recharts';
 const { ComposedChart, Bar, Line, XAxis, YAxis, Tooltip: RechartsTooltip, ResponsiveContainer, CartesianGrid, Legend } = _recharts as any;
@@ -264,7 +264,7 @@ export const Customers: React.FC<CustomersProps> = ({
     } catch { return new Set(); }
   });
   const [isRefreshingAlerts, setIsRefreshingAlerts] = React.useState(false);
-  const [alertRefreshMsg, setAlertRefreshMsg] = React.useState<string | null>(null);
+  const [alertRefreshMsg, setAlertRefreshMsg] = React.useState<{ ok: boolean; text: string } | null>(null);
 
   /** Pull fresh alert counts from SolarEdge /sites/list and store in localStorage */
   const fetchAlertCounts = React.useCallback(async () => {
@@ -296,9 +296,9 @@ export const Customers: React.FC<CustomersProps> = ({
         return next;
       });
       const withAlerts = [...newOverrides.values()].filter(v => v.count > 0).length;
-      setAlertRefreshMsg(`✓ ${withAlerts} site${withAlerts !== 1 ? 's' : ''} with active alerts`);
+      setAlertRefreshMsg({ ok: true, text: `${withAlerts} site${withAlerts !== 1 ? 's' : ''} with active alerts` });
     } catch (err: unknown) {
-      setAlertRefreshMsg(`✗ ${err instanceof Error ? err.message : 'Sync failed'}`);
+      setAlertRefreshMsg({ ok: false, text: err instanceof Error ? err.message : 'Sync failed' });
     } finally {
       setIsRefreshingAlerts(false);
     }
@@ -676,8 +676,8 @@ export const Customers: React.FC<CustomersProps> = ({
                 {isRefreshingAlerts ? 'Syncing…' : 'Sync Alerts'}
               </button>
               {alertRefreshMsg && (
-                <span className={`text-xs ${alertRefreshMsg.startsWith('✓') ? 'text-emerald-600' : 'text-red-500'}`}>
-                  {alertRefreshMsg}
+                <span className={`text-xs ${alertRefreshMsg.ok ? 'text-emerald-600' : 'text-red-500'}`}>
+                  {alertRefreshMsg.text}
                 </span>
               )}
             </div>
@@ -2389,7 +2389,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
             </div>
           ) : fetchError ? (
             <div className="h-full flex flex-col items-center justify-center gap-1 text-center px-4">
-              <span className="text-sm font-medium text-red-500">⚠ {fetchError}</span>
+              <span className="text-sm font-medium text-red-500">{fetchError}</span>
             </div>
           ) : energyData.length > 0 ? (
             <ResponsiveContainer width="100%" height="100%">
@@ -3016,9 +3016,9 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
     <div>
       ${customer.clientId ? `<div class="client-badge">${customer.clientId}</div>` : ''}
       <div class="client-name">${customer.name}</div>
-      ${[customer.address, customer.city, customer.state].filter(Boolean).length ? `<div class="client-sub">📍 ${[customer.address, customer.city, customer.state].filter(Boolean).join(', ')}</div>` : ''}
-      ${customer.phone ? `<div class="client-sub">📞 ${customer.phone}</div>` : ''}
-      ${customer.email ? `<div class="client-sub">✉️ ${customer.email}</div>` : ''}
+      ${[customer.address, customer.city, customer.state].filter(Boolean).length ? `<div class="client-sub">${[customer.address, customer.city, customer.state].filter(Boolean).join(', ')}</div>` : ''}
+      ${customer.phone ? `<div class="client-sub">${customer.phone}</div>` : ''}
+      ${customer.email ? `<div class="client-sub">${customer.email}</div>` : ''}
     </div>
     <div class="client-right">
       ${peakPowerKw > 0 ? `<div class="system-size">${peakPowerKw.toFixed(1)}<span style="font-size:12pt"> kW</span></div><div class="system-label">System Size</div>` : ''}
@@ -3028,7 +3028,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
   </div>
 
   <!-- Period -->
-  <div class="period-badge">☀ ${periodLabel} Performance</div>
+  <div class="period-badge">${periodLabel} Performance</div>
 
   <!-- Metrics -->
   <div class="metrics">
@@ -3374,7 +3374,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
     const logEntry: Activity = {
       id: `story-edit-${Date.now()}`,
       type: 'info_updated',
-      description: `📝 Customer story updated by ${currentUser?.name ?? 'User'}`,
+      description: `Customer story updated by ${currentUser?.name ?? 'User'}`,
       timestamp: new Date().toISOString(),
       userName: currentUser?.name ?? 'User',
     };
@@ -3538,7 +3538,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
               setPastedFiles(prev => [...prev, { id, name, dataUrl, mimeType: 'image/jpeg', size: Math.round(dataUrl.length * 0.75) }]);
               processedCount++;
               if (processedCount === 1) {
-                toast.success('📎 Image pasted, click "Save Note" to upload');
+                toast.success('Image pasted, click "Save Note" to upload');
               }
             } catch (err) {
               toast.error('Failed to process pasted image');
@@ -3549,7 +3549,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
         } else {
           setPastedFiles(prev => [...prev, { id, name, dataUrl: raw, mimeType: file.type || 'application/octet-stream', size: file.size }]);
           processedCount++;
-          toast.success(`📎 File "${name}" attached, click "Save Note" to upload`);
+          toast.success(`File "${name}" attached, click "Save Note" to upload`);
         }
       };
       reader.readAsDataURL(file);
@@ -3594,7 +3594,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
           return;
         }
       } else {
-        toast.success(`📎 ${uploaded.length} file${uploaded.length !== 1 ? 's' : ''} uploaded`);
+        toast.success(`${uploaded.length} file${uploaded.length !== 1 ? 's' : ''} uploaded`);
         setPastedFiles([]);
       }
     }
@@ -4141,7 +4141,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                                       : active ? 'bg-white border-orange-500 text-orange-600 ring-2 ring-orange-100'
                                       : 'bg-white border-slate-200 text-slate-300'
                                     }`}>
-                                      {done ? '✓' : i + 1}
+                                      {done ? <Check className="w-3 h-3" /> : i + 1}
                                     </div>
                                     <span className={`text-[7px] mt-[2px] font-medium leading-tight text-center ${active ? 'text-orange-600' : done ? 'text-slate-500' : 'text-slate-300'}`}>
                                       {stage.short}
@@ -5611,8 +5611,8 @@ const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({ onClose, onCr
                   </button>
                 )}
 
-                {screenshotError && <p className="text-[11px] text-red-600 font-medium">⚠ {screenshotError}</p>}
-                {screenshotOk    && <p className="text-[11px] text-green-700 font-medium">✓ {screenshotOk}</p>}
+                {screenshotError && <p className="text-[11px] text-red-600 font-medium">{screenshotError}</p>}
+                {screenshotOk    && <p className="text-[11px] text-green-700 font-medium">{screenshotOk}</p>}
               </div>
             )}
           </div>

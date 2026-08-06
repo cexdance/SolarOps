@@ -149,6 +149,18 @@ export interface ContractorInvite {
   contractorId?: string;
 }
 
+export interface ContractorLineItem {
+  id: string;
+  type: 'labor' | 'part';
+  description: string;
+  quantity: number;        // hours for labor, count for parts
+  /** Cost per hour/unit as entered in the field. Optional: the contractor may
+   *  not know the price, in which case the office fills it in on the quote. */
+  unitCost?: number;
+  createdAt: string;
+  createdBy: string;       // contractorId
+}
+
 export interface ContractorExpense {
   id: string;
   contractorId: string;
@@ -240,7 +252,8 @@ export interface ServiceRate {
 }
 
 // Read-only scope-of-work line for the contractor's SO review card. Costs are
-// intentionally omitted (money is hidden app-wide); this conveys scope only.
+// intentionally omitted here (this card conveys SCOPE only); see lib/money.ts
+// for the financial-visibility rule.
 export interface ScopeItem {
   description: string;
   quantity: number;
@@ -342,6 +355,13 @@ export interface ContractorJob {
   // a contractor-side write there would blind-overwrite the office's edits.
   // Unioned by id in mergeContractorJobs so neither side can drop the other's.
   expenses?: ContractorExpense[];
+
+  // Extra billable work the contractor logged in the field beyond the WO scope
+  // (e.g. troubleshooting inverter comms during an optimizer change). Contractor
+  // describes only, NO price: the office is notified and prices it into the quote.
+  // Synced on the JOB (unioned in mergeContractorJobs) for the same reason as
+  // expenses, so an office save cannot drop a field-logged addition.
+  additionalItems?: ContractorLineItem[];
 
   // Invoice tracking
   invoiceId?: string;
