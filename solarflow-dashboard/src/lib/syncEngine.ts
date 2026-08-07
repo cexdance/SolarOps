@@ -44,6 +44,19 @@ async function getActiveSession() {
 
 // ── Key constants ─────────────────────────────────────────────────────────────
 
+/**
+ * `customer:{id}` keys for a tombstone list, chunked so one `.in()` filter never
+ * overruns the request URL (~900 tombstones would be an ~18 KB query string).
+ * Pure and exported so the reap in pushToSupabase is testable without Supabase.
+ */
+export function customerRowKeyBatches(ids: string[], size = 100): string[][] {
+  const batches: string[][] = [];
+  for (let i = 0; i < ids.length; i += size) {
+    batches.push(ids.slice(i, i + size).map(id => `${PREFIX.customer}${id}`));
+  }
+  return batches;
+}
+
 export const PREFIX = {
   customer: 'customer:',
   job:      'job:',
@@ -915,8 +928,28 @@ export async function pushToSupabase(state: AppState): Promise<void> {
     const metaRows: Array<{ key: string; value: unknown; updated_at: string }> = [];
 
     const tombstoneKey = 'deleted_customer_ids';
-    if (isDirty(tombstoneKey, deletedIds)) {
+    const tombstonesDirty = isDirty(tombstoneKey, deletedIds);
+    if (tombstonesDirty) {
       metaRows.push({ key: tombstoneKey, value: deletedIds, updated_at: now });
+    }
+
+    // Reap the `customer:{id}` rows of tombstoned customers. The push filters
+    // deleted customers out of dirtyCustomerRows above, so nothing ever removed
+    // their row: it sat in app_data forever and every client kept pulling dead
+    // records it would only discard again (99 orphans / 61 KB when this landed).
+    //
+    // Gated on the tombstone list being dirty, so a steady-state push costs zero
+    // extra queries. Runs BEFORE the metaRows upsert on purpose: a failed reap
+    // throws, tombstoneKey never reaches markClean, and the next push retries.
+    // Reaping after markClean would orphan the rows permanently.
+    if (tombstonesDirty && deletedIds.length > 0) {
+      for (const keys of customerRowKeyBatches(deletedIds)) {
+        const { error } = await supabase.from('app_data').delete().in('key', keys);
+        if (error) {
+          console.warn('[SyncEngine] tombstone reap failed:', error.message);
+          throw error;
+        }
+      }
     }
     // Job tombstones, so a delete on one device propagates to every device/user
     // instead of staying local (the cause of divergent job totals across browsers).
