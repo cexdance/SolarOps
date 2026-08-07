@@ -72,9 +72,46 @@ function readLog(): ChangeEntry[] {
   } catch { return []; }
 }
 
+/**
+ * MAX_ENTRIES caps the log by COUNT, which says nothing about bytes. Measured
+ * against the live change_log table, the average entry is ~2 KB and `job.update`
+ * averages 9.7 KB (one hit 1.43 MB), so 2000 entries is ~3.9 MB of a ~5 MB
+ * localStorage origin cap. That is what actually filled Cesar's device while he
+ * edited a work order, not the write that happened to throw.
+ *
+ * The full payload still goes to Supabase (see pushEntry) which is the real audit
+ * store. Locally we keep a slim copy: enough to see what happened and when.
+ */
+const MAX_LOCAL_PAYLOAD_BYTES = 1024;
+const MAX_LOCAL_LOG_BYTES     = 512 * 1024;
+
+export function slimPayload(payload: unknown): unknown {
+  try {
+    const json = JSON.stringify(payload);
+    if (json == null || json.length <= MAX_LOCAL_PAYLOAD_BYTES) return payload;
+    return { _truncated: true, bytes: json.length, preview: json.slice(0, 200) };
+  } catch {
+    return { _truncated: true, bytes: -1 };
+  }
+}
+
+/**
+ * Trim to MAX_ENTRIES, then drop oldest until the serialized log fits
+ * MAX_LOCAL_LOG_BYTES. The byte pass is the backstop that matters: it also
+ * reclaims devices already carrying multi-MB logs written by earlier builds,
+ * on the first write after this ships.
+ */
+export function trimLog(entries: ChangeEntry[]): ChangeEntry[] {
+  let kept = entries.slice(-MAX_ENTRIES);
+  while (kept.length > 1 && JSON.stringify(kept).length > MAX_LOCAL_LOG_BYTES) {
+    kept = kept.slice(Math.ceil(kept.length / 2)); // halve, not one-by-one
+  }
+  return kept;
+}
+
 function writeLog(entries: ChangeEntry[]): void {
   try {
-    localStorage.setItem(LOG_KEY, JSON.stringify(entries.slice(-MAX_ENTRIES)));
+    localStorage.setItem(LOG_KEY, JSON.stringify(trimLog(entries)));
   } catch {} // storage quota: fail silently, log is a bonus, not critical path
 }
 
@@ -106,8 +143,12 @@ export function logChange(
     syncedAt:   null,
   };
 
+  // Local copy is slimmed; the FULL payload goes to Supabase below. Caveat: if
+  // that push fails, flushPending retries from this local copy and so re-sends
+  // the truncated payload. Losing detail on a retried entry is an acceptable
+  // trade for not filling the device, and the entry itself is never lost.
   const log = readLog();
-  log.push(entry);
+  log.push({ ...entry, payload: slimPayload(entry.payload) });
   writeLog(log);
 
   // Async Supabase push, does NOT block the UI
