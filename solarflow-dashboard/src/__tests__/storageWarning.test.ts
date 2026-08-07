@@ -14,7 +14,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { saveContractorJobs } from '../lib/contractorStore';
-import { measureLocalStorage } from '../components/StorageWarningBanner';
+import { measureLocalStorage, topLocalStorageKeys } from '../components/StorageWarningBanner';
 import type { ContractorJob } from '../types/contractor';
 
 vi.mock('../lib/db', () => ({
@@ -102,6 +102,21 @@ describe('measureLocalStorage', () => {
     expect(measureLocalStorage()).toBe(0);
     localStorage.setItem('ab', 'cdef');
     expect(measureLocalStorage()).toBe(6);
+  });
+
+  it('ranks the biggest keys so the culprit is named, not just the total', () => {
+    localStorage.setItem('small', 'x'.repeat(100));
+    localStorage.setItem('huge', 'x'.repeat(300 * 1024));
+    localStorage.setItem('medium', 'x'.repeat(50 * 1024));
+
+    const top = topLocalStorageKeys(2);
+    expect(top.map(t => t.key)).toEqual(['huge', 'medium']);
+    expect(top[0].kb).toBeGreaterThan(top[1].kb);
+  });
+
+  it('exposes key names only, never stored values', () => {
+    localStorage.setItem('secret', 'super-sensitive-payload');
+    expect(JSON.stringify(topLocalStorageKeys())).not.toContain('super-sensitive-payload');
   });
 
   it('reports -1 rather than throwing when storage is unreadable', () => {

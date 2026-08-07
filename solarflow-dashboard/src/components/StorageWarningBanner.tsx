@@ -16,6 +16,24 @@ export function measureLocalStorage(): number {
   } catch { return -1; }
 }
 
+/**
+ * The biggest localStorage keys, largest first. A total alone says the cap was
+ * hit but not by what: the first report read `quota-exceeded · contractor_jobs ·
+ * local 5.0 MB`, yet that blob measures ~300 KB server-side, so the write that
+ * throws is not the write that filled the cap. Names only, never values.
+ */
+export function topLocalStorageKeys(n = 5): Array<{ key: string; kb: number }> {
+  try {
+    const sizes: Array<{ key: string; kb: number }> = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (!k) continue;
+      sizes.push({ key: k, kb: Math.round((localStorage.getItem(k)?.length ?? 0) / 1024) });
+    }
+    return sizes.sort((a, b) => b.kb - a.kb).slice(0, n);
+  } catch { return []; }
+}
+
 /** Origin-wide usage/quota, which is what IndexedDB actually draws on. */
 async function measureOrigin(): Promise<{ usage: number; quota: number } | null> {
   try {
@@ -74,6 +92,7 @@ export const StorageWarningBanner: React.FC<Props> = ({ getSnapshot }) => {
             // A ~5 MB localStorage reading means the cap; a usage close to quota with
             // small localStorage means the origin is full (photo blobs), not the cap.
             localStorageBytes: measureLocalStorage(),
+            topKeys:           topLocalStorageKeys(8),
             origin:            await measureOrigin(),
             ua:                typeof navigator !== 'undefined' ? navigator.userAgent : '',
           });
@@ -124,11 +143,16 @@ export const StorageWarningBanner: React.FC<Props> = ({ getSnapshot }) => {
                 another device.
               </p>
               {diag && (
-                <p className="text-[11px] text-slate-400 mt-2 font-mono break-all">
-                  {diag.reason ?? 'unspecified'}
-                  {diag.source ? ` · ${diag.source}` : ''}
-                  {` · local ${(measureLocalStorage() / 1048576).toFixed(1)} MB`}
-                </p>
+                <div className="text-[11px] text-slate-400 mt-2 font-mono break-all">
+                  <p>
+                    {diag.reason ?? 'unspecified'}
+                    {diag.source ? ` · ${diag.source}` : ''}
+                    {` · local ${(measureLocalStorage() / 1048576).toFixed(1)} MB`}
+                  </p>
+                  {topLocalStorageKeys(3).map(k => (
+                    <p key={k.key}>{k.key} · {k.kb >= 1024 ? `${(k.kb / 1024).toFixed(1)} MB` : `${k.kb} KB`}</p>
+                  ))}
+                </div>
               )}
             </div>
           </div>
