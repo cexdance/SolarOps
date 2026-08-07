@@ -45,14 +45,14 @@ async function getActiveSession() {
 // ── Key constants ─────────────────────────────────────────────────────────────
 
 /**
- * `customer:{id}` keys for a tombstone list, chunked so one `.in()` filter never
+ * Prefixed row keys for a tombstone list, chunked so one `.in()` filter never
  * overruns the request URL (~900 tombstones would be an ~18 KB query string).
- * Pure and exported so the reap in pushToSupabase is testable without Supabase.
+ * Pure and exported so the reaps in pushToSupabase are testable without Supabase.
  */
-export function customerRowKeyBatches(ids: string[], size = 100): string[][] {
+export function rowKeyBatches(prefix: string, ids: string[], size = 100): string[][] {
   const batches: string[][] = [];
   for (let i = 0; i < ids.length; i += size) {
-    batches.push(ids.slice(i, i + size).map(id => `${PREFIX.customer}${id}`));
+    batches.push(ids.slice(i, i + size).map(id => `${prefix}${id}`));
   }
   return batches;
 }
@@ -933,30 +933,37 @@ export async function pushToSupabase(state: AppState): Promise<void> {
       metaRows.push({ key: tombstoneKey, value: deletedIds, updated_at: now });
     }
 
-    // Reap the `customer:{id}` rows of tombstoned customers. The push filters
-    // deleted customers out of dirtyCustomerRows above, so nothing ever removed
-    // their row: it sat in app_data forever and every client kept pulling dead
-    // records it would only discard again (99 orphans / 61 KB when this landed).
-    //
-    // Gated on the tombstone list being dirty, so a steady-state push costs zero
-    // extra queries. Runs BEFORE the metaRows upsert on purpose: a failed reap
-    // throws, tombstoneKey never reaches markClean, and the next push retries.
-    // Reaping after markClean would orphan the rows permanently.
-    if (tombstonesDirty && deletedIds.length > 0) {
-      for (const keys of customerRowKeyBatches(deletedIds)) {
-        const { error } = await supabase.from('app_data').delete().in('key', keys);
-        if (error) {
-          console.warn('[SyncEngine] tombstone reap failed:', error.message);
-          throw error;
-        }
-      }
-    }
     // Job tombstones, so a delete on one device propagates to every device/user
     // instead of staying local (the cause of divergent job totals across browsers).
     const deletedJobIds = Array.from(getDeletedJobIds());
     const jobTombstoneKey = 'deleted_job_ids';
-    if (isDirty(jobTombstoneKey, deletedJobIds)) {
+    const jobTombstonesDirty = isDirty(jobTombstoneKey, deletedJobIds);
+    if (jobTombstonesDirty) {
       metaRows.push({ key: jobTombstoneKey, value: deletedJobIds, updated_at: now });
+    }
+
+    // Reap the per-record rows of tombstoned customers/jobs. Both pushes filter
+    // deleted records OUT of their dirty set above, so nothing ever removed the
+    // row: it sat in app_data forever and every client kept pulling dead records
+    // it would only discard again (99 customer + 11 job orphans, 77 KB, at the
+    // time this landed).
+    //
+    // Gated per entity on ITS tombstone list being dirty, so a steady-state push
+    // issues zero extra queries. Runs BEFORE the metaRows upsert on purpose: a
+    // failed reap throws, the tombstone key never reaches markClean, and the next
+    // push retries. Reaping after markClean would orphan the rows permanently,
+    // which is the exact bug being fixed.
+    const reaps: Array<[string, string[]]> = [];
+    if (tombstonesDirty && deletedIds.length > 0) reaps.push([PREFIX.customer, deletedIds]);
+    if (jobTombstonesDirty && deletedJobIds.length > 0) reaps.push([PREFIX.job, deletedJobIds]);
+    for (const [prefix, ids] of reaps) {
+      for (const keys of rowKeyBatches(prefix, ids)) {
+        const { error } = await supabase.from('app_data').delete().in('key', keys);
+        if (error) {
+          console.warn(`[SyncEngine] tombstone reap failed for ${prefix}`, error.message);
+          throw error;
+        }
+      }
     }
     const seConfigKey = 'solarEdgeConfig';
     if (isDirty(seConfigKey, state.solarEdgeConfig)) {

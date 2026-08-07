@@ -12,7 +12,7 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { mergeRemote, mergeWoPhotos, PREFIX, isKVSyncKey, KV_SYNC_KEYS, customerRowKeyBatches } from '../lib/syncEngine';
+import { mergeRemote, mergeWoPhotos, PREFIX, isKVSyncKey, KV_SYNC_KEYS, rowKeyBatches } from '../lib/syncEngine';
 import type { AppState, Customer, Job, WOPhoto } from '../types';
 
 function makePhoto(overrides: Partial<WOPhoto> = {}): WOPhoto {
@@ -90,18 +90,22 @@ describe('PREFIX constants', () => {
 // customerRowKeyBatches (tombstone reap)
 // ---------------------------------------------------------------------------
 
-describe('customerRowKeyBatches', () => {
+describe('rowKeyBatches', () => {
   it('prefixes every id so the reap targets customer: rows, not bare ids', () => {
-    expect(customerRowKeyBatches(['c1', 'c2'])).toEqual([['customer:c1', 'customer:c2']]);
+    expect(rowKeyBatches(PREFIX.customer, ['c1', 'c2'])).toEqual([['customer:c1', 'customer:c2']]);
+  });
+
+  it('reaps job rows under the job prefix', () => {
+    expect(rowKeyBatches(PREFIX.job, ['j1'])).toEqual([['job:j1']]);
   });
 
   it('emits nothing for an empty tombstone list', () => {
-    expect(customerRowKeyBatches([])).toEqual([]);
+    expect(rowKeyBatches(PREFIX.customer, [])).toEqual([]);
   });
 
   it('chunks at 100 so a ~900-tombstone reap never overruns the request URL', () => {
     const ids = Array.from({ length: 919 }, (_, i) => `c${i}`);
-    const batches = customerRowKeyBatches(ids);
+    const batches = rowKeyBatches(PREFIX.customer, ids);
     expect(batches).toHaveLength(10);
     expect(batches.every(b => b.length <= 100)).toBe(true);
     // no id dropped and none duplicated across the chunk boundary
@@ -112,7 +116,7 @@ describe('customerRowKeyBatches', () => {
 
   it('does not emit a trailing empty batch when the count divides evenly', () => {
     const ids = Array.from({ length: 200 }, (_, i) => `c${i}`);
-    expect(customerRowKeyBatches(ids)).toHaveLength(2);
+    expect(rowKeyBatches(PREFIX.customer, ids)).toHaveLength(2);
   });
 });
 
