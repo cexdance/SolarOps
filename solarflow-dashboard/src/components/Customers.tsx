@@ -650,7 +650,7 @@ export const Customers: React.FC<CustomersProps> = ({
   const activeFilterCount = Object.values(colFilters).filter(Boolean).length;
 
   // Pagination
-  const PAGE_SIZE = 50;
+  const PAGE_SIZE = 100;
   const totalPages = Math.max(1, Math.ceil(sortedCustomers.length / PAGE_SIZE));
   const pagedCustomers = sortedCustomers.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
@@ -1059,7 +1059,8 @@ export const Customers: React.FC<CustomersProps> = ({
 
         {/* Pagination */}
         {totalPages > 1 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-slate-100 bg-slate-50">
+          // ponytail: sticky so mobile users see the pager without scrolling past 50 rows
+          <div className="sticky bottom-0 z-10 flex items-center justify-between px-4 py-3 border-t border-slate-100 bg-slate-50">
             <span className="text-xs text-slate-500">
               {(page - 1) * PAGE_SIZE + 1}-{Math.min(page * PAGE_SIZE, sortedCustomers.length)} of {sortedCustomers.length}
             </span>
