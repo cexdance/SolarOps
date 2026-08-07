@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { slimPayload, trimLog } from '../lib/changeLog';
+import { slimPayload, trimLog, diffEntity, describeUrl } from '../lib/changeLog';
 
 const MAX_LOCAL_LOG_BYTES = 512 * 1024;
 
@@ -53,6 +53,55 @@ describe('slimPayload', () => {
     const circular: Record<string, unknown> = {};
     circular.self = circular;
     expect(slimPayload(circular)).toEqual({ _truncated: true, bytes: -1 });
+  });
+});
+
+describe('describeUrl', () => {
+  it('passes an uploaded https URL through, identity is what an audit needs', () => {
+    expect(describeUrl('https://cdn.example.com/a.jpg')).toBe('https://cdn.example.com/a.jpg');
+  });
+
+  it('collapses a data: URL instead of embedding the image', () => {
+    const dataUrl = 'data:image/jpeg;base64,' + 'A'.repeat(600_000);
+    const out = describeUrl(dataUrl);
+
+    expect(out).toBe(`[data:image/jpeg ${dataUrl.length} bytes]`);
+    expect(out.length).toBeLessThan(80);
+  });
+
+  it('handles a data: URL with no mime section without producing junk', () => {
+    expect(describeUrl('data:,hello')).toMatch(/^\[data:\w+ \d+ bytes\]$/);
+  });
+
+  it('does not throw on a non-string', () => {
+    expect(describeUrl(undefined)).toBe('undefined');
+  });
+});
+
+describe('diffEntity heavy fields', () => {
+  it('summarizes auditLog and fieldTimes by count, they were 3.97 MB of live diffs', () => {
+    const before = {
+      auditLog:   Array.from({ length: 40 }, (_, i) => ({ i, note: 'x'.repeat(200) })),
+      fieldTimes: { a: 'x'.repeat(2000) },
+      status:     'assigned',
+    };
+    const after = {
+      auditLog:   Array.from({ length: 41 }, (_, i) => ({ i, note: 'x'.repeat(200) })),
+      fieldTimes: { a: 'y'.repeat(2000) },
+      status:     'completed',
+    };
+
+    const diff = diffEntity(before, after);
+
+    expect(diff.auditLog).toEqual({ before: '40', after: '41' });
+    expect(diff.status).toEqual({ before: 'assigned', after: 'completed' });
+    // The whole diff must stay small even though both heavy fields changed.
+    expect(JSON.stringify(diff).length).toBeLessThan(300);
+  });
+
+  it('still reports ordinary field changes in full', () => {
+    const diff = diffEntity({ notes: 'old' }, { notes: 'new' });
+    expect(diff.notes).toEqual({ before: 'old', after: 'new' });
   });
 });
 

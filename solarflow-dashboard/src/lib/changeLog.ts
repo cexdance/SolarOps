@@ -195,9 +195,29 @@ export function getRecentLog(limit = 100): ChangeEntry[] {
 // ── Field-level diff + per-entity history (WO audit) ────────────────────────
 
 // Heavy fields are summarized by count, not dumped, so the audit payload stays small.
+//
+// `auditLog` and `fieldTimes` were added after measuring live change_log rows:
+// they were 2.24 MB and 1.73 MB of the 4.65 MB that job.update diffs occupy, far
+// more than every other field combined. Both are append-only, so each edit grows
+// them and the diff then dumps the full before AND after copies. Logging a job's
+// own audit log inside an audit entry is pure duplication.
 const HEAVY_DIFF_FIELDS = new Set([
   'woPhotos', 'photos', 'lineItems', 'rmaEntries', 'activityHistory', 'parts',
+  'auditLog', 'fieldTimes',
 ]);
+
+/**
+ * Describe a URL for an audit payload without embedding it. A `data:` URL is the
+ * whole image inline: live `photo.delete` rows averaged 115 KB with one at 639 KB
+ * purely because 3 of 13 captured base64 instead of an uploaded https:// link.
+ * The identity of a blob matters for an audit trail; its bytes do not.
+ */
+export function describeUrl(url: unknown): string {
+  if (typeof url !== 'string') return String(url);
+  if (!url.startsWith('data:')) return url;
+  const mime = url.slice(5, url.indexOf(';') > 0 ? url.indexOf(';') : 5);
+  return `[data:${mime || 'unknown'} ${url.length} bytes]`;
+}
 
 /**
  * Shallow field-level diff between two entity snapshots → { field: {before, after} }.

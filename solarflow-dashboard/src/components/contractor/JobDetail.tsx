@@ -21,7 +21,7 @@ import {
 import { compressImageToDataUrl } from '../../lib/photoCompress';
 import { uploadPhotoToStorage } from '../../lib/photoStorage';
 import { appendPhoto, flushPendingMirrors, listPhotosForJob, dataUrlToBlob, deletePhotoForJobByUrl } from '../../lib/photoStore';
-import { logChange } from '../../lib/changeLog';
+import { logChange, describeUrl } from '../../lib/changeLog';
 import ServiceOrderCard from './ServiceOrderCard';
 
 interface JobDetailProps {
@@ -527,7 +527,7 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
     setPhotos(prev => ({ ...prev, [category]: (prev[category] ?? []).filter((_, i) => i !== idx) }));
     if (!url) return;
     // Audit the deletion (100% auditable: who removed which photo from which WO).
-    try { logChange('photo.delete', 'job', auditEntity, { category, url, contractorId }, contractorId); }
+    try { logChange('photo.delete', 'job', auditEntity, { category, url: describeUrl(url), contractorId }, contractorId); }
     catch { /* logging must never block the UI */ }
     // Purge the durable IDB row so the upload-retry sweep cannot resurrect it
     // (the root cause of "delete doesn't stick"). Best-effort, fully guarded so
