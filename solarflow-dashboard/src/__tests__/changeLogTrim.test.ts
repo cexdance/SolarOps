@@ -7,8 +7,8 @@
  * These pin the byte discipline. Without them the count cap looks sufficient.
  */
 
-import { describe, it, expect } from 'vitest';
-import { slimPayload, trimLog, diffEntity, describeUrl } from '../lib/changeLog';
+import { describe, it, expect, beforeEach } from 'vitest';
+import { slimPayload, trimLog, diffEntity, describeUrl, reclaimLocalStorage } from '../lib/changeLog';
 
 const MAX_LOCAL_LOG_BYTES = 512 * 1024;
 
@@ -53,6 +53,46 @@ describe('slimPayload', () => {
     const circular: Record<string, unknown> = {};
     circular.self = circular;
     expect(slimPayload(circular)).toEqual({ _truncated: true, bytes: -1 });
+  });
+});
+
+describe('reclaimLocalStorage (boot-time recovery)', () => {
+  const LOG_KEY = 'solarops_change_log';
+  beforeEach(() => localStorage.clear());
+
+  it('frees a device already carrying a multi-MB log', () => {
+    const fat = Array.from({ length: 1500 }, (_, i) => entry({ pad: 'x'.repeat(9_700) }, i));
+    localStorage.setItem(LOG_KEY, JSON.stringify(fat));
+    expect(localStorage.getItem(LOG_KEY)!.length).toBeGreaterThan(4 * 1024 * 1024);
+
+    const { before, after } = reclaimLocalStorage();
+
+    expect(before).toBeGreaterThan(4 * 1024 * 1024);
+    expect(after).toBeLessThanOrEqual(512 * 1024);
+    expect(localStorage.getItem(LOG_KEY)!.length).toBe(after);
+  });
+
+  it('leaves a healthy log untouched, no cost on a normal boot', () => {
+    const small = JSON.stringify([entry({ ok: true }, 0)]);
+    localStorage.setItem(LOG_KEY, small);
+
+    const { before, after } = reclaimLocalStorage();
+
+    expect(before).toBe(after);
+    expect(localStorage.getItem(LOG_KEY)).toBe(small);
+  });
+
+  it('drops an unparseable oversized log rather than leaving the device wedged', () => {
+    localStorage.setItem(LOG_KEY, 'x'.repeat(600 * 1024)); // corrupt, not JSON
+    const { after } = reclaimLocalStorage();
+
+    expect(after).toBe(0);
+    expect(localStorage.getItem(LOG_KEY)).toBeNull();
+  });
+
+  it('does not throw when there is no log at all', () => {
+    expect(() => reclaimLocalStorage()).not.toThrow();
+    expect(reclaimLocalStorage().before).toBe(0);
   });
 });
 

@@ -115,6 +115,41 @@ function writeLog(entries: ChangeEntry[]): void {
   } catch {} // storage quota: fail silently, log is a bonus, not critical path
 }
 
+/**
+ * Reclaim an oversized log at BOOT, before anything else touches storage.
+ *
+ * The byte cap in writeLog only fires on the next logChange, so a device already
+ * at the quota could throw on some other key first and never reach it: it stayed
+ * wedged, showing "out of storage" on every session. This runs unconditionally at
+ * startup and does not depend on any write path succeeding.
+ *
+ * Existing fat payloads are slimmed too, not just trimmed by age, because a device
+ * carrying entries from before the cap has fat rows throughout, not only old ones.
+ * If anything at all fails, the log is dropped entirely: it is a local cache, and
+ * Supabase holds the durable audit trail. Freeing the device wins over keeping it.
+ */
+export function reclaimLocalStorage(): { before: number; after: number } {
+  let before = -1;
+  try {
+    const raw = localStorage.getItem(LOG_KEY);
+    before = raw?.length ?? 0;
+    if (!raw || before <= MAX_LOCAL_LOG_BYTES) return { before, after: before };
+
+    const entries = JSON.parse(raw) as ChangeEntry[];
+    const slimmed = trimLog(entries.map(e => ({ ...e, payload: slimPayload(e.payload) })));
+    const json = JSON.stringify(slimmed);
+    localStorage.setItem(LOG_KEY, json);
+    console.info(`[changeLog] reclaimed ${before} -> ${json.length} bytes at boot`);
+    return { before, after: json.length };
+  } catch (e) {
+    try {
+      localStorage.removeItem(LOG_KEY);
+      console.warn('[changeLog] log unreadable/unwritable, dropped to free storage', e);
+      return { before, after: 0 };
+    } catch { return { before, after: -1 }; }
+  }
+}
+
 // ── Public API ─────────────────────────────────────────────────────────────
 
 /**

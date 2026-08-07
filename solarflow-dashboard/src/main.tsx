@@ -3,6 +3,13 @@ import { createRoot } from 'react-dom/client'
 import { ErrorBoundary } from './components/ErrorBoundary.tsx'
 import './index.css'
 import App from './App.tsx'
+import { reclaimLocalStorage } from './lib/changeLog.ts'
+
+// Run BEFORE React mounts and before any store writes. A device already at the
+// localStorage quota used to stay wedged: the log's byte cap only applied on the
+// next logChange, so a session that threw on some other key first never reclaimed
+// anything and showed "out of storage" every time. Fully guarded internally.
+reclaimLocalStorage()
 
 // Stale-deploy recovery: after a new deploy, an open tab still references the
 // previous build's hashed chunk files; navigating to a lazy view then fails
