@@ -126,6 +126,14 @@ const TIER_STYLE: Record<0 | 1 | 2 | 3, { border: string; pill: string }> = {
   3: { border: 'border-l-4 border-l-red-600',    pill: 'bg-red-100 text-red-700 font-bold' },
 };
 
+/** Billing works service orders, not leads. An order gets its woNumber when it
+ *  is created, so that number IS the "a service order exists" flag: as of
+ *  2026-08-08 all 116 orders across the six worked columns have one, and the
+ *  only 35 records without one are S1 pipeline leads (every one of them
+ *  carrying a pipelineStage, which by design nothing in billing reads). Those
+ *  belong on the sales board until someone actually raises an order. */
+export const isServiceOrder = (job: Job): boolean => !!job.woNumber;
+
 /** A lead converted straight to a service order has no customer row yet, only
  *  job.clientName. Falling back keeps those cards from rendering nameless. */
 export const displayName = (job: Job, customer?: Customer): string =>
@@ -237,8 +245,12 @@ export const Billing: React.FC<BillingProps> = ({
     localStorage.setItem('solarops_billing_view', mode);
   };
 
+  // Billing only ever deals in service orders. Everything upstream of that,
+  // the S1 sales funnel, belongs on the pipeline board.
+  const serviceOrders = jobs.filter(isServiceOrder);
+
   // Filter jobs by status
-  const filteredJobs = jobs
+  const filteredJobs = serviceOrders
     .filter((job) => {
       // Show all jobs in 'all' filter, otherwise filter by specific status
       if (filter === 'all') return true;
@@ -250,9 +262,9 @@ export const Billing: React.FC<BillingProps> = ({
     .filter((job) => {
       // An empty search must not filter anything. It used to: with no query the
       // predicate still ran, and a job whose customerId resolves to nothing
-      // returned undefined and was DROPPED. 33 of the 38 orders in the first
-      // column are lead conversions with customerId:'' and the name in
-      // clientName, so the queue Daniel works from rendered 1 of 38 cards.
+      // returned undefined and was DROPPED off the board silently. Real service
+      // orders do hit that path (2 live ones carry a woNumber but no linked
+      // customer), so the guard stays even now that leads are excluded above.
       const q = searchQuery.trim().toLowerCase();
       if (!q) return true;
       const customer = customers.find((c) => c.id === job.customerId);
@@ -270,9 +282,9 @@ export const Billing: React.FC<BillingProps> = ({
       return dateB - dateA;
     });
 
-  const unbilledJobs = jobs.filter((j) => j.status === 'completed');
-  const invoicedJobs = jobs.filter((j) => j.status === 'invoiced');
-  const paidJobs = jobs.filter((j) => j.status === 'paid');
+  const unbilledJobs = serviceOrders.filter((j) => j.status === 'completed');
+  const invoicedJobs = serviceOrders.filter((j) => j.status === 'invoiced');
+  const paidJobs = serviceOrders.filter((j) => j.status === 'paid');
 
   const getCustomer = (customerId: string) => customers.find((c) => c.id === customerId);
 
@@ -434,7 +446,7 @@ export const Billing: React.FC<BillingProps> = ({
           onChange={(e) => setFilter(e.target.value as 'all' | 'unbilled' | 'invoiced' | 'paid')}
           className="px-4 py-2.5 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 shrink-0"
         >
-          <option value="all">All ({jobs.length})</option>
+          <option value="all">All ({serviceOrders.length})</option>
           <option value="unbilled">Unbilled ({unbilledJobs.length})</option>
           <option value="invoiced">Invoiced ({invoicedJobs.length})</option>
           <option value="paid">Paid ({paidJobs.length})</option>

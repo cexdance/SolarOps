@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getBillingColumn, ageTier, cardAge, sortByAge, displayName, orderKind } from '../components/Billing';
+import { getBillingColumn, ageTier, cardAge, sortByAge, displayName, orderKind, isServiceOrder } from '../components/Billing';
 import type { Job, Customer } from '../types';
 
 const job = (p: Partial<Job>): Job => ({
@@ -105,6 +105,24 @@ describe('cardAge', () => {
 
   it('floors a future timestamp at 0 instead of going negative', () => {
     expect(cardAge(job({ quoteSentAt: daysAgo(-5) }), 'quote_sent', now)).toEqual({ days: 0, exact: true });
+  });
+});
+
+describe('isServiceOrder', () => {
+  it('accepts a job that has a service order number', () => {
+    expect(isServiceOrder(job({ woNumber: 'WO-2607-00042' }))).toBe(true);
+  });
+
+  it('rejects an S1 pipeline lead, which has a stage but no order yet', () => {
+    // 33 live records look like this. They were never meant to reach billing:
+    // pipelineStage is the sales funnel and nothing in billing reads it.
+    expect(isServiceOrder(job({ woNumber: undefined, pipelineStage: 'needs_first_quote' }))).toBe(false);
+  });
+
+  it('keeps a real order that simply has no linked customer', () => {
+    // The discriminator is the order number, NOT the customer link: 2 live
+    // orders are unlinked but genuine, and must stay on the board.
+    expect(isServiceOrder(job({ woNumber: 'WO-2605-20400', customerId: '' }))).toBe(true);
   });
 });
 
