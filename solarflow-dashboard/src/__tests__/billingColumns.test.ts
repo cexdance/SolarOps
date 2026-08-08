@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { getBillingColumn, ageTier, cardAge, sortByAge } from '../components/Billing';
-import type { Job } from '../types';
+import { getBillingColumn, ageTier, cardAge, sortByAge, displayName, orderKind } from '../components/Billing';
+import type { Job, Customer } from '../types';
 
 const job = (p: Partial<Job>): Job => ({
   id: 'j1',
@@ -105,6 +105,35 @@ describe('cardAge', () => {
 
   it('floors a future timestamp at 0 instead of going negative', () => {
     expect(cardAge(job({ quoteSentAt: daysAgo(-5) }), 'quote_sent', now)).toEqual({ days: 0, exact: true });
+  });
+});
+
+describe('displayName', () => {
+  it('falls back to clientName when the order has no customer row', () => {
+    // 33 of the 38 orders in the intake column look exactly like this:
+    // customerId '', name carried on the job itself.
+    expect(displayName(job({ customerId: '', clientName: 'Daniel Torres' }))).toBe('Daniel Torres');
+  });
+
+  it('prefers the linked customer record when there is one', () => {
+    const customer = { id: 'c1', name: 'Linked Co' } as Customer;
+    expect(displayName(job({ clientName: 'Stale Name' }), customer)).toBe('Linked Co');
+  });
+
+  it('never renders an empty card title', () => {
+    expect(displayName(job({ customerId: '', clientName: undefined }))).toBe('Unnamed order');
+  });
+});
+
+describe('orderKind', () => {
+  it('separates the three intake flows', () => {
+    expect(orderKind(job({}))).toBe('quote');
+    expect(orderKind(job({ isServiceAccountExpense: true }))).toBe('expense');
+    expect(orderKind(job({ isPowercare: true }))).toBe('powercare');
+  });
+
+  it('calls a PowerCare expense PowerCare, since the plan covers the cost', () => {
+    expect(orderKind(job({ isPowercare: true, isServiceAccountExpense: true }))).toBe('powercare');
   });
 });
 

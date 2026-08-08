@@ -126,6 +126,25 @@ const TIER_STYLE: Record<0 | 1 | 2 | 3, { border: string; pill: string }> = {
   3: { border: 'border-l-4 border-l-red-600',    pill: 'bg-red-100 text-red-700 font-bold' },
 };
 
+/** A lead converted straight to a service order has no customer row yet, only
+ *  job.clientName. Falling back keeps those cards from rendering nameless. */
+export const displayName = (job: Job, customer?: Customer): string =>
+  customer?.name || job.clientName || 'Unnamed order';
+
+/** What the first column is actually asking Daniel to do. The three intake
+ *  flows land in the same place but need different work, so the card says
+ *  which one it is instead of making him open it to find out. */
+export type OrderKind = 'powercare' | 'expense' | 'quote';
+
+export const orderKind = (job: Job): OrderKind =>
+  job.isPowercare ? 'powercare' : job.isServiceAccountExpense ? 'expense' : 'quote';
+
+export const ORDER_KIND_META: Record<OrderKind, { label: string; badge: string; action: string }> = {
+  powercare: { label: 'PowerCare', badge: 'bg-orange-100 text-orange-700', action: 'Review PowerCare' },
+  expense:   { label: 'Service Account', badge: 'bg-cyan-100 text-cyan-700', action: 'Log Expense' },
+  quote:     { label: 'Quote', badge: 'bg-blue-100 text-blue-700', action: 'Create Quote' },
+};
+
 interface BillingProps {
   jobs: Job[];
   customers: Customer[];
@@ -229,10 +248,19 @@ export const Billing: React.FC<BillingProps> = ({
       return true;
     })
     .filter((job) => {
+      // An empty search must not filter anything. It used to: with no query the
+      // predicate still ran, and a job whose customerId resolves to nothing
+      // returned undefined and was DROPPED. 33 of the 38 orders in the first
+      // column are lead conversions with customerId:'' and the name in
+      // clientName, so the queue Daniel works from rendered 1 of 38 cards.
+      const q = searchQuery.trim().toLowerCase();
+      if (!q) return true;
       const customer = customers.find((c) => c.id === job.customerId);
       return (
-        customer?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        customer?.address.toLowerCase().includes(searchQuery.toLowerCase())
+        (job.clientName ?? '').toLowerCase().includes(q) ||
+        (job.siteAddress ?? '').toLowerCase().includes(q) ||
+        customer?.name.toLowerCase().includes(q) ||
+        customer?.address.toLowerCase().includes(q)
       );
     })
     .sort((a, b) => {
@@ -442,7 +470,7 @@ export const Billing: React.FC<BillingProps> = ({
       {viewMode === 'kanban' && (
         <div className="flex gap-4 overflow-x-auto pb-4">
           {([
-            { key: 'new'           as BillingCol, label: 'New',                sub: 'Service calls to quote',       headerCls: 'bg-blue-50 border-blue-200 text-blue-700' },
+            { key: 'new'           as BillingCol, label: 'CREATE QUOTE',       sub: 'Every new service order: quote, service account, PowerCare', headerCls: 'bg-blue-50 border-blue-200 text-blue-700' },
             { key: 'quote_sent'    as BillingCol, label: 'Quote Sent',         sub: 'Awaiting client approval',     headerCls: 'bg-violet-50 border-violet-200 text-violet-700' },
             { key: 'pending'       as BillingCol, label: 'Pending Completion', sub: 'Approved, waiting on contractor', headerCls: 'bg-slate-100 border-slate-200 text-slate-700' },
             { key: 'to_invoice'    as BillingCol, label: 'Ready to Invoice',   sub: 'Create and send in Xero',      headerCls: 'bg-red-50 border-red-200 text-red-700' },
@@ -533,7 +561,13 @@ export const Billing: React.FC<BillingProps> = ({
                           {customer?.clientId && (
                             <span className="text-[10px] text-slate-400 font-medium leading-tight">{customer.clientId}</span>
                           )}
-                          {job.isPowercare && (
+                          {/* In the intake column say which of the three flows
+                              this is; elsewhere only PowerCare needs calling out. */}
+                          {col.key === 'new' ? (
+                            <span className={`text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full ${ORDER_KIND_META[orderKind(job)].badge}`}>
+                              {ORDER_KIND_META[orderKind(job)].label}
+                            </span>
+                          ) : job.isPowercare && (
                             <span className="text-[9px] font-bold uppercase tracking-wide bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded-full">PowerCare</span>
                           )}
                           {tier > 0 && age && (
@@ -550,7 +584,10 @@ export const Billing: React.FC<BillingProps> = ({
                             <span className="text-[10px] text-slate-400 ml-auto shrink-0">{serviceOrderNo(job.woNumber)}</span>
                           )}
                         </div>
-                        <p className="font-semibold text-slate-900 text-sm leading-tight truncate">{customer?.name}</p>
+                        <p className="font-semibold text-slate-900 text-sm leading-tight truncate">{displayName(job, customer)}</p>
+                        {!customer && (
+                          <p className="text-[10px] text-amber-600 leading-tight">Not linked to a client record</p>
+                        )}
                         <div className="mt-1">{cardLinks(job, customer)}</div>
                         <div className="flex items-center gap-1.5 flex-wrap mt-1 mb-2">
                           {job.serviceType && (
@@ -582,7 +619,7 @@ export const Billing: React.FC<BillingProps> = ({
                               onClick={() => onJobClick?.(job.id)}
                               className="flex-1 flex items-center justify-center gap-1 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700 cursor-pointer"
                             >
-                              <FileText className="w-3 h-3" /> Create Quote
+                              <FileText className="w-3 h-3" /> {ORDER_KIND_META[orderKind(job)].action}
                             </button>
                           )}
                           {col.key === 'quote_sent' && (
@@ -701,7 +738,7 @@ export const Billing: React.FC<BillingProps> = ({
                       </p>
                     )}
                     <div className="flex items-center gap-2 mb-1">
-                      <h3 className="font-semibold text-slate-900">{customer?.name}</h3>
+                      <h3 className="font-semibold text-slate-900">{displayName(job, customer)}</h3>
                       {billingStatus === 'unbilled' && daysOld > 2 && (
                         <span className="text-xs px-2 py-0.5 bg-red-100 text-red-700 rounded-full">
                           {daysOld} days old
