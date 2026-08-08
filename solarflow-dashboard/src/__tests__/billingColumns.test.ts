@@ -37,8 +37,28 @@ describe('getBillingColumn', () => {
     expect(getBillingColumn(job({ status: 'in_progress', woStatus: 'scheduled' }))).toBe('pending');
   });
 
-  it('returns a completed order to Ready to Invoice regardless of woStatus', () => {
-    expect(getBillingColumn(job({ status: 'completed', woStatus: 'quote_sent' }))).toBe('to_invoice');
+  it('returns a completed order to Ready to Invoice from any WORKED woStatus', () => {
+    // The auto-return path: contractor finishes, status flips to completed,
+    // and the card comes back to billing on its own.
+    expect(getBillingColumn(job({ status: 'completed', woStatus: 'scheduled' }))).toBe('to_invoice');
+    expect(getBillingColumn(job({ status: 'completed', woStatus: 'in_progress' }))).toBe('to_invoice');
+    expect(getBillingColumn(job({ status: 'completed', woStatus: 'completed' }))).toBe('to_invoice');
+  });
+
+  it('will not let a stale status put unworked orders in the money columns', () => {
+    // WO-2605-48600 / -55497 / -79732 live: status says invoiced, woStatus says
+    // draft, and no completedAt / invoicedAt / clientPaidAt / xeroInvoiceId
+    // backs the claim. woStatus wins, so they sit in the quote queue where the
+    // work actually is, not in Invoiced pretending to be revenue.
+    expect(getBillingColumn(job({ status: 'invoiced', woStatus: 'draft' }))).toBe('new');
+    expect(getBillingColumn(job({ status: 'paid', woStatus: 'draft' }))).toBe('new');
+    expect(getBillingColumn(job({ status: 'invoiced', woStatus: 'quote_sent' }))).toBe('quote_sent');
+    // costsCoveredAt must not smuggle one into the closed-out column either.
+    expect(getBillingColumn(job({ status: 'paid', woStatus: 'draft', costsCoveredAt: '2026-07-02T00:00:00.000Z' }))).toBe('new');
+  });
+
+  it('still trusts status once woStatus reports the work done', () => {
+    expect(getBillingColumn(job({ status: 'invoiced', woStatus: 'completed' }))).toBe('invoiced');
   });
 
   it('keeps the existing invoiced / paid / closed-out stages', () => {

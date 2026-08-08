@@ -32,13 +32,23 @@ import { printServiceReport } from '../lib/printServiceReport';
 export type BillingCol = 'new' | 'quote_sent' | 'pending' | 'to_invoice' | 'invoiced' | 'paid' | 'costs_covered';
 
 export const getBillingColumn = (job: Job): BillingCol => {
+  // woStatus is the field the Service Order panel actually drives through the
+  // 8-stage pipeline, so it is checked FIRST for the two pre-work stages. When
+  // woStatus still says draft or quote_sent, the work provably has not been
+  // done, and a coarse `status` claiming invoiced or paid is stale data rather
+  // than a real stage. Three live orders are exactly that shape
+  // (WO-2605-48600 / -55497 / -79732: status invoiced, woStatus draft, and no
+  // completedAt, invoicedAt, clientPaidAt or xeroInvoiceId to support it, two
+  // of them last written on 2026-06-12, the stale-push incident). Money
+  // columns must not accept an order on the word of `status` alone.
+  if (job.woStatus === 'draft') return 'new';
+  if (job.woStatus === 'quote_sent') return 'quote_sent';
   if (job.status === 'paid') return job.costsCoveredAt ? 'costs_covered' : 'paid';
   if (job.status === 'invoiced') return 'invoiced';
   if (job.status === 'completed') return 'to_invoice';
-  if (job.woStatus === 'quote_sent') return 'quote_sent';
   // No woStatus at all means the service call was created but never worked,
   // same place as an explicit draft.
-  if (!job.woStatus || job.woStatus === 'draft') return 'new';
+  if (!job.woStatus) return 'new';
   return 'pending';
 };
 
