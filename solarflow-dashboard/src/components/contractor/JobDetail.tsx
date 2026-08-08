@@ -382,9 +382,6 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
   // Active tab
   const [activeTab, setActiveTab] = useState<ActiveTab>('photos');
 
-  // Contractor invoice number
-  const [contractorInvoiceNumber, setContractorInvoiceNumber] = useState(job.contractorInvoiceNumber ?? '');
-
   // XP gamification
   const [xpResult, setXpResult]       = useState<AddXpResult | null>(null);
   const [showXpBreakdown, setShowXpBreakdown] = useState(false);
@@ -1947,39 +1944,53 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
         {/* ── COMPLETED ───────────────────────────────────────────────────── */}
         {phase === 'completed' && (
           <div className="space-y-4">
-            {/* Hero success */}
-            <div className="bg-emerald-600 rounded-2xl p-6 text-center text-white">
-              <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-3">
-                <CheckCircle className="w-9 h-9 text-white" />
-              </div>
-              <h2 className="text-xl font-bold">Call Complete</h2>
-
-              {/* Who and what, so the tech can confirm the right call was closed
-                  out without navigating back into the work order. */}
-              <p className="text-white font-bold text-lg mt-2 leading-tight">{job.customerName}</p>
-              <p className="text-emerald-100 text-sm">{job.serviceType}</p>
-
-              <p className="text-emerald-200 text-xs mt-1">
-                {job.completedAt && new Date(job.completedAt).toLocaleString('en-US', {
-                  month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
-                })}
-              </p>
-
-              {job.startedAt && job.completedAt && (() => {
-                const mins = Math.round((new Date(job.completedAt).getTime() - new Date(job.startedAt).getTime()) / 60000);
-                // Guard a clock skew / bad stamp producing a negative or absurd span.
-                if (!Number.isFinite(mins) || mins < 0) return null;
-                const hrs = Math.floor(mins / 60);
-                return (
-                  <div className="mt-3 pt-3 border-t border-white/20">
-                    <p className="text-emerald-200 text-[10px] font-semibold uppercase tracking-wide">Time on site</p>
-                    <p className="text-white font-bold text-2xl">
-                      {hrs > 0 ? `${hrs}h ` : ''}{mins % 60}m
-                    </p>
+            {/* Hero success, colored by how the call was left */}
+            {(() => {
+              const statusStyle: Record<ServiceStatus, { bg: string; text: string; sub: string; ring: string }> = {
+                fully_operational:     { bg: '#0A837F', text: 'text-white',    sub: 'text-white/80', ring: 'border-white/20' },
+                partially_operational: { bg: '#FFBC11', text: 'text-[#3D2A00]', sub: 'text-[#3D2A00]/70', ring: 'border-black/15' },
+                pending_parts:         { bg: '#4C49A2', text: 'text-white',    sub: 'text-white/80', ring: 'border-white/20' },
+                could_not_complete:    { bg: '#FF3D00', text: 'text-white',    sub: 'text-white/80', ring: 'border-white/20' },
+              };
+              const status = job.serviceStatus ?? 'fully_operational';
+              const style = statusStyle[status];
+              const statusLabel = SERVICE_STATUS_OPTIONS.find(o => o.id === status)?.label ?? 'Fully Operational';
+              return (
+                <div className="rounded-2xl p-6 text-center" style={{ backgroundColor: style.bg }}>
+                  <div className={`w-16 h-16 ${status === 'partially_operational' ? 'bg-black/10' : 'bg-white/20'} rounded-full flex items-center justify-center mx-auto mb-3`}>
+                    <CheckCircle className={`w-9 h-9 ${style.text}`} />
                   </div>
-                );
-              })()}
-            </div>
+                  <h2 className={`text-xl font-bold ${style.text}`}>Call Complete</h2>
+
+                  {/* Client number and name, so the tech can confirm the right
+                      call was closed out without navigating back into the WO. */}
+                  {job.clientId && <p className={`${style.sub} text-xs mt-2`}>{job.clientId}</p>}
+                  <p className={`${style.text} font-bold text-lg mt-0.5 leading-tight`}>{job.customerName}</p>
+                  <p className={`${style.sub} text-sm`}>{job.serviceType} &middot; {statusLabel}</p>
+
+                  <p className={`${style.sub} text-xs mt-1`}>
+                    {job.completedAt && new Date(job.completedAt).toLocaleString('en-US', {
+                      month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                    })}
+                  </p>
+
+                  {job.startedAt && job.completedAt && (() => {
+                    const mins = Math.round((new Date(job.completedAt).getTime() - new Date(job.startedAt).getTime()) / 60000);
+                    // Guard a clock skew / bad stamp producing a negative or absurd span.
+                    if (!Number.isFinite(mins) || mins < 0) return null;
+                    const hrs = Math.floor(mins / 60);
+                    return (
+                      <div className={`mt-3 pt-3 border-t ${style.ring}`}>
+                        <p className={`${style.sub} text-[10px] font-semibold uppercase tracking-wide`}>Time on site</p>
+                        <p className={`${style.text} font-bold text-2xl`}>
+                          {hrs > 0 ? `${hrs}h ` : ''}{mins % 60}m
+                        </p>
+                      </div>
+                    );
+                  })()}
+                </div>
+              );
+            })()}
 
             {/* XP earned summary */}
             {(() => {
@@ -1990,7 +2001,7 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
               const jobEntry = data.jobHistory.find(h => h.jobId === job.id);
               if (!jobEntry) return null;
               return (
-                <div className="bg-gradient-to-br from-orange-500 to-amber-500 rounded-2xl p-4 text-white">
+                <div className="rounded-2xl p-4 text-white" style={{ backgroundColor: '#FF7200' }}>
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
                       <Sparkles className="w-4 h-4" />
@@ -2009,60 +2020,53 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
               );
             })()}
 
-            {/* Your payment */}
-            <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-3">
-              <h3 className="font-semibold text-slate-900 flex items-center gap-2">
-                <DollarSign className="w-4 h-4 text-emerald-500" />
-                Your Payment
-              </h3>
-              <div className="flex items-center justify-between px-4 py-4 bg-emerald-50 border border-emerald-200 rounded-xl">
-                <div>
-                  <p className="text-xs text-emerald-700 font-medium uppercase tracking-wide">Work order earnings</p>
-                  <p className="text-xs text-emerald-600 mt-0.5">
-                    {job.contractorPayUnit === 'flat' ? 'Flat rate' : `${formatMoney(job.contractorPayRate, { decimals: 0 })}/hr`}
-                  </p>
-                </div>
-                <p className="text-2xl font-bold text-emerald-700">{formatMoney(job.contractorTotalPay)}</p>
-              </div>
-              {job.partsReimbursementRequested && job.parts?.length > 0 && (
-                <div className="flex items-center gap-2 px-3 py-2.5 bg-blue-50 border border-blue-200 rounded-xl">
-                  <div className="w-2 h-2 rounded-full bg-blue-500 shrink-0" />
-                  <div className="flex-1">
-                    <p className="text-sm font-semibold text-blue-800">Parts reimbursement pending</p>
-                    <p className="text-xs text-blue-600">{formatMoney(job.partsAmount)}, under review by accounting</p>
+            {/* Photos and files counter */}
+            {(() => {
+              const photoCount = Object.values(photos).reduce((sum, arr) => sum + (arr?.length ?? 0), 0);
+              const fileCount = (job.expenses ?? []).reduce((sum, exp) => sum + (exp.attachments?.length ?? 0), 0);
+              return (
+                <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-3">
+                  <h3 className="font-semibold text-slate-900 flex items-center gap-2">
+                    <Camera className="w-4 h-4 text-orange-500" />
+                    Photos and Files
+                  </h3>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-slate-50 rounded-xl p-3 text-center">
+                      <p className="text-2xl font-bold text-slate-900">{photoCount}</p>
+                      <p className="text-xs text-slate-500">Photos</p>
+                    </div>
+                    <div className="bg-slate-50 rounded-xl p-3 text-center">
+                      <p className="text-2xl font-bold text-slate-900">{fileCount}</p>
+                      <p className="text-xs text-slate-500">Files</p>
+                    </div>
                   </div>
                 </div>
-              )}
-              {/* Contractor invoice number */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-slate-600">Your Invoice # (submitted for payment)</label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={contractorInvoiceNumber}
-                    onChange={e => setContractorInvoiceNumber(e.target.value)}
-                    placeholder="e.g. INV-2026-001"
-                    className="flex-1 px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-400"
-                  />
-                  <button
-                    onClick={() => {
-                      const updated = { ...job, contractorInvoiceNumber: contractorInvoiceNumber.trim() };
-                      onUpdateJob(updated);
-                    }}
-                    disabled={contractorInvoiceNumber.trim() === (job.contractorInvoiceNumber ?? '')}
-                    className="px-3 py-2 bg-emerald-500 hover:bg-emerald-600 disabled:bg-slate-200 disabled:text-slate-400 text-white text-xs font-semibold rounded-lg transition-colors"
-                  >
-                    Save
-                  </button>
+              );
+            })()}
+
+            {/* Expenses reported */}
+            {job.expenses && job.expenses.length > 0 && (
+              <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-3">
+                <h3 className="font-semibold text-slate-900 flex items-center gap-2">
+                  <DollarSign className="w-4 h-4 text-orange-500" />
+                  Expenses Reported
+                </h3>
+                <div className="divide-y divide-slate-100">
+                  {job.expenses.map(exp => (
+                    <div key={exp.id} className="flex items-center justify-between py-2 text-sm">
+                      <span className="text-slate-500">{exp.description || exp.category}</span>
+                      <span className="text-slate-900 font-medium">{formatMoney(exp.amount)}</span>
+                    </div>
+                  ))}
                 </div>
-                {job.contractorInvoiceNumber && (
-                  <p className="text-xs text-emerald-600 flex items-center gap-1">
-                    <CheckCircle className="w-3 h-3" /> Saved: {job.contractorInvoiceNumber}
-                  </p>
-                )}
+                <div className="flex items-center justify-between pt-2 border-t border-slate-200">
+                  <span className="text-sm font-semibold text-slate-900">Total</span>
+                  <span className="text-sm font-semibold text-slate-900">
+                    {formatMoney(job.expenses.reduce((sum, exp) => sum + exp.amount, 0))}
+                  </span>
+                </div>
               </div>
-              <p className="text-xs text-slate-400 text-center">Payment processed after accounting review</p>
-            </div>
+            )}
 
             {/* Add Photos (post-completion) */}
             <div className="bg-white rounded-2xl border-2 border-orange-200 p-4 space-y-3">
