@@ -21,7 +21,6 @@ import {
   MapPinned,
   TrendingUp,
   UserCheck,
-  Inbox,
   HardHat,
   Bell,
   CheckCheck,
@@ -76,7 +75,6 @@ const allNavItems = [
   { id: 'dispatch',           label: 'Ops Center',        icon: Crosshair,       dispatch: true,  roles: ['admin', 'coo', 'technician', 'support'] },
   { id: 'dashboard',          label: 'Dashboard',          icon: LayoutDashboard,                  roles: ['admin', 'coo', 'technician', 'support'] },
   { id: 'customers',          label: 'Customers',          icon: Users,                            roles: ['admin', 'coo', 'technician', 'support'] },
-  { id: 'lobby',              label: 'Lead Lobby',         icon: Inbox,           indent: true, parent: 'customers', roles: ['admin', 'coo', 'support', 'sales'] },
   { id: 'solaredge',          label: 'SolarEdge Sites',    icon: Sun,             indent: true, parent: 'customers', roles: ['admin', 'coo', 'support'] },
   { id: 'jobs',               label: 'Service Orders',        icon: Wrench,                           roles: ['admin', 'coo', 'technician', 'support'] },
   { id: 'routes',             label: 'Dispatch Map',       icon: MapPinned,       indent: true, parent: 'jobs', roles: ['admin', 'coo', 'technician', 'support'] },
@@ -215,7 +213,7 @@ export const Layout: React.FC<LayoutProps> = ({
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   // SolarEdge Sites is hidden by default; auto-expands when that view is active
   const [customersExpanded, setCustomersExpanded] = useState(
-    ['solaredge', 'lobby'].includes(currentView)
+    ['solaredge'].includes(currentView)
   );
   const [billingExpanded, setBillingExpanded] = useState(
     ['contractor-billing', 'rates'].includes(currentView)
@@ -473,7 +471,7 @@ export const Layout: React.FC<LayoutProps> = ({
               const Icon = item.icon;
               const isActive = currentView === item.id;
               // Parent item is also highlighted when a child view is active
-              const isParentActive = (item.id === 'customers' && ['solaredge', 'lobby'].includes(currentView))
+              const isParentActive = (item.id === 'customers' && ['solaredge'].includes(currentView))
                 || (item.id === 'billing' && ['contractor-billing', 'rates'].includes(currentView));
               const badge = getBadgeCount(item.badge);
 

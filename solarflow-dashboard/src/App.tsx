@@ -31,7 +31,6 @@ const Operations         = lazy(() => import('./components/Operations'));
 const SolarEdgeMonitoring = lazy(() => import('./components/SolarEdgeMonitoring').then(m => ({ default: m.SolarEdgeMonitoring })));
 const DispatchDashboard  = lazy(() => import('./components/DispatchDashboard').then(m => ({ default: m.DispatchDashboard })));
 const DispatchMap        = lazy(() => import('./components/DispatchMap'));
-const LeadLobby          = lazy(() => import('./components/LeadLobby').then(m => ({ default: m.LeadLobby })));
 const RMADashboardPage   = lazy(() => import('./components/RMADashboard').then(m => ({ default: m.RMADashboard })));
 import { supabase, authedFetch } from './lib/supabase';
 import { canSeeFinancials, isFinancialView } from './lib/access';
@@ -3075,8 +3074,10 @@ function App() {
   };
 
   const renderView = () => {
-    // Sales reps can only access crm, customers2, and lobby
-    if (currentUser?.role === 'sales' && !['crm', 'customers2', 'lobby'].includes(currentView)) {
+    // Sales reps can only access crm and customers2. (Lead Lobby was removed;
+    // its leads now live on the LL board inside Service Orders, which sales
+    // cannot see. Sales keep the CRM leaderboard, which reads the same leads.)
+    if (currentUser?.role === 'sales' && !['crm', 'customers2'].includes(currentView)) {
       return <CRMDashboard currentUserId={data.currentUser?.id || 'user-1'} />;
     }
 
@@ -3132,17 +3133,6 @@ function App() {
     })();
 
     switch (currentView) {
-      case 'lobby':
-        return (
-          <LeadLobby
-            currentUserId={data.currentUser?.id || 'user-1'}
-            currentUserRole={currentUser?.role}
-            customers={data.customers}
-            onAddCustomer={handleCreateCustomer}
-            onCreateStandaloneRma={handleCreateStandaloneRma}
-            onViewCustomer={(customerId) => { setSelectedCustomerId(customerId); setCurrentView('customers'); }}
-          />
-        );
 
       case 'crm':
         return (

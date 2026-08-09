@@ -64,8 +64,6 @@ const supabaseHeaders = {
   'Content-Type': 'application/json',
 };
 
-const CRM_KEY = 'solarflow_crm_data';
-
 const API_SECRET = (process.env.TRELLO_API_SECRET ?? '').trim();
 const CALLBACK_URL_OVERRIDE = (process.env.TRELLO_WEBHOOK_CALLBACK_URL ?? '').trim();
 
@@ -276,42 +274,7 @@ export function displayNameFor(f: Pick<LeadFields, 'firstName' | 'lastName' | 'p
  */
 const BACKFILL_ACTIONS = new Set(['updateCard', 'addAttachmentToCard', 'commentCard']);
 
-async function backfillLead(leadId: string, fields: LeadFields, now: string): Promise<'filled' | 'complete' | 'absent'> {
-  const selectRes = await fetch(
-    `${SUPABASE_URL}/rest/v1/app_data?key=eq.${CRM_KEY}&select=value`,
-    { headers: supabaseHeaders },
-  );
-  if (!selectRes.ok) throw new Error(`Supabase read ${selectRes.status}`);
-  const rows = await selectRes.json() as { value?: { leads?: any[] } }[];
-  const current = rows[0]?.value ?? { leads: [] };
-  const leads = Array.isArray(current.leads) ? current.leads : [];
-
-  const lead = leads.find((l: any) => l?.id === leadId);
-  if (!lead) return 'absent';
-
-  let changed = false;
-  for (const [k, v] of Object.entries(fields)) {
-    if (v && !String(lead[k] ?? '').trim()) { lead[k] = v; changed = true; }
-  }
-  if (!changed) return 'complete';
-  lead.updatedAt = now;
-
-  const upsertRes = await fetch(
-    `${SUPABASE_URL}/rest/v1/app_data?on_conflict=key`,
-    {
-      method: 'POST',
-      headers: { ...supabaseHeaders, Prefer: 'resolution=merge-duplicates,return=minimal' },
-      body: JSON.stringify({ key: CRM_KEY, value: { ...current, leads }, updated_at: now }),
-    },
-  );
-  if (!upsertRes.ok) {
-    const detail = await upsertRes.text().catch(() => '');
-    throw new Error(`Supabase lead backfill ${upsertRes.status}: ${detail}`);
-  }
-  return 'filled';
-}
-
-/** Same backfill for the S1-board job row: only replace the placeholder display name. */
+/** Backfill for the LL-board job row: only replace the placeholder display name. */
 async function backfillLeadJob(jobId: string, displayName: string, now: string): Promise<void> {
   const key = `job:${jobId}`;
   const selectRes = await fetch(
@@ -348,42 +311,6 @@ export function matchTargetList(action: TrelloWebhookAction): { boardId: string;
   return TARGET_LISTS.find(t => t.boardId === boardId && t.listId === landedListId);
 }
 
-/**
- * Add the Lead to Lead Lobby, unless this card was already imported.
- *
- * CREATE-IF-ABSENT, deliberately not an overwrite. Trello redelivers, and a
- * card dragged out of the list and back fires again. By then the team may have
- * edited the Lead (added a phone, changed status, routed it). Re-importing the
- * card's original values on top of that would silently undo their work, so an
- * already-imported card is left completely alone.
- */
-async function upsertLead(leadId: string, lead: unknown, now: string): Promise<'created' | 'exists'> {
-  const selectRes = await fetch(
-    `${SUPABASE_URL}/rest/v1/app_data?key=eq.${CRM_KEY}&select=value`,
-    { headers: supabaseHeaders },
-  );
-  if (!selectRes.ok) throw new Error(`Supabase read ${selectRes.status}`);
-  const rows = await selectRes.json() as { value?: { leads?: unknown[] } }[];
-  const current = rows[0]?.value ?? { leads: [] };
-  const leads = Array.isArray(current.leads) ? current.leads : [];
-
-  if (leads.some((l: any) => l?.id === leadId)) return 'exists';
-
-  const nextValue = { ...current, leads: [lead, ...leads] };
-  const upsertRes = await fetch(
-    `${SUPABASE_URL}/rest/v1/app_data?on_conflict=key`,
-    {
-      method: 'POST',
-      headers: { ...supabaseHeaders, Prefer: 'resolution=merge-duplicates,return=minimal' },
-      body: JSON.stringify({ key: CRM_KEY, value: nextValue, updated_at: now }),
-    },
-  );
-  if (!upsertRes.ok) {
-    const detail = await upsertRes.text().catch(() => '');
-    throw new Error(`Supabase lead upsert ${upsertRes.status}: ${detail}`);
-  }
-  return 'created';
-}
 
 /**
  * Add the matching service order so the card also shows on the S1 board's
@@ -460,9 +387,8 @@ async function handleLeadImportWebhook(req: VercelRequest, res: VercelResponse) 
     }
 
     const cardId = action.data.card.id;
-    // Deterministic ids from the card id, so a redelivery resolves to the same
-    // records and the create-if-absent checks above can recognise them.
-    const leadId = `lead-trello-${cardId}`;
+    // Deterministic id from the card id, so a redelivery resolves to the same
+    // job and the create-if-absent check recognises it.
     const jobId  = `job-trello-${cardId}`;
     const now = new Date().toISOString();
 
@@ -473,13 +399,13 @@ async function handleLeadImportWebhook(req: VercelRequest, res: VercelResponse) 
     // team can see who to call, never "image.jpeg".
     const displayName = displayNameFor(fields);
 
-    // A later event on a card we already imported: fill the holes the create-time
-    // race left, then stop. Never creates, never overwrites.
+    // A later event on a card we already imported: fill the placeholder name the
+    // create-time race left, then stop. Self-guards to a no-op if the job is
+    // absent or already named. Never creates, never overwrites a real name.
     if (!target) {
-      const result = await backfillLead(leadId, fields, now);
-      if (result === 'filled') await backfillLeadJob(jobId, displayName, now);
-      console.info(`[trello-webhook] backfill ${action.type}: lead ${leadId} ${result} (${displayName})`);
-      return res.status(200).json({ lead: { id: leadId, result } });
+      await backfillLeadJob(jobId, displayName, now);
+      console.info(`[trello-webhook] backfill ${action.type}: job ${jobId} (${displayName})`);
+      return res.status(200).json({ job: { id: jobId, result: 'backfilled' } });
     }
 
     const extraNote = [
@@ -490,21 +416,14 @@ async function handleLeadImportWebhook(req: VercelRequest, res: VercelResponse) 
     const cardNote = [card.desc.trim(), extraNote].filter(Boolean).join('\n').trim()
       || `Auto-imported from Trello card "${card.name}"`;
 
-    const lead = {
-      id: leadId,
-      firstName, lastName, phone, email,
-      address, city, state, zip,
-      status: 'new',
-      source: 'other',
-      customSource: `Trello: ${target.label}`,
-      priority: 'medium',
-      score: 50,
-      leadType: 'service',
-      createdAt: now,
-      updatedAt: now,
-      notes: cardNote,
-      trelloBackupUrl: card.shortUrl,
-    };
+    // Lead Lobby was removed (2026-08-08 teardown): the LL-board job row is now
+    // the ONLY record. A job has no phone/email fields, so contact info must ride
+    // in the notes or the team cannot call the lead, which is the whole point.
+    const contactLine = [
+      phone && `Phone: ${formatPhone(phone)}`,
+      email && `Email: ${email}`,
+      [address, city, state, zip].filter(Boolean).join(', ') || null,
+    ].filter(Boolean).join('\n');
 
     const job = {
       id: jobId,
@@ -522,7 +441,7 @@ async function handleLeadImportWebhook(req: VercelRequest, res: VercelResponse) 
       // into "unscheduled" rather than dropping an unqualified lead onto today.
       scheduledDate: '',
       scheduledTime: '',
-      notes: `${cardNote}\n\nTrello card: ${card.shortUrl}`,
+      notes: [cardNote, contactLine, `Trello card: ${card.shortUrl}`].filter(Boolean).join('\n\n'),
       description: cardNote,
       photos: [],
       laborHours: 0, laborRate: 0, partsCost: 0, totalAmount: 0,
@@ -534,13 +453,10 @@ async function handleLeadImportWebhook(req: VercelRequest, res: VercelResponse) 
       updatedAt: now,
     };
 
-    const [leadResult, jobResult] = await Promise.all([
-      upsertLead(leadId, lead, now),
-      upsertLeadJob(jobId, job, now),
-    ]);
+    const jobResult = await upsertLeadJob(jobId, job, now);
 
-    console.info(`[trello-webhook] ${target.label}: lead ${leadId} ${leadResult}, job ${jobId} ${jobResult} (${displayName})`);
-    return res.status(200).json({ lead: { id: leadId, result: leadResult }, job: { id: jobId, result: jobResult } });
+    console.info(`[trello-webhook] ${target.label}: job ${jobId} ${jobResult} (${displayName})`);
+    return res.status(200).json({ job: { id: jobId, result: jobResult } });
   } catch (err) {
     console.error('[trello-webhook] error:', err);
     return res.status(500).json({ error: err instanceof Error ? err.message : 'trello-webhook crashed' });

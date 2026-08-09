@@ -680,10 +680,10 @@ export const Jobs: React.FC<JobsProps> = ({
         <div className="flex rounded-lg border border-slate-200 overflow-hidden">
           <button
             onClick={() => handleViewMode('tryout')}
-            title="S1 (multi-state pipeline)"
+            title="LL (Lead Lobby) - multi-state pipeline"
             className={`px-3 py-2.5 text-xs font-semibold flex items-center justify-center ${viewMode === 'tryout' ? 'bg-slate-800 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}
           >
-            S1
+            LL
           </button>
           <button
             onClick={() => handleViewMode('kanban')}
