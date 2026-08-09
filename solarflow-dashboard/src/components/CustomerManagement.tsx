@@ -54,6 +54,7 @@ import {
   outcomeLabels,
 } from '../lib/customerStore';
 import { rcCall, rcSMS } from '../lib/ringcentral';
+import { ImportPrefill } from './ImportPrefill';
 
 // Users for the system
 const users = [
@@ -1158,6 +1159,22 @@ const AddCustomerModal: React.FC<{
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Prefill from a SolarEdge lead screenshot or an RMA Excel export. */}
+          <ImportPrefill
+            sources={['screenshot', 'excel']}
+            onParsed={(f) => setFormData(prev => ({
+              ...prev,
+              firstName: f.firstName ?? prev.firstName,
+              lastName:  f.lastName  ?? prev.lastName,
+              email:     f.email     ?? prev.email,
+              phone:     f.phone     ?? prev.phone,
+              address:   f.address   ?? prev.address,
+              city:      f.city      ?? prev.city,
+              state:     f.state     ?? prev.state,
+              zip:       f.zip       ?? prev.zip,
+              notes:     f.notes ? [prev.notes, f.notes].filter(Boolean).join('\n') : prev.notes,
+            }))}
+          />
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">First Name *</label>

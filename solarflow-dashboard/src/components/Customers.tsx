@@ -68,6 +68,7 @@ import { AddressLink } from './AddressLink';
 import { ServiceOrderPanel } from './ServiceOrderPanel';
 import { PhoneLink } from './PhoneLink';
 import { ImageLightbox } from './ImageLightbox';
+import { ImportPrefill } from './ImportPrefill';
 import { ActivityFeed } from './ui/ActivityFeed';
 import { uploadCustomerFilesPartial, StoredCustomerFile, CustomerFileUpload } from '../lib/customerFileStorage';
 import { MentionTextarea, fireMentionNotifications, parseMentions, parseMentionEmails } from './ui/MentionTextarea';
@@ -5548,6 +5549,27 @@ const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({ onClose, onCr
         </div>
 
         <form onSubmit={handleSubmit} className="p-4 space-y-4">
+
+          {/* Excel prefill (screenshot import is the bespoke block below). Reads the
+              first row of a SolarEdge RMA export into the form. */}
+          <ImportPrefill
+            sources={['excel']}
+            onParsed={(f) => setFormData(prev => ({
+              ...prev,
+              firstName: f.firstName ?? prev.firstName,
+              lastName:  f.lastName  ?? prev.lastName,
+              name:      (f.firstName || f.lastName)
+                ? `${f.firstName ?? ''} ${f.lastName ?? ''}`.trim()
+                : prev.name,
+              email:     f.email   ?? prev.email,
+              phone:     f.phone   ?? prev.phone,
+              address:   f.address ?? prev.address,
+              city:      f.city    ?? prev.city,
+              state:     f.state   ?? prev.state,
+              zip:       f.zip     ?? prev.zip,
+              notes:     f.notes ? [prev.notes, f.notes].filter(Boolean).join('\n') : prev.notes,
+            }))}
+          />
 
           {/* ── Import from Screenshot ─────────────────────────────────── */}
           <div className="border-2 border-orange-200 rounded-xl bg-orange-50/40">
