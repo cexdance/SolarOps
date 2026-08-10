@@ -539,18 +539,23 @@ export const Jobs: React.FC<JobsProps> = ({
   // Shared job predicate. `includeHeld` lets the calendar receive parked orders
   // (it has its own On Hold / Active status filter) while the list + kanban keep
   // the board's "Show On Hold" gating.
-  const jobMatches = useCallback((job: Job, includeHeld: boolean) => {
+  // forLL: the LL funnel board groups by pipelineStage, an axis orthogonal to
+  // execution. The contractor and status filters (meant for the work-order
+  // board) would gut it, intake/funnel cards have no contractor and their
+  // status is always 'new', so a contractor or status filter hides them all.
+  // The LL board keeps only search / powercare / period / archived.
+  const jobMatches = useCallback((job: Job, includeHeld: boolean, forLL = false) => {
     const customer = customers.find((c) => c.id === job.customerId);
     const matchesSearch =
       !searchQuery ||
       customer?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       customer?.address.toLowerCase().includes(searchQuery.toLowerCase()) ||
       job.notes.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus =
+    const matchesStatus = forLL ? true : (
       filterStatus === 'all' ? true :
       filterStatus === 'on_hold' ? !!job.onHold :
-      boardStatus(job) === filterStatus;
-    const matchesContractor = filterContractor === 'all' || job.contractorId === filterContractor;
+      boardStatus(job) === filterStatus);
+    const matchesContractor = forLL || filterContractor === 'all' || job.contractorId === filterContractor;
     const matchesPowerCare = !powerCareOnly || !!job.isPowercare;
     // Period filter, uses scheduledDate or createdAt
     let matchesPeriod = true;
@@ -568,12 +573,14 @@ export const Jobs: React.FC<JobsProps> = ({
     const notArchived = !isArchived || showArchived;
     // Held orders are parked: hidden from the queue unless "Show On Hold" is on or
     // the admin is explicitly filtering to On Hold (the calendar passes includeHeld).
-    const notHeld = includeHeld || !job.onHold || showOnHold || filterStatus === 'on_hold';
+    const notHeld = forLL || includeHeld || !job.onHold || showOnHold || filterStatus === 'on_hold';
 
     return matchesSearch && matchesStatus && matchesContractor && matchesPowerCare && matchesPeriod && notArchived && notHeld;
   }, [customers, searchQuery, filterStatus, filterContractor, powerCareOnly, periodRange, showArchived, showOnHold]);
 
   const filteredJobs = useMemo(() => jobs.filter(j => jobMatches(j, false)), [jobs, jobMatches]);
+  // The LL funnel board ignores the contractor/status filters (see forLL above).
+  const llJobs = useMemo(() => jobs.filter(j => jobMatches(j, false, true)), [jobs, jobMatches]);
   // Real service orders for the main board/list/map/count. LL-only funnel cards
   // (pipeline stage, no woNumber) are excluded here and live only on the LL board.
   const boardJobs = useMemo(() => filteredJobs.filter(j => !isPipelineOnly(j)), [filteredJobs]);
@@ -922,10 +929,10 @@ export const Jobs: React.FC<JobsProps> = ({
               status={col}
               title={col === 'unstaged' ? 'Unstaged' : col === 'done' ? 'Completed' : PIPELINE_STAGE_LABEL[col]}
               columnJobs={col === 'unstaged'
-                ? filteredJobs.filter(j => !j.pipelineStage && j.status !== 'completed')
+                ? llJobs.filter(j => !j.pipelineStage && j.status !== 'completed')
                 : col === 'done'
-                  ? filteredJobs.filter(j => j.pipelineStage === col || j.status === 'completed')
-                  : filteredJobs.filter(j => j.pipelineStage === col)}
+                  ? llJobs.filter(j => j.pipelineStage === col || j.status === 'completed')
+                  : llJobs.filter(j => j.pipelineStage === col)}
               allJobs={jobs}
               draggedJobId={draggedJobId}
               customers={customers}
