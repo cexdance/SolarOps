@@ -1291,7 +1291,7 @@ const InfoTooltip: React.FC<{ text: string }> = ({ text }) => {
 };
 
 // ── Production Section ────────────────────────────────────────────────────────
-const COST_PER_KWH = 0.16;
+const COST_PER_KWH = 0.165;
 
 interface EnergyDataPoint {
   date: string;
@@ -2059,7 +2059,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
           </div>
           <div class="m-value">${formatMoney(dollarsSaved, { decimals: 0 })}</div>
           <div class="m-label">Estimated Savings</div>
-          <div class="m-sub">Based on $${COST_PER_KWH.toFixed(2)}/kWh grid rate</div>
+          <div class="m-sub">Based on $${COST_PER_KWH}/kWh grid rate</div>
         </div>
 
         <div class="metric blue">
@@ -3040,7 +3040,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
     </div>
     <div class="metric-card">
       <div class="metric-value green">${formatMoney(dollarsSaved, { decimals: 0 })}</div>
-      <div class="metric-label">Est. Savings ($${COST_PER_KWH.toFixed(2)}/kWh)</div>
+      <div class="metric-label">Est. Savings ($${COST_PER_KWH}/kWh)</div>
     </div>
     <div class="metric-card">
       <div class="metric-value blue">${specificYield > 0 ? specificYield.toFixed(2) : '-'}</div>
