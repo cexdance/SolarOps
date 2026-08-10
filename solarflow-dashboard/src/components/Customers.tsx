@@ -1293,6 +1293,12 @@ const InfoTooltip: React.FC<{ text: string }> = ({ text }) => {
 // ── Production Section ────────────────────────────────────────────────────────
 const COST_PER_KWH = 0.165;
 
+// Client-facing utility-savings estimate. Shown regardless of the global
+// SHOW_MONEY switch: that switch hides the internal commercial layer (quotes,
+// revenue, job amounts, contractor pay), NOT a homeowner's savings estimate.
+// ponytail: inline $ format, not formatMoney (which returns '-' while money is hidden).
+const fmtSavings = (n: number) => `$${Math.round(n).toLocaleString('en-US')}`;
+
 interface EnergyDataPoint {
   date: string;
   rawDate: string; // YYYY-MM-DD
@@ -2057,7 +2063,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
           <div class="m-head">
             <span class="m-icon">${svgDollar}</span>
           </div>
-          <div class="m-value">${formatMoney(dollarsSaved, { decimals: 0 })}</div>
+          <div class="m-value">${fmtSavings(dollarsSaved)}</div>
           <div class="m-label">Estimated Savings</div>
           <div class="m-sub">Based on $${COST_PER_KWH}/kWh grid rate</div>
         </div>
@@ -2328,7 +2334,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
           </div>
           <p className="text-2xl font-bold text-green-700">
             {dollarsSaved > 0
-              ? formatMoney(dollarsSaved, { decimals: 0 })
+              ? fmtSavings(dollarsSaved)
               : <span className="text-slate-400 text-lg">Loading…</span>}
           </p>
           <p className="text-xs text-green-600 mt-1">Estimated utility savings</p>
@@ -2439,7 +2445,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
                     label={({ x, y, width: w, value: v }: { x: number; y: number; width: number; value: number }) =>
                       v > 0 ? (
                         <text x={x + w / 2} y={y - 4} textAnchor="middle" fontSize={8} fontWeight={600} fill="#16a34a">
-                          {formatMoney(v * COST_PER_KWH, { decimals: 0 })}
+                          {fmtSavings(v * COST_PER_KWH)}
                         </text>
                       ) : null
                     }
@@ -2675,7 +2681,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
               <div className="px-5 pt-3 pb-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
                 {[
                   { icon: <Zap className="w-4 h-4 text-orange-500" />, value: displayKwh >= 1000 ? `${(displayKwh/1000).toFixed(1)} MWh` : `${Math.round(displayKwh).toLocaleString()} kWh`, label: 'Energy Generated', color: 'orange' },
-                  { icon: <DollarSign className="w-4 h-4 text-green-600" />, value: formatMoney(dollarsSaved, { decimals: 0 }), label: 'Est. Savings', color: 'green' },
+                  { icon: <DollarSign className="w-4 h-4 text-green-600" />, value: fmtSavings(dollarsSaved), label: 'Est. Savings', color: 'green' },
                   { icon: <BarChart3 className="w-4 h-4 text-blue-500" />, value: specificYield > 0 ? `${specificYield.toFixed(2)}` : '-', label: 'Specific Yield', color: 'blue' },
                   { icon: <Leaf className="w-4 h-4 text-emerald-600" />, value: `${co2Tons.toFixed(2)} t`, label: 'CO₂ Offset', color: 'emerald' },
                 ].map(({ icon, value, label, color }) => (
@@ -2722,7 +2728,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
                           label={({ x, y, width: w, value: v }: { x: number; y: number; width: number; value: number }) =>
                             v > 0 ? (
                               <text x={x + w / 2} y={y - 3} textAnchor="middle" fontSize={7} fontWeight={600} fill="#16a34a">
-                                {formatMoney(v * COST_PER_KWH, { decimals: 0 })}
+                                {fmtSavings(v * COST_PER_KWH)}
                               </text>
                             ) : null
                           }
@@ -3039,7 +3045,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
       <div class="metric-label">Energy Generated</div>
     </div>
     <div class="metric-card">
-      <div class="metric-value green">${formatMoney(dollarsSaved, { decimals: 0 })}</div>
+      <div class="metric-value green">${fmtSavings(dollarsSaved)}</div>
       <div class="metric-label">Est. Savings ($${COST_PER_KWH}/kWh)</div>
     </div>
     <div class="metric-card">
