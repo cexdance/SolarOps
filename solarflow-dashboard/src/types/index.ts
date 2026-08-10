@@ -152,6 +152,8 @@ export const PIPELINE_STAGES = [
   'site_transfer_completed',
   'service_quote_in_progress',
   'needs_scheduling',
+  'needs_follow_up',
+  'work_done_collect',
   'done',
   'email_follow_up',
   'closed_won',
@@ -168,11 +170,20 @@ export const PIPELINE_STAGE_LABEL: Record<PipelineStage, string> = {
   site_transfer_completed:   'Site Transfer Completed/To Be Checked',
   service_quote_in_progress: 'Quote/Invoicing in Progress for Service',
   needs_scheduling:          'Quote Accepted - Needs Scheduling',
+  needs_follow_up:           'Needs follow-Up Service',
+  work_done_collect:         'Work Done - Collect Payment',
   done:                      'Done',
   email_follow_up:           'Email Marketing Follow-Up',
   closed_won:                'Closed - Won',
   closed_archived:           'Closed - Archived',
 };
+
+/** A Trello-style label chip mirrored onto a Job so the LL board reads like Trello.
+ *  `color` is the raw Trello colour key (e.g. 'green', 'sky_dark', or '' for none). */
+export interface JobLabel {
+  name: string;
+  color: string;
+}
 
 // Maps WOStatus → JobStatus so existing Kanban/billing views stay in sync
 export const WO_TO_JOB_STATUS: Record<WOStatus, JobStatus> = {
@@ -269,6 +280,9 @@ export interface Job {
   // Multi-state Trello-style funnel stage (S1 board). Optional: legacy jobs
   // have none and simply don't appear on that board until dragged onto it.
   pipelineStage?: PipelineStage;
+  // Trello-style labels mirrored from the source card, rendered as chips on the
+  // LL board so the app reads like the Trello board the team already knows.
+  labels?: JobLabel[];
   // ── Work Order Panel extended fields ──────────────────────────────────
   woStatus?: WOStatus;
   // On Hold is an orthogonal flag, NOT a status value: it parks an order so it

@@ -11,6 +11,7 @@ import {
 } from 'date-fns';
 import { WorkOrderCalendar } from './WorkOrderCalendar';
 import { pipelineDropPatch } from '../lib/woHelpers';
+import { labelChipClass } from '../lib/trelloLabels';
 import { resolvePriority, sortJobsBy, JOB_SORT_OPTIONS, type JobSortOption } from '../lib/jobSort';
 import JobMapView from './views/JobMapView';
 import { ViewJob, ViewJobPriority } from './views/jobViewTypes';
@@ -158,6 +159,16 @@ const JobCard: React.FC<JobCardProps> = ({ job, customer, contractorName, isDrag
       job.isPowercare ? 'bg-orange-50/70 border-orange-200' : 'bg-white border-slate-200'
     } ${isDragging ? 'cursor-grabbing opacity-40 scale-95' : 'cursor-pointer hover:border-orange-300'} select-none`}
   >
+    {/* Trello-style label chips at the very top, mirroring the source card. */}
+    {job.labels && job.labels.length > 0 && (
+      <div className="flex flex-wrap gap-1 mb-2">
+        {job.labels.map((lb, i) => (
+          <span key={i} className={`text-[10px] font-semibold px-2 py-0.5 rounded border ${labelChipClass(lb.color)}`}>
+            {lb.name}
+          </span>
+        ))}
+      </div>
+    )}
     <div className="flex items-start justify-between mb-3">
       <div className="flex-1 min-w-0">
         {(job.clientId || customer?.clientId) && (
@@ -284,11 +295,18 @@ const colColors: Record<string, string> = {
   site_transfer_completed: 'bg-purple-50 border-purple-200',
   service_quote_in_progress: 'bg-amber-50 border-amber-200',
   needs_scheduling: 'bg-orange-50 border-orange-200',
+  needs_follow_up: 'bg-rose-50 border-rose-200',
+  work_done_collect: 'bg-teal-50 border-teal-200',
   done: 'bg-green-50 border-green-200',
   email_follow_up: 'bg-yellow-50 border-yellow-200',
   closed_won: 'bg-emerald-50 border-emerald-200',
   closed_archived: 'bg-gray-50 border-gray-200',
 };
+
+// A Job with a pipeline stage but no work-order number is a pure LL funnel card
+// (a Trello lead / converted card), not a real service order. These render ONLY
+// on the LL board, never the main Service Orders board / list / map / count.
+const isPipelineOnly = (j: Job) => !!j.pipelineStage && !j.woNumber;
 
 const PIPELINE_STAGE_SET = new Set<string>(PIPELINE_STAGES);
 const isPipelineStage = (s: string): s is PipelineStage => PIPELINE_STAGE_SET.has(s);
@@ -556,6 +574,9 @@ export const Jobs: React.FC<JobsProps> = ({
   }, [customers, searchQuery, filterStatus, filterContractor, powerCareOnly, periodRange, showArchived, showOnHold]);
 
   const filteredJobs = useMemo(() => jobs.filter(j => jobMatches(j, false)), [jobs, jobMatches]);
+  // Real service orders for the main board/list/map/count. LL-only funnel cards
+  // (pipeline stage, no woNumber) are excluded here and live only on the LL board.
+  const boardJobs = useMemo(() => filteredJobs.filter(j => !isPipelineOnly(j)), [filteredJobs]);
   // The calendar always receives held orders; its own status filter shows/hides them.
   const calendarJobs = useMemo(() => jobs.filter(j => jobMatches(j, true)), [jobs, jobMatches]);
 
@@ -583,8 +604,8 @@ export const Jobs: React.FC<JobsProps> = ({
   // List view has no columns, so it gets one sort (Kanban columns each sort
   // independently inside KanbanColumn via their own sortBy/onSortChange props).
   const sortedListJobs = useMemo(
-    () => sortJobsBy(filteredJobs, listSortBy, contractors),
-    [filteredJobs, listSortBy, contractors]
+    () => sortJobsBy(boardJobs, listSortBy, contractors),
+    [boardJobs, listSortBy, contractors]
   );
 
   // Per-contractor workload summary (Assigned / On Route / In Progress / Completed).
@@ -611,7 +632,7 @@ export const Jobs: React.FC<JobsProps> = ({
   // address (cached) and plots colored pins; JobMapView owns its own status filter.
   const mapJobs = useMemo<ViewJob[]>(() => {
     const custById = new Map(customers.map(c => [c.id, c]));
-    return filteredJobs.map(job => {
+    return boardJobs.map(job => {
       const c = custById.get(job.customerId);
       const status = String(boardStatus(job));
       return {
@@ -627,7 +648,7 @@ export const Jobs: React.FC<JobsProps> = ({
         clientNumber: c?.clientId || '',
       } satisfies ViewJob;
     });
-  }, [filteredJobs, customers]);
+  }, [boardJobs, customers]);
 
   const handleDragStart = (e: React.DragEvent, jobId: string) => {
     e.dataTransfer.setData('jobId', jobId);
@@ -662,7 +683,7 @@ export const Jobs: React.FC<JobsProps> = ({
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Service Orders</h1>
-          <p className="text-slate-500 mt-1">{filteredJobs.length} total service orders</p>
+          <p className="text-slate-500 mt-1">{boardJobs.length} total service orders</p>
         </div>
         {currentUser?.role !== 'support' && (
           <button
@@ -871,7 +892,7 @@ export const Jobs: React.FC<JobsProps> = ({
               // raw status is stale/undefined) so RMA/imported service orders land in
               // the right column WITHOUT needing a manual save, and none vanish. Held
               // jobs go ONLY in the On Hold column, never their status column.
-              columnJobs={col === 'on_hold' ? boardHeldJobs : filteredJobs.filter(j => !j.onHold && boardStatus(j) === col)}
+              columnJobs={col === 'on_hold' ? boardHeldJobs : boardJobs.filter(j => !j.onHold && boardStatus(j) === col)}
               allJobs={jobs}
               draggedJobId={draggedJobId}
               customers={customers}
@@ -939,7 +960,7 @@ export const Jobs: React.FC<JobsProps> = ({
               onToggleHold={handleToggleHold}
             />
           ))}
-          {filteredJobs.length === 0 && (
+          {sortedListJobs.length === 0 && (
             <div className="text-center py-12">
               <Wrench className="w-12 h-12 text-slate-300 mx-auto mb-3" />
               <p className="text-slate-500">No jobs found</p>
