@@ -101,6 +101,7 @@ const DATASHEET_PROMPT = `You are extracting structured data from a solar-equipm
 Return ONLY a valid JSON object with exactly these fields (empty string "" if not found):
 {
   "name": "",
+  "manufacturer": "",
   "partNumber": "",
   "sku": "",
   "category": "",
@@ -109,13 +110,14 @@ Return ONLY a valid JSON object with exactly these fields (empty string "" if no
 
 Rules:
 - name: the product model / name, including its power or size rating if printed (e.g. "TOPHiKu6 415W Panel").
+- manufacturer: the brand printed on the sheet (e.g. "QuickMount PV", "IronRidge", "SolarEdge"), not the reseller/distributor.
 - partNumber: the manufacturer part / model number exactly as printed.
 - sku: a short uppercase code derived from manufacturer + model when no explicit SKU is printed (hyphens, no spaces, e.g. "PAN-TOPHIKU6-415").
 - category: EXACTLY one of: panel, optimizer, inverter, cable, racking, label, battery, bos. Pick the closest; use "bos" (balance of system) when unsure.
 - description: one concise sentence of the key specs (power, voltage, dimensions, etc.).
 - Output ONLY the JSON object, no text around it.`;
 
-export type ParsedDatasheet = { name: string; partNumber: string; sku: string; category: string; description: string };
+export type ParsedDatasheet = { name: string; manufacturer: string; partNumber: string; sku: string; category: string; description: string };
 
 /**
  * Parse a solar-equipment datasheet (PDF or image) into inventory fields with
@@ -162,7 +164,7 @@ export async function extractDatasheet(base64: string, mimeType?: string): Promi
     ? (p.category as string).toLowerCase()
     : 'bos';
   return {
-    name: p.name ?? '', partNumber: p.partNumber ?? '', sku: p.sku ?? '',
+    name: p.name ?? '', manufacturer: p.manufacturer ?? '', partNumber: p.partNumber ?? '', sku: p.sku ?? '',
     category, description: p.description ?? '',
   };
 }

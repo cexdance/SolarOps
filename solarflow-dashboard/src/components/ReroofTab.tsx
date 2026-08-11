@@ -1,6 +1,7 @@
-import { useState } from 'react';
-import { Plus, Trash2, Sparkles, ClipboardCheck, Loader2, Package } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { Plus, Trash2, Sparkles, ClipboardCheck, Loader2, Package, Upload } from 'lucide-react';
 import { authedFetch } from '../lib/supabase';
+import { parseDatasheetFile } from '../lib/datasheetParse';
 import type { ReroofWorkflow, ReroofPart, ReroofPartCategory } from '../types';
 
 // ── Category metadata + the standard reroof reinstallation checklist ──────────
@@ -39,6 +40,10 @@ interface Props {
 export default function ReroofTab({ value, onChange, readOnly }: Props) {
   const wf: ReroofWorkflow = value ?? { parts: [] };
   const [estimating, setEstimating] = useState<Record<string, boolean>>({});
+  const [datasheetBusy, setDatasheetBusy] = useState<Record<string, boolean>>({});
+  const [datasheetNote, setDatasheetNote] = useState<Record<string, string>>({});
+  const [pendingDatasheetPart, setPendingDatasheetPart] = useState<ReroofPart | null>(null);
+  const datasheetInputRef = useRef<HTMLInputElement>(null);
 
   const patch = (p: Partial<ReroofWorkflow>) => onChange({ ...wf, ...p });
   const setParts = (parts: ReroofPart[]) => patch({ parts });
@@ -97,6 +102,32 @@ export default function ReroofTab({ value, onChange, readOnly }: Props) {
       updatePart(part.id, { priceSource: `estimate failed${msg ? ` (${msg})` : ''}` });
     } finally {
       setEstimating(s => ({ ...s, [part.id]: false }));
+    }
+  };
+
+  // ── Datasheet upload (PDF/photo) -> auto-fill name / part# / manufacturer ────
+  const handleDatasheetFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    const part = pendingDatasheetPart;
+    e.target.value = ''; // allow re-selecting the same file
+    if (!file || !part) return;
+    setDatasheetBusy(s => ({ ...s, [part.id]: true }));
+    setDatasheetNote(s => ({ ...s, [part.id]: '' }));
+    try {
+      const p = await parseDatasheetFile(file);
+      updatePart(part.id, {
+        // Manual edits win: only fill fields the user hasn't already typed.
+        name: part.name.trim() ? part.name : (p.name ?? part.name),
+        partNumber: part.partNumber || p.partNumber,
+        manufacturer: part.manufacturer || p.manufacturer,
+      });
+      setDatasheetNote(s => ({ ...s, [part.id]: 'Filled from datasheet' }));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('[reroof] datasheet parse failed', err);
+      setDatasheetNote(s => ({ ...s, [part.id]: `datasheet parse failed (${msg})` }));
+    } finally {
+      setDatasheetBusy(s => ({ ...s, [part.id]: false }));
     }
   };
 
@@ -216,6 +247,12 @@ export default function ReroofTab({ value, onChange, readOnly }: Props) {
                             </div>
                             {!readOnly && (
                               <>
+                                <button onClick={() => { setPendingDatasheetPart(p); datasheetInputRef.current?.click(); }}
+                                  disabled={datasheetBusy[p.id]}
+                                  title="Upload datasheet (PDF/photo) to auto-fill name / Part# / manufacturer"
+                                  className="px-2 py-2 rounded-lg bg-slate-100 text-slate-500 hover:bg-slate-200 disabled:opacity-40">
+                                  {datasheetBusy[p.id] ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                                </button>
                                 <button onClick={() => estimate(p)} disabled={busy || !p.name.trim()}
                                   title="Estimate price from 3 web sources"
                                   className="px-2 py-2 rounded-lg bg-orange-50 text-orange-600 hover:bg-orange-100 disabled:opacity-40">
@@ -228,6 +265,9 @@ export default function ReroofTab({ value, onChange, readOnly }: Props) {
                               </>
                             )}
                           </div>
+                          {datasheetNote[p.id] && (
+                            <div className="mt-1 pl-1 text-[11px] text-slate-400">{datasheetNote[p.id]}</div>
+                          )}
                           {(p.priceSource || (p.pricePoints?.length ?? 0) > 0) && (
                             <div className="mt-1 pl-1 text-[11px] text-slate-400 flex flex-wrap gap-x-3">
                               {p.priceSource && <span>{p.priceSource}</span>}
@@ -249,6 +289,10 @@ export default function ReroofTab({ value, onChange, readOnly }: Props) {
             );
           })}
         </div>
+        {!readOnly && (
+          <input ref={datasheetInputRef} type="file" accept="application/pdf,image/*" className="hidden"
+            onChange={handleDatasheetFile} />
+        )}
 
         <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
           <span className="text-xs text-slate-500">Estimated parts total</span>

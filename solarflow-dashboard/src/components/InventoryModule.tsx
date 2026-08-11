@@ -162,33 +162,15 @@ const DatasheetField: React.FC<{
 
     // 1) Parse -> autofill (best effort; failure just means manual entry).
     try {
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const r = new FileReader();
-        r.onload = () => resolve(String(r.result).split(',')[1] ?? '');
-        r.onerror = () => reject(r.error);
-        r.readAsDataURL(file);
+      const p = await parseDatasheetFile(file);
+      onParsed({
+        name: p.name,
+        partNumber: p.partNumber,
+        sku: p.sku,
+        category: p.category as InventoryCategory | undefined,
+        description: p.description,
       });
-      // authedFetch, not fetch: /api/parse-lead-image requires a signed-in caller
-      // because every call spends ANTHROPIC_API_KEY. A plain fetch sends no
-      // Authorization header and now gets a 401.
-      const res = await authedFetch('/api/parse-lead-image', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ action: 'parse-datasheet', imageBase64: base64, mimeType: file.type }),
-      });
-      if (res.ok) {
-        const p = await res.json() as { name?: string; partNumber?: string; sku?: string; category?: string; description?: string };
-        onParsed({
-          name: p.name || undefined,
-          partNumber: p.partNumber || undefined,
-          sku: p.sku || undefined,
-          category: (p.category as InventoryCategory) || undefined,
-          description: p.description || undefined,
-        });
-        setNote('Fields auto-filled from the datasheet. Review and edit as needed.');
-      } else {
-        setNote('Could not read the datasheet automatically; fill the fields in manually.');
-      }
+      setNote('Fields auto-filled from the datasheet. Review and edit as needed.');
     } catch (err) {
       console.error('[datasheet] parse failed', err);
       setNote('Could not read the datasheet automatically; fill the fields in manually.');
@@ -266,7 +248,7 @@ import { RmaCreateModal } from './RmaCreateModal';
 import { uploadPhotoToStorage } from '../lib/photoStorage';
 import { compressImageToDataUrlUnder, compressImageToBlob } from '../lib/photoCompress';
 import { Contractor } from '../types/contractor';
-import { authedFetch } from '../lib/supabase';
+import { parseDatasheetFile } from '../lib/datasheetParse';
 
 interface InventoryModuleProps {
   isMobile?: boolean;
