@@ -92,8 +92,9 @@ export default function ReroofTab({ value, onChange, readOnly }: Props) {
         priceEstimatedAt: new Date().toISOString(),
       });
     } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
       console.error('[reroof] price estimate failed', e);
-      updatePart(part.id, { priceSource: 'estimate failed' });
+      updatePart(part.id, { priceSource: `estimate failed${msg ? ` (${msg})` : ''}` });
     } finally {
       setEstimating(s => ({ ...s, [part.id]: false }));
     }
