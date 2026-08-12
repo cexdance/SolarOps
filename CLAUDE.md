@@ -63,12 +63,13 @@ This section lists the primary functionalities of the SolarOps platform:
 ## Project Structure
 
 - This is the SolarOps/SolarFlow dashboard (TypeScript/React + Supabase + Vercel). Vercel's Root Directory is unset (repo root), so the **repo-root `/api/`** directory is what actually deploys, confirmed via `.vercel/project.json` and root `vercel.json`'s `buildCommand`/`outputDirectory`. A "flip to `solarflow-dashboard/` as root" migration was attempted and abandoned (see 2026-06-05 note); do not repeat it.
-- `solarflow-dashboard/api/` is a second, parallel `api/` tree that has drifted from root's, it currently has `xero-api.ts`/`xero-connections.ts`/`xero-token.ts` with no equivalent in root's `xero.ts`. Treat this as unverified duplication, not a place to add new endpoints, until reconciled.
+- `solarflow-dashboard/vercel.json` was a leftover of that abandoned migration (prepared for a Root Directory cutover that never happened; its `solarflow-dashboard/api/` counterpart was already gone). It was deleted 2026-08-12 after being confirmed as the cause of a real production outage: `vercel --prod` run from inside `solarflow-dashboard/` picks up whatever `vercel.json` is in the CWD, and that one had no `api/` folder as a sibling, so it deployed a build with zero serverless functions, 404ing every `/api/*` route (broke Trello import, and everything else API-backed, for ~21h before caught). **Always run `vercel --prod` from the repo root, never after `cd solarflow-dashboard`.**
 
 ## Deployment
 
 - After every deploy, poll the live production URL's `version.json` until its `sha` matches the commit just pushed, and confirm the changed feature is actually visible, before reporting success. Vercel deploys and HMR frequently serve stale builds.
-- If it hasn't propagated after ~3 minutes, trigger a manual deploy (`cd solarflow-dashboard && vercel --prod`) and re-poll. Do not report success on a timeout.
+- If it hasn't propagated after ~3 minutes, trigger a manual deploy from the **repo root** (`cd /Users/cex/SolarOps÷ && vercel --prod --yes`, never `cd solarflow-dashboard` first) and re-poll. Do not report success on a timeout.
+- After a manual `vercel --prod`, also spot-check a real `/api/*` route (e.g. `/api/users`) returns something other than a Vercel `NOT_FOUND` page — `version.json` matching is not proof the serverless functions actually built.
 - Use the `/deploy` skill (`.claude/skills/deploy/SKILL.md`) for this loop end-to-end.
 
 ## Debugging
