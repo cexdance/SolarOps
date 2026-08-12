@@ -178,12 +178,12 @@ export async function extractDatasheet(base64: string, mimeType?: string): Promi
  */
 async function priceEstimate(body: { name?: string; partNumber?: string; manufacturer?: string }) {
   const q = [body.manufacturer, body.name, body.partNumber].filter(Boolean).join(' ').trim();
-  if (!q) return { estimate: undefined, points: [] as { source: string; price: number; url?: string }[] };
+  if (!q) return { estimate: undefined, name: undefined, manufacturer: undefined, points: [] as { source: string; price: number; url?: string }[] };
 
   const prompt = `Find the current retail UNIT price in USD for this solar installation part from 3 different online retailers or distributors: "${q}".
 Search the web, then return ONLY a JSON object, no other text:
-{"estimate": <number, the average of the points>, "points": [{"source": "<store name>", "price": <number, per single unit>, "url": "<product url>"}]}
-Rules: price is per single unit (not a case/box unless the item is only sold that way). Use up to 3 sources. If you cannot find a price, return {"estimate": null, "points": []}.`;
+{"estimate": <number, the average of the points>, "name": "<canonical product name/model, e.g. \\"IronRidge Halo Grip\\">", "manufacturer": "<brand>", "points": [{"source": "<store name>", "price": <number, per single unit>, "url": "<product url>"}]}
+Rules: price is per single unit (not a case/box unless the item is only sold that way). Use up to 3 sources. name/manufacturer: fill in from what you find while searching, "" if you can't determine them. If you cannot find a price, return {"estimate": null, "name": "", "manufacturer": "", "points": []}.`;
 
   const upstream = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -210,10 +210,15 @@ Rules: price is per single unit (not a case/box unless the item is only sold tha
   // The final text block holds the JSON; earlier blocks are the tool calls/results.
   const raw = [...result.content].reverse().find(b => b.type === 'text' && b.text)?.text ?? '';
   const match = raw.match(/\{[\s\S]*\}/);
-  if (!match) return { estimate: undefined, points: [] };
-  const parsed = JSON.parse(match[0]) as { estimate?: number | null; points?: { source: string; price: number; url?: string }[] };
+  if (!match) return { estimate: undefined, name: undefined, manufacturer: undefined, points: [] };
+  const parsed = JSON.parse(match[0]) as {
+    estimate?: number | null; name?: string; manufacturer?: string;
+    points?: { source: string; price: number; url?: string }[];
+  };
   return {
     estimate: typeof parsed.estimate === 'number' ? parsed.estimate : undefined,
+    name: parsed.name || undefined,
+    manufacturer: parsed.manufacturer || undefined,
     points: Array.isArray(parsed.points) ? parsed.points.filter(p => typeof p?.price === 'number') : [],
   };
 }

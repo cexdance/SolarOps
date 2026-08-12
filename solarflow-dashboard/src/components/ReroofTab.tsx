@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { Plus, Trash2, Sparkles, ClipboardCheck, Loader2, Package, Upload } from 'lucide-react';
 import { authedFetch } from '../lib/supabase';
 import { parseDatasheetFile } from '../lib/datasheetParse';
+import { resolvePartByNumber } from '../lib/partsLookup';
 import type { ReroofWorkflow, ReroofPart, ReroofPartCategory } from '../types';
 
 // ── Category metadata + the standard reroof reinstallation checklist ──────────
@@ -66,6 +67,23 @@ export default function ReroofTab({ value, onChange, readOnly }: Props) {
     if (seeded.length) setParts([...wf.parts, ...seeded]);
   };
 
+  // ── Local part# lookup (catalog + inventory) ──────────────────────────────────
+  // Free and instant, so it runs on every blur with no size/cost guard, unlike
+  // the paid web estimate below. Checked first so a known part never spends a
+  // web search on price OR name; see resolvePartByNumber for source ordering.
+  const lookupLocal = (part: ReroofPart) => {
+    if (readOnly || !part.partNumber?.trim()) return;
+    const hit = resolvePartByNumber(part.partNumber);
+    if (!hit) return;
+    const patch: Partial<ReroofPart> = {};
+    if (!part.name.trim() && hit.name) patch.name = hit.name;
+    if (part.unitPrice == null && hit.unitCost) {
+      patch.unitPrice = hit.unitCost;
+      patch.priceSource = `${hit.source} match`;
+    }
+    if (Object.keys(patch).length) updatePart(part.id, patch);
+  };
+
   // ── Internet price estimate (Claude web_search via /api/parse-lead-image) ────
   const estimate = async (part: ReroofPart) => {
     if (!part.name.trim()) return;
@@ -87,10 +105,14 @@ export default function ReroofTab({ value, onChange, readOnly }: Props) {
       if (!res.ok) throw new Error(`estimator ${res.status}`);
       const data = await res.json() as {
         estimate?: number;
+        name?: string;
+        manufacturer?: string;
         points?: { source: string; price: number; url?: string }[];
       };
       updatePart(part.id, {
-        // Manual override wins: only fill unitPrice if the user hasn't set one.
+        // Manual override wins: only fill fields the user hasn't already set.
+        name: part.name.trim() ? part.name : (data.name ?? part.name),
+        manufacturer: part.manufacturer || data.manufacturer,
         unitPrice: part.unitPrice ?? data.estimate,
         pricePoints: data.points ?? [],
         priceSource: data.points?.length ? `${data.points.length}-source web avg` : part.priceSource,
@@ -235,7 +257,8 @@ export default function ReroofTab({ value, onChange, readOnly }: Props) {
                               onChange={e => updatePart(p.id, { qty: Number(e.target.value) })} />
                             <input className={`${field} w-28 bg-white`} disabled={readOnly}
                               placeholder="Part#" value={p.partNumber ?? ''}
-                              onChange={e => updatePart(p.id, { partNumber: e.target.value })} />
+                              onChange={e => updatePart(p.id, { partNumber: e.target.value })}
+                              onBlur={e => lookupLocal({ ...p, partNumber: e.target.value })} />
                             <input className={`${field} w-32 bg-white`} disabled={readOnly}
                               placeholder="Manufacturer" value={p.manufacturer ?? ''}
                               onChange={e => updatePart(p.id, { manufacturer: e.target.value })} />
