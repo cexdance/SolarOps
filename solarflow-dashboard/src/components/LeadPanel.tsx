@@ -8,6 +8,7 @@ import { Phone, Mail, FileText, X, UserCheck, PhoneCall } from 'lucide-react';
 import type { Job, LeadInfo, Activity } from '../types';
 import { seedLeadInfo, leadDisplayName } from '../lib/leadConvert';
 import { rcCall } from '../lib/ringcentral';
+import { LabelPicker } from './LabelPicker';
 
 interface LeadPanelProps {
   job: Job;
@@ -58,6 +59,9 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({ job, currentUserName, onSa
         </div>
 
         <div className="p-4 space-y-4">
+          {/* Labels (also render as chips on the kanban card) */}
+          <LabelPicker value={job.labels ?? []} onChange={labels => onSave({ labels })} />
+
           {/* Contact info */}
           <div className="space-y-3">
             <div className="flex gap-2">

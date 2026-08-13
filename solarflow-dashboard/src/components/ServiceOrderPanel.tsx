@@ -12,6 +12,7 @@ import {
 import SiteMapView from './views/SiteMapView';
 import ReroofTab from './ReroofTab';
 import { Job, WOStatus, WOLineItem, WOPhoto, WOServiceStatus, WO_TO_JOB_STATUS, RMAEntry, AuditEntry, ReroofWorkflow } from '../types';
+import { LabelPicker } from './LabelPicker';
 import { updateClientStatus } from '../lib/siteProfileStore';
 import { normalizeStreetOrder } from '../lib/addressValidator';
 import { QuotePreviewModal } from './QuotePreviewModal';
@@ -1753,6 +1754,11 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
 
           {/* Overview */}
           {activeTab === 'overview' && (
+            <>
+            {/* Labels: pick as many as needed; render as chips on the kanban card. */}
+            <div className="px-6 pt-4">
+              <LabelPicker value={job?.labels ?? []} onChange={labels => onSave({ labels })} />
+            </div>
             <div className="p-6 lg:grid lg:grid-cols-[1.618fr_1fr] lg:gap-6 lg:items-start">
               {/* ── Comments & Activity: default DOM order keeps it first for
                   mobile/tablet, unchanged from the 2026-06-22 decision. At lg+
@@ -2344,6 +2350,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
 
             </div>
             </div>
+            </>
           )}
 
           {/* Parts & Labor */}
