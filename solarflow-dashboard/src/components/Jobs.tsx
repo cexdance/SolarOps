@@ -64,6 +64,8 @@ function badgeLabel(job: Job): string {
   return boardStatus(job).replace('_', ' ');
 }
 import { ServiceOrderPanel } from './ServiceOrderPanel';
+import { LeadPanel } from './LeadPanel';
+import { leadToCustomer } from '../lib/leadConvert';
 
 // Contractor workload buckets for the per-contractor filter summary. Uses the raw
 // `contractorJobStatus` (mirrored from the contractor portal) so "on route"
@@ -425,6 +427,7 @@ interface JobsProps {
   onCreateJob: (job: Partial<Job>) => Job;
   onUpdateJob: (job: Job) => void;
   onDeleteJob: (jobId: string) => void;
+  onCreateCustomer: (customer: Partial<Customer>) => string;
   onViewChange: (view: string, jobId?: string) => void;
   isMobile: boolean;
   currentUser: UserType | null;
@@ -437,6 +440,7 @@ export const Jobs: React.FC<JobsProps> = ({
   contractors = [],
   onCreateJob,
   onUpdateJob,
+  onCreateCustomer,
   onViewChange,
   isMobile,
   currentUser,
@@ -444,6 +448,9 @@ export const Jobs: React.FC<JobsProps> = ({
   const [showCustomerPicker, setShowCustomerPicker] = useState(false);
   const [createCustomer, setCreateCustomer] = useState<Customer | null>(null);
   const [editingCreatedJob, setEditingCreatedJob] = useState<Job | null>(null);
+  // A customerless card is a LEAD (no Service Order panel can open it); it opens
+  // the LeadPanel instead. Set to the job id being worked as a lead.
+  const [leadPanelJobId, setLeadPanelJobId] = useState<string | null>(null);
 
   // ── Persist filters/sort to localStorage, so they survive a page leave/return
   // (same pattern as Customers.tsx's loadView/saveView). ─────────────────────
@@ -663,7 +670,21 @@ export const Jobs: React.FC<JobsProps> = ({
     setDraggedJobId(jobId);
   };
 
-  const handleCardClick = (jobId: string) => onViewChange('jobDetail', jobId);
+  // A customerless job is a lead: the Service Order panel needs a customer, so
+  // route it to the LeadPanel instead. Everything else opens the SO panel.
+  const handleCardClick = (jobId: string) => {
+    const j = jobs.find(x => x.id === jobId);
+    if (j && !j.customerId) { setLeadPanelJobId(jobId); return; }
+    onViewChange('jobDetail', jobId);
+  };
+
+  // Convert a lead to a client: create the Customer from the lead's fields, link
+  // it to the job, and advance the card to the first quote stage.
+  const handleConvertLead = (lead: Job) => {
+    const customerId = onCreateCustomer(leadToCustomer(lead));
+    onUpdateJob({ ...lead, customerId, leadInfo: undefined, pipelineStage: 'needs_first_quote', updatedAt: new Date().toISOString() });
+    setLeadPanelJobId(null);
+  };
 
   // Calendar drag-to-reschedule: stamp the new scheduled date (yyyy-MM-dd) plus
   // updatedAt so the sync engine keeps the change (LWW). No-op if the date is
@@ -995,6 +1016,22 @@ export const Jobs: React.FC<JobsProps> = ({
           <JobMapView jobs={mapJobs} onOpen={handleCardClick} />
         </div>
       )}
+
+      {/* Lead card (customerless funnel job): add contact info, log calls/emails,
+          and convert to a client. */}
+      {leadPanelJobId && (() => {
+        const lead = jobs.find(j => j.id === leadPanelJobId);
+        if (!lead) return null;
+        return (
+          <LeadPanel
+            job={lead}
+            currentUserName={currentUser?.name}
+            onSave={(partial) => onUpdateJob({ ...lead, ...partial, updatedAt: new Date().toISOString() })}
+            onConvertToClient={() => handleConvertLead(lead)}
+            onClose={() => setLeadPanelJobId(null)}
+          />
+        );
+      })()}
 
       {/* Step 1: Customer Picker */}
       {showCustomerPicker && !createCustomer && (

@@ -185,6 +185,18 @@ export interface JobLabel {
   color: string;
 }
 
+/** Editable contact fields carried on a lead job until it converts to a Customer. */
+export interface LeadInfo {
+  firstName?: string;
+  lastName?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  zip?: string;
+}
+
 // Maps WOStatus → JobStatus so existing Kanban/billing views stay in sync
 export const WO_TO_JOB_STATUS: Record<WOStatus, JobStatus> = {
   draft:          'new',
@@ -283,6 +295,11 @@ export interface Job {
   // Trello-style labels mirrored from the source card, rendered as chips on the
   // LL board so the app reads like the Trello board the team already knows.
   labels?: JobLabel[];
+  // Editable contact fields for a LEAD (a funnel card with no customer yet). Kept
+  // on the job so the team can work the lead (add info, log calls/emails into
+  // activityHistory) before deciding to convert. On "Move to Client" these seed
+  // the new Customer. Absent once the lead is a real customer.
+  leadInfo?: LeadInfo;
   // ── Work Order Panel extended fields ──────────────────────────────────
   woStatus?: WOStatus;
   // On Hold is an orthogonal flag, NOT a status value: it parks an order so it

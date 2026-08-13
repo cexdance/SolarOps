@@ -2162,6 +2162,8 @@ function App() {
       saveData(next);
       return next;
     });
+    // Return the id so callers (e.g. converting a lead to a client) can link it.
+    return newCustomer.id;
   };
 
   const handleUpdateCustomer = (rawCustomer: Customer) => {
@@ -3240,6 +3242,7 @@ function App() {
             onCreateJob={handleCreateJob}
             onUpdateJob={handleUpdateJob}
             onDeleteJob={handleDeleteJob}
+            onCreateCustomer={handleCreateCustomer}
             onViewChange={handleViewChange}
             isMobile={isMobile}
             currentUser={currentUser}
@@ -3275,6 +3278,7 @@ function App() {
             onCreateJob={handleCreateJob}
             onUpdateJob={handleUpdateJob}
             onDeleteJob={handleDeleteJob}
+            onCreateCustomer={handleCreateCustomer}
             onViewChange={handleViewChange}
             isMobile={isMobile}
             currentUser={currentUser}
