@@ -21,7 +21,7 @@ import {
 import { compressImageToDataUrl } from '../../lib/photoCompress';
 import { uploadPhotoToStorage } from '../../lib/photoStorage';
 import { appendPhoto, flushPendingMirrors, listPhotosForJob, dataUrlToBlob, deletePhotoForJobByUrl } from '../../lib/photoStore';
-import { logChange, describeUrl } from '../../lib/changeLog';
+import { logChange, logJobChange, describeUrl } from '../../lib/changeLog';
 import ServiceOrderCard from './ServiceOrderCard';
 
 interface JobDetailProps {
@@ -470,6 +470,23 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
   // photo/comment events surface in that work order's history. Actor = contractor.
   const auditEntity = job.sourceJobId || job.id;
 
+  // Last note text the audit log knows about, so a blur with nothing typed
+  // doesn't write a no-op history row. Reset per job so opening a different
+  // WO doesn't diff against the previous one's notes.
+  const lastLoggedNotes = useRef(job.operationalNotes ?? '');
+  useEffect(() => { lastLoggedNotes.current = job.operationalNotes ?? ''; }, [job.id]);
+  const commitNotesToHistory = () => {
+    if (serviceNotes === lastLoggedNotes.current) return;
+    logJobChange(
+      'job.note_update',
+      auditEntity,
+      { operationalNotes: lastLoggedNotes.current },
+      { operationalNotes: serviceNotes },
+      contractorId,
+    );
+    lastLoggedNotes.current = serviceNotes;
+  };
+
   const addPhoto = async (category: PhotoCategory, dataUrl: string) => {
     setUploadError(null);
     // Audit the upload (100% auditable: who added a photo to which WO category).
@@ -910,7 +927,7 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
       }`}>
         <div className="flex items-center gap-3 px-4 py-3">
           <button
-            onClick={onBack}
+            onClick={() => { commitNotesToHistory(); onBack(); }}
             className={`p-2 rounded-lg cursor-pointer ${phase === 'active' ? 'hover:bg-orange-700' : 'hover:bg-slate-100'}`}
           >
             <ArrowLeft className="w-5 h-5" />
@@ -2067,6 +2084,23 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
                 </div>
               </div>
             )}
+
+            {/* Add Notes (post-completion) */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-3">
+              <h3 className="font-semibold text-slate-900 flex items-center gap-2">
+                <FileText className="w-4 h-4 text-orange-500" />
+                Add Notes
+              </h3>
+              <textarea
+                value={serviceNotes}
+                onChange={e => setServiceNotes(e.target.value)}
+                onBlur={commitNotesToHistory}
+                placeholder="Add notes about the work, findings, or follow-up needed…"
+                rows={3}
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm resize-none focus:outline-none focus:ring-2 focus:ring-orange-400"
+              />
+              <p className="text-xs text-slate-400 text-center">Notes sync automatically to the admin dashboard</p>
+            </div>
 
             {/* Add Photos (post-completion) */}
             <div className="bg-white rounded-2xl border-2 border-orange-200 p-4 space-y-3">
