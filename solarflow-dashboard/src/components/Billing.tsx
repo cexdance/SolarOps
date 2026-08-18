@@ -20,9 +20,10 @@ import type { Contractor } from '../types/contractor';
 import { sortJobsBy, JOB_SORT_OPTIONS, type JobSortOption } from '../lib/jobSort';
 import { serviceOrderNo } from '../lib/woHelpers';
 import { notifyAdminForInvoice } from '../lib/quoteService';
-import { formatMoney } from '../lib/money';
+import { formatMoney, formatCost } from '../lib/money';
 import { WorkOrderCalendar } from './WorkOrderCalendar';
 import { BillingReportModal } from './BillingReportModal';
+import { SowDistributionModal } from './SowDistributionModal';
 import { printServiceReport } from '../lib/printServiceReport';
 
 // ── Billing pipeline (kanban) ─────────────────────────────────────────────────
@@ -189,6 +190,8 @@ export const Billing: React.FC<BillingProps> = ({
   const [showReport, setShowReport] = useState(false);
   // Click a column's aging badge to see only the cards that are actually late.
   const [agingOnly, setAgingOnly] = useState<Record<string, boolean>>({});
+  // Order whose SOW is being reviewed before invoicing.
+  const [sowJobId, setSowJobId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'kanban' | 'list' | 'calendar'>(() => {
     const saved = localStorage.getItem('solarops_billing_view');
     if (saved === 'kanban' || saved === 'list' || saved === 'calendar') return saved as 'kanban' | 'list' | 'calendar';
@@ -656,16 +659,15 @@ export const Billing: React.FC<BillingProps> = ({
                             <span className="text-[11px] text-slate-400">With dispatch · moves to Ready to Invoice when the contractor completes</span>
                           )}
                           {col.key === 'to_invoice' && (
-                            <>
-                              <button
-                                onClick={() => handleRequestInvoice(job)}
-                                disabled={processingIds.includes(job.id)}
-                                className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg text-xs font-medium transition-colors bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 cursor-pointer"
-                              >
-                                <Send className="w-3 h-3" /> Notify Daniel
-                              </button>
-                              <button onClick={() => moveToColumn(job.id, 'invoiced')} className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-50 cursor-pointer">Invoiced</button>
-                            </>
+                            // Opens the SOW instead of invoicing blind. The card
+                            // stays exactly where it is: nothing advances until
+                            // Daniel acts from inside the report.
+                            <button
+                              onClick={() => setSowJobId(job.id)}
+                              className="flex-1 flex items-center justify-center gap-1 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700 cursor-pointer"
+                            >
+                              <FileText className="w-3 h-3" /> Generate Invoice
+                            </button>
                           )}
                           {col.key === 'invoiced' && (
                             <>
@@ -723,6 +725,70 @@ export const Billing: React.FC<BillingProps> = ({
           onClose={() => setShowReport(false)}
         />
       )}
+
+      {/* ── Invoice review ───────────────────────────────────────────────────
+          Generate Invoice opens the SOW rather than invoicing blind, so the
+          work actually done and the amount about to be billed are on screen
+          together. The card does not move until Daniel acts from in here. */}
+      {sowJobId && (() => {
+        const job = serviceOrders.find(j => j.id === sowJobId);
+        if (!job) return null;
+        const customer = getCustomer(job.customerId);
+        const parts = job.partsCost ?? 0;
+        const close = () => setSowJobId(null);
+        return (
+          <SowDistributionModal
+            job={job}
+            siteName={displayName(job, customer)}
+            siteAddress={customer?.address ?? job.siteAddress}
+            customer={customer}
+            contractors={contractors}
+            users={users.map(u => ({ id: u.id, name: u.name, username: u.username, email: u.email }))}
+            onClose={close}
+            actions={
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                {/* No client total here on purpose: commercial figures are
+                    hidden platform-wide (SHOW_MONEY), the invoice itself is
+                    raised in Xero. What Daniel needs off this screen is what
+                    was actually done, plus the field-entered costs formatCost
+                    is explicitly allowed to show. */}
+                <div className="min-w-0">
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Billable work</p>
+                  <p className="text-sm font-semibold text-slate-900 leading-tight">
+                    {job.laborHours ? `${job.laborHours} hr${job.laborHours === 1 ? '' : 's'} labor` : 'No labor hours logged'}
+                    {parts > 0 && <span className="font-normal text-slate-600"> · parts {formatCost(parts)}</span>}
+                  </p>
+                  <p className="text-[11px] text-slate-500 truncate">
+                    {job.serviceType ? String(job.serviceType) : 'No service type'}
+                    {job.isPowercare && <> · <span className="text-orange-600 font-semibold">PowerCare, bills to SolarEdge</span></>}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={close}
+                    className="px-3 py-2 border border-slate-200 bg-white rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-50 cursor-pointer"
+                  >
+                    Not yet
+                  </button>
+                  <button
+                    onClick={() => { handleRequestInvoice(job); close(); }}
+                    disabled={processingIds.includes(job.id)}
+                    className="flex items-center gap-1.5 px-3 py-2 bg-green-600 text-white rounded-lg text-xs font-semibold hover:bg-green-700 disabled:opacity-50 cursor-pointer"
+                  >
+                    <Send className="w-3.5 h-3.5" /> Notify Daniel to Invoice
+                  </button>
+                  <button
+                    onClick={() => { moveToColumn(job.id, 'invoiced'); close(); }}
+                    className="flex items-center gap-1.5 px-3 py-2 bg-slate-900 text-white rounded-lg text-xs font-semibold hover:bg-slate-700 cursor-pointer"
+                  >
+                    <CheckCircle className="w-3.5 h-3.5" /> Mark Invoiced
+                  </button>
+                </div>
+              </div>
+            }
+          />
+        );
+      })()}
 
       {/* List View */}
       {viewMode === 'list' && (

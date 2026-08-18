@@ -178,6 +178,11 @@ interface Props {
   technicians?: { id: string; name: string }[];
   users?: MentionUser[];
   onClose: () => void;
+  /** Optional decision bar pinned under the report. Billing uses it to show
+   *  what the order is worth and to invoice without leaving the report, so the
+   *  work done and the amount being billed are on screen at the same time.
+   *  Never printed. */
+  actions?: React.ReactNode;
 }
 
 // ── Section wrapper ───────────────────────────────────────────────────────────
@@ -258,6 +263,7 @@ export const SowDistributionModal: React.FC<Props> = ({
   customer,
   contractors = [],
   onClose,
+  actions,
 }) => {
   const [weather, setWeather] = useState<WeatherResult | null | 'loading'>('loading');
 
@@ -527,6 +533,13 @@ export const SowDistributionModal: React.FC<Props> = ({
 
             </div>
           </div>
+
+          {/* ── Decision bar (Billing) ── */}
+          {actions && (
+            <div className="sow-toolbar shrink-0 border-t border-slate-200 bg-slate-50 px-5 py-3 rounded-b-2xl">
+              {actions}
+            </div>
+          )}
         </div>
       </div>
 
