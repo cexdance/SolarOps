@@ -1,10 +1,33 @@
 // SolarFlow - Contractor Data Store
 import { Contractor, ServiceRate, ContractorJob, ContractorInvite } from '../types/contractor';
 import { dbSet } from './db';
+import { getKVMirror, setKVMirror } from './stateStore';
 
 const CONTRACTORS_KEY = 'solarflow_contractors';
 const RATES_KEY = 'solarflow_service_rates';
 const CONTRACTOR_JOBS_KEY = 'solarflow_contractor_jobs';
+
+/** Keys mirrored to IDB so a phone that loses localStorage still has them. */
+export const MIRRORED_KEYS = [CONTRACTORS_KEY, RATES_KEY, CONTRACTOR_JOBS_KEY];
+
+/**
+ * Read a blob that localStorage owns, falling back to the durable IDB mirror.
+ *
+ * localStorage first because the sync pull writes it directly, so when it is
+ * present it is the freshest copy. The mirror only answers when localStorage has
+ * nothing: a quota-rejected write, an ITP eviction, or a cleared cache. Before
+ * this, that case returned the seed default, which for contractor jobs is `[]`,
+ * i.e. "this contractor has no work" on a phone whose server has 146 jobs.
+ */
+function readBlob<T>(key: string): T | null {
+  try {
+    const stored = localStorage.getItem(key);
+    if (stored) return JSON.parse(stored) as T;
+  } catch (e) {
+    console.error(`Failed to read ${key} from localStorage:`, e);
+  }
+  return getKVMirror<T>(key);
+}
 
 // Default service rates - imported from Excel
 const defaultServiceRates: ServiceRate[] = [
@@ -453,65 +476,48 @@ const demoContractors: Contractor[] = [
 ];
 
 export const loadContractors = (): Contractor[] => {
-  try {
-    const stored = localStorage.getItem(CONTRACTORS_KEY);
-    if (stored) {
-      const loaded: Contractor[] = JSON.parse(stored);
-      // Always apply altEmails from seed so login aliases stay up-to-date
-      return loaded.map(c => {
-        const seed = demoContractors.find(d => d.id === c.id);
-        return seed?.altEmails ? { ...c, altEmails: seed.altEmails } : c;
-      });
-    }
-  } catch (e) {
-    console.error('Failed to load contractors:', e);
-  }
-  return demoContractors;
+  const loaded = readBlob<Contractor[]>(CONTRACTORS_KEY);
+  if (!loaded) return demoContractors;
+  // Always apply altEmails from seed so login aliases stay up-to-date
+  return loaded.map(c => {
+    const seed = demoContractors.find(d => d.id === c.id);
+    return seed?.altEmails ? { ...c, altEmails: seed.altEmails } : c;
+  });
 };
 
 export const saveContractors = (contractors: Contractor[]): void => {
+  // Cloud and mirror first, both independent of localStorage. A quota throw on
+  // setItem used to sit inside this try and skip dbSet entirely, so the write
+  // that most needed to reach the server was the one that never did.
+  dbSet(CONTRACTORS_KEY, contractors);
+  setKVMirror(CONTRACTORS_KEY, contractors);
   try {
     localStorage.setItem(CONTRACTORS_KEY, JSON.stringify(contractors));
-    dbSet(CONTRACTORS_KEY, contractors);
   } catch (e) {
-    console.error('Failed to save contractors:', e);
+    console.error('Failed to save contractors to localStorage (quota):', e);
   }
 };
 
 export const loadServiceRates = (): ServiceRate[] => {
-  try {
-    const stored = localStorage.getItem(RATES_KEY);
-    if (stored) {
-      const parsed: ServiceRate[] = JSON.parse(stored);
-      // Merge: apply any updated defaults by id so price/description changes propagate
-      const defaultMap = new Map(defaultServiceRates.map(r => [r.id, r]));
-      return parsed.map(r => defaultMap.has(r.id) ? { ...defaultMap.get(r.id)!, active: r.active } : r);
-    }
-  } catch (e) {
-    console.error('Failed to load service rates:', e);
-  }
-  return defaultServiceRates;
+  const parsed = readBlob<ServiceRate[]>(RATES_KEY);
+  if (!parsed) return defaultServiceRates;
+  // Merge: apply any updated defaults by id so price/description changes propagate
+  const defaultMap = new Map(defaultServiceRates.map(r => [r.id, r]));
+  return parsed.map(r => defaultMap.has(r.id) ? { ...defaultMap.get(r.id)!, active: r.active } : r);
 };
 
 export const saveServiceRates = (rates: ServiceRate[]): void => {
+  dbSet(RATES_KEY, rates);
+  setKVMirror(RATES_KEY, rates);
   try {
     localStorage.setItem(RATES_KEY, JSON.stringify(rates));
-    dbSet(RATES_KEY, rates);
   } catch (e) {
-    console.error('Failed to save service rates:', e);
+    console.error('Failed to save service rates to localStorage (quota):', e);
   }
 };
 
 export const loadContractorJobs = (): ContractorJob[] => {
-  try {
-    const stored = localStorage.getItem(CONTRACTOR_JOBS_KEY);
-    if (stored) {
-      return JSON.parse(stored);
-    }
-  } catch (e) {
-    console.error('Failed to load contractor jobs:', e);
-  }
-  return demoContractorJobs;
+  return readBlob<ContractorJob[]>(CONTRACTOR_JOBS_KEY) ?? demoContractorJobs;
 };
 
 export const saveContractorJobs = (jobs: ContractorJob[]): void => {
@@ -520,6 +526,7 @@ export const saveContractorJobs = (jobs: ContractorJob[]): void => {
   // is full. (Previously a quota throw on setItem skipped dbSet entirely.)
   // Push full payload (incl. base64) to cloud, Supabase handles large data fine.
   dbSet(CONTRACTOR_JOBS_KEY, jobs);
+  setKVMirror(CONTRACTOR_JOBS_KEY, jobs);
   try {
     // Strip base64 photo strings before writing to localStorage to prevent quota overflow.
     // Photos are durably stored in IndexedDB (via photoStore.appendPhoto) and the

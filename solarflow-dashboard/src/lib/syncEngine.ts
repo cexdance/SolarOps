@@ -26,7 +26,7 @@ import { isContractorAccount } from './authRouting';
 import { markPushPending, clearPendingPush, isRowPoisoned, incRowFailure, clearRowPoison } from './outbox';
 import { isAllowedCustomer } from './solarEdgeSiteFilter';
 import { dedupeWoPhotos } from './woHelpers';
-import { idbSetState } from './stateStore';
+import { idbSetState, getKVMirror, setKVMirror } from './stateStore';
 import type { AppState, Customer, Job, WOPhoto } from '../types';
 import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 
@@ -1017,30 +1017,69 @@ export async function pushToSupabase(state: AppState): Promise<void> {
 // ── Incremental pull ──────────────────────────────────────────────────────────
 
 /**
- * Pull per-record rows for a given prefix.
+ * Land a pulled KV blob locally: mirror (memory + IDB) first, localStorage after.
+ *
+ * The order is the whole point. This used to be a bare localStorage.setItem
+ * inside a try whose catch only logged, so on a phone at quota the write threw,
+ * the `changedKVKeys.push` below it never ran, no `solarflow-remote-update` event
+ * fired, and useSyncEngine never re-read. The pull reported success while the
+ * contractor's job list stayed empty. Now the value is already durable before
+ * localStorage is even attempted, and a quota throw is just a lost cache entry.
+ */
+function writeKVLocal(key: string, value: unknown, serialized: string): void {
+  setKVMirror(key, value);
+  try {
+    localStorage.setItem(key, serialized);
+  } catch (e) {
+    console.warn(`[SyncEngine] localStorage full, ${key} kept in the IDB mirror only`, e);
+  }
+}
+
+// Rows per pullPrefix request. Small enough that one page lands quickly on a
+// phone's connection, large enough that a full reconcile is a handful of
+// requests, not dozens.
+const PULL_PAGE_SIZE = 200;
+
+/**
+ * Pull per-record rows for a given prefix, one page at a time.
  * If `since` is provided, only fetches rows changed after that timestamp.
  * Returns an array of the value field.
  */
-async function pullPrefix<T>(
+export async function pullPrefix<T>(
   prefix: string,
   since: string | null,
 ): Promise<T[]> {
   try {
-    let q = supabase
-      .from('app_data')
-      .select('key, value, updated_at')
-      .like('key', `${prefix}%`);
+    // Paginated. A full reconcile (which is exactly what a storage-evicted phone
+    // triggers via resetSyncCursor) fetches every customer: and job: row at once,
+    // ~800KB in two requests, and PostgREST silently TRUNCATES at its max-rows cap
+    // with error === null, so an over-cap pull looks like a successful short one.
+    // Ordering by key keeps the window stable across requests.
+    const rows: { value: unknown; updated_at: string }[] = [];
+    for (let from = 0; ; from += PULL_PAGE_SIZE) {
+      let q = supabase
+        .from('app_data')
+        .select('key, value, updated_at')
+        .like('key', `${prefix}%`)
+        .order('key', { ascending: true })
+        .range(from, from + PULL_PAGE_SIZE - 1);
 
-    if (since) q = q.gt('updated_at', since);
+      if (since) q = q.gt('updated_at', since);
 
-    const { data, error } = await q;
-    if (error || !data) {
-      console.warn(`[SyncEngine] pullPrefix failed for prefix ${prefix}:`, error?.message || 'No data returned');
-      return [];
+      const { data, error } = await q;
+      if (error || !data) {
+        // Keep the pages already in hand. A partial reconcile is strictly better
+        // than none: mergeRemote is additive, so the next pull fills the rest.
+        console.warn(`[SyncEngine] pullPrefix failed for prefix ${prefix} at offset ${from}:`, error?.message || 'No data returned');
+        break;
+      }
+      rows.push(...data);
+      if (data.length < PULL_PAGE_SIZE) break; // short page means last page
     }
+
     // Stamp the authoritative app_data.updated_at onto the value so mergeRemote
     // can compare it against the local record's updatedAt.
-    return data.map(r => {
+    return rows.map(r => {
       const v = r.value as T;
       if (v && typeof v === 'object' && r.updated_at) {
         (v as { updatedAt?: string }).updatedAt = r.updated_at as string;
@@ -1090,7 +1129,14 @@ async function pullContractorScope(): Promise<[Customer[], Job[]]> {
  */
 export async function pullFromSupabase(): Promise<Partial<AppState> | null> {
   try {
-    const { data: { session } } = await supabase.auth.getSession();
+    // getActiveSession, NOT getSession. A suspended phone (iOS backgrounds the
+    // tab/PWA) resumes with an expired access token and a still-valid refresh
+    // token, because the auto-refresh timer never fired while suspended. The raw
+    // getSession() then returns null and this function silently no-ops on EVERY
+    // trigger (mount, focus, online, the 5-min poll), so the device pushes fine
+    // and never reads: "my phone is missing clients and contractor jobs".
+    // pushToSupabase already refreshed here; the read path was never ported.
+    const session = await getActiveSession();
     if (!session) return null;
 
     ensureCursorVersion(); // one-time full resync to recover any stale future cursor
@@ -1190,16 +1236,21 @@ export async function pullFromSupabase(): Promise<Partial<AppState> | null> {
               const prev = localStorage.getItem(row.key);
               let local: unknown = null;
               try { local = prev ? JSON.parse(prev) : null; } catch { local = null; }
-              const next = JSON.stringify(mergeKVValue(row.key, local, row.value));
+              // Fall back to the mirror when localStorage lost the key, so the
+              // merge sees the real local side instead of treating an evicted
+              // cache as "this device has nothing".
+              if (local == null) local = getKVMirror(row.key);
+              const merged = mergeKVValue(row.key, local, row.value);
+              const next = JSON.stringify(merged);
               if (prev !== next) {
-                localStorage.setItem(row.key, next);
+                writeKVLocal(row.key, merged, next);
                 changedKVKeys.push(row.key);
               }
             } else {
               const next = JSON.stringify(row.value);
               const prev = localStorage.getItem(row.key);
               if (prev !== next) {
-                localStorage.setItem(row.key, next);
+                writeKVLocal(row.key, row.value, next);
                 changedKVKeys.push(row.key);
               }
             }

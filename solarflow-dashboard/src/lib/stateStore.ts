@@ -68,15 +68,25 @@ export interface StateStorage {
   set(key: string, value: AppState): Promise<void>;
 }
 
+// Untyped access to the same object store. The AppState blob and the KV mirror
+// below share one store, separated by key prefix.
+async function idbGetRaw(key: string): Promise<unknown> {
+  const store = await tx('readonly');
+  const row = await reqToPromise<KvRow | undefined>(store.get(key));
+  return row?.value ?? null;
+}
+
+async function idbSetRaw(key: string, value: unknown): Promise<void> {
+  const store = await tx('readwrite');
+  await reqToPromise(store.put({ key, value } satisfies KvRow));
+}
+
 const idbStorage: StateStorage = {
   async get(key) {
-    const store = await tx('readonly');
-    const row = await reqToPromise<KvRow | undefined>(store.get(key));
-    return (row?.value as AppState) ?? null;
+    return (await idbGetRaw(key)) as AppState | null;
   },
   async set(key, value) {
-    const store = await tx('readwrite');
-    await reqToPromise(store.put({ key, value } satisfies KvRow));
+    return idbSetRaw(key, value);
   },
 };
 
@@ -163,4 +173,60 @@ export async function hydrateStateFromIdb(
     clearLS: () => localStorage.removeItem(LEGACY_LS_KEY),
     parse,
   });
+}
+
+// ── KV blob mirror ───────────────────────────────────────────────────────────
+//
+// The contractor blobs (solarflow_contractor_jobs and friends) are the last big
+// values still living in localStorage, the exact tier this file moved AppState
+// off for the exact reason: a contractor's phone runs out of it. Two ways that
+// surfaced as "my phone shows no contractor jobs":
+//
+//   1. localStorage.setItem throws QuotaExceededError. The old KV pull caught it,
+//      logged, and skipped changedKVKeys, so no re-hydrate event ever fired and
+//      the UI kept its empty list while the server had 146 jobs.
+//   2. iOS evicts localStorage (ITP, ~7 days idle). loadContractorJobs() finds
+//      nothing and returns the empty demo array, which reads as "no jobs".
+//
+// So the blob now lands in three places on every write: this in-memory map (the
+// synchronous read path, because loadContractorJobs has six sync callers and
+// cannot become async), IndexedDB (durable across reloads, far larger quota),
+// and localStorage (kept only so an older build reading the key still works).
+// A localStorage failure is now cosmetic instead of load-bearing.
+
+const kvMirror = new Map<string, unknown>();
+
+/** Synchronous read of a mirrored KV blob. null when nothing has hydrated it. */
+export function getKVMirror<T>(key: string): T | null {
+  return kvMirror.has(key) ? (kvMirror.get(key) as T) : null;
+}
+
+/**
+ * Mirror a KV blob: memory immediately, IDB in the background.
+ * Callers keep writing localStorage themselves; this is the tier that survives.
+ */
+export function setKVMirror(key: string, value: unknown): void {
+  kvMirror.set(key, value);
+  // Fire-and-forget. A rejected IDB write must not break the caller's save, the
+  // value is already in memory for this session and in Supabase durably.
+  idbSetRaw(`kv:${key}`, value).catch((e) => {
+    console.warn(`[stateStore] IDB mirror write failed for ${key}`, e);
+  });
+}
+
+/**
+ * Populate the mirror from IDB at boot, for keys that have nothing in
+ * localStorage. localStorage wins when present: the sync pull writes it directly,
+ * so it is at least as fresh as anything IDB holds from a previous session.
+ */
+export async function hydrateKVMirror(keys: string[]): Promise<void> {
+  await Promise.all(keys.map(async (key) => {
+    try {
+      if (localStorage.getItem(key)) return; // localStorage is intact, nothing to rescue
+      const stored = await idbGetRaw(`kv:${key}`);
+      if (stored != null) kvMirror.set(key, stored);
+    } catch (e) {
+      console.warn(`[stateStore] IDB mirror hydrate failed for ${key}`, e);
+    }
+  }));
 }

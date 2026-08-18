@@ -44,18 +44,20 @@ import { logChange, logJobChange, flushChangeLog } from './lib/changeLog';
 import { autoArchiveCompletedJobs, stampJobFields } from './lib/jobService';
 import { fetchMyNotifications, markNotificationReadRemote, markAllNotificationsReadRemote, startNotificationPolling, stopNotificationPolling, subscribeToNotifications, unsubscribeFromNotifications } from './lib/notifications';
 import { processBillingTimers } from './lib/billingService';
-import { loadContractors, saveContractors, loadServiceRates, saveServiceRates, loadContractorJobs, saveContractorJobs, initializeContractorData, findInviteByToken } from './lib/contractorStore';
+import { loadContractors, saveContractors, loadServiceRates, saveServiceRates, loadContractorJobs, saveContractorJobs, initializeContractorData, findInviteByToken, MIRRORED_KEYS } from './lib/contractorStore';
+import { hydrateKVMirror } from './lib/stateStore';
 import { ContractorInvite as ContractorInviteType } from './types/contractor';
 import { AppState, Job, Customer, User, AppNotification, SolarEdgeExtraSite, RMAEntry, WOStatus, JobStatus, Activity } from './types';
 import { FL_SITES } from './lib/solarEdgeSites';
 import { isFloridaSite, isAllowedCustomer, deriveClientId, findCustomerForSite } from './lib/solarEdgeSiteFilter';
-import { getDeletedCustomerIds, markJobDeleted } from './lib/dataStore';
+import { getDeletedCustomerIds, markJobDeleted, findDuplicateCustomer } from './lib/dataStore';
+import { mergeCustomerPair } from './lib/syncEngine';
 import { Contractor, ContractorStatus, ContractorJob, ContractorLineItem } from './types/contractor';
 import { addInteraction, loadCustomers, loadInteractions, saveInteractions } from './lib/customerStore';
 import { validateAddress, normalizeStreetOrder, sameStreetAddress } from './lib/addressValidator';
 import { useUnreadBadge } from './hooks/useUnreadBadge';
 import { resolveSessionRoute, isContractorAccount } from './lib/authRouting';
-import { Eye, X } from 'lucide-react';
+import { Eye, X, CloudOff } from 'lucide-react';
 
 // ── Web Push helpers ────────────────────────────────────────────────────────
 
@@ -697,6 +699,10 @@ const ResetPasswordScreen: React.FC<{ onDone: () => void }> = ({ onDone }) => {
 
 function App() {
   const [dbReady, setDbReady] = useState(false);
+  // The boot pull did not finish in time (or failed). The app is rendering
+  // whatever was local, which on an evicted phone is close to nothing, so say so
+  // instead of passing a partial database off as the whole one.
+  const [syncDegraded, setSyncDegraded] = useState(false);
   const [data, setData] = useState<AppState>(() => loadData());
   const [currentView, setCurrentView] = useState(
     // `?box=` means a box QR label was scanned, which overrides the remembered
@@ -832,9 +838,14 @@ function App() {
     // Hydrate the local state tier from IndexedDB first (migrating it out of the
     // legacy 5MB localStorage blob on first run), so both syncFromDB's merge and
     // the loadData() below read the IDB-backed snapshot, not the retired blob.
-    hydrateData()
-      .then(() => Promise.race([syncFromDB(), timeout]))
-      .then(async () => {
+    // Adopting the pull's result is attached to the PULL, not to the race below.
+    // The race used to wrap both, so a timeout skipped this entirely: the request
+    // was never actually cancelled (Promise.race just stops awaiting), it landed a
+    // few seconds later and wrote correct data to IDB, and React kept rendering the
+    // near-empty pre-pull state until a manual reload, which re-ran the same race.
+    // That is the "my phone is missing clients and jobs" report. Now the timeout
+    // only releases the spinner; a late pull still gets adopted whenever it lands.
+    const adopt = async () => {
         // Re-read from IDB after remote merge (may have new records from other devices)
         const merged = await hydrateData();
         // Auto-archive completed jobs >30 days old
@@ -859,11 +870,28 @@ function App() {
           });
           return { ...withArchived, jobs: safeMergedJobs };
         });
+        // The data landed, whether that took 2s or 40s. Clear any banner the
+        // timeout put up.
+        setSyncDegraded(false);
+    };
+
+    hydrateData()
+      .then(() => {
+        const pull = syncFromDB()
+          .then(adopt)
+          .catch((err) => {
+            // Offline, not logged in, or the pull itself failed. Local data is
+            // already loaded, but it may be a fraction of the real database.
+            console.warn('[App] startup sync failed, showing local data', err);
+            setSyncDegraded(true);
+          });
+        // The spinner waits at most SYNC_TIMEOUT_MS. `pull` keeps running either way.
+        return Promise.race([pull, timeout]);
       })
       .catch((err) => {
-        // Sync failed (offline, not logged in, or timed out), local data is already loaded
         if (err?.message === 'sync-timeout') {
           console.warn('[App] Supabase sync timed out after 8s, using local data');
+          setSyncDegraded(true);
         }
       })
       .finally(() => setDbReady(true));
@@ -935,6 +963,37 @@ function App() {
     if (skipContractorPersist.current) return;
     saveContractorJobs(contractorJobs);
   }, [contractorJobs]);
+
+  // Rescue the contractor blobs from the IDB mirror.
+  //
+  // The useState initializers for these three ran synchronously against
+  // localStorage at mount. On a phone that lost localStorage (quota-rejected
+  // write, or iOS ITP eviction after ~7 days idle) they are holding seed
+  // defaults, and for contractor jobs that seed is `[]`, which renders as "you
+  // have no work" while the server holds 146 jobs. Re-read once the mirror is up.
+  //
+  // Only fills EMPTY state, so it can never clobber a list that already loaded.
+  // Guarded by skipContractorPersist for the same reason the remote-update
+  // handler is: this data came out of local durable storage, and writing it
+  // straight back out would be a pointless whole-blob push from the one device
+  // whose local tier just proved unreliable.
+  //
+  // Not done in main.tsx before render: a private-mode IDB open can hang, and
+  // blocking first paint for every user to fix an evicted device is a bad trade.
+  useEffect(() => {
+    let cancelled = false;
+    hydrateKVMirror(MIRRORED_KEYS)
+      .then(() => {
+        if (cancelled) return;
+        skipContractorPersist.current = true;
+        setContractorJobs(prev => (prev.length ? prev : loadContractorJobs()));
+        setContractors(prev  => (prev.length ? prev : loadContractors()));
+        setServiceRates(prev => (prev.length ? prev : loadServiceRates()));
+        setTimeout(() => { skipContractorPersist.current = false; }, 0);
+      })
+      .catch(() => { /* the mirror is a rescue tier, never fatal */ });
+    return () => { cancelled = true; };
+  }, []);
 
   // ── Contractor → admin reconciliation (sync-side) ──────────────────────────
   // handleContractorJobUpdate mirrors contractor work into the admin Job, but it
@@ -2122,6 +2181,48 @@ function App() {
   };
 
   const handleCreateCustomer = (customer: Partial<Customer>) => {
+    // Duplicate guard. Every create path in the app funnels through here (the
+    // Customers modal, the Trello/lead import, and lead conversion), so one
+    // check covers all of them. See findDuplicateCustomer for the incident.
+    //
+    // ponytail: reads `data.customers` from this render's closure rather than
+    // inside the setData updater, because the caller needs the id back
+    // SYNCHRONOUSLY and the updater has not run by then. The gap is one render,
+    // which is fine for imports and form submits (a second submit re-renders
+    // first). If two creates ever land in the same tick, move the check into
+    // the updater and hand the id back through a callback.
+    const existing = findDuplicateCustomer(data.customers, customer);
+    if (existing) {
+      // Reuse the existing record, but do NOT drop what the incoming one
+      // carried: an import arrives with comments and files the existing record
+      // has never seen, and skipping the create must not discard those too.
+      const absorbed = mergeCustomerPair(existing, {
+        ...existing,
+        activityHistory: customer.activityHistory,
+        files: customer.files,
+      });
+      const gained =
+        (absorbed.activityHistory?.length ?? 0) !== (existing.activityHistory?.length ?? 0) ||
+        (absorbed.files?.length ?? 0) !== (existing.files?.length ?? 0) ||
+        (!existing.trelloBackupUrl && !!customer.trelloBackupUrl);
+      // Only write when there is something to absorb. A needless whole-record
+      // save is a sync-clobber opportunity, not a no-op.
+      if (gained) {
+        handleUpdateCustomer({
+          ...absorbed,
+          trelloBackupUrl: existing.trelloBackupUrl || customer.trelloBackupUrl,
+        });
+      }
+      logChange('customer.create.duplicate_blocked', 'customer', existing.id,
+        { candidate: customer, absorbed: gained }, data.currentUser?.email ?? 'unknown');
+      alert(
+        `${existing.name} already exists${existing.clientId ? ` as client ${existing.clientId}` : ''}.\n\n` +
+        `Opening the existing record instead of creating a second one` +
+        `${gained ? ', and the notes and files from this one were added to it' : ''}.`
+      );
+      return existing.id;
+    }
+
     const newCustomer: Customer = {
       id: `cust-${Date.now()}`,
       name: customer.name || '',
@@ -3512,6 +3613,32 @@ function App() {
     <ErrorBoundary>
       <Suspense fallback={<SuspenseFallback message="Loading application..." />}>
         <StorageWarningBanner getSnapshot={() => data} />
+        {/* The startup pull did not land. Without this the app looks fully loaded
+            while showing a fraction of the database, which is how the mobile
+            "missing clients and contractor jobs" reports went unnoticed. Retry
+            runs deepSync (clears the cursor, full reconcile), the same button the
+            header already exposes. Not dismissible: the state it reports is wrong
+            data on screen, and it clears itself the moment a pull succeeds. */}
+        {syncDegraded && (
+          <div
+            role="alert"
+            className="fixed top-2 left-1/2 -translate-x-1/2 z-[200] max-w-md w-[calc(100%-1rem)] rounded-xl shadow-lg border px-4 py-3 flex items-start gap-3 bg-amber-50 border-amber-300 text-amber-800"
+          >
+            <CloudOff className="w-5 h-5 shrink-0 mt-0.5" />
+            <div className="text-sm">
+              <p className="font-semibold">Showing partial data</p>
+              <p className="text-xs mt-0.5">
+                Could not reach the server on startup, so this may be missing clients and work orders.
+              </p>
+              <button
+                onClick={() => { void deepSync().then(() => setSyncDegraded(false)).catch(() => {}); }}
+                className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded-lg text-xs font-semibold cursor-pointer"
+              >
+                Retry sync
+              </button>
+            </div>
+          </div>
+        )}
         <Layout
         currentView={currentView}
         onViewChange={handleViewChange}
