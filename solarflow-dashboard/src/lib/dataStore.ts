@@ -234,6 +234,32 @@ function applyDedup(customers: Customer[]): { customers: Customer[]; removed: st
   return { customers: deduped, removed: tombstone };
 }
 
+/**
+ * The record we already hold for this client, if any.
+ *
+ * INCIDENT 2026-08-13, US-15644 (Jose Ravelo). A Trello import created a SECOND
+ * customer for a client that already existed. Both of that client's service
+ * orders stayed linked to the ORIGINAL record, so whoever opened the new one
+ * saw an account with no orders while a colleague looking at the old one saw
+ * both. Nothing reported an error: the two records simply coexisted.
+ *
+ * applyDedup above already collapses this pair, but only once, behind a
+ * one-time flag. This is the same two keys applied at CREATE time, so the
+ * duplicate is never written in the first place.
+ */
+export function findDuplicateCustomer(
+  customers: Customer[],
+  candidate: Pick<Customer, 'clientId' | 'solarEdgeSiteId'>,
+): Customer | undefined {
+  const clientId = candidate.clientId?.trim();
+  const siteId = candidate.solarEdgeSiteId?.trim();
+  // A blank key must match NOTHING. Most records carry neither field, so
+  // treating '' as a value would collapse every one of them into one client.
+  return customers.find(c =>
+    (!!siteId && c.solarEdgeSiteId?.trim() === siteId) ||
+    (!!clientId && c.clientId?.trim() === clientId));
+}
+
 // ── Safe version migration ────────────────────────────────────────────────────
 //
 // When DATA_VERSION changes, we ADD new seed customers that don't already exist
