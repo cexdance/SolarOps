@@ -260,6 +260,26 @@ export function findDuplicateCustomer(
     (!!clientId && c.clientId?.trim() === clientId));
 }
 
+/**
+ * Does any job point at a customer this device does not hold?
+ *
+ * That dangling reference is proof the local cache has holes, and the
+ * incremental cursor can never close them: the pull only asks for rows changed
+ * since the cursor, so a customer last written BEFORE it is never sent again.
+ * Seen 2026-08-18 as "SO-2608-77819 is on the board but client US-15674 is not".
+ *
+ * Tombstoned customers do not count. A job referencing a deliberately deleted
+ * client is an orphan, not a hole, and healing it would loop forever.
+ */
+export function hasDanglingCustomerRef(
+  jobs: Array<{ customerId?: string }>,
+  customers: Array<{ id: string }>,
+  tombstoned: Set<string>,
+): boolean {
+  const known = new Set(customers.map(c => c.id));
+  return jobs.some(j => !!j.customerId && !known.has(j.customerId) && !tombstoned.has(j.customerId));
+}
+
 // ── Safe version migration ────────────────────────────────────────────────────
 //
 // When DATA_VERSION changes, we ADD new seed customers that don't already exist

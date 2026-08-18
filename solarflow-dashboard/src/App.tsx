@@ -50,7 +50,7 @@ import { ContractorInvite as ContractorInviteType } from './types/contractor';
 import { AppState, Job, Customer, User, AppNotification, SolarEdgeExtraSite, RMAEntry, WOStatus, JobStatus, Activity } from './types';
 import { FL_SITES } from './lib/solarEdgeSites';
 import { isFloridaSite, isAllowedCustomer, deriveClientId, findCustomerForSite } from './lib/solarEdgeSiteFilter';
-import { getDeletedCustomerIds, markJobDeleted, findDuplicateCustomer } from './lib/dataStore';
+import { getDeletedCustomerIds, markJobDeleted, findDuplicateCustomer, hasDanglingCustomerRef } from './lib/dataStore';
 import { mergeCustomerPair } from './lib/syncEngine';
 import { Contractor, ContractorStatus, ContractorJob, ContractorLineItem } from './types/contractor';
 import { addInteraction, loadCustomers, loadInteractions, saveInteractions } from './lib/customerStore';
@@ -994,6 +994,37 @@ function App() {
       .catch(() => { /* the mirror is a rescue tier, never fatal */ });
     return () => { cancelled = true; };
   }, []);
+
+  // ── Self-heal a cache with holes in it ─────────────────────────────────────
+  //
+  // A job pointing at a customerId we do not hold is proof the local cache is
+  // incomplete, and the incremental cursor can NEVER close that hole on its own:
+  // the pull only asks for rows changed since the cursor, so a customer last
+  // written before it is simply never sent again. Reported 2026-08-18 as
+  // "SO-2608-77819 is there but client US-15674 is not" (customer last written
+  // 08-06, job written today, cursor long past 08-06).
+  //
+  // Reloading does not fix it either: hydrateData() only resets the cursor when
+  // local state is entirely absent, and a cache with holes is not absent. Before
+  // this, the only escape was deepSync, which is wired ONLY into the contractor
+  // portal, so a staff session had no way out at all.
+  //
+  // Tombstoned customers are excluded: a job referencing a deliberately deleted
+  // client is an orphan, not a hole, and must not trigger anything.
+  const holeHealRef = useRef(false);
+  useEffect(() => {
+    if (!dbReady || holeHealRef.current) return;
+    if (data.jobs.length === 0 || data.customers.length === 0) return;
+
+    if (!hasDanglingCustomerRef(data.jobs, data.customers, getDeletedCustomerIds())) return;
+
+    // Once per session regardless of outcome. If a full reconcile does not close
+    // the gap the reference is genuinely orphaned, and retrying would put every
+    // affected device into a permanent full-reconcile loop.
+    holeHealRef.current = true;
+    console.warn('[App] job references a customer we do not have, forcing a full reconcile');
+    void deepSync().catch(() => { /* the next boot tries once more */ });
+  }, [dbReady, data.jobs, data.customers, deepSync]);
 
   // ── Contractor → admin reconciliation (sync-side) ──────────────────────────
   // handleContractorJobUpdate mirrors contractor work into the admin Job, but it
