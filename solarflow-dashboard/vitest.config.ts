@@ -6,7 +6,10 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./src/__tests__/setup.ts'],
-    include: ['src/__tests__/**/*.test.ts'],
+    // .tsx included so component render checks are picked up. Without it a
+    // .tsx test file is silently ignored: vitest exits "No test files found"
+    // for that filter rather than failing, so it looks like it passed.
+    include: ['src/__tests__/**/*.test.{ts,tsx}'],
     // src/lib/supabase.ts calls createClient() at module scope, so ANY test that
     // transitively imports syncEngine or dataStore throws "supabaseUrl is
     // required" when these are unset. .env is gitignored, so CI has no values

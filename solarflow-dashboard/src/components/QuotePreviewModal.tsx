@@ -37,6 +37,14 @@ interface QuotePreviewProps {
   notifyName?: string;
   /** Staff roster for @mention autocomplete in the Notes field. */
   users?: MentionUser[];
+  /** What the client actually asked for. Shown at the TOP, above the customer
+   *  fields: whoever prices this needs the scope before anything else, and it
+   *  was previously only reachable by closing the modal and reading the WO. */
+  serviceType?: string;
+  requestedWork?: string;
+  /** Flags that change how the order is billed. */
+  isPowercare?: boolean;
+  isServiceAccountExpense?: boolean;
 }
 
 export const QuotePreviewModal: React.FC<QuotePreviewProps> = ({
@@ -52,6 +60,10 @@ export const QuotePreviewModal: React.FC<QuotePreviewProps> = ({
   onSavePreview,
   notifyName,
   users,
+  serviceType,
+  requestedWork,
+  isPowercare,
+  isServiceAccountExpense,
 }) => {
   const [customerName, setCustomerName] = useState(initialName);
   const [customerEmail, setCustomerEmail] = useState(initialEmail);
@@ -135,6 +147,33 @@ export const QuotePreviewModal: React.FC<QuotePreviewProps> = ({
         </div>
 
         <div className="p-6 space-y-5">
+          {/* ── What to quote ──────────────────────────────────────────────
+              First thing on the screen. Pricing the job needs the scope, and
+              until now it lived behind the modal on the WO overview. */}
+          {(serviceType || requestedWork || isPowercare || isServiceAccountExpense) && (
+            <div className="rounded-xl border border-slate-900 bg-slate-900 text-white px-4 py-3">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1.5">What to quote</p>
+              <div className="flex items-center gap-2 flex-wrap mb-1.5">
+                {serviceType && (
+                  <span className="text-xs font-semibold bg-white/10 px-2 py-0.5 rounded">{serviceType}</span>
+                )}
+                {isPowercare && (
+                  <span className="text-[10px] font-bold uppercase tracking-wide bg-orange-500/20 text-orange-300 px-2 py-0.5 rounded-full">
+                    PowerCare · bills to SolarEdge
+                  </span>
+                )}
+                {isServiceAccountExpense && (
+                  <span className="text-[10px] font-bold uppercase tracking-wide bg-cyan-500/20 text-cyan-300 px-2 py-0.5 rounded-full">
+                    Service Account · admin approval
+                  </span>
+                )}
+              </div>
+              {requestedWork
+                ? <p className="text-sm text-slate-100 whitespace-pre-line leading-relaxed">{requestedWork}</p>
+                : <p className="text-sm text-slate-400 italic">No scope written on this order yet.</p>}
+            </div>
+          )}
+
           {/* Customer Info */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>

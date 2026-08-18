@@ -408,6 +408,10 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
   const [deleteStep, setDeleteStep] = useState(0);
   // SOW Distribution Report state
   const [showSowDistribution, setShowSowDistribution] = useState(false);
+  // True when the SOW was opened as the review gate before invoicing, rather
+  // than just to read the report. Carries the stage to advance to on confirm.
+  const [invoiceReview, setInvoiceReview] = useState(false);
+  const pendingAdvance = useRef<WOStatus | null>(null);
   // Quote modal state
   const [showQuotePreview, setShowQuotePreview] = useState(false);
   // SOW / report preview modal (separate from the quote-send modal above)
@@ -870,6 +874,23 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
       }
     }
 
+    // Completed -> Invoiced is the money step. Show the SOW first so the work
+    // being billed is on screen when the call is made, same gate Billing's
+    // "Generate Invoice" uses. Nothing advances here: the confirm inside the
+    // report calls commitWorkflowAdvance().
+    if (woStatus === 'completed') {
+      pendingAdvance.current = next;
+      setInvoiceReview(true);
+      setShowSowDistribution(true);
+      return;
+    }
+
+    commitWorkflowAdvance(next);
+  };
+
+  /** Apply a stage advance. Split out of handleWorkflowAction so the SOW
+   *  review can defer it until Daniel confirms. */
+  const commitWorkflowAdvance = (next: WOStatus) => {
     setWoStatus(next);
     // Auto-save so kanban status stays in sync, panel stays open for further editing
     handleSave(next, true);
@@ -3878,6 +3899,10 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
           notes={notes}
           notifyName="Daniel Matos"
           users={users ?? []}
+          serviceType={serviceType || undefined}
+          requestedWork={job?.description?.trim() || notes.trim() || undefined}
+          isPowercare={isPowercare}
+          isServiceAccountExpense={isServiceAccountExpense}
           onClose={() => setShowQuotePreview(false)}
           onSavePreview={(payload) => {
             // 1. Persist any edits made in the preview back onto the WO line items.
@@ -3999,7 +4024,47 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
           contractors={contractors}
           technicians={technicians}
           users={users}
-          onClose={() => setShowSowDistribution(false)}
+          onClose={() => { setShowSowDistribution(false); setInvoiceReview(false); pendingAdvance.current = null; }}
+          actions={invoiceReview ? (() => {
+            const partsTotal = lineItems.filter(i => i.type !== 'labor').reduce((s, i) => s + i.totalCost, 0);
+            return (
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              {/* No client total: SHOW_MONEY hides commercial figures, the
+                  invoice is raised in Xero. Show the billable facts instead. */}
+              <div className="min-w-0">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Billable work</p>
+                <p className="text-sm font-semibold text-slate-900 leading-tight">
+                  {laborHours ? `${laborHours} hr${Number(laborHours) === 1 ? '' : 's'} labor` : 'No labor hours logged'}
+                  {partsTotal > 0 && <span className="font-normal text-slate-600"> · parts {formatCost(partsTotal)}</span>}
+                </p>
+                <p className="text-[11px] text-slate-500 truncate">
+                  {serviceType || 'No service type'}
+                  {isPowercare && <> · <span className="text-orange-600 font-semibold">PowerCare, bills to SolarEdge</span></>}
+                </p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={() => { setShowSowDistribution(false); setInvoiceReview(false); pendingAdvance.current = null; }}
+                  className="px-3 py-2 border border-slate-200 bg-white rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-50 cursor-pointer"
+                >
+                  Not yet
+                </button>
+                <button
+                  onClick={() => {
+                    const next = pendingAdvance.current;
+                    setShowSowDistribution(false);
+                    setInvoiceReview(false);
+                    pendingAdvance.current = null;
+                    if (next) commitWorkflowAdvance(next);
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 text-white rounded-lg text-xs font-semibold hover:bg-blue-700 cursor-pointer"
+                >
+                  <FileText className="w-3.5 h-3.5" /> Confirm · {action?.label ?? 'Generate Invoice'}
+                </button>
+              </div>
+            </div>
+            );
+          })() : undefined}
         />
       )}
     </div>
