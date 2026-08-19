@@ -58,6 +58,7 @@ import { validateAddress, normalizeStreetOrder, sameStreetAddress } from './lib/
 import { useUnreadBadge } from './hooks/useUnreadBadge';
 import { resolveSessionRoute, isContractorAccount } from './lib/authRouting';
 import { Eye, X, CloudOff } from 'lucide-react';
+import { Toaster } from 'sonner';
 
 // ── Web Push helpers ────────────────────────────────────────────────────────
 
@@ -3643,6 +3644,13 @@ function App() {
   return (
     <ErrorBoundary>
       <Suspense fallback={<SuspenseFallback message="Loading application..." />}>
+        {/* sonner's toast() is a no-op unless a <Toaster /> is mounted. It never
+            was, so all 15 toast call sites in Customers.tsx have been silently
+            rendering nothing since they were written: "Photo attached", "Image
+            pasted", and every upload error. That is why a failed note
+            attachment looked like the Save Note button doing nothing at all.
+            Bottom-centre keeps clear of StorageWarningBanner at the top. */}
+        <Toaster position="bottom-center" richColors closeButton />
         <StorageWarningBanner getSnapshot={() => data} />
         {/* The startup pull did not land. Without this the app looks fully loaded
             while showing a fraction of the database, which is how the mobile

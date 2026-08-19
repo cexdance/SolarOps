@@ -46,10 +46,12 @@ export async function uploadCustomerFile(
     throw new Error('Session expired, please re-login to upload files.');
   }
 
-  // File size guard (Supabase free tier: 50MB max per object)
-  const MAX_SIZE = 20 * 1024 * 1024; // 20MB
+  // Must match the customer-files bucket's own file_size_limit, which is 10MB.
+  // This guard said 20MB, so anything between 10 and 20 passed the friendly
+  // client check and was rejected by Storage with a far vaguer message.
+  const MAX_SIZE = 10 * 1024 * 1024; // 10MB, matches the bucket
   if (file.size > MAX_SIZE) {
-    throw new Error(`File too large (${Math.round(file.size / 1024 / 1024)}MB). Max 20MB.`);
+    throw new Error(`File too large (${Math.round(file.size / 1024 / 1024)}MB). Max 10MB.`);
   }
 
   // Convert dataURL to Blob

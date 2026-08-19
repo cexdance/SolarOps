@@ -3597,8 +3597,15 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
         toast.error(`${failed.length} of ${filesToUpload.length} file${filesToUpload.length !== 1 ? 's' : ''} failed: ${firstError}`);
         // Keep only the failed files in state so user can retry
         setPastedFiles(failed.map(f => f.file));
-        // If ALL failed, don't proceed with note save
-        if (uploaded.length === 0) {
+        // A failed ATTACHMENT must not discard the typed COMMENT. This used to
+        // `return` when every upload failed, so the note the user wrote was
+        // thrown away along with the file, and since no sonner Toaster was
+        // mounted the error above rendered nothing: clicking Save Note appeared
+        // to do absolutely nothing.
+        // The note is the user's words; the attachment is a bonus that stays in
+        // the tray for a retry. Only bail when there is genuinely nothing to
+        // save, i.e. no text either.
+        if (uploaded.length === 0 && !noteText) {
           return;
         }
       } else {
