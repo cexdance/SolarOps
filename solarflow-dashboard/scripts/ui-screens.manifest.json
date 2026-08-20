@@ -96,6 +96,22 @@
       "detail": "SolarEdgeMonitoring. Site list, power/energy columns (MonitoringColumnPicker), SiteProfilePanel on click, import modal."
     },
     {
+      "id": "solaredge-alerts-map",
+      "group": "admin",
+      "title": "SolarEdge Alerts Map",
+      "view": "solaredge",
+      "pre": [
+        {
+          "clickText": "Alerts Map"
+        },
+        {
+          "wait": 9000
+        }
+      ],
+      "macro": "Map of sites with active alerts, territory-wide.",
+      "detail": "SolarEdgeAlertsMapView. Leaflet pins colored by highest alert impact, popup with Open/Acknowledge/View-in-SolarEdge, geocoded via shared Nominatim cache."
+    },
+    {
       "id": "jobs",
       "group": "admin",
       "title": "Work Orders",
