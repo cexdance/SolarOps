@@ -35,11 +35,21 @@ import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 // suspended in the field), leaving getSession() null while the refresh token is
 // still valid - that produced a premature "Session expired" banner that stranded
 // every write locally. Only declare the session dead after a refresh also fails.
+//
+// Multiple tabs sharing one browser's localStorage session hit a second race:
+// Supabase rotates the refresh token on every use, so if another tab refreshed
+// a moment earlier, this tab's refreshSession() call carries the now-stale
+// token and is rejected even though a valid session exists (that other tab
+// just wrote it to storage). A short wait-and-recheck of getSession() picks up
+// that freshly-written session instead of surfacing a false "session expired".
 async function getActiveSession() {
   const { data: { session } } = await supabase.auth.getSession();
   if (session) return session;
   const { data: refreshed } = await supabase.auth.refreshSession();
-  return refreshed.session ?? null;
+  if (refreshed.session) return refreshed.session;
+  await new Promise(r => setTimeout(r, 500));
+  const { data: { session: retried } } = await supabase.auth.getSession();
+  return retried ?? null;
 }
 
 // ── Key constants ─────────────────────────────────────────────────────────────

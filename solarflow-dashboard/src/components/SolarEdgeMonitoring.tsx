@@ -20,8 +20,11 @@ import {
   TrendingDown,
   RefreshCw,
   Download,
+  Map as MapIcon,
+  List,
 } from 'lucide-react';
 import { FL_SITES, SolarEdgeSite } from '../lib/solarEdgeSites';
+import { SolarEdgeAlertsMapView } from './views/SolarEdgeAlertsMapView';
 import { getProfile, CLIENT_STATUS_CONFIG, SiteClientStatus } from '../lib/siteProfileStore';
 import { getRemovedSiteIds, addRemovedSiteId } from '../lib/removedSitesStore';
 import { COLUMN_REGISTRY, getDefaultColumnConfig } from '../lib/monitoringColumns';
@@ -113,6 +116,7 @@ export const SolarEdgeMonitoring: React.FC<Props> = ({
   const [isUpdating, setIsUpdating]     = useState(false);
   const [updateMsg, setUpdateMsg]       = useState<{ ok: boolean; text: string } | null>(null);
   const [groupFilter, setGroupFilter]   = useState<string>('Conexsol Florida');
+  const [viewMode, setViewMode]         = useState<'table' | 'map'>('table');
 
   // ── Live alert overrides fetched from SolarEdge /sites/list ────────────────
   const [alertOverrides, setAlertOverrides] = useState<Map<string, { count: number; impact: string }>>(() => {
@@ -624,11 +628,41 @@ export const SolarEdgeMonitoring: React.FC<Props> = ({
           onReset={handleColReset}
         />
 
+        <div className="flex items-center bg-slate-100 rounded-lg p-0.5">
+          <button
+            onClick={() => setViewMode('table')}
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
+              viewMode === 'table' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            <List className="w-3.5 h-3.5" /> Table
+          </button>
+          <button
+            onClick={() => setViewMode('map')}
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
+              viewMode === 'map' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+            }`}
+            title="Map view of sites with active alerts"
+          >
+            <MapIcon className="w-3.5 h-3.5" /> Alerts Map
+          </button>
+        </div>
+
         <span className="text-xs text-slate-400 ml-auto">
           {filtered.length} of {ALL_SITES.length} sites
         </span>
       </div>
 
+      {viewMode === 'map' ? (
+        <SolarEdgeAlertsMapView
+          sites={filtered.filter(s => (effectiveAlerts.count.get(s.siteId) ?? 0) > 0)}
+          alertOverrides={alertOverrides}
+          ackedSites={ackedSites}
+          onOpenSite={(site) => setPanelSite(site)}
+          onAckAlert={handleAckAlert}
+        />
+      ) : (
+      <>
       {/* Table */}
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         <div className="overflow-x-auto">
@@ -779,6 +813,8 @@ export const SolarEdgeMonitoring: React.FC<Props> = ({
           <span>{filtered.length} sites shown</span>
         </div>
       </div>
+      </>
+      )}
     </div>
 
     {/* Site Profile Slide-over */}
