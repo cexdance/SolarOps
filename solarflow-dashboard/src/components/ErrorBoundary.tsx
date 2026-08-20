@@ -1,4 +1,5 @@
 import React from 'react';
+import { isStaleChunkError, reloadForStaleChunk } from '../lib/staleChunk';
 
 const searilizeError = (error: any) => {
   if (error instanceof Error) {
@@ -6,12 +7,6 @@ const searilizeError = (error: any) => {
   }
   return JSON.stringify(error, null, 2);
 };
-
-// A failed lazy-chunk load means the tab is on a previous deploy whose hashed
-// asset files no longer exist; a reload fixes it by loading the new build.
-const isStaleChunkError = (error: unknown): boolean =>
-  error instanceof Error &&
-  /Failed to fetch dynamically imported module|Importing a module script failed|error loading dynamically imported module/i.test(error.message);
 
 export class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
@@ -27,13 +22,7 @@ export class ErrorBoundary extends React.Component<
   }
 
   componentDidCatch(error: unknown) {
-    if (!isStaleChunkError(error)) return;
-    // Reload once to pick up the new deploy. Same loop guard as the
-    // vite:preloadError handler in main.tsx.
-    const last = Number(sessionStorage.getItem('solarops_chunk_reload') ?? 0);
-    if (Date.now() - last < 60_000) return;
-    sessionStorage.setItem('solarops_chunk_reload', String(Date.now()));
-    window.location.reload();
+    if (isStaleChunkError(error)) reloadForStaleChunk();
   }
 
   render() {

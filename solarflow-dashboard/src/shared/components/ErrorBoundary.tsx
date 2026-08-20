@@ -1,4 +1,6 @@
 import { Component, ErrorInfo, ReactNode } from 'react';
+import { isStaleChunkError, reloadForStaleChunk } from '../../lib/staleChunk';
+import { BUILD_ID } from '../../lib/versionConfig';
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -10,6 +12,17 @@ interface ErrorBoundaryState {
   error: Error | null;
 }
 
+const LAST_ERROR_KEY = 'solarops_last_error';
+
+const describeError = (error: Error): string =>
+  [
+    `build: ${BUILD_ID}`,
+    `at:    ${new Date().toISOString()}`,
+    `url:   ${window.location.href}`,
+    '',
+    error.stack || `${error.name}: ${error.message}`,
+  ].join('\n');
+
 export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   state: ErrorBoundaryState = { hasError: false, error: null };
 
@@ -17,12 +30,40 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     return { hasError: true, error };
   }
 
-  componentDidCatch(error: Error, _errorInfo: ErrorInfo) {
-    console.error('ErrorBoundary caught:', error, _errorInfo);
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error('ErrorBoundary caught:', error, errorInfo);
+    // Survive the Refresh below: without this the only copy of the error is in
+    // state, and the button the user reaches for is what destroys it.
+    try {
+      sessionStorage.setItem(LAST_ERROR_KEY, describeError(error) + '\n' + (errorInfo.componentStack ?? ''));
+    } catch {
+      // Quota or private mode. The console.error above is still there.
+    }
+    // This boundary sits INSIDE the main.tsx one, so it catches stale-chunk
+    // failures first and must handle them itself or they never reach the
+    // boundary that knows how to recover.
+    if (isStaleChunkError(error)) reloadForStaleChunk();
   }
 
   render() {
     if (this.state.hasError) {
+      if (isStaleChunkError(this.state.error)) {
+        // componentDidCatch is reloading; a version notice, not a crash wall.
+        // Also covers the 60s reload-guard window.
+        return (
+          <div className="flex min-h-[400px] flex-col items-center justify-center gap-3 p-4 text-center">
+            <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
+              A new version of SolarOps is available.
+            </p>
+            <button
+              onClick={() => window.location.reload()}
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+            >
+              Reload now
+            </button>
+          </div>
+        );
+      }
       if (this.props.fallback) {
         return this.props.fallback;
       }
@@ -42,11 +83,16 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
             >
               Refresh Page
             </button>
-            {(process.env as Record<string, string>)['NODE_ENV'] === 'development' && this.state.error && (
-              <details className="mt-4 text-left text-sm text-gray-500 dark:text-gray-400">
-                <summary className="cursor-pointer">Error Details</summary>
-                <pre className="mt-2 overflow-auto rounded bg-gray-100 p-2 dark:bg-gray-800">
-                  {this.state.error.toString()}
+            {this.state.error && (
+              // Always rendered, in prod too. This was gated on NODE_ENV, which
+              // esbuild folds to false in the bundle, so every production crash
+              // reported itself as a blank screen with no error anywhere.
+              // Collapsed by default: no UX cost, and a screenshot of it is a
+              // usable bug report.
+              <details className="mx-auto mt-4 max-w-lg text-left text-sm text-gray-500 dark:text-gray-400">
+                <summary className="cursor-pointer">Error details</summary>
+                <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded bg-gray-100 p-2 text-xs dark:bg-gray-800">
+                  {describeError(this.state.error)}
                 </pre>
               </details>
             )}
