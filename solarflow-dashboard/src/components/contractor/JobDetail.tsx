@@ -822,102 +822,11 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
     );
   }
 
-  // ── XP Celebration Modal ────────────────────────────────────────────────────
-  if (xpResult && xpResult.xpEarned > 0) {
-    const { breakdown, xpEarned, badgeXpBonus, newBadges, leveledUp, prevLevel, currentLevel } = xpResult;
-    const xpData = loadXpData(contractorId);
-    const progress = getLevelProgress(xpData.totalXp);
-    return (
-      <div className="fixed inset-0 z-[600] bg-slate-950 flex flex-col overflow-y-auto">
-        {/* Hero */}
-        <div className="bg-gradient-to-b from-orange-600 to-amber-500 px-6 pt-12 pb-8 text-center text-white flex-shrink-0">
-          <Sparkles className="w-14 h-14 mx-auto mb-3" />
-          <h1 className="text-3xl font-black tracking-tight">Call Complete!</h1>
-          <div className="mt-2 text-5xl font-black">+{xpEarned + badgeXpBonus} XP</div>
-          {badgeXpBonus > 0 && (
-            <p className="text-amber-200 text-sm mt-1">includes +{badgeXpBonus} XP badge bonus</p>
-          )}
-
-          {/* Level progress */}
-          <div className="mt-5 bg-white/20 rounded-2xl p-4">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-bold">{currentLevel.name}</span>
-              <span className="text-sm">{xpData.totalXp.toLocaleString()} XP</span>
-            </div>
-            <div className="h-3 bg-white/30 rounded-full overflow-hidden">
-              <div className="h-full bg-white rounded-full transition-all duration-1000" style={{ width: `${progress * 100}%` }} />
-            </div>
-            {getNextLevel(xpData.totalXp) && (
-              <p className="text-xs text-amber-200 mt-1.5">
-                {(getNextLevel(xpData.totalXp)!.minXp - xpData.totalXp).toLocaleString()} XP to {getNextLevel(xpData.totalXp)!.name}
-              </p>
-            )}
-          </div>
-
-          {/* Level up banner */}
-          {leveledUp && prevLevel && (
-            <div className="mt-3 bg-white text-orange-700 rounded-xl px-4 py-2.5 font-bold text-sm flex items-center justify-center gap-2">
-              <ChevronUp className="w-4 h-4" />Level Up! {prevLevel.name} to {currentLevel.name}
-            </div>
-          )}
-        </div>
-
-        {/* XP Breakdown */}
-        <div className="flex-1 px-4 py-5 space-y-3">
-          <h2 className="text-white font-bold text-sm uppercase tracking-wide">XP Breakdown</h2>
-          <div className="bg-slate-800 rounded-2xl overflow-hidden divide-y divide-slate-700">
-            {breakdown.items.filter(i => i.achieved).map((item, i) => (
-              <div key={i} className="flex items-center justify-between px-4 py-3">
-                <span className="text-sm text-slate-200 flex items-center gap-2">
-                  <Check className="w-3.5 h-3.5 text-green-400" />{item.label}
-                </span>
-                <span className="text-sm font-bold text-orange-400">+{item.points}</span>
-              </div>
-            ))}
-          </div>
-
-          {/* Missed items */}
-          {breakdown.items.some(i => !i.achieved) && (
-            <>
-              <h2 className="text-slate-500 font-bold text-xs uppercase tracking-wide pt-2">Could have earned more</h2>
-              <div className="bg-slate-900 rounded-2xl overflow-hidden divide-y divide-slate-800">
-                {breakdown.items.filter(i => !i.achieved).map((item, i) => (
-                  <div key={i} className="flex items-center justify-between px-4 py-2.5">
-                    <span className="text-xs text-slate-500">{item.label}</span>
-                    <span className="text-xs text-slate-600">+{item.points}</span>
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
-
-          {/* New badges */}
-          {newBadges.length > 0 && (
-            <div className="space-y-2">
-              <h2 className="text-white font-bold text-sm uppercase tracking-wide pt-2">New Badges Earned!</h2>
-              {newBadges.map(badge => (
-                <div key={badge.id} className="bg-slate-800 border border-amber-500/40 rounded-2xl flex items-center gap-3 px-4 py-3">
-                  <Star className="w-6 h-6 text-amber-400 flex-shrink-0" />
-                  <div className="flex-1">
-                    <p className="text-white font-bold text-sm">{badge.name}</p>
-                    <p className="text-slate-400 text-xs">{badge.description}</p>
-                  </div>
-                  <span className="text-amber-400 font-bold text-sm">+{badge.xpBonus}</span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <button
-            onClick={() => setXpResult(null)}
-            className="w-full py-4 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-2xl text-base mt-2 cursor-pointer"
-          >
-            View Job Summary
-          </button>
-        </div>
-      </div>
-    );
-  }
+  // `xpResult` (set by handleCompleteCall, this session only) used to gate a
+  // full-screen celebration modal here before the completed-phase splash
+  // could render at all. Folded into that splash's XP card instead, so the
+  // real completion screen (status, notes, photos) shows immediately with no
+  // extra tap, see the XP card below in the `phase === 'completed'` block.
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -2009,7 +1918,10 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
               );
             })()}
 
-            {/* XP earned summary */}
+            {/* XP earned summary. When xpResult is set (this session just
+                completed the call), also shows the full breakdown/badges/
+                level-up that used to live behind a separate blocking modal
+                the contractor had to tap through before seeing this splash. */}
             {(() => {
               const data = loadXpData(contractorId);
               const level = getLevelInfo(data.totalXp);
@@ -2017,22 +1929,65 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
               const next = getNextLevel(data.totalXp);
               const jobEntry = data.jobHistory.find(h => h.jobId === job.id);
               if (!jobEntry) return null;
+              const celebration = xpResult && xpResult.xpEarned > 0 ? xpResult : null;
               return (
                 <div className="rounded-2xl p-4 text-white" style={{ backgroundColor: '#FF7200' }}>
-                  <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center justify-between mb-1">
                     <div className="flex items-center gap-2">
                       <Sparkles className="w-4 h-4" />
                       <span className="font-bold text-sm">XP Earned This Job</span>
                     </div>
                     <span className="text-xl font-black">+{jobEntry.xp} XP</span>
                   </div>
-                  <div className="flex items-center justify-between text-xs mb-1.5">
+                  {celebration && celebration.badgeXpBonus > 0 && (
+                    <p className="text-orange-100 text-xs mb-2">includes +{celebration.badgeXpBonus} XP badge bonus</p>
+                  )}
+                  <div className="flex items-center justify-between text-xs mb-1.5 mt-2">
                     <span className="text-orange-200">{level.name} · {data.totalXp.toLocaleString()} XP total</span>
                     {next && <span className="text-orange-200">{(next.minXp - data.totalXp).toLocaleString()} to {next.name}</span>}
                   </div>
                   <div className="h-2 bg-white/30 rounded-full overflow-hidden">
                     <div className="h-full bg-white rounded-full" style={{ width: `${progress * 100}%` }} />
                   </div>
+
+                  {celebration?.leveledUp && celebration.prevLevel && (
+                    <div className="mt-3 bg-white text-orange-700 rounded-xl px-3 py-2 font-bold text-xs flex items-center justify-center gap-1.5">
+                      <ChevronUp className="w-3.5 h-3.5" />Level Up! {celebration.prevLevel.name} to {celebration.currentLevel.name}
+                    </div>
+                  )}
+
+                  {celebration && (
+                    <div className="mt-3 pt-3 border-t border-white/20 space-y-1.5">
+                      {celebration.breakdown.items.filter(i => i.achieved).map((item, i) => (
+                        <div key={`a-${i}`} className="flex items-center justify-between text-xs">
+                          <span className="flex items-center gap-1.5"><Check className="w-3 h-3 flex-shrink-0" />{item.label}</span>
+                          <span className="font-semibold flex-shrink-0">+{item.points}</span>
+                        </div>
+                      ))}
+                      {celebration.breakdown.items.filter(i => !i.achieved).map((item, i) => (
+                        <div key={`m-${i}`} className="flex items-center justify-between text-xs text-orange-100/60">
+                          <span>{item.label}</span>
+                          <span className="flex-shrink-0">+{item.points}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {celebration && celebration.newBadges.length > 0 && (
+                    <div className="mt-3 pt-3 border-t border-white/20 space-y-2">
+                      <p className="text-xs font-bold uppercase tracking-wide">New Badges Earned!</p>
+                      {celebration.newBadges.map(badge => (
+                        <div key={badge.id} className="flex items-center gap-2 bg-white/10 rounded-xl px-3 py-2">
+                          <Star className="w-4 h-4 flex-shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <p className="font-bold text-xs truncate">{badge.name}</p>
+                            <p className="text-orange-100 text-[11px] truncate">{badge.description}</p>
+                          </div>
+                          <span className="font-bold text-xs flex-shrink-0">+{badge.xpBonus}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               );
             })()}
