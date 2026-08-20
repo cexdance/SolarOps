@@ -48,6 +48,7 @@ interface Props {
   disabled?: boolean;
   onPaste?: (e: React.ClipboardEvent<HTMLTextAreaElement>) => void;
   onBlur?: () => void;
+  onFocus?: () => void;
 }
 
 /** The @handle for a user, and the single place that decides it.
@@ -112,6 +113,7 @@ export const MentionTextarea: React.FC<Props> = ({
   disabled,
   onPaste,
   onBlur,
+  onFocus,
 }) => {
   const [query, setQuery]         = useState('');
   const [start, setStart]         = useState(-1);
@@ -248,6 +250,7 @@ export const MentionTextarea: React.FC<Props> = ({
         onKeyDown={handleKeyDown}
         onPaste={onPaste}
         onBlur={() => { setTimeout(() => setOpen(false), 150); onBlur?.(); }}
+        onFocus={onFocus}
         rows={rows}
         placeholder={placeholder}
         disabled={disabled}

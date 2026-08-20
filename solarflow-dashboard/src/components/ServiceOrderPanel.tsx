@@ -418,8 +418,10 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
   const [showSowReport, setShowSowReport] = useState(false);
   // Overview comment thread starts collapsed to the latest few entries
   const [showAllComments, setShowAllComments] = useState(false);
-  // Header scope text is clamped on mobile (see "Requested work" in the header)
+  // Header scope text is clamped to one line until tapped ("Requested work")
   const [scopeExpanded, setScopeExpanded] = useState(false);
+  // Comment composer grows from 2 rows to 5 once it has focus or a draft
+  const [composerOpen, setComposerOpen] = useState(false);
   const [quoteSending] = useState(false);
   const [quoteResult, setQuoteResult] = useState<{ ok: boolean; msg: string } | null>(null);
   const [technicianId] = useState(job?.technicianId ?? '');
@@ -1528,7 +1530,8 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
       <div className="relative w-full max-w-4xl max-h-[92vh] bg-white flex flex-col shadow-2xl rounded-2xl overflow-hidden">
 
         {/* ── Header ─────────────────────────────────────────────────── */}
-        <div className="bg-slate-900 px-4 pt-3 pb-2 md:px-6 md:pt-4 md:pb-3 shrink-0 flex gap-2 md:gap-4">
+        <div className="bg-slate-900 px-4 pt-3 pb-2 md:px-6 md:pt-4 md:pb-3 shrink-0 flex flex-col">
+        <div className="flex gap-2 md:gap-4">
           {/* Left: WO info */}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap mb-1">
@@ -1580,41 +1583,9 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                 <ExternalLink className="w-3 h-3 shrink-0 opacity-0 group-hover:opacity-60 transition-opacity" />
               </a>
             )}
-            {/* Monitoring badge moved up into the top header row (next to status). */}
-            {serviceType && (
-              <div className="flex items-center gap-2 flex-wrap mt-2">
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-700 text-slate-200 text-xs font-medium rounded">
-                  <Wrench className="w-3 h-3 text-slate-400" />
-                  {serviceType}
-                </span>
-              </div>
-            )}
-            {/* Pre-quote, the caller's own words are what gets quoted. Put them
-                in the header so whoever opens the order reads the scope first
-                instead of hunting for it further down. */}
-            {(job?.description || job?.notes) && ['draft', 'quote_sent'].includes(woStatus) && (
-              <button
-                type="button"
-                onClick={() => setScopeExpanded(v => !v)}
-                aria-expanded={scopeExpanded}
-                className="mt-2 w-full text-left rounded-lg bg-slate-800 border border-slate-700 px-3 py-2 max-w-2xl cursor-pointer hover:border-slate-600 transition-colors"
-              >
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">
-                  Requested work
-                  <span className="md:hidden font-normal normal-case tracking-normal text-slate-500">
-                    {' '}· tap to {scopeExpanded ? 'collapse' : 'expand'}
-                  </span>
-                </p>
-                {/* Caller-authored free text with no length ceiling. Unclamped it
-                    grew the header without limit, five lines here, and shoved the
-                    comment thread off the bottom of the phone. Two lines is enough
-                    to recognise the job; the rest is one tap away. Desktop has the
-                    room, so it stays fully expanded there. */}
-                <p className={`text-sm text-slate-200 whitespace-pre-line ${scopeExpanded ? '' : 'line-clamp-2 md:line-clamp-none'}`}>
-                  {job.description || job.notes}
-                </p>
-              </button>
-            )}
+            {/* Monitoring badge sits in the top header row (next to status), and
+                the service type moved to the right column under Report/Close, so
+                neither costs the name and address a whole row of their own. */}
           </div>
 
           {/* Right: logo + close */}
@@ -1662,7 +1633,50 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                 <X className="w-5 h-5" />
               </button>
             </div>
+            {/* Service type lives here, under Report/Close, rather than on its own
+                row beside the name. This column is otherwise dead space once the
+                logo is hidden. Width is capped hard: the whole point of moving it
+                was to stop it stealing rows, and an uncapped long service name
+                here would just steal COLUMNS from the name instead. */}
+            {serviceType && (
+              <span
+                title={serviceType}
+                className="mt-1.5 inline-flex items-center gap-1 max-w-[8.5rem] md:max-w-[14rem] px-2 py-0.5 bg-slate-700 text-slate-200 text-xs font-medium rounded"
+              >
+                <Wrench className="w-3 h-3 shrink-0 text-slate-400" />
+                <span className="truncate">{serviceType}</span>
+              </span>
+            )}
           </div>
+        </div>
+
+        {/* Requested work: full header width, one line collapsed.
+            Pre-quote, the caller's own words are what gets quoted, so whoever
+            opens the order should read the scope first instead of hunting for
+            it. Moved out of the left column so a single collapsed line gets the
+            ENTIRE header width instead of ~60% of it, which is roughly twice the
+            text before the ellipsis. Caller-authored free text has no length
+            ceiling, so it stays clamped until tapped. */}
+        {(job?.description || job?.notes) && ['draft', 'quote_sent'].includes(woStatus) && (
+          <button
+            type="button"
+            onClick={() => setScopeExpanded(v => !v)}
+            aria-expanded={scopeExpanded}
+            className="mt-2 w-full text-left rounded-lg bg-slate-800 border border-slate-700 px-3 py-1.5 cursor-pointer hover:border-slate-600 transition-colors"
+          >
+            <div className="flex items-baseline gap-2">
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 shrink-0">
+                Requested work
+              </span>
+              <span className="text-[10px] font-normal text-slate-500 shrink-0">
+                tap to {scopeExpanded ? 'collapse' : 'expand'}
+              </span>
+            </div>
+            <p className={`text-sm text-slate-200 whitespace-pre-line ${scopeExpanded ? '' : 'line-clamp-1'}`}>
+              {job.description || job.notes}
+            </p>
+          </button>
+        )}
         </div>
 
         {/* ── Status Pipeline ────────────────────────────────────────── */}
@@ -1842,19 +1856,27 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                   to layout instead of scroll. ── */}
               <div className="space-y-5 lg:order-2">
               <div className="border-b border-slate-100 pb-5">
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                  <Users className="w-3.5 h-3.5" />
+                {/* One line, no explainer. The "shared with the team and shown on
+                    the client timeline" tail wrapped to a second and third line on
+                    a phone to describe something every user already knows. */}
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5 whitespace-nowrap">
+                  <Users className="w-3.5 h-3.5 shrink-0" />
                   Comments &amp; Activity
-                  <span className="ml-1 text-slate-400 font-normal normal-case tracking-normal">- shared with the team and shown on the client timeline</span>
                 </p>
+                {/* Two rows at rest, five once you click in. The composer sat at a
+                    permanent three rows whether or not anyone was typing, spending
+                    a fixed chunk of the thread's space on an empty box. Stays open
+                    while there is a draft so it never collapses mid-sentence. */}
                 <MentionTextarea
                   value={newComment}
                   onChange={setNewComment}
                   users={users ?? []}
-                  rows={3}
+                  rows={composerOpen || newComment.trim() ? 5 : 2}
+                  onFocus={() => setComposerOpen(true)}
+                  onBlur={() => { if (!newComment.trim()) setComposerOpen(false); }}
                   onPaste={handleCommentPaste}
                   placeholder="Type your update… use @ to mention a teammate · Ctrl/Cmd+V to paste a screenshot"
-                  className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 resize-none"
+                  className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 resize-none transition-all"
                 />
                 {(commentAttachments.length > 0 || commentUploading) && (
                   <div className="flex flex-wrap items-center gap-2 mt-2">
