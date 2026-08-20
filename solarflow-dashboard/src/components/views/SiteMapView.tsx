@@ -142,7 +142,7 @@ const SiteMapView: React.FC<Props> = ({ address, city, state, zip, label, onEdit
         </a>
       </div>
       {/* Map */}
-      <div className="flex-1 min-h-0" style={{ minHeight: 320 }}>
+      <div className="isolate flex-1 min-h-0" style={{ minHeight: 320 }}>
         <MapContainer
           center={[coord.lat, coord.lon]}
           zoom={14}

@@ -120,7 +120,7 @@ export const SolarEdgeAlertsMapView: React.FC<Props> = ({ sites, alertOverrides,
   const located = sites.filter(s => coords[s.siteId]).length;
 
   return (
-    <div className="relative bg-white rounded-xl border border-slate-200 overflow-hidden" style={{ height: 560 }}>
+    <div className="relative isolate bg-white rounded-xl border border-slate-200 overflow-hidden" style={{ height: 560 }}>
       <MapContainer center={[27.6648, -81.5158]} zoom={6} className="h-full w-full" style={{ background: '#e8eef0' }}>
         <TileLayer attribution='&copy; OpenStreetMap contributors' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
         <FitBounds points={points} sig={boundsSig} />

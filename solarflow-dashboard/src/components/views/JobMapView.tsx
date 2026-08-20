@@ -301,7 +301,7 @@ const JobMapView: React.FC<JobMapViewProps> = ({ jobs, onOpen, selectable = true
 
       <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
         {/* Map */}
-        <div className="relative flex-1 min-h-[280px]">
+        <div className="relative isolate flex-1 min-h-[280px]">
           <MapContainer center={[27.6648, -81.5158]} zoom={6} className="h-full w-full" style={{ background: '#e8eef0' }}>
             <TileLayer attribution='&copy; OpenStreetMap contributors' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
             <FitBounds points={points} sig={boundsSig} />
