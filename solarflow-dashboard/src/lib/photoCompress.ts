@@ -7,6 +7,9 @@
  * Compressing to a max edge of 1600px @ 0.75 quality drops each photo to
  * ~150-300 KB while staying visually lossless for documentation use.
  */
+
+import { dataUrlToBlob } from './dataUrl';
+
 export async function compressImageToDataUrl(
   file: File,
   maxEdge = 1600,
@@ -85,7 +88,7 @@ function fileToDataUrl(file: File): Promise<string> {
 /**
  * Compress a File to a Blob (JPEG) without the base64 round-trip.
  * Use this when you only need a Blob for upload, saves ~33% memory vs
- * compressImageToDataUrl + fetch(dataUrl).blob().
+ * compressImageToDataUrl + dataUrlToBlob().
  */
 export async function compressImageToBlob(
   file: File,
@@ -194,8 +197,7 @@ export async function recompressDataUrl(
 ): Promise<string | null> {
   if (!dataUrl.startsWith('data:image/')) return null;
   try {
-    const res = await fetch(dataUrl);
-    const blob = await res.blob();
+    const blob = dataUrlToBlob(dataUrl);
     const file = new File([blob], 'photo', { type: blob.type || 'image/jpeg' });
     const next = await compressImageToDataUrl(file, maxEdge, quality);
     if (next.length >= dataUrl.length) return null;

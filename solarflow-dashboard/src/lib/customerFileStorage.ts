@@ -5,6 +5,7 @@
  * After upload, files are stored in the Customer object with authenticated URLs.
  */
 import { supabase } from './supabase';
+import { dataUrlToBlob } from './dataUrl';
 
 const BUCKET = 'customer-files';
 
@@ -54,9 +55,9 @@ export async function uploadCustomerFile(
     throw new Error(`File too large (${Math.round(file.size / 1024 / 1024)}MB). Max 10MB.`);
   }
 
-  // Convert dataURL to Blob
-  const response = await fetch(file.dataUrl);
-  const blob = await response.blob();
+  // Convert dataURL to Blob. NOT via fetch(): CSP connect-src has no `data:`,
+  // so fetch(dataUrl) throws "Failed to fetch" in production.
+  const blob = dataUrlToBlob(file.dataUrl);
 
   // Generate path: customerId/YYYY-MM/timestamp-filename
   const date = new Date().toISOString().split('T')[0].slice(0, 7); // YYYY-MM

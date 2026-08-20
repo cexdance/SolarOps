@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { compressImageUnderBytes } from './photoCompress';
+import { dataUrlToBlob } from './dataUrl';
 
 const BUCKET = 'customer-files';
 
@@ -94,7 +95,7 @@ export async function migrateInlinePhoto(
 ): Promise<string> {
   if (!dataUrl.startsWith('data:')) return dataUrl; // already a storage URL
   try {
-    const blob = await (await fetch(dataUrl)).blob();
+    const blob = dataUrlToBlob(dataUrl);
     const photoId = `mig-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const result = await uploadPhotoToStorage(blob, jobId, photoId);
     return result.url ?? dataUrl; // fall back to dataUrl if upload fails
