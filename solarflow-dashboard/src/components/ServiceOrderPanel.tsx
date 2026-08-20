@@ -416,8 +416,10 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
   const [showQuotePreview, setShowQuotePreview] = useState(false);
   // SOW / report preview modal (separate from the quote-send modal above)
   const [showSowReport, setShowSowReport] = useState(false);
-  // Overview comment thread starts collapsed to the latest 2 entries
+  // Overview comment thread starts collapsed to the latest few entries
   const [showAllComments, setShowAllComments] = useState(false);
+  // Header scope text is clamped on mobile (see "Requested work" in the header)
+  const [scopeExpanded, setScopeExpanded] = useState(false);
   const [quoteSending] = useState(false);
   const [quoteResult, setQuoteResult] = useState<{ ok: boolean; msg: string } | null>(null);
   const [technicianId] = useState(job?.technicianId ?? '');
@@ -1526,7 +1528,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
       <div className="relative w-full max-w-4xl max-h-[92vh] bg-white flex flex-col shadow-2xl rounded-2xl overflow-hidden">
 
         {/* ── Header ─────────────────────────────────────────────────── */}
-        <div className="bg-slate-900 px-6 pt-4 pb-3 shrink-0 flex gap-4">
+        <div className="bg-slate-900 px-4 pt-3 pb-2 md:px-6 md:pt-4 md:pb-3 shrink-0 flex gap-2 md:gap-4">
           {/* Left: WO info */}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap mb-1">
@@ -1591,16 +1593,39 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                 in the header so whoever opens the order reads the scope first
                 instead of hunting for it further down. */}
             {(job?.description || job?.notes) && ['draft', 'quote_sent'].includes(woStatus) && (
-              <div className="mt-2 rounded-lg bg-slate-800 border border-slate-700 px-3 py-2 max-w-2xl">
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">Requested work</p>
-                <p className="text-sm text-slate-200 whitespace-pre-line">{job.description || job.notes}</p>
-              </div>
+              <button
+                type="button"
+                onClick={() => setScopeExpanded(v => !v)}
+                aria-expanded={scopeExpanded}
+                className="mt-2 w-full text-left rounded-lg bg-slate-800 border border-slate-700 px-3 py-2 max-w-2xl cursor-pointer hover:border-slate-600 transition-colors"
+              >
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">
+                  Requested work
+                  <span className="md:hidden font-normal normal-case tracking-normal text-slate-500">
+                    {' '}· tap to {scopeExpanded ? 'collapse' : 'expand'}
+                  </span>
+                </p>
+                {/* Caller-authored free text with no length ceiling. Unclamped it
+                    grew the header without limit, five lines here, and shoved the
+                    comment thread off the bottom of the phone. Two lines is enough
+                    to recognise the job; the rest is one tap away. Desktop has the
+                    room, so it stays fully expanded there. */}
+                <p className={`text-sm text-slate-200 whitespace-pre-line ${scopeExpanded ? '' : 'line-clamp-2 md:line-clamp-none'}`}>
+                  {job.description || job.notes}
+                </p>
+              </button>
             )}
           </div>
 
           {/* Right: logo + close */}
-          <div className="flex flex-col items-end justify-between shrink-0 pl-4">
-            <div className="overflow-hidden mb-2" style={{ height: 54, width: 172 }}>
+          <div className="flex flex-col items-end justify-between shrink-0 pl-2 md:pl-4">
+            {/* Desktop only. This is a hard 172px block, and on a 390pt phone it
+                plus its padding claimed over half the header's content width,
+                which is what forced every badge, the service chip and the scope
+                text onto their own lines and pushed the comment thread off the
+                bottom of the screen. Branding is not worth that on the smallest
+                screen; the panel is already unmistakably ours. */}
+            <div className="hidden md:block overflow-hidden mb-2" style={{ height: 54, width: 172 }}>
               <img
                 src="/conexsol-logo.png"
                 alt="Conexsol"
@@ -1608,7 +1633,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                 style={{ width: 172, height: 'auto', marginTop: -24 }}
               />
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1 md:gap-3">
               {job && (
                 <button
                   onClick={() => printServiceReport({
@@ -1620,16 +1645,18 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                     serviceType,
                   })}
                   title="Print client service report (no financials)"
-                  className="inline-flex items-center gap-1.5 text-slate-300 hover:text-orange-300 transition-colors cursor-pointer text-xs font-medium"
+                  className="inline-flex items-center gap-1.5 min-h-[44px] px-2 text-slate-300 hover:text-orange-300 transition-colors cursor-pointer text-xs font-medium"
                   aria-label="Print service report"
                 >
                   <Printer className="w-4 h-4" />
                   Report
                 </button>
               )}
+              {/* min-h/w-44 for the tap target. The glyph stays 20px; only the
+                  hit area grows, so nothing moves visually on desktop. */}
               <button
                 onClick={onClose}
-                className="text-slate-400 hover:text-white transition-colors cursor-pointer"
+                className="inline-flex items-center justify-center min-w-[44px] min-h-[44px] text-slate-400 hover:text-white transition-colors cursor-pointer"
                 aria-label="Close panel"
               >
                 <X className="w-5 h-5" />
@@ -1639,7 +1666,30 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
         </div>
 
         {/* ── Status Pipeline ────────────────────────────────────────── */}
-        <div className="bg-slate-800 px-6 py-2 shrink-0">
+        {/* Mobile: one line + a progress bar. Eight nodes across 390pt gives each
+            stage ~40px, so the labels render at 9px and truncate to "Qu…", "Ap…",
+            "Sc…" - decoration, not information, bought with vertical space the
+            comment thread needed. The stage name is spelled out here instead, and
+            the full node stepper returns at md:. Going back a stage is a desktop
+            action; on mobile the workflow button drives forward as before. */}
+        <div className="md:hidden bg-slate-800 px-4 py-2 shrink-0">
+          <div className="flex items-center justify-between gap-2 mb-1.5">
+            <span className="text-xs font-semibold text-orange-300 truncate">
+              {WO_STAGES[stageIdx]?.label ?? woStatus}
+            </span>
+            <span className="text-[10px] font-mono text-slate-400 shrink-0">
+              Step {stageIdx + 1} of {WO_STAGES.length}
+            </span>
+          </div>
+          <div className="h-1 rounded-full bg-slate-600 overflow-hidden">
+            <div
+              className="h-full bg-orange-500 rounded-full transition-all"
+              style={{ width: `${((stageIdx + 1) / WO_STAGES.length) * 100}%` }}
+            />
+          </div>
+        </div>
+
+        <div className="hidden md:block bg-slate-800 px-6 py-2 shrink-0">
           <div className="flex items-center gap-0">
             {WO_STAGES.map((stage, idx) => {
               const done    = idx < stageIdx;
@@ -1694,10 +1744,10 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
 
         {/* ── Workflow Action Bar ─────────────────────────────────────── */}
         {action && (
-          <div className={`border-b px-6 py-2 flex items-center justify-between gap-4 shrink-0 ${
+          <div className={`border-b px-4 md:px-6 py-2 flex items-center justify-between gap-2 md:gap-4 shrink-0 ${
             isServiceAccountExpense ? 'bg-blue-50 border-blue-200' : 'bg-slate-50 border-slate-200'
           }`}>
-            <div className="flex items-center gap-2 text-sm text-slate-500">
+            <div className="flex items-center gap-2 text-sm text-slate-500 min-w-0">
               <Clock className="w-4 h-4" />
               {!isSiteTransfer && woStatus === 'quote_approved' && !assignedContractorId && !isServiceAccountExpense ? (
                 <span className="text-amber-600 font-medium">Assign a contractor first (Overview tab)</span>
@@ -1720,8 +1770,12 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
               {!isSiteTransfer && skipQuoteForPowerCare && woStatus === 'draft' && !quoteResult && (
                 <span className="text-xs text-emerald-600">PowerCare plan · No quote sent</span>
               )}
+              {/* Desktop only. This wrapped to two lines on a phone and cost a
+                  whole row to explain a button that already says "Send Quote".
+                  Blocking states above (assign a contractor, missing serial) are
+                  NOT hidden, those change what you can do. */}
               {!isSiteTransfer && !skipQuoteForPowerCare && woStatus === 'draft' && !quoteResult && (
-                <span className="text-xs text-slate-400">Opens a quote preview · saves it &amp; notifies Daniel Matos</span>
+                <span className="hidden md:block text-xs text-slate-400">Opens a quote preview · saves it &amp; notifies Daniel Matos</span>
               )}
               {isSiteTransfer && woStatus === 'draft' && (
                 <span className="text-xs text-teal-600">Admin agentic workflow · No quote sent · flat fee (Xero)</span>
@@ -1837,8 +1891,13 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                 </div>
                 {woActivities.length > 0 && (
                   <div className="mt-4">
+                    {/* 5, not 2. The old preview was set when the header left
+                        almost no room below the fold, so two entries was all
+                        that could fit. The header no longer takes ~55% of a
+                        phone screen, and the comment thread is what people open
+                        this panel to read, so show a real conversation. */}
                     <ActivityFeed
-                      activities={showAllComments ? woActivities : woActivities.slice(0, 2)}
+                      activities={showAllComments ? woActivities : woActivities.slice(0, 5)}
                       users={users ?? []}
                       currentUser={(users ?? []).find(u => u.name === currentUserName) ?? null}
                       onEdit={editComment}
