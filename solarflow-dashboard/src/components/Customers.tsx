@@ -1561,8 +1561,6 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
   // Live HTML generation, recomputes whenever any editable field changes
   const previewHtmlComputed = React.useMemo(() => {
     if (!showReportPreview || !previewTrackingId) return '';
-    const tid = previewTrackingId;
-    const trackingPixel = `https://solarflow-dashboard-sooty.vercel.app/api/track?event=open&id=${tid}`;
     const overdueInvs: any[] = [];
     const hasOverdue = false;
 
@@ -2209,7 +2207,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
     <div class="alert">
       <div class="alert-title">Balance Reminder</div>
       <div class="alert-body">We noticed an open balance on your account. To ensure uninterrupted service monitoring and support, please submit payment at your earliest convenience.</div>
-      <a href="https://solarflow-dashboard-sooty.vercel.app/api/track?event=click&target=invoice&id=${tid}&redirect=${encodeURIComponent(overdueInvs[0]?.InvoiceID ? 'https://invoicing.xero.com/view/' + overdueInvs[0].InvoiceID : '#')}" class="alert-btn">View Invoice →</a>
+      <a href="${overdueInvs[0]?.InvoiceID ? 'https://invoicing.xero.com/view/' + overdueInvs[0].InvoiceID : '#'}" class="alert-btn">View Invoice →</a>
     </div>` : ''}
 
     <!-- Review CTA -->
@@ -2217,14 +2215,14 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
       <div class="review-stars">${svgStar}${svgStar}${svgStar}${svgStar}${svgStar}</div>
       <div class="review-headline">Enjoying the savings?</div>
       <div class="review-sub">Your feedback helps us grow and serve more homeowners in your community. It takes less than 60 seconds.</div>
-      <a href="https://solarflow-dashboard-sooty.vercel.app/api/track?event=click&target=review&id=${tid}&redirect=${encodeURIComponent('https://g.page/r/conexsol/review')}" class="review-btn">Leave Us a Google Review</a>
+      <a href="https://g.page/r/conexsol/review" class="review-btn">Leave Us a Google Review</a>
     </div>
 
     <!-- Footer -->
     <div class="footer">
       <img class="footer-logo" src="https://solarflow-dashboard-sooty.vercel.app/conexsol-logo.png" alt="Conexsol" />
       <p>
-        <a href="https://solarflow-dashboard-sooty.vercel.app/api/track?event=click&target=website&id=${tid}&redirect=${encodeURIComponent('https://conexsol.us')}">conexsol.us</a>
+        <a href="https://conexsol.us">conexsol.us</a>
         &nbsp;·&nbsp; Florida Solar Service &nbsp;·&nbsp; Report generated ${reportDate}
         <br/>
         <span class="footer-unsub">To stop receiving reports, reply to this email.</span>
@@ -2233,7 +2231,6 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
 
   </div><!-- /card -->
 </div>
-<img src="${trackingPixel}" width="1" height="1" alt="" style="display:none;" />
 </body>
 </html>`;
 

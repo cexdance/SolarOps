@@ -5,7 +5,6 @@ import react from "@vitejs/plugin-react"
 import { defineConfig, loadEnv } from "vite"
 import sourceIdentifierPlugin from 'vite-plugin-source-identifier'
 
-const isProd = process.env.BUILD_MODE === 'prod'
 
 // ── Build-info: stamps a unique id into the bundle AND public/version.json ────
 // Same id in both places → useVersionPoll can detect any new deploy reliably.
@@ -44,7 +43,12 @@ export default defineConfig(({ command, mode }) => {
   plugins: [
     react(),
     sourceIdentifierPlugin({
-      enabled: !isProd,
+      // Dev only. This was `!isProd`, driven by BUILD_MODE, which Vercel never
+      // sets (vercel.json runs `pnpm run build`, not `build:prod`), so every
+      // production bundle shipped data-matrix-* attributes carrying source file
+      // paths, line numbers and URL-encoded component props into the live DOM.
+      // Keying off Vite's own command removes the env-var dependency entirely.
+      enabled: command !== 'build',
       attributePrefix: 'data-matrix',
       includeProps: true,
     })
