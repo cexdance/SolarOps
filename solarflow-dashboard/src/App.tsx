@@ -3106,6 +3106,9 @@ function App() {
           onSync={isImpersonating ? undefined : deepSync}
           onProposeSchedule={isImpersonating ? undefined : handleContractorProposeSchedule}
           onReportAdditionalItem={isImpersonating ? undefined : handleContractorReportAdditionalItem}
+          versionState={versionState}
+          remoteVersion={remoteVersion}
+          onUpdate={() => window.location.reload()}
         />
       </Suspense>
     );

@@ -5,7 +5,7 @@ import { formatMoney } from '../../lib/money';
 import {
   Wrench, MapPin, Clock, LogOut, X, ChevronRight, Filter,
   List as ListIcon, LayoutGrid, CalendarDays, Map as MapIcon, RefreshCw,
-  PauseCircle, PlayCircle,
+  PauseCircle, PlayCircle, Download,
 } from 'lucide-react';
 import { APP_VERSION } from '../../lib/versionConfig';
 import { Contractor, ContractorJob, ContractorLineItem, JobPriority, JobStatusContractor } from '../../types/contractor';
@@ -37,6 +37,16 @@ interface ContractorDashboardProps {
   onProposeSchedule?: (job: ContractorJob, dateISO: string, time: string) => void;
   /** Contractor logged extra billable labor/parts -> notify the office to price it in. */
   onReportAdditionalItem?: (job: ContractorJob, item: ContractorLineItem) => void;
+  /**
+   * Version-poll state, computed unconditionally in App.tsx (useVersionPoll)
+   * but only ever surfaced to staff via Layout.tsx's sidebar badge. The real
+   * contractor portal renders this component directly, no Layout, so without
+   * these props a contractor on a long, never-backgrounded shift has no way
+   * to know or act on a shipped build, silent 10-min poll or not.
+   */
+  versionState?: 'idle' | 'checking' | 'up-to-date' | 'update-available';
+  remoteVersion?: string | null;
+  onUpdate?: () => void;
 }
 
 // ─── Priority badge ────────────────────────────────────────────────────────────
@@ -61,6 +71,9 @@ export const ContractorDashboard: React.FC<ContractorDashboardProps> = ({
   onSync,
   onProposeSchedule,
   onReportAdditionalItem,
+  versionState,
+  remoteVersion,
+  onUpdate,
 }) => {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   // Arrival auto-starts today's assigned jobs; departure after the on-site
@@ -331,15 +344,30 @@ export const ContractorDashboard: React.FC<ContractorDashboardProps> = ({
             <h1 className="text-base font-bold leading-tight">{contractorName}</h1>
           </div>
           <div className="flex items-center gap-2">
-            {/* App version badge */}
-            <span className="px-2 py-1 rounded-md bg-slate-800 text-[11px] font-semibold text-slate-300 tabular-nums">
-              {APP_VERSION}
-            </span>
+            {/* App version badge, or an update prompt when the version-poll
+                sees a newer build. This portal has no Layout/sidebar (staff
+                gets the same signal via Layout.tsx's version badge), so
+                without this a contractor mid-shift has zero way to notice
+                a shipped build until they force-quit or background 30min+. */}
+            {versionState === 'update-available' ? (
+              <button
+                onClick={onUpdate}
+                title={`Update to ${remoteVersion ?? 'latest'}, tap to restart`}
+                className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-orange-500/20 text-orange-300 text-[11px] font-semibold cursor-pointer"
+              >
+                <Download className="w-3 h-3 animate-bounce" />
+                Update available
+              </button>
+            ) : (
+              <span className="px-2 py-1 rounded-md bg-slate-800 text-[11px] font-semibold text-slate-300 tabular-nums">
+                {APP_VERSION}
+              </span>
+            )}
             {/* Sync / update */}
             <button
               onClick={handleSync}
               disabled={syncing}
-              title="Sync & update to the latest version"
+              title="Sync latest job data"
               className="p-2 hover:bg-slate-800 rounded-lg cursor-pointer disabled:opacity-60 disabled:cursor-default"
             >
               <RefreshCw className={`w-5 h-5 ${syncing ? 'animate-spin' : ''}`} />
