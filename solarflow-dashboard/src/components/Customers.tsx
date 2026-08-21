@@ -3244,7 +3244,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
         toast.error(`Could not attach ${file.name || 'photo'}`);
       }
     }
-    toast.success('Photo attached, tap "Save Note" to upload');
+    toast.success('Attached, tap "Save Note" to upload');
   };
 
   // Files tab, "+ Upload Files" upload (previously a dead button with no handler)
@@ -3895,11 +3895,11 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                   <div className="flex items-center gap-3">
                     <button
                       onClick={() => noteImageInputRef.current?.click()}
-                      title="Add a photo from your camera or gallery"
+                      title="Attach a photo or document"
                       className="flex items-center gap-1 text-xs text-slate-500 hover:text-orange-500 transition-colors cursor-pointer"
                     >
                       <ImageIcon className="w-4 h-4" />
-                      Add Photo
+                      Add Photo / File
                     </button>
                     <button
                       onClick={() => setActiveTab('files')}
@@ -3913,7 +3913,6 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                   <input
                     ref={noteImageInputRef}
                     type="file"
-                    accept="image/*"
                     multiple
                     className="hidden"
                     onChange={(e) => { handleNoteImageFiles(e.target.files); e.target.value = ''; }}
@@ -3933,7 +3932,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                     <div className="flex flex-wrap gap-2 mt-2">
                       {pastedFiles.map(f => (
                         <div key={f.id} className="relative group/paste border border-slate-200 rounded-lg overflow-hidden bg-white shadow-sm">
-                          {f.mimeType.startsWith('image/') ? (
+                          {(f.mimeType || '').startsWith('image/') ? (
                             <img
                               src={f.dataUrl}
                               alt={f.name}
@@ -4205,7 +4204,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                 ) : (
                   <div className="grid grid-cols-3 gap-2">
                     {allFiles.map(file => {
-                      const isImage = file.mimeType.startsWith('image/') || /\.(png|jpg|jpeg|webp|gif|heic)$/i.test(file.name);
+                      const isImage = (file.mimeType || '').startsWith('image/') || /\.(png|jpg|jpeg|webp|gif|heic)$/i.test(file.name || '');
                       const cardCls = "group relative aspect-square rounded-lg overflow-hidden border border-slate-200 bg-slate-100 flex items-center justify-center hover:border-orange-400 transition-colors";
                       const badge = file.source === 'trello'
                         ? <span className="absolute top-1 left-1 bg-blue-600 text-white text-[9px] px-1 py-0.5 rounded font-bold">T</span>

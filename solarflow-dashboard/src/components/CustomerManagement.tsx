@@ -738,7 +738,7 @@ export const CustomerManagement: React.FC<CustomerManagementProps> = ({ currentU
                     </div>
                     <div className="flex flex-wrap gap-2">
                       {(selectedCustomer.attachments ?? []).map(att => {
-                        const isImage = att.mimeType.startsWith('image/');
+                        const isImage = (att.mimeType || '').startsWith('image/');
                         return (
                           <div key={att.id} className="group relative bg-white border border-slate-200 rounded-xl overflow-hidden hover:shadow-md transition-shadow">
                             {isImage ? (
