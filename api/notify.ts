@@ -166,6 +166,81 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).json({ sent: 1 });
   }
 
+  // Contractor payment confirmation. Fired when the office covers contractor +
+  // expenses on the billing board. Emails the CONTRACTOR (not the client), so
+  // like customer-appointment it needs no Supabase user lookup: contractors are
+  // not staff users.
+  //
+  // Deliberately carries NO dollar amount. SHOW_MONEY hides commercial figures
+  // in the app and the contractor's own invoice is the authority on the number,
+  // so this confirms the event, not the sum.
+  if ((req.body as Record<string, unknown>)?.action === 'contractor-paid') {
+    const { contractorEmail, contractorName: pName, orderNo, customerName: siteName } =
+      (req.body ?? {}) as Record<string, string>;
+    const to = String(contractorEmail ?? '').trim();
+    if (!to || !/.+@.+\..+/.test(to)) return res.status(400).json({ error: 'valid contractorEmail required' });
+    if (!RESEND_API_KEY) return res.status(200).json({ sent: 0, skipped: 'no RESEND_API_KEY' });
+
+    const safe = escapeHtml;
+    const r = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from: 'SolarOps <solar.ops@conexsol.us>',
+        reply_to: 'solar.ops@conexsol.us',
+        to,
+        subject: `Payment processed${orderNo ? ` for ${safe(orderNo)}` : ''}`,
+        html: `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;padding:32px 16px">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.08)">
+        <tr>
+          <td style="background:linear-gradient(135deg,#16a34a,#15803d);padding:28px 32px">
+            <div style="font-size:22px;font-weight:700;color:#fff">Payment processed</div>
+            <div style="font-size:13px;color:rgba(255,255,255,.85);margin-top:4px">Your work order has been settled</div>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:32px">
+            <p style="margin:0 0 8px;font-size:16px;color:#1e293b">Hi ${safe(pName) || 'there'},</p>
+            <p style="margin:0 0 24px;font-size:14px;color:#64748b;line-height:1.6">
+              The office has covered your labor and approved expenses for the work order below. It now shows as <strong>Paid</strong> in your portal.
+            </p>
+            <div style="background:#f0fdf4;border-left:3px solid #16a34a;border-radius:0 8px 8px 0;padding:16px 20px;margin-bottom:24px">
+              <p style="margin:0 0 6px;font-size:13px;color:#94a3b8;text-transform:uppercase;letter-spacing:.04em">Work order</p>
+              <p style="margin:0;font-size:18px;font-weight:700;color:#1e293b">${safe(orderNo) || 'Service order'}</p>
+              ${siteName ? `<p style="margin:8px 0 0;font-size:13px;color:#64748b">${safe(siteName)}</p>` : ''}
+            </div>
+            <p style="margin:0;font-size:14px;color:#64748b;line-height:1.6">
+              Refer to your submitted invoice for the amount. If anything looks wrong, reply to this email and the office will take a look.
+            </p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:20px 32px;border-top:1px solid #f1f5f9">
+            <p style="margin:0;font-size:12px;color:#94a3b8">Conexsol. This confirmation was sent automatically.</p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`,
+      }),
+    }).catch((err: unknown) => { console.warn('[notify] contractor paid email failed', err); return null; });
+
+    if (!r || !r.ok) {
+      const detail = r ? await r.text().catch(() => '') : 'fetch failed';
+      console.error('[notify] contractor paid email error:', detail);
+      return res.status(502).json({ error: 'email send failed' });
+    }
+    return res.status(200).json({ sent: 1 });
+  }
+
   // `notifierName` is deliberately NOT read from the body any more; `notifier`
   // above is derived from the verified token instead. The client still sends it,
   // and ignoring it is the fix.

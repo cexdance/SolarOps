@@ -155,14 +155,19 @@ export function generateServiceOrderNumber(): string {
   return `SO-${yymm}-${seq}`;
 }
 
-// Statuses the contractor sees in their portal: only ACTIVE work. A job assigned
-// to a contractor but still at draft/quote_sent is NOT yet visible (it must reach
-// the assigned stage first, advanced by the admin via the Service Order / WO
-// panel). Finished/billing states (invoiced, paid) are deliberately EXCLUDED -
-// once a job is invoiced the contractor's work is done and admin billing is not
-// their concern, so it drops out of their active list.
+// Statuses the contractor sees in their portal. A job assigned to a contractor
+// but still at draft/quote_sent is NOT yet visible (it must reach the assigned
+// stage first, advanced by the admin via the Service Order / WO panel).
+//
+// invoiced/paid used to be excluded on the grounds that admin billing is not
+// the contractor's concern. That still holds for CLIENT billing, but the
+// contractor being PAID is very much their concern, and a card cannot move to
+// their Paid column if it has already dropped out of the list. So the tail
+// stays visible and toContractorJobView() decides what it is CALLED: still
+// "completed" while the office invoices the client, "paid" only once costs are
+// covered.
 const CONTRACTOR_VISIBLE_STATUSES: Set<string> = new Set([
-  'assigned', 'scheduled', 'in_progress', 'completed',
+  'assigned', 'scheduled', 'in_progress', 'completed', 'invoiced', 'paid',
 ]);
 
 /**
@@ -173,6 +178,10 @@ const CONTRACTOR_VISIBLE_STATUSES: Set<string> = new Set([
 export function pickupJobsForContractor(contractorId: string, jobs: Job[]): Job[] {
   return jobs.filter(j =>
     j.contractorId === contractorId &&
+    // An archived order is gone for everyone. Checked explicitly because the
+    // visible-status test reads woStatus FIRST, so an archived job carrying
+    // woStatus 'paid' would otherwise reappear in the portal.
+    j.status !== 'archived' &&
     CONTRACTOR_VISIBLE_STATUSES.has(j.woStatus ?? j.status)
   );
 }
@@ -279,9 +288,31 @@ export function toContractorJobView(job: Job, existingCj?: ContractorJob, custom
     // the contractor's device re-hydrates the stale admin status and a
     // completed call reverts to "in progress" even though it was saved.
     status: job.onHold ? 'on_hold' : (() => {
-      const mirrored = STATUS_MAP[job.woStatus ?? job.status] ?? 'assigned';
-      return (existingCj?.status && STATUS_RANK[existingCj.status] > STATUS_RANK[mirrored])
-        ? existingCj.status
+      // The admin `paid` stage means the CLIENT paid. That is NOT the same as
+      // the contractor being paid, which happens later when the office covers
+      // contractor + expenses and stamps costsCoveredAt. Mapping woStatus
+      // 'paid' straight through would tell a contractor they had been paid
+      // while they were still owed, so their 'paid' state keys off
+      // costsCoveredAt alone. Until then the client-billing tail reads as
+      // 'completed': their work IS done, and who has invoiced whom is not
+      // their business.
+      if (job.costsCoveredAt) return 'paid';
+      // Resolve the stage the same way STATUS_MAP is keyed, so a job carrying
+      // only the coarse `status` collapses identically to one with woStatus.
+      const stage = job.woStatus ?? job.status;
+      const mirrored: JobStatusContractor =
+        (stage === 'invoiced' || stage === 'paid')
+          ? 'completed'
+          : STATUS_MAP[stage] ?? 'assigned';
+      // The "furthest along wins" rule exists to stop a failed local mirror
+      // write reverting FIELD progress (assigned -> completed). It must not
+      // apply to billing states: 2 live contractor rows already carry a stale
+      // status 'paid' whose admin job was never costs-covered, and without this
+      // guard those would tell a contractor they had been paid.
+      const cj = existingCj?.status;
+      const cjIsBillingState = cj === 'invoiced' || cj === 'paid';
+      return (cj && !cjIsBillingState && STATUS_RANK[cj] > STATUS_RANK[mirrored])
+        ? cj
         : mirrored;
     })(),
     isRecurringClient: !!job.isRecurringClient,

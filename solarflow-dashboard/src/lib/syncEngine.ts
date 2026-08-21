@@ -114,6 +114,12 @@ export const KV_SYNC_KEYS = [
   // techs check in/out), so it has a KV_MERGERS entry. `kvMergers.test.ts`
   // enforces that pairing rather than leaving it to a comment.
   'solarops_tools',
+  // Contractor notifications are written by the OFFICE (e.g. costs covered on
+  // the billing board) and read/marked-read on the CONTRACTOR's device, so they
+  // are multi-writer by definition and need the union merge below. Before this
+  // the key was localStorage-only, which meant an office-written notification
+  // could never reach the contractor at all.
+  'solarflow_contractor_notifications',
 ] as const;
 type KVSyncKey = typeof KV_SYNC_KEYS[number];
 
@@ -539,6 +545,8 @@ export function mergeToolItems(localArr: unknown, remoteArr: unknown): Inventory
 
 /** Union two record arrays by `id`, newest `updatedAt` (falling back to
  *  `createdAt`) winning. Anything present on only one side is KEPT. */
+interface NotificationLike { id: string; createdAt?: string; read?: boolean }
+
 function mergeByIdNewest(localArr: unknown, remoteArr: unknown): InventoryItemLike[] {
   const local: InventoryItemLike[]  = Array.isArray(localArr)  ? (localArr  as InventoryItemLike[]) : [];
   const remote: InventoryItemLike[] = Array.isArray(remoteArr) ? (remoteArr as InventoryItemLike[]) : [];
@@ -550,6 +558,27 @@ function mergeByIdNewest(localArr: unknown, remoteArr: unknown): InventoryItemLi
     if (!l || invTime(r) >= invTime(l)) byId.set(r.id, r);
   }
   return Array.from(byId.values());
+}
+
+/**
+ * Union contractor notifications by id. Never drops a side: a notification the
+ * office just wrote and one the contractor already had must both survive.
+ * `read` is sticky-true, so marking it read on the phone is not undone by a
+ * desktop copy that still says unread. Capped newest-first so the blob cannot
+ * grow without bound.
+ */
+export function mergeContractorNotifications(localArr: unknown, remoteArr: unknown): NotificationLike[] {
+  const local: NotificationLike[]  = Array.isArray(localArr)  ? (localArr  as NotificationLike[]) : [];
+  const remote: NotificationLike[] = Array.isArray(remoteArr) ? (remoteArr as NotificationLike[]) : [];
+  const byId = new Map<string, NotificationLike>();
+  for (const n of [...local, ...remote]) {
+    if (!n?.id) continue;
+    const prev = byId.get(n.id);
+    byId.set(n.id, prev ? { ...prev, ...n, read: !!(prev.read || n.read) } : n);
+  }
+  return Array.from(byId.values())
+    .sort((a, b) => String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? '')))
+    .slice(0, 300);
 }
 
 /**
@@ -571,6 +600,7 @@ export const KV_MERGERS: Record<string, (local: unknown, remote: unknown) => unk
   solarops_address_cleanup:  (l, r) => mergeAddressCleanupItems(l, r),
   solarops_inventory:        (l, r) => mergeInventoryItems(l, r),
   solarops_tools:            (l, r) => mergeToolItems(l, r),
+  solarflow_contractor_notifications: (l, r) => mergeContractorNotifications(l, r),
 };
 
 /** Merge an incoming KV blob against what this device holds, if the key needs it. */

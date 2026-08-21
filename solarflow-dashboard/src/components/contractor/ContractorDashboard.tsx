@@ -1,11 +1,11 @@
 // SolarFlow - Contractor Dashboard
 // Single list view with a status filter. Tap a work order to open its detail.
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { formatMoney } from '../../lib/money';
 import {
   Wrench, MapPin, Clock, LogOut, X, ChevronRight, Filter,
   List as ListIcon, LayoutGrid, CalendarDays, Map as MapIcon, RefreshCw,
-  PauseCircle, PlayCircle, Download,
+  PauseCircle, PlayCircle, Download, Bell,
 } from 'lucide-react';
 import { APP_VERSION } from '../../lib/versionConfig';
 import { Contractor, ContractorJob, ContractorLineItem, JobPriority, JobStatusContractor } from '../../types/contractor';
@@ -22,6 +22,7 @@ import {
   ContractorXpData, BADGES,
 } from '../../lib/contractorGamification';
 import { loadCRMData, saveCRMData } from '../../lib/crmStore';
+import { loadNotifications, markAllNotificationsRead } from '../../lib/contractorStore';
 
 interface ContractorDashboardProps {
   contractorName: string;
@@ -85,6 +86,16 @@ export const ContractorDashboard: React.FC<ContractorDashboardProps> = ({
   const [showBadges, setShowBadges]     = useState(false);
   const [timeframe]                     = useState<'day' | 'week' | 'month' | 'ytd'>('ytd');
   const [syncing, setSyncing]           = useState(false);
+  // Payment + work-order notices written by the OFFICE. The store is synced, so
+  // one written on Daniel's desktop lands here on the next pull. Re-read after
+  // a sync so a fresh notice appears without a reload.
+  const [showNotifs, setShowNotifs] = useState(false);
+  const [notifSeq, setNotifSeq] = useState(0);
+  const notifications = useMemo(
+    () => loadNotifications().filter(n => n.contractorId === contractorId),
+    [contractorId, notifSeq, syncing],
+  );
+  const unreadCount = notifications.filter(n => !n.read).length;
 
   // Pull the latest list from the server IN PLACE (no page reload). A full
   // reload was hanging iOS Safari (had to be force-closed) and did not reliably
@@ -277,6 +288,7 @@ export const ContractorDashboard: React.FC<ContractorDashboardProps> = ({
     { id: 'en_route',    label: 'En Route'    },
     { id: 'in_progress', label: 'In Progress' },
     { id: 'completed',   label: 'Completed'   },
+    { id: 'paid',        label: 'Paid'        },
     { id: 'on_hold',     label: 'On Hold'     },
   ];
 
@@ -311,6 +323,8 @@ export const ContractorDashboard: React.FC<ContractorDashboardProps> = ({
     { id: 'en_route',    label: 'En Route',    accent: 'bg-orange-100 text-orange-700'  },
     { id: 'in_progress', label: 'In Progress', accent: 'bg-blue-100 text-blue-700'      },
     { id: 'completed',   label: 'Completed',   accent: 'bg-emerald-100 text-emerald-700'},
+    // Set by the office covering contractor + expenses on the billing board.
+    { id: 'paid',        label: 'Paid',        accent: 'bg-green-600 text-white'        },
     { id: 'on_hold',     label: 'On Hold',     accent: 'bg-slate-200 text-slate-500'    },
   ];
 
@@ -344,6 +358,29 @@ export const ContractorDashboard: React.FC<ContractorDashboardProps> = ({
             <h1 className="text-base font-bold leading-tight">{contractorName}</h1>
           </div>
           <div className="flex items-center gap-2">
+            {/* Notifications. The office writes these (e.g. costs covered on
+                the billing board); this portal is the only place a contractor
+                can read them. */}
+            <button
+              onClick={() => setShowNotifs(v => {
+                const next = !v;
+                if (next && unreadCount > 0) {
+                  markAllNotificationsRead(contractorId);
+                  setNotifSeq(n => n + 1);
+                }
+                return next;
+              })}
+              title="Notifications"
+              aria-label={`Notifications${unreadCount ? `, ${unreadCount} unread` : ''}`}
+              className="relative p-1.5 rounded-md bg-slate-800 text-slate-300 hover:text-white cursor-pointer"
+            >
+              <Bell className="w-4 h-4" />
+              {unreadCount > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-orange-500 text-white text-[10px] font-bold flex items-center justify-center">
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
+              )}
+            </button>
             {/* App version badge, or an update prompt when the version-poll
                 sees a newer build. This portal has no Layout/sidebar (staff
                 gets the same signal via Layout.tsx's version badge), so
@@ -443,6 +480,32 @@ export const ContractorDashboard: React.FC<ContractorDashboardProps> = ({
             <p className="text-lg font-bold text-emerald-400">{formatMoney(totalEarned, { decimals: 0 })}</p>
           </div>
         </div>
+        {/* Notification list. Inline under the header rather than a floating
+            popover: this portal is used one-handed on a phone in the field. */}
+        {showNotifs && (
+          <div className="mt-3 bg-slate-800 rounded-xl overflow-hidden">
+            {notifications.length === 0 ? (
+              <p className="px-4 py-4 text-xs text-slate-400">No notifications yet.</p>
+            ) : (
+              <ul className="divide-y divide-slate-700 max-h-72 overflow-y-auto">
+                {notifications.slice(0, 25).map(n => (
+                  <li key={n.id} className="px-4 py-3">
+                    <div className="flex items-start gap-2">
+                      <span className={`mt-1 w-1.5 h-1.5 rounded-full shrink-0 ${n.type === 'payment' ? 'bg-green-400' : 'bg-orange-400'}`} />
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-white leading-tight">{n.title}</p>
+                        <p className="text-[11px] text-slate-300 leading-snug mt-0.5">{n.message}</p>
+                        <p className="text-[10px] text-slate-500 mt-1">
+                          {new Date(n.createdAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                        </p>
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
       </header>
 
       {/* ── Badge Detail Sheet ───────────────────────────────────────────────── */}

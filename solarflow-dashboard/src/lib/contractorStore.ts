@@ -6,9 +6,10 @@ import { getKVMirror, setKVMirror } from './stateStore';
 const CONTRACTORS_KEY = 'solarflow_contractors';
 const RATES_KEY = 'solarflow_service_rates';
 const CONTRACTOR_JOBS_KEY = 'solarflow_contractor_jobs';
+const NOTIFICATIONS_KEY = 'solarflow_contractor_notifications';
 
 /** Keys mirrored to IDB so a phone that loses localStorage still has them. */
-export const MIRRORED_KEYS = [CONTRACTORS_KEY, RATES_KEY, CONTRACTOR_JOBS_KEY];
+export const MIRRORED_KEYS = [CONTRACTORS_KEY, RATES_KEY, CONTRACTOR_JOBS_KEY, NOTIFICATIONS_KEY];
 
 /**
  * Read a blob that localStorage owns, falling back to the durable IDB mirror.
@@ -669,8 +670,6 @@ export const markInviteUsed = (token: string, contractorId: string): void => {
 
 // ─── Notification Management ────────────────────────────────────────────────────
 
-const NOTIFICATIONS_KEY = 'solarflow_contractor_notifications';
-
 export interface ContractorNotification {
   id: string;
   contractorId: string;
@@ -683,16 +682,16 @@ export interface ContractorNotification {
   createdAt: string;
 }
 
-export const loadNotifications = (): ContractorNotification[] => {
-  try {
-    const stored = localStorage.getItem(NOTIFICATIONS_KEY);
-    return stored ? JSON.parse(stored) : [];
-  } catch {
-    return [];
-  }
-};
+export const loadNotifications = (): ContractorNotification[] =>
+  readBlob<ContractorNotification[]>(NOTIFICATIONS_KEY) ?? [];
 
 export const saveNotifications = (notifications: ContractorNotification[]): void => {
+  // Cloud first, same order as saveContractorJobs: the Supabase write is the
+  // durable copy and must not be skipped by a localStorage quota throw. These
+  // are cross-device by nature (office writes, contractor reads), so a
+  // localStorage-only write would never arrive.
+  dbSet(NOTIFICATIONS_KEY, notifications);
+  setKVMirror(NOTIFICATIONS_KEY, notifications);
   try {
     localStorage.setItem(NOTIFICATIONS_KEY, JSON.stringify(notifications));
   } catch (e) {
@@ -707,10 +706,11 @@ export const addNotification = (notification: Omit<ContractorNotification, 'id' 
     read: false,
     createdAt: new Date().toISOString(),
   };
-  const notifications = loadNotifications();
-  // Keep only last 100 notifications per contractor
-  const contractorNotifications = notifications.filter(n => n.contractorId !== notification.contractorId);
-  const updated = [newNotification, ...contractorNotifications].slice(0, 100);
+  // Keep the newest 300 across everyone. This used to filter OUT every existing
+  // notification for the same contractor before prepending, so each contractor
+  // could only ever hold one: the comment said "last 100 per contractor", the
+  // code deleted the other 99.
+  const updated = [newNotification, ...loadNotifications()].slice(0, 300);
   saveNotifications(updated);
   return newNotification;
 };

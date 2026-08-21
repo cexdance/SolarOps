@@ -173,6 +173,9 @@ interface BillingProps {
   currentUserName?: string;
   onJobClick?: (jobId: string) => void;
   contractors?: Contractor[];
+  /** Fired once when an order first moves into Costs Covered, so the contractor
+   *  can be told they have been paid. App owns the delivery. */
+  onCostsCovered?: (job: Job) => void;
 }
 
 export const Billing: React.FC<BillingProps> = ({
@@ -183,6 +186,7 @@ export const Billing: React.FC<BillingProps> = ({
   currentUserName,
   onJobClick,
   contractors = [],
+  onCostsCovered,
 }) => {
   const [filter, setFilter] = useState<'all' | 'unbilled' | 'invoiced' | 'paid'>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -365,6 +369,14 @@ export const Billing: React.FC<BillingProps> = ({
         break;
     }
     onUpdateJob({ ...job, ...patch });
+
+    // Covering contractor + expenses is the contractor's payday, so tell them.
+    // Guarded on the order NOT already being covered: moveToColumn also runs on
+    // drag, and dragging a card out and back must not re-send a payment
+    // confirmation every time.
+    if (col === 'costs_covered' && !job.costsCoveredAt) {
+      onCostsCovered?.({ ...job, ...patch });
+    }
   };
 
   // Client accepted the quote. The order leaves billing's hands and goes back

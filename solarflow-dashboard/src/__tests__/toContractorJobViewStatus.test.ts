@@ -28,8 +28,43 @@ describe('toContractorJobView status', () => {
   });
 
   it('still prefers admin status when it is further along than the contractor copy', () => {
-    const view = toContractorJobView(job({ status: 'invoiced' }), cj({ status: 'completed' }));
-    expect(view.status).toBe('invoiced');
+    const view = toContractorJobView(job({ status: 'scheduled' }), cj({ status: 'assigned' }));
+    expect(view.status).toBe('assigned'); // scheduled maps to assigned
+    const ahead = toContractorJobView(job({ status: 'completed' }), cj({ status: 'in_progress' }));
+    expect(ahead.status).toBe('completed');
+  });
+
+  // ── Contractor payment ───────────────────────────────────────────────────
+  // The office covering contractor + expenses is what "paid" means to a
+  // contractor. The admin `paid` stage means the CLIENT paid, which happens
+  // earlier, so it must NOT leak through as a contractor payment.
+  describe('paid is driven by costsCoveredAt, never by the client-paid stage', () => {
+    it('shows paid once costs are covered', () => {
+      const view = toContractorJobView(job({ status: 'paid', woStatus: 'paid', costsCoveredAt: '2026-08-18T00:00:00.000Z' }));
+      expect(view.status).toBe('paid');
+    });
+
+    it('does NOT say paid while only the client has paid', () => {
+      const view = toContractorJobView(job({ status: 'paid', woStatus: 'paid' }));
+      expect(view.status).toBe('completed');
+    });
+
+    it('reads the client-invoicing tail as completed, not invoiced', () => {
+      expect(toContractorJobView(job({ status: 'invoiced' })).status).toBe('completed');
+      expect(toContractorJobView(job({ woStatus: 'invoiced', status: 'completed' })).status).toBe('completed');
+    });
+
+    it('a STALE paid in the contractor blob cannot claim payment on its own', () => {
+      // 2 live contractor rows carry status 'paid' whose admin job was never
+      // costs-covered. The furthest-along rule must not honour those.
+      const view = toContractorJobView(job({ status: 'completed' }), cj({ status: 'paid' }));
+      expect(view.status).toBe('completed');
+    });
+
+    it('on_hold still wins over a covered order', () => {
+      const view = toContractorJobView(job({ status: 'paid', costsCoveredAt: '2026-08-18T00:00:00.000Z', onHold: true }));
+      expect(view.status).toBe('on_hold');
+    });
   });
 
   it('on_hold always overrides regardless of pipeline stage', () => {

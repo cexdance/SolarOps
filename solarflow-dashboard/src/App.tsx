@@ -41,6 +41,7 @@ import { pickupJobsForContractor, toContractorJobView, serviceOrderNo, photoUrlS
 import { fireMentionNotifications, sendCustomerAppointmentEmail } from './components/ui/MentionTextarea';
 import { formatCost } from './lib/money';
 import { logChange, logJobChange, flushChangeLog } from './lib/changeLog';
+import { notifyContractorPaid } from './lib/contractorPaidNotify';
 import { autoArchiveCompletedJobs, stampJobFields } from './lib/jobService';
 import { fetchMyNotifications, markNotificationReadRemote, markAllNotificationsReadRemote, startNotificationPolling, stopNotificationPolling, subscribeToNotifications, unsubscribeFromNotifications } from './lib/notifications';
 import { processBillingTimers } from './lib/billingService';
@@ -3466,6 +3467,15 @@ function App() {
               currentUserName={currentUser?.name}
               onJobClick={(jobId) => setSelectedJobId(jobId)}
               contractors={contractors}
+              onCostsCovered={(job) => {
+                const c = contractors.find(x => x.id === job.contractorId);
+                const cust = data.customers.find(x => x.id === job.customerId);
+                // Best-effort, same posture as the other notify calls: the board
+                // move is the durable part and must not depend on the send.
+                void notifyContractorPaid(job, c, cust?.name).then(r => {
+                  logChange('contractor.paid_notified', 'job', job.id, r, resolveActor());
+                });
+              }}
             />
             {renderServiceOrder('billing')}
           </>
