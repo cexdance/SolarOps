@@ -61,6 +61,18 @@ describe('toContractorJobView status', () => {
       expect(view.status).toBe('completed');
     });
 
+    it('carries the paid DATE through, which is what the card renders', () => {
+      const view = toContractorJobView(job({ status: 'paid', woStatus: 'paid', costsCoveredAt: '2026-08-18T00:00:00.000Z' }));
+      expect(view.paidAt).toBe('2026-08-18T00:00:00.000Z');
+    });
+
+    it('leaves paidAt unset while nobody has covered the costs', () => {
+      // The card keys its green hue and Paid line off this, so an unpaid order
+      // must not carry a date at all.
+      expect(toContractorJobView(job({ status: 'paid', woStatus: 'paid' })).paidAt).toBeUndefined();
+      expect(toContractorJobView(job({ status: 'completed' })).paidAt).toBeUndefined();
+    });
+
     it('on_hold still wins over a covered order', () => {
       const view = toContractorJobView(job({ status: 'paid', costsCoveredAt: '2026-08-18T00:00:00.000Z', onHold: true }));
       expect(view.status).toBe('on_hold');

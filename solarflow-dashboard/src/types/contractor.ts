@@ -381,6 +381,11 @@ export interface ContractorJob {
   paymentStatus?: PaymentStatus;
   paymentApprovedAt?: string;
   paymentProcessedAt?: string;
+  /** When the office covered contractor + expenses, i.e. this contractor's
+   *  payday. Projected from the admin Job's `costsCoveredAt`, which is the ONLY
+   *  authority for it: the admin `paid` stage means the CLIENT paid and happens
+   *  earlier. Presence of this is what makes the card read Paid. */
+  paidAt?: string;
 
   // Mileage (PowerCare jobs), cost paid to contractor: $0.54/mi; charged to client: $0.89/mi
   miles?: number;

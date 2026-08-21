@@ -324,6 +324,8 @@ export function toContractorJobView(job: Job, existingCj?: ContractorJob, custom
     assignedAt: existingCj?.assignedAt ?? job.contractorSentAt ?? new Date().toISOString(),
     startedAt: job.startedAt ?? existingCj?.startedAt,
     completedAt: job.completedAt ?? existingCj?.completedAt,
+    // Contractor payday. Same authority as the 'paid' status above.
+    paidAt: job.costsCoveredAt ?? existingCj?.paidAt,
     notes: job.notes,
     completionNotes: job.completionNotes ?? existingCj?.completionNotes,
     photos,

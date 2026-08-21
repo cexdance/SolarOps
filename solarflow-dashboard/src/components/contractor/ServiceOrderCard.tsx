@@ -18,7 +18,7 @@ const STATUS_STYLE: Record<JobStatusContractor, string> = {
   cancelled:     'bg-red-100 text-red-700',
   on_hold:       'bg-amber-100 text-amber-700',
   invoiced:      'bg-indigo-100 text-indigo-700',
-  paid:          'bg-emerald-100 text-emerald-700',
+  paid:          'bg-green-600 text-white',
   returned:      'bg-red-100 text-red-700',
 };
 
@@ -42,9 +42,13 @@ const ServiceOrderCard: React.FC<{ job: ContractorJob }> = ({ job }) => {
   const scope = job.scopeItems ?? [];
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+    <div className={`rounded-2xl border overflow-hidden ${
+      job.status === 'paid' ? 'bg-green-50 border-green-300' : 'bg-white border-slate-200'
+    }`}>
       {/* Header: link to the Service Order */}
-      <div className="flex items-center justify-between px-4 py-3 bg-slate-50 border-b border-slate-200">
+      <div className={`flex items-center justify-between px-4 py-3 border-b ${
+        job.status === 'paid' ? 'bg-green-100 border-green-200' : 'bg-slate-50 border-slate-200'
+      }`}>
         <div className="flex items-center gap-2 min-w-0">
           <ClipboardList className="w-4 h-4 text-orange-500 flex-shrink-0" />
           <span className="text-sm font-semibold text-slate-900">Service Order</span>
@@ -64,6 +68,13 @@ const ServiceOrderCard: React.FC<{ job: ContractorJob }> = ({ job }) => {
           {job.status.replace(/_/g, ' ')}
         </span>
       </div>
+
+      {job.status === 'paid' && job.paidAt && (
+        <div className="flex items-center gap-1.5 px-4 py-2 bg-green-50 border-b border-green-200 text-xs font-semibold text-green-800">
+          <CheckCircle2 className="w-4 h-4" />
+          Paid {new Date(job.paidAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+        </div>
+      )}
 
       <div className="p-4 space-y-3">
         {/* Scope of work (SOW) review */}
