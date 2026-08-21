@@ -137,6 +137,32 @@ const TIER_STYLE: Record<0 | 1 | 2 | 3, { border: string; pill: string }> = {
   3: { border: 'border-l-4 border-l-red-600',    pill: 'bg-red-100 text-red-700 font-bold' },
 };
 
+/** `YYYY-MM-DD` for a date input, in LOCAL time. `toISOString().slice(0,10)`
+ *  is wrong here: it converts to UTC first, so anyone west of Greenwich gets
+ *  yesterday's date as the default after ~19:00 local. */
+export const toDateInputValue = (d = new Date()): string => {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+};
+
+/** Turn a `YYYY-MM-DD` picker value into an ISO timestamp at LOCAL midday.
+ *  `new Date('2026-08-21')` parses as UTC midnight, which renders as the 20th
+ *  in any negative-offset timezone (all of the US). Midday local survives the
+ *  round trip through toLocaleDateString in every zone. Returns null on junk so
+ *  a bad value can never be written as the close-out date. */
+export const dateInputToISO = (value: string): string | null => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!m) return null;
+  const [, y, mo, d] = m;
+  const dt = new Date(Number(y), Number(mo) - 1, Number(d), 12, 0, 0, 0);
+  if (Number.isNaN(dt.getTime())) return null;
+  // JS rolls impossible dates over silently: new Date(2026, 12, 45) is Feb
+  // 2027, not an error. Reject anything that did not survive the round trip,
+  // so a typo cannot be written as the close-out date.
+  if (dt.getFullYear() !== Number(y) || dt.getMonth() !== Number(mo) - 1 || dt.getDate() !== Number(d)) return null;
+  return dt.toISOString();
+};
+
 /** Billing works service orders, not leads. An order gets its woNumber when it
  *  is created, so that number IS the "a service order exists" flag: as of
  *  2026-08-08 all 116 orders across the six worked columns have one, and the
@@ -196,6 +222,15 @@ export const Billing: React.FC<BillingProps> = ({
   const [agingOnly, setAgingOnly] = useState<Record<string, boolean>>({});
   // Order whose SOW is being reviewed before invoicing.
   const [sowJobId, setSowJobId] = useState<string | null>(null);
+  // Close-out step: which order is being covered, and the date the admin picked.
+  const [coverJobId, setCoverJobId] = useState<string | null>(null);
+  const [coverDate, setCoverDate] = useState(() => toDateInputValue());
+
+  /** Open the close-out step with today pre-filled. */
+  const startCoverCosts = (jobId: string) => {
+    setCoverDate(toDateInputValue());
+    setCoverJobId(jobId);
+  };
   const [viewMode, setViewMode] = useState<'kanban' | 'list' | 'calendar'>(() => {
     const saved = localStorage.getItem('solarops_billing_view');
     if (saved === 'kanban' || saved === 'list' || saved === 'calendar') return saved as 'kanban' | 'list' | 'calendar';
@@ -340,10 +375,14 @@ export const Billing: React.FC<BillingProps> = ({
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverCol, setDragOverCol] = useState<BillingCol | null>(null);
 
-  const moveToColumn = (jobId: string, col: BillingCol) => {
+  const moveToColumn = (jobId: string, col: BillingCol, coveredAtISO?: string) => {
     const job = jobs.find(j => j.id === jobId);
     if (!job || getBillingColumn(job) === col) return;
     const now = new Date().toISOString();
+    // Close-out is the one stage whose date the admin sets by hand: costs are
+    // often covered days after the fact, and this timestamp is what the
+    // contractor sees as their paid date.
+    const coveredAt = coveredAtISO ?? job.costsCoveredAt ?? now;
     let patch: Partial<Job>;
     switch (col) {
       case 'new':
@@ -365,7 +404,7 @@ export const Billing: React.FC<BillingProps> = ({
         patch = { status: 'paid', woStatus: 'paid', clientPaidAt: job.clientPaidAt ?? now, costsCoveredAt: undefined };
         break;
       case 'costs_covered':
-        patch = { status: 'paid', woStatus: 'paid', clientPaidAt: job.clientPaidAt ?? now, costsCoveredAt: job.costsCoveredAt ?? now };
+        patch = { status: 'paid', woStatus: 'paid', clientPaidAt: job.clientPaidAt ?? now, costsCoveredAt: coveredAt };
         break;
     }
     onUpdateJob({ ...job, ...patch });
@@ -535,7 +574,12 @@ export const Billing: React.FC<BillingProps> = ({
                 onDrop={e => {
                   e.preventDefault();
                   setDragOverCol(null);
-                  if (draggedId) moveToColumn(draggedId, col.key);
+                  // Dropping onto Costs Covered asks for the date as well, so
+                  // the close-out date never depends on how the card got there.
+                  if (draggedId) {
+                    if (col.key === 'costs_covered') startCoverCosts(draggedId);
+                    else moveToColumn(draggedId, col.key);
+                  }
                   setDraggedId(null);
                 }}
               >
@@ -691,7 +735,7 @@ export const Billing: React.FC<BillingProps> = ({
                           )}
                           {col.key === 'paid' && (
                             <button
-                              onClick={() => moveToColumn(job.id, 'costs_covered')}
+                              onClick={() => startCoverCosts(job.id)}
                               className="flex-1 flex items-center justify-center gap-1 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-medium hover:bg-emerald-700 cursor-pointer"
                             >
                               <CheckCircle className="w-3 h-3" /> Cover Contractor & Expenses
@@ -737,6 +781,75 @@ export const Billing: React.FC<BillingProps> = ({
           onClose={() => setShowReport(false)}
         />
       )}
+
+      {/* ── Close-out date ───────────────────────────────────────────────────
+          Costs are routinely covered days after the fact, and this timestamp is
+          what the contractor sees as their paid date, so the admin sets it
+          rather than inheriting "whenever I happened to click". */}
+      {coverJobId && (() => {
+        const job = serviceOrders.find(j => j.id === coverJobId);
+        if (!job) return null;
+        const customer = getCustomer(job.customerId);
+        const close = () => setCoverJobId(null);
+        const iso = dateInputToISO(coverDate);
+        const confirm = () => {
+          if (!iso) return;
+          moveToColumn(job.id, 'costs_covered', iso);
+          close();
+        };
+        return (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+            onClick={close}
+          >
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm" onClick={e => e.stopPropagation()}>
+              <div className="px-5 py-4 border-b border-slate-200">
+                <h2 className="text-base font-bold text-slate-900">Close out this order</h2>
+                <p className="text-xs text-slate-500 mt-0.5 truncate">
+                  {displayName(job, customer)}
+                  {job.woNumber && <> · {serviceOrderNo(job.woNumber)}</>}
+                </p>
+              </div>
+              <div className="px-5 py-4">
+                <label htmlFor="coverDate" className="block text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-1.5">
+                  Close-out date
+                </label>
+                <input
+                  id="coverDate"
+                  type="date"
+                  value={coverDate}
+                  max={toDateInputValue()}
+                  onChange={e => setCoverDate(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && iso) confirm(); }}
+                  autoFocus
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+                <p className="text-[11px] text-slate-500 mt-2">
+                  Defaults to today. This is the date the contractor sees as their paid date.
+                </p>
+                {!iso && (
+                  <p className="text-[11px] text-red-600 mt-1.5">Pick a valid date to continue.</p>
+                )}
+              </div>
+              <div className="px-5 py-3 border-t border-slate-200 bg-slate-50 rounded-b-2xl flex items-center justify-end gap-2">
+                <button
+                  onClick={close}
+                  className="px-3 py-2 border border-slate-200 bg-white rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-50 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirm}
+                  disabled={!iso}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 text-white rounded-lg text-xs font-semibold hover:bg-emerald-700 disabled:opacity-50 cursor-pointer"
+                >
+                  <CheckCircle className="w-3.5 h-3.5" /> Cover Contractor &amp; Expenses
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ── Invoice review ───────────────────────────────────────────────────
           Generate Invoice opens the SOW rather than invoicing blind, so the
