@@ -274,8 +274,17 @@ export function displayNameFor(f: Pick<LeadFields, 'firstName' | 'lastName' | 'p
  */
 const BACKFILL_ACTIONS = new Set(['updateCard', 'addAttachmentToCard', 'commentCard']);
 
-/** Backfill for the LL-board job row: only replace the placeholder display name. */
-async function backfillLeadJob(jobId: string, displayName: string, now: string): Promise<void> {
+/**
+ * Backfill for the LL-board job row: replace the placeholder display name AND
+ * fill any leadInfo fields still missing. Runs on every updateCard/
+ * addAttachmentToCard/commentCard after the create-time import, which is where
+ * MOST real contact data actually arrives (Trello writes the desc a beat after
+ * createCard fires, see BACKFILL_ACTIONS above) - so this is not a rare edge
+ * case, it is the common path for a card whose desc wasn't ready yet at create.
+ * Field-by-field empty-only, so a lead the team has since edited by hand keeps
+ * their edits (e.g. a corrected phone number is never overwritten back).
+ */
+async function backfillLeadJob(jobId: string, displayName: string, leadFields: Record<string, string>, now: string): Promise<void> {
   const key = `job:${jobId}`;
   const selectRes = await fetch(
     `${SUPABASE_URL}/rest/v1/app_data?key=eq.${encodeURIComponent(key)}&select=value`,
@@ -287,10 +296,18 @@ async function backfillLeadJob(jobId: string, displayName: string, now: string):
 
   const isPlaceholder = (s: unknown) =>
     !String(s ?? '').trim() || String(s) === 'New Lead (Trello)' || isFilename(String(s));
-  if (!isPlaceholder(job.clientName) && !isPlaceholder(job.title)) return;
+  const nameChanged = isPlaceholder(job.clientName) || isPlaceholder(job.title);
+
+  const info = { ...(job.leadInfo ?? {}) };
+  let infoChanged = false;
+  for (const [k, v] of Object.entries(leadFields)) {
+    if (!info[k]) { info[k] = v; infoChanged = true; }
+  }
+  if (!nameChanged && !infoChanged) return;
 
   if (isPlaceholder(job.clientName)) job.clientName = displayName;
   if (isPlaceholder(job.title)) job.title = displayName;
+  if (infoChanged) job.leadInfo = info;
   job.updatedAt = now;
 
   await fetch(`${SUPABASE_URL}/rest/v1/app_data?on_conflict=key`, {
@@ -399,11 +416,26 @@ async function handleLeadImportWebhook(req: VercelRequest, res: VercelResponse) 
     // team can see who to call, never "image.jpeg".
     const displayName = displayNameFor(fields);
 
-    // A later event on a card we already imported: fill the placeholder name the
-    // create-time race left, then stop. Self-guards to a no-op if the job is
-    // absent or already named. Never creates, never overwrites a real name.
+    // Only include fields that actually have a value: LeadInfo fields are all
+    // optional, and seedLeadInfo() on the client treats ANY truthy leadInfo as
+    // "already seeded", so an object of all-empty strings would block its own
+    // notes-parsing fallback without contributing anything.
+    const leadInfoFields: Record<string, string> = {};
+    if (firstName) leadInfoFields.firstName = firstName;
+    if (lastName)  leadInfoFields.lastName  = lastName;
+    if (phone)     leadInfoFields.phone     = phone;
+    if (email)     leadInfoFields.email     = email;
+    if (address)   leadInfoFields.address   = address;
+    if (city)      leadInfoFields.city      = city;
+    if (state)     leadInfoFields.state     = state;
+    if (zip)       leadInfoFields.zip       = zip;
+
+    // A later event on a card we already imported: fill the placeholder name AND
+    // any leadInfo fields the create-time race left empty, then stop. Self-guards
+    // to a no-op if the job is absent. Never creates, never overwrites a value
+    // the team (or a prior successful import) already set.
     if (!target) {
-      await backfillLeadJob(jobId, displayName, now);
+      await backfillLeadJob(jobId, displayName, leadInfoFields, now);
       console.info(`[trello-webhook] backfill ${action.type}: job ${jobId} (${displayName})`);
       return res.status(200).json({ job: { id: jobId, result: 'backfilled' } });
     }
@@ -417,8 +449,9 @@ async function handleLeadImportWebhook(req: VercelRequest, res: VercelResponse) 
       || `Auto-imported from Trello card "${card.name}"`;
 
     // Lead Lobby was removed (2026-08-08 teardown): the LL-board job row is now
-    // the ONLY record. A job has no phone/email fields, so contact info must ride
-    // in the notes or the team cannot call the lead, which is the whole point.
+    // the ONLY record. Contact info rides in job.leadInfo (LeadPanel's actual
+    // editable fields, added after this file was first written, see below) AND
+    // in the notes as human-readable redundancy for the activity feed.
     const contactLine = [
       phone && `Phone: ${formatPhone(phone)}`,
       email && `Email: ${email}`,
@@ -437,6 +470,11 @@ async function handleLeadImportWebhook(req: VercelRequest, res: VercelResponse) 
       serviceType: 'Lead',
       status: 'new',
       pipelineStage: 'leads',
+      // The LeadPanel's editable contact fields, LeadPanel.tsx / seedLeadInfo().
+      // Omitted entirely (not an empty object) when nothing was extracted, so a
+      // later backfill's own emptiness check (Object.values(...).some(Boolean))
+      // still treats the job as unseeded.
+      ...(Object.keys(leadInfoFields).length > 0 ? { leadInfo: leadInfoFields } : {}),
       // Empty, not today's date: the calendar buckets these via parseDateSafe
       // into "unscheduled" rather than dropping an unqualified lead onto today.
       scheduledDate: '',

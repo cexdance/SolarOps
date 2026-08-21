@@ -221,14 +221,18 @@ const JobCard: React.FC<JobCardProps> = ({ job, customer, contractorName, isDrag
           <Zap className="w-3 h-3" />PowerCare
         </span>
       )}
-      {job.contractorId ? (
-        <span className="text-xs text-slate-500 flex items-center gap-1">
-          <User className="w-3 h-3" />{contractorName ?? 'Assigned'}
-        </span>
-      ) : (
-        <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200 font-semibold flex items-center gap-1">
-          <User className="w-3 h-3" />Pending Assignment
-        </span>
+      {/* Contractor assignment doesn't apply yet on a pure LL lead card, that
+          happens once it converts to a real service order (has a woNumber). */}
+      {!isPipelineOnly(job) && (
+        job.contractorId ? (
+          <span className="text-xs text-slate-500 flex items-center gap-1">
+            <User className="w-3 h-3" />{contractorName ?? 'Assigned'}
+          </span>
+        ) : (
+          <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200 font-semibold flex items-center gap-1">
+            <User className="w-3 h-3" />Pending Assignment
+          </span>
+        )
       )}
     </div>
     <div className="flex items-center justify-between pt-3 border-t border-slate-100">
