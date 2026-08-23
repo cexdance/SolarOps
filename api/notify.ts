@@ -92,6 +92,86 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     (caller.user_metadata?.name as string | undefined) || caller.email || 'A teammate',
   );
 
+  // ── Site Transfer info request email ───────────────────────────────────────
+  // Emails the CLIENT asking for the two identifiers we need to run a SolarEdge
+  // ownership transfer. Like customer-appointment, no Supabase user lookup.
+  if ((req.body as Record<string, unknown>)?.action === 'site-transfer-request') {
+    const { customerEmail, customerName: stName, orderNo } =
+      (req.body ?? {}) as Record<string, string>;
+    const to = String(customerEmail ?? '').trim();
+    if (!to || !/.+@.+\..+/.test(to)) return res.status(400).json({ error: 'valid customerEmail required' });
+    if (!RESEND_API_KEY) return res.status(200).json({ sent: 0, skipped: 'no RESEND_API_KEY' });
+
+    const safe = escapeHtml;
+    // ponytail: the "attached photo" is an inline image served from /public, not
+    // a real MIME attachment. Swap for Resend `attachments` only if a client
+    // strips remote images and someone actually complains.
+    const guideUrl = 'https://solarflow-dashboard-sooty.vercel.app/site-id-instructions.png';
+    const r = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from: 'SolarOps <solar.ops@conexsol.us>',
+        reply_to: 'solar.ops@conexsol.us',
+        to,
+        subject: `Information needed for your site transfer${orderNo ? `, ${safe(orderNo)}` : ''}`,
+        html: `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;padding:32px 16px">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.08)">
+        <tr>
+          <td style="background:linear-gradient(135deg,#0d9488,#0f766e);padding:28px 32px">
+            <div style="font-size:22px;font-weight:700;color:#fff">Conexsol Solar Service</div>
+            <div style="font-size:13px;color:rgba(255,255,255,.85);margin-top:4px">Site transfer, information request</div>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:32px">
+            <p style="margin:0 0 16px;font-size:16px;color:#1e293b">Hello ${safe(stName) || 'there'},</p>
+            <p style="margin:0 0 16px;font-size:14px;color:#64748b;line-height:1.6">
+              I am emailing you to request two pieces of information that we need to perform the "site transfer" of your installation and gain access to its monitoring. These pieces of information are:
+            </p>
+            <ul style="margin:0 0 20px;padding-left:20px;font-size:14px;color:#64748b;line-height:1.7">
+              <li><strong style="color:#1e293b">Site ID:</strong> You can find this number by following the instructions detailed in the attached photo. In the mySolarEdge app, open the menu at the top left and tap <strong style="color:#1e293b">Site Details</strong>, the Site ID is listed there.</li>
+              <li><strong style="color:#1e293b">Full inverter serial number:</strong> This number is located on the label of the inverter.</li>
+            </ul>
+            <img src="${guideUrl}" alt="How to find your Site ID in the mySolarEdge app" width="240" style="width:100%;max-width:240px;border-radius:8px;border:1px solid #e2e8f0;display:block;margin:0 auto 20px" />
+            <p style="margin:0 0 16px;font-size:14px;color:#64748b;line-height:1.6">
+              I appreciate your cooperation in providing us with this information. This will allow us to complete the process and ensure that your installation is properly monitored.
+            </p>
+            <p style="margin:0 0 16px;font-size:14px;color:#64748b;line-height:1.6">
+              If you have any questions or need additional assistance in finding these details, please do not hesitate to contact me.
+            </p>
+            <p style="margin:0;font-size:14px;color:#64748b;line-height:1.6">I look forward to your response.</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:20px 32px;border-top:1px solid #f1f5f9">
+            <p style="margin:0;font-size:12px;color:#94a3b8">
+              Conexsol${orderNo ? ` &bull; Service order ${safe(orderNo)}` : ''}. Reply to this email to reach our office.
+            </p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`,
+      }),
+    }).catch((err: unknown) => { console.warn('[notify] site transfer email failed', err); return null; });
+
+    if (!r || !r.ok) {
+      const detail = r ? await r.text().catch(() => '') : 'fetch failed';
+      console.error('[notify] site transfer email error:', detail);
+      return res.status(502).json({ error: 'email send failed' });
+    }
+    return res.status(200).json({ sent: 1 });
+  }
+
   // ── Customer appointment confirmation email ────────────────────────────────
   // Distinct from the staff @mention flow: emails the CLIENT directly (no
   // Supabase user lookup) when a contractor schedules/confirms a service date.

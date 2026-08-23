@@ -450,7 +450,7 @@ const demoContractors: Contractor[] = [
     status: 'approved',
     createdAt: new Date().toISOString(),
 
-    businessName: 'Valnuar Capital LLC',
+    businessName: 'Valnoir Capital LLC',
     businessType: 'llc',
     ein: '',
     streetAddress: '',

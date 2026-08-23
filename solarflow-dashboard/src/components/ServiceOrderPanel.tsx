@@ -19,7 +19,8 @@ import { QuotePreviewModal } from './QuotePreviewModal';
 import { Contractor, ContractorJob, JobPriority, ServiceRate } from '../types/contractor';
 import { loadServiceRates, loadContractorJobs } from '../lib/contractorStore';
 import { searchParts, CatalogPart } from '../lib/partsCatalog';
-import { MentionTextarea, MentionUser, renderWithMentions, parseMentions, parseMentionEmails, fireMentionNotifications } from './ui/MentionTextarea';
+import { MentionTextarea, MentionUser, renderWithMentions, parseMentions, parseMentionEmails, fireMentionNotifications, handleFor } from './ui/MentionTextarea';
+import { sendSiteTransferRequest } from '../lib/siteTransferEmail';
 import { formatMoney, formatCost } from '../lib/money';
 import { printServiceReport } from '../lib/printServiceReport';
 import { serviceOrderNo, workOrderNo, generateServiceOrderNumber, photoUrlStem } from '../lib/woHelpers';
@@ -1113,23 +1114,22 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
   const [commentError, setCommentError] = useState<string | null>(null);
 
   // ── Comments / Activity handlers ─────────────────────────────────────────
-  const addComment = useCallback(() => {
-    const text = newComment.trim();
+  const addComment = useCallback((override?: string) => {
+    const text = (override ?? newComment).trim();
     // Allow a comment that is image-only (text OR at least one attachment).
-    if (!text && commentAttachments.length === 0) return;
+    if (!text && (override || commentAttachments.length === 0)) return;
     const entry: import('../types').Activity = {
       id: `wo-cmt-${Date.now()}`,
       type: 'note_added',
-      description: text || (commentAttachments.length ? '(image)' : ''),
+      description: text || (!override && commentAttachments.length ? '(image)' : ''),
       timestamp: new Date().toISOString(),
       userId: (currentUserName && users.find(u => u.name === currentUserName)?.id) || undefined,
       userName: currentUserName ?? 'Unknown',
       mentions: parseMentions(text, users as MentionUser[]),
-      attachments: commentAttachments.length ? commentAttachments.map(a => ({ ...a })) : undefined,
+      attachments: !override && commentAttachments.length ? commentAttachments.map(a => ({ ...a })) : undefined,
     };
     setWoActivities(prev => [entry, ...prev]);
-    setNewComment('');
-    setCommentAttachments([]);
+    if (!override) { setNewComment(''); setCommentAttachments([]); }
     // Persist the comment (and its attachments) right away, deferred so the
     // woActivities state update is committed before handleSave reads it.
     setTimeout(() => handleSaveRef.current(undefined, true), 0);
@@ -1146,6 +1146,36 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
       });
     }
   }, [newComment, commentAttachments, currentUserName, users, job, siteId]);
+
+  // ── Site Transfer: request identifiers from the customer ─────────────────
+  // One click does both halves of the manual routine: email the client for the
+  // Site ID + inverter serial, and @mention Daniel to raise the invoice.
+  const [stRequesting, setStRequesting]   = useState(false);
+  const [stRequestMsg, setStRequestMsg]   = useState<string | null>(null);
+  const requestSiteTransferInfo = useCallback(async () => {
+    if (stRequesting) return;
+    setStRequesting(true);
+    setStRequestMsg(null);
+    const orderNo = job?.woNumber ? serviceOrderNo(job.woNumber) : '';
+    const r = await sendSiteTransferRequest({
+      customerEmail: customer?.email ?? '',
+      customerName:  customer?.name ?? '',
+      orderNo,
+    });
+    if (!r.success) {
+      setStRequestMsg(r.error ?? 'Failed to send');
+      setStRequesting(false);
+      return;
+    }
+    const daniel = users.find(u => u.name.toLowerCase().includes('daniel'));
+    addComment(
+      `Site transfer info requested from ${customer?.name || 'the customer'} (${customer?.email}). ` +
+      (daniel ? `@${handleFor(daniel as MentionUser)} ` : '') +
+      `please create the invoice for this site transfer${orderNo ? ` (${orderNo})` : ''}.`,
+    );
+    setStRequestMsg('Email sent, Daniel notified');
+    setStRequesting(false);
+  }, [stRequesting, job, customer, users, addComment]);
 
   const editComment = useCallback((id: string, text: string) => {
     setWoActivities(prev => prev.map(a => a.id === id ? { ...a, description: text } : a));
@@ -1904,7 +1934,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                 )}
                 <div className="flex items-center justify-end mt-2">
                   <button
-                    onClick={addComment}
+                    onClick={() => addComment()}
                     disabled={(!newComment.trim() && commentAttachments.length === 0) || commentUploading}
                     className="px-4 py-1.5 bg-orange-500 text-white text-sm font-medium rounded-lg hover:bg-orange-600 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed transition-colors"
                   >
@@ -2247,6 +2277,17 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                         />
                       </div>
                     </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    <button
+                      onClick={requestSiteTransferInfo}
+                      disabled={stRequesting || !customer?.email}
+                      title={customer?.email ? 'Email the customer for the Site ID + inverter serial and @mention Daniel to invoice' : 'Customer has no email on file'}
+                      className="px-3 py-2 text-xs font-semibold rounded-lg bg-teal-600 text-white hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                    >
+                      {stRequesting ? 'Sending...' : 'Request info from customer'}
+                    </button>
+                    {stRequestMsg && <span className="text-[11px] text-teal-700">{stRequestMsg}</span>}
                   </div>
                   <p className="text-[10px] text-teal-700">These values are saved with the service order and used by the admin agentic workflow to execute the SolarEdge ownership transfer.</p>
                 </div>
