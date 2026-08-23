@@ -36,6 +36,7 @@ import { User as UserType, AppNotification, Customer, Job } from '../types';
 // Inbox-style dimension chips for the notifications panel
 const NOTIF_GROUPS: Record<string, AppNotification['type'][]> = {
   mentions: ['mention'],
+  leads: ['new_lead'],
   completed: ['contractor_completed'],
   billing: ['late_fee_1', 'late_fee_2', 'contractor_autopay'],
   alerts: ['service_disconnect'],
@@ -44,6 +45,8 @@ const NOTIF_CHIPS: { key: string; label: string }[] = [
   { key: 'all', label: 'All' },
   { key: 'unread', label: 'Unread' },
   { key: 'mentions', label: 'Mentions' },
+  // New leads off the Trello board (api/trello-card.ts notifyNewLead).
+  { key: 'leads', label: 'Leads' },
   { key: 'completed', label: 'Completed' },
   { key: 'billing', label: 'Billing' },
   { key: 'alerts', label: 'Alerts' },
