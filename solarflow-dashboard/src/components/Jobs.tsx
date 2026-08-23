@@ -65,7 +65,7 @@ function badgeLabel(job: Job): string {
 }
 import { ServiceOrderPanel } from './ServiceOrderPanel';
 import { LeadPanel } from './LeadPanel';
-import { leadToCustomer } from '../lib/leadConvert';
+import { leadToCustomer, formatImportedAt } from '../lib/leadConvert';
 
 // Contractor workload buckets for the per-contractor filter summary. Uses the raw
 // `contractorJobStatus` (mirrored from the contractor portal) so "on route"
@@ -237,8 +237,23 @@ const JobCard: React.FC<JobCardProps> = ({ job, customer, contractorName, isDrag
     </div>
     <div className="flex items-center justify-between pt-3 border-t border-slate-100">
       <div className="flex items-center gap-3 text-xs text-slate-500">
-        <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{job.scheduledDate?.split('T')[0] ?? job.scheduledDate}</span>
-        <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{job.scheduledTime}</span>
+        {isPipelineOnly(job) ? (
+          /* A lead has no schedule yet: the webhook writes scheduledDate/Time
+             empty on purpose so it buckets as "unscheduled" rather than landing
+             on today's calendar. That left this row rendering two bare icons, so
+             show when the lead came in instead. */
+          <span
+            className="flex items-center gap-1"
+            title={job.createdAt ? `Imported ${new Date(job.createdAt).toLocaleString()}` : undefined}
+          >
+            <Calendar className="w-3 h-3" />Imported {formatImportedAt(job.createdAt)}
+          </span>
+        ) : (
+          <>
+            <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{job.scheduledDate?.split('T')[0] ?? job.scheduledDate}</span>
+            <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{job.scheduledTime}</span>
+          </>
+        )}
       </div>
       <div className="flex items-center gap-2">
         {onToggleHold && (

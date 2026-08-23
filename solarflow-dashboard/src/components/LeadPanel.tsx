@@ -6,7 +6,7 @@
 import React, { useState } from 'react';
 import { Phone, Mail, FileText, X, UserCheck, PhoneCall } from 'lucide-react';
 import type { Job, LeadInfo, Activity } from '../types';
-import { seedLeadInfo, leadDisplayName } from '../lib/leadConvert';
+import { seedLeadInfo, leadDisplayName, formatImportedAt } from '../lib/leadConvert';
 import { rcCall } from '../lib/ringcentral';
 import { LabelPicker } from './LabelPicker';
 
@@ -53,7 +53,14 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({ job, currentUserName, onSa
         <div className="flex items-center justify-between p-4 border-b border-slate-200 sticky top-0 bg-white">
           <div className="min-w-0">
             <h2 className="text-lg font-bold text-slate-900 truncate">{leadDisplayName(job)}</h2>
-            <p className="text-xs text-slate-500">Lead {job.clientId ? `· ${job.clientId}` : ''}</p>
+            <p className="text-xs text-slate-500">
+              Lead {job.clientId ? `· ${job.clientId}` : ''}
+              {job.createdAt && (
+                <span title={`Imported ${new Date(job.createdAt).toLocaleString()}`}>
+                  {' · Imported '}{formatImportedAt(job.createdAt)}
+                </span>
+              )}
+            </p>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-lg"><X className="w-5 h-5 text-slate-500" /></button>
         </div>

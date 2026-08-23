@@ -68,3 +68,27 @@ export function leadToCustomer(job: Job): Partial<Customer> {
     createdAt: new Date().toISOString(),
   };
 }
+
+/**
+ * "Imported" stamp for a lead card: the date the lead arrived, plus how long it
+ * has been sitting, which on an intake board is the number that actually
+ * matters. The year is shown only when it is not the current one, so the common
+ * case stays short enough for a kanban card.
+ *
+ * Source is `Job.createdAt`, which the Trello webhook stamps at import.
+ */
+export function formatImportedAt(iso: string | undefined, now: Date = new Date()): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const date = d.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    ...(d.getFullYear() === now.getFullYear() ? {} : { year: 'numeric' }),
+  });
+  const days = Math.floor((now.getTime() - d.getTime()) / 86_400_000);
+  // Guard the future case: a clock-skewed or hand-edited createdAt should read
+  // as the date alone, never "(-3d)".
+  if (days < 0) return date;
+  return days === 0 ? `${date} (today)` : `${date} (${days}d)`;
+}

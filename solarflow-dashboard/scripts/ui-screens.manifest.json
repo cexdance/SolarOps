@@ -80,14 +80,6 @@
       "detail": "Customers. Search, customer cards, interaction history, links to SolarEdge sites and jobs."
     },
     {
-      "id": "lobby",
-      "group": "admin",
-      "title": "Lead Lobby",
-      "view": "lobby",
-      "macro": "Inbound lead intake and triage.",
-      "detail": "LeadLobby. Lead pipeline, assignment, conversion to customer/job."
-    },
-    {
       "id": "solaredge",
       "group": "admin",
       "title": "SolarEdge Sites",
@@ -118,6 +110,22 @@
       "view": "jobs",
       "macro": "Work-order list and pipeline.",
       "detail": "Jobs. Status filters, work-order rows, opens WorkOrderPanel / jobDetail. WorkOrderCalendar for scheduling."
+    },
+    {
+      "id": "ll-board",
+      "group": "admin",
+      "title": "LL Board (lead funnel)",
+      "view": "jobs",
+      "pre": [
+        {
+          "click": "button[title=\"LL (Lead Lobby) - multi-state pipeline\"]"
+        },
+        {
+          "wait": 900
+        }
+      ],
+      "macro": "The Trello lead funnel: every lead from intake to closed.",
+      "detail": "Jobs viewMode 'tryout'. 13 columns mirroring the Conexsol Florida Services Trello board 1:1, first column Leads Services SolarEdge where the webhook drops new leads. Only funnel cards (pipelineStage, no woNumber) appear; real service orders live on the main board. Cards show Trello label chips and the lead's import date. Clicking a customerless card opens LeadPanel."
     },
     {
       "id": "routes",
