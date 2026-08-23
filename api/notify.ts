@@ -171,7 +171,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!r || !r.ok) {
       const detail = r ? await r.text().catch(() => '') : 'fetch failed';
       console.error('[notify] site transfer email error:', detail);
-      return res.status(502).json({ error: 'email send failed' });
+      // Surface the provider's own reason. A bare "email send failed" sent us
+      // hunting through the client for a bug that was really an unverified
+      // sending domain, which no code change can fix. Resend's message names
+      // the cause and carries no secret.
+      let reason = '';
+      try { reason = String(JSON.parse(detail).message ?? ''); } catch { /* not JSON */ }
+      return res.status(502).json({ error: reason ? `Email not sent: ${reason}` : 'email send failed' });
     }
     return res.status(200).json({ sent: 1 });
   }
