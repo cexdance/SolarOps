@@ -105,6 +105,39 @@ const TARGET_LISTS: { boardId: string; listId: string; label: string }[] = [
   { boardId: '6a5a58e06fbf97144b5d96c9', listId: '6a5a58e06fbf97144b5d96be', label: 'FL: Leads Services SolarEdge' },
 ];
 
+/**
+ * Trello list id -> LL `pipelineStage`, for the whole "Conexsol Florida
+ * Services" board. This is what keeps the LL column and the Trello list the
+ * same thing.
+ *
+ * MAPPED BY ID, NEVER BY INDEX. The 2026-08-10 bulk import mapped the board's
+ * lists onto PIPELINE_STAGES positionally, and the two orders do NOT agree:
+ * Trello has "Work Done - Collect Payment" at index 7 and "Needs follow-Up
+ * Service" at 8, while PIPELINE_STAGES has them the other way round. A
+ * positional map silently swaps those two columns, and a Trello reorder would
+ * scramble the rest at any time.
+ */
+const LIST_STAGES: Record<string, string> = {
+  '6a5a58e06fbf97144b5d96be': 'leads',                     // Leads Services SolarEdge
+  '6a5a58e06fbf97144b5d96c2': 'needs_first_quote',         // Needs First Time Quoting/Invoicing
+  '6a5a58e06fbf97144b5d96bf': 'first_quote_in_progress',   // First Time Quote/Invoice In Progress
+  '6a5a58e06fbf97144b5d96c3': 'site_transfer_processing',  // Site Transfer is Processing
+  '6a5a58e06fbf97144b5d96c4': 'site_transfer_completed',   // Site Transfer is Completed/To Be Checked
+  '6a5a58e06fbf97144b5d96c5': 'service_quote_in_progress', // Quote/Invoicing in Progress for Service
+  '6a5a58e06fbf97144b5d96c0': 'needs_scheduling',          // Quote Accepted - Needs Scheduling
+  '6a6b74b3042230eaca73f224': 'work_done_collect',         // Work Done - Collect Payment
+  '6a79fe57cd90d79ec1c71526': 'needs_follow_up',           // Needs follow-Up Service
+  '6a5a58e06fbf97144b5d96c1': 'done',                      // Done
+  '6a5a58e06fbf97144b5d96c6': 'email_follow_up',           // Email Marketing Follow-Up
+  '6a5a58e06fbf97144b5d96c7': 'closed_won',                // Closed - Won
+  '6a5a58e06fbf97144b5d96c8': 'closed_archived',           // Closed - Archived
+};
+
+/** The stage a card currently belongs in, or undefined for an untracked list. */
+export function stageForList(listId: string | undefined): string | undefined {
+  return listId ? LIST_STAGES[listId] : undefined;
+}
+
 interface TrelloWebhookAction {
   type: string;
   data?: {
@@ -174,8 +207,12 @@ export function extractContact(text: string): { phone: string; email: string } {
 
 interface TrelloLabel { name?: string; color?: string }
 
-async function fetchCardForLeadImport(cardId: string): Promise<{ name: string; desc: string; shortUrl: string; labels?: TrelloLabel[] }> {
-  const url = `${TRELLO_BASE}/cards/${cardId}?key=${API_KEY}&token=${API_TOKEN}&fields=name,desc,shortUrl,labels`;
+async function fetchCardForLeadImport(cardId: string): Promise<{ name: string; desc: string; shortUrl: string; labels?: TrelloLabel[]; idList?: string }> {
+  // idList is read on EVERY event, not just list-move events: reconciling
+  // against the card's actual current list is self-healing, so a webhook
+  // delivery we missed (or a move made while a deploy was in flight) is
+  // corrected by the next event of any kind on that card.
+  const url = `${TRELLO_BASE}/cards/${cardId}?key=${API_KEY}&token=${API_TOKEN}&fields=name,desc,shortUrl,labels,idList`;
   const res = await fetch(url, { headers: { Accept: 'application/json' } });
   if (!res.ok) throw new Error(`Trello card fetch ${res.status}`);
   return res.json();
@@ -321,9 +358,15 @@ async function backfillLeadJob(
   jobId: string,
   displayName: string,
   leadFields: Record<string, string>,
-  syncLabels: { name: string; color: string }[] | undefined,
+  card: {
+    labels?: { name: string; color: string }[];
+    stage?: string;
+    notes: string;
+    description: string;
+  },
   now: string,
 ): Promise<void> {
+  const syncLabels = card.labels;
   const key = `job:${jobId}`;
   const selectRes = await fetch(
     `${SUPABASE_URL}/rest/v1/app_data?key=eq.${encodeURIComponent(key)}&select=value`,
@@ -349,12 +392,30 @@ async function backfillLeadJob(
   const before = JSON.stringify(job.labels ?? []);
   const labelsChanged = syncLabels !== undefined && JSON.stringify(syncLabels) !== before;
 
-  if (!nameChanged && !infoChanged && !labelsChanged) return;
+  // The LL column IS the Trello list. Nothing used to maintain this after
+  // create, so every card the office moved in Trello stayed pinned to the stage
+  // it was imported at: 32 of 56 cards had drifted, 24 of them still sitting in
+  // "Leads" after being worked all the way to Done or Email Marketing.
+  // Reconciled from the card's CURRENT list, so one event of any kind repairs it.
+  const stageChanged = !!card.stage && job.pipelineStage !== card.stage;
+
+  // Repair the create-time placeholder note. Trello writes the desc a beat after
+  // createCard, so a card imported during that window kept
+  // 'Auto-imported from Trello card "image.jpeg"' forever and lost the real lead
+  // text, the contact block and the HS_ID. Only ever replaces that exact
+  // placeholder shape, so a note the team has written is never touched.
+  const notePlaceholder = /^Auto-imported from Trello card "[^"]*"/.test(String(job.notes ?? '').trim());
+  const notesChanged = notePlaceholder && card.notes.trim() !== String(job.notes ?? '').trim()
+    && !/^Auto-imported from Trello card "[^"]*"/.test(card.notes.trim());
+
+  if (!nameChanged && !infoChanged && !labelsChanged && !stageChanged && !notesChanged) return;
 
   if (isPlaceholder(job.clientName)) job.clientName = displayName;
   if (isPlaceholder(job.title)) job.title = displayName;
   if (infoChanged) job.leadInfo = info;
   if (labelsChanged) job.labels = syncLabels;
+  if (stageChanged) job.pipelineStage = card.stage;
+  if (notesChanged) { job.notes = card.notes; job.description = card.description; }
   job.updatedAt = now;
 
   await fetch(`${SUPABASE_URL}/rest/v1/app_data?on_conflict=key`, {
@@ -598,20 +659,6 @@ async function handleLeadImportWebhook(req: VercelRequest, res: VercelResponse) 
     if (state)     leadInfoFields.state     = state;
     if (zip)       leadInfoFields.zip       = zip;
 
-    // A later event on a card we already imported: fill the placeholder name AND
-    // any leadInfo fields the create-time race left empty, then stop. Self-guards
-    // to a no-op if the job is absent. Never creates, never overwrites a value
-    // the team (or a prior successful import) already set.
-    if (!target) {
-      await backfillLeadJob(
-        jobId, displayName, leadInfoFields,
-        LABEL_ACTIONS.has(action.type) ? cardLabels : undefined,
-        now,
-      );
-      console.info(`[trello-webhook] backfill ${action.type}: job ${jobId} (${displayName})`);
-      return res.status(200).json({ job: { id: jobId, result: 'backfilled' } });
-    }
-
     const extraNote = [
       vision.contractName?.trim() && `Contract: ${vision.contractName.trim()}`,
       vision.hsId?.trim() && `HS_ID: ${vision.hsId.trim()}`,
@@ -630,6 +677,22 @@ async function handleLeadImportWebhook(req: VercelRequest, res: VercelResponse) 
       [address, city, state, zip].filter(Boolean).join(', ') || null,
     ].filter(Boolean).join('\n');
 
+    const fullNotes = [cardNote, contactLine, `Trello card: ${card.shortUrl}`].filter(Boolean).join('\n\n');
+
+    // A later event on a card we already imported: reconcile it against the card
+    // as it stands right now. Self-guards to a no-op if the job is absent, never
+    // creates, and never overwrites a value the team already set by hand.
+    if (!target) {
+      await backfillLeadJob(jobId, displayName, leadInfoFields, {
+        labels: LABEL_ACTIONS.has(action.type) ? cardLabels : undefined,
+        stage: stageForList(card.idList),
+        notes: fullNotes,
+        description: cardNote,
+      }, now);
+      console.info(`[trello-webhook] backfill ${action.type}: job ${jobId} (${displayName}) stage=${stageForList(card.idList) ?? '?'}`);
+      return res.status(200).json({ job: { id: jobId, result: 'backfilled' } });
+    }
+
     const job = {
       id: jobId,
       // No customer yet, that is the point: the team assigns the client number
@@ -641,7 +704,9 @@ async function handleLeadImportWebhook(req: VercelRequest, res: VercelResponse) 
       title: nameIsFile ? displayName : card.name,
       serviceType: 'Lead',
       status: 'new',
-      pipelineStage: 'leads',
+      // Effectively always 'leads' (only that list creates a lead), but read
+      // from the card's real list so the column can never disagree with Trello.
+      pipelineStage: stageForList(card.idList) ?? 'leads',
       // The LeadPanel's editable contact fields, LeadPanel.tsx / seedLeadInfo().
       // Omitted entirely (not an empty object) when nothing was extracted, so a
       // later backfill's own emptiness check (Object.values(...).some(Boolean))
@@ -653,7 +718,7 @@ async function handleLeadImportWebhook(req: VercelRequest, res: VercelResponse) 
       // into "unscheduled" rather than dropping an unqualified lead onto today.
       scheduledDate: '',
       scheduledTime: '',
-      notes: [cardNote, contactLine, `Trello card: ${card.shortUrl}`].filter(Boolean).join('\n\n'),
+      notes: fullNotes,
       description: cardNote,
       photos: [],
       laborHours: 0, laborRate: 0, partsCost: 0, totalAmount: 0,

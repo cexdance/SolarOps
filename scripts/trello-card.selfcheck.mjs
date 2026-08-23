@@ -13,7 +13,7 @@
 // endpoint anyone added would have failed the deploy.
 import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
-import { splitName, extractContact, matchTargetList, isFilename, parseLeadDesc, displayNameFor, verifyTrelloSignature, toJobLabels } from '/tmp/twcheck/trello-card.js';
+import { splitName, extractContact, matchTargetList, isFilename, parseLeadDesc, displayNameFor, verifyTrelloSignature, toJobLabels, stageForList } from '/tmp/twcheck/trello-card.js';
 
 // Trello label -> Job.labels. Must match what LabelPicker writes in-app, since
 // both render through labelChipClass (raw Trello colour key, name required).
@@ -29,6 +29,20 @@ assert.deepEqual(
 // The live board really does carry a null-coloured label ("Completed/Did not proceed.").
 assert.deepEqual(toJobLabels([{ name: 'Completed/Did not proceed.' }]), [{ name: 'Completed/Did not proceed.', color: '' }]);
 assert.deepEqual(toJobLabels(undefined), []);
+
+// List -> stage. The two that a positional map gets WRONG: Trello orders
+// "Work Done - Collect Payment" (index 7) before "Needs follow-Up Service"
+// (index 8), while PIPELINE_STAGES has needs_follow_up first. Mapping by index
+// silently swaps these two columns, which is why the map is keyed by list id.
+assert.equal(stageForList('6a6b74b3042230eaca73f224'), 'work_done_collect');
+assert.equal(stageForList('6a79fe57cd90d79ec1c71526'), 'needs_follow_up');
+assert.equal(stageForList('6a5a58e06fbf97144b5d96be'), 'leads');
+assert.equal(stageForList('6a5a58e06fbf97144b5d96c6'), 'email_follow_up');
+assert.equal(stageForList('6a5a58e06fbf97144b5d96c8'), 'closed_archived');
+// An unknown/untracked list must yield undefined, so the caller leaves the
+// stage alone rather than dumping the card into a wrong column.
+assert.equal(stageForList('not-a-real-list'), undefined);
+assert.equal(stageForList(undefined), undefined);
 
 // Webhook signature: base64(HMAC-SHA1(rawBody + callbackURL, secret)).
 const BODY = '{"action":{"type":"createCard"}}';

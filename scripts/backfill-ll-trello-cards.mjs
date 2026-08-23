@@ -34,8 +34,12 @@ const BOARD_ID = '6a5a58e06fbf97144b5d96c9'; // Conexsol Florida Services (trell
 const cardIdOf = (jobId) => String(jobId || '').replace(/^job-trello-/, '');
 const hasInfo = (j) => !!j?.leadInfo && Object.values(j.leadInfo).some(v => String(v ?? '').trim());
 const hasLabels = (j) => Array.isArray(j?.labels) && j.labels.length > 0;
-/** A card is worth replaying if either enrichment is still missing. */
-const needsBackfill = (j) => !hasInfo(j) || !hasLabels(j);
+/** Still carrying the create-time placeholder, so the real lead text was lost. */
+const hasPlaceholderNote = (j) => /^Auto-imported from Trello card "[^"]*"/.test(String(j?.notes ?? '').trim());
+/** Locally visible gaps. NOT the replay gate: `pipelineStage` drift is invisible
+ *  from here (it needs the card's current Trello list), and that was the biggest
+ *  defect of all, so every card is replayed and this is only used for reporting. */
+const needsBackfill = (j) => !hasInfo(j) || !hasLabels(j) || hasPlaceholderNote(j);
 
 if (process.argv.includes('--selftest')) {
   const ok = (c, m) => { if (!c) { console.error('FAIL:', m); process.exit(1); } };
@@ -45,8 +49,10 @@ if (process.argv.includes('--selftest')) {
   ok(hasInfo({ leadInfo: { phone: '8138094163' } }), 'one real field counts as seeded');
   ok(!hasLabels({ labels: [] }), 'empty labels array');
   ok(hasLabels({ labels: [{ name: 'Invoiced', color: 'green' }] }), 'labels present');
-  ok(needsBackfill({ leadInfo: { phone: '1' } }), 'has info but no labels -> still needs backfill');
-  ok(!needsBackfill({ leadInfo: { phone: '1' }, labels: [{ name: 'x', color: '' }] }), 'both present -> skip');
+  ok(needsBackfill({ leadInfo: { phone: '1' } }), 'has info but no labels -> still a gap');
+  ok(!needsBackfill({ leadInfo: { phone: '1' }, labels: [{ name: 'x', color: '' }], notes: 'real text' }), 'all present -> no gap');
+  ok(hasPlaceholderNote({ notes: 'Auto-imported from Trello card "image.jpeg"\n\nTrello card: https://x' }), 'placeholder note detected');
+  ok(!hasPlaceholderNote({ notes: 'Hello team! You have received a new solar lead!' }), 'real lead text is not a placeholder');
   console.log('selftest: all assertions passed');
   process.exit(0);
 }
@@ -84,15 +90,16 @@ async function allTrelloJobs() {
 }
 
 const jobs = await allTrelloJobs();
-const targets = jobs.filter(needsBackfill);
-console.log(`${jobs.length} Trello-imported LL cards; ${targets.length} need backfill.`);
-console.log(`  missing leadInfo: ${jobs.filter(j => !hasInfo(j)).length}   missing labels: ${jobs.filter(j => !hasLabels(j)).length}`);
+// Replay ALL of them: the webhook reconciles pipelineStage against the card's
+// current Trello list, and that drift cannot be seen from here.
+const targets = jobs;
+console.log(`${jobs.length} Trello-imported LL cards (replaying all, stage drift is only visible server-side).`);
+console.log(`  locally visible gaps: leadInfo ${jobs.filter(j => !hasInfo(j)).length}, labels ${jobs.filter(j => !hasLabels(j)).length}, placeholder notes ${jobs.filter(hasPlaceholderNote).length}`);
 console.log(APPLY ? `\nAPPLYING via ${PROD}/api/trello-card\n` : '\nDry run. Re-run with --apply to replay the webhook.\n');
 
 if (!APPLY) {
-  targets.slice(0, 10).forEach(j =>
-    console.log(`  ${j.clientName || '(no name)'}  info=${hasInfo(j) ? 'y' : 'NO'} labels=${hasLabels(j) ? j.labels.length : 'NO'}`));
-  if (targets.length > 10) console.log(`  ... and ${targets.length - 10} more`);
+  jobs.filter(needsBackfill).slice(0, 10).forEach(j =>
+    console.log(`  ${j.clientName || '(no name)'}  info=${hasInfo(j) ? 'y' : 'NO'} labels=${hasLabels(j) ? j.labels.length : 'NO'} note=${hasPlaceholderNote(j) ? 'PLACEHOLDER' : 'ok'} stage=${j.pipelineStage}`));
   process.exit(0);
 }
 
