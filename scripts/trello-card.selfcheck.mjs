@@ -13,7 +13,22 @@
 // endpoint anyone added would have failed the deploy.
 import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
-import { splitName, extractContact, matchTargetList, isFilename, parseLeadDesc, displayNameFor, verifyTrelloSignature } from '/tmp/twcheck/trello-card.js';
+import { splitName, extractContact, matchTargetList, isFilename, parseLeadDesc, displayNameFor, verifyTrelloSignature, toJobLabels } from '/tmp/twcheck/trello-card.js';
+
+// Trello label -> Job.labels. Must match what LabelPicker writes in-app, since
+// both render through labelChipClass (raw Trello colour key, name required).
+assert.deepEqual(
+  toJobLabels([{ name: 'Quote Approved', color: 'purple_dark' }, { name: 'Invoiced', color: 'green' }]),
+  [{ name: 'Quote Approved', color: 'purple_dark' }, { name: 'Invoiced', color: 'green' }],
+);
+// Colour-only labels would render as blank chips on the card, so they are dropped.
+assert.deepEqual(
+  toJobLabels([{ name: '', color: 'red' }, { name: '   ' }, { name: 'Needs Scheduling', color: 'red_light' }]),
+  [{ name: 'Needs Scheduling', color: 'red_light' }],
+);
+// The live board really does carry a null-coloured label ("Completed/Did not proceed.").
+assert.deepEqual(toJobLabels([{ name: 'Completed/Did not proceed.' }]), [{ name: 'Completed/Did not proceed.', color: '' }]);
+assert.deepEqual(toJobLabels(undefined), []);
 
 // Webhook signature: base64(HMAC-SHA1(rawBody + callbackURL, secret)).
 const BODY = '{"action":{"type":"createCard"}}';

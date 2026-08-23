@@ -539,7 +539,7 @@ export interface SolarEdgeExtraSite {
 export interface AppNotification {
   id: string;
   userId: string;
-  type: 'contractor_completed' | 'late_fee_1' | 'late_fee_2' | 'contractor_autopay' | 'service_disconnect' | 'mention';
+  type: 'contractor_completed' | 'late_fee_1' | 'late_fee_2' | 'contractor_autopay' | 'service_disconnect' | 'mention' | 'new_lead';
   title: string;
   message: string;
   relatedJobId?: string;

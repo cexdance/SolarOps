@@ -942,22 +942,23 @@ export const Jobs: React.FC<JobsProps> = ({
         </div>
       )}
 
-      {/* Tryout View: the 11-stage multi-state pipeline mirrored from the
-          "Conexsol Florida Services" Trello board, now the TX/GA standard.
-          Groups by `pipelineStage` ONLY. Orders with no stage yet (every legacy
-          record) sit in the Unstaged column until dragged onto the funnel. */}
+      {/* LL board: the "Conexsol Florida Services" Trello funnel mirrored 1:1,
+          first column = Leads Services SolarEdge, where the Trello webhook drops
+          every new lead (api/trello-card.ts writes pipelineStage:'leads').
+          Groups by `pipelineStage` ONLY.
+          There is deliberately NO "Unstaged" column: the ~123 stage-less records
+          are real service orders, not funnel cards, and they stay visible on the
+          main board/list/map (boardJobs). Showing them here buried the funnel. */}
       {viewMode === 'tryout' && (
         <div className="flex gap-4 overflow-x-auto pb-4">
-          {(['unstaged', ...PIPELINE_STAGES] as const).map(col => (
+          {PIPELINE_STAGES.map(col => (
             <KanbanColumn
               key={col}
               status={col}
-              title={col === 'unstaged' ? 'Unstaged' : col === 'done' ? 'Completed' : PIPELINE_STAGE_LABEL[col]}
-              columnJobs={col === 'unstaged'
-                ? llJobs.filter(j => !j.pipelineStage && j.status !== 'completed')
-                : col === 'done'
-                  ? llJobs.filter(j => j.pipelineStage === col || j.status === 'completed')
-                  : llJobs.filter(j => j.pipelineStage === col)}
+              title={col === 'done' ? 'Completed' : PIPELINE_STAGE_LABEL[col]}
+              columnJobs={col === 'done'
+                ? llJobs.filter(j => j.pipelineStage === col || j.status === 'completed')
+                : llJobs.filter(j => j.pipelineStage === col)}
               allJobs={jobs}
               draggedJobId={draggedJobId}
               customers={customers}

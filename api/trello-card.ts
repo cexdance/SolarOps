@@ -172,11 +172,27 @@ export function extractContact(text: string): { phone: string; email: string } {
   return { phone, email: emailMatch ? emailMatch[0] : '' };
 }
 
-async function fetchCardForLeadImport(cardId: string): Promise<{ name: string; desc: string; shortUrl: string }> {
-  const url = `${TRELLO_BASE}/cards/${cardId}?key=${API_KEY}&token=${API_TOKEN}&fields=name,desc,shortUrl`;
+interface TrelloLabel { name?: string; color?: string }
+
+async function fetchCardForLeadImport(cardId: string): Promise<{ name: string; desc: string; shortUrl: string; labels?: TrelloLabel[] }> {
+  const url = `${TRELLO_BASE}/cards/${cardId}?key=${API_KEY}&token=${API_TOKEN}&fields=name,desc,shortUrl,labels`;
   const res = await fetch(url, { headers: { Accept: 'application/json' } });
   if (!res.ok) throw new Error(`Trello card fetch ${res.status}`);
   return res.json();
+}
+
+/**
+ * Trello label -> the board's own `JobLabel` shape ({name, color}), the same one
+ * LabelPicker writes, so an imported chip is indistinguishable from a hand-added
+ * one. Colour is Trello's raw key ('purple_dark', 'sky', ...) exactly as the
+ * 2026-08-10 bulk import stored it, so both sources render identically.
+ * Nameless labels (colour-only chips) are dropped: the board renders the name,
+ * so they would show up as blank chips.
+ */
+export function toJobLabels(labels: TrelloLabel[] | undefined): { name: string; color: string }[] {
+  return (labels ?? [])
+    .filter(l => (l.name ?? '').trim())
+    .map(l => ({ name: (l.name as string).trim(), color: l.color ?? '' }));
 }
 
 const IMG_EXT_RE = /\.(jpe?g|png|gif|webp)$/i;
@@ -272,7 +288,24 @@ export function displayNameFor(f: Pick<LeadFields, 'firstName' | 'lastName' | 'p
  * an ALREADY-IMPORTED card are treated as a backfill. Empty-only, so a lead the
  * team has since edited by hand is never clobbered.
  */
-const BACKFILL_ACTIONS = new Set(['updateCard', 'addAttachmentToCard', 'commentCard']);
+const BACKFILL_ACTIONS = new Set([
+  'updateCard', 'addAttachmentToCard', 'commentCard',
+  // Label events carry no contact data, but they are the ONLY unambiguous signal
+  // that the team re-labelled the card in Trello, so they mirror the label set
+  // across. See LABEL_ACTIONS below for why only these two overwrite labels.
+  'addLabelToCard', 'removeLabelFromCard',
+]);
+
+/**
+ * Labels mirror Trello, but ONLY on an explicit label event.
+ *
+ * The team can also set labels in-app (LabelPicker on LeadPanel/ServiceOrderPanel,
+ * 00fafca). If every updateCard/commentCard re-pushed Trello's label set, an
+ * in-app label would be silently reverted by the next unrelated card edit. Gating
+ * on addLabelToCard/removeLabelFromCard means Trello wins only when someone
+ * actually changed a label there, which is unambiguous intent.
+ */
+const LABEL_ACTIONS = new Set(['addLabelToCard', 'removeLabelFromCard']);
 
 /**
  * Backfill for the LL-board job row: replace the placeholder display name AND
@@ -284,7 +317,13 @@ const BACKFILL_ACTIONS = new Set(['updateCard', 'addAttachmentToCard', 'commentC
  * Field-by-field empty-only, so a lead the team has since edited by hand keeps
  * their edits (e.g. a corrected phone number is never overwritten back).
  */
-async function backfillLeadJob(jobId: string, displayName: string, leadFields: Record<string, string>, now: string): Promise<void> {
+async function backfillLeadJob(
+  jobId: string,
+  displayName: string,
+  leadFields: Record<string, string>,
+  syncLabels: { name: string; color: string }[] | undefined,
+  now: string,
+): Promise<void> {
   const key = `job:${jobId}`;
   const selectRes = await fetch(
     `${SUPABASE_URL}/rest/v1/app_data?key=eq.${encodeURIComponent(key)}&select=value`,
@@ -303,11 +342,19 @@ async function backfillLeadJob(jobId: string, displayName: string, leadFields: R
   for (const [k, v] of Object.entries(leadFields)) {
     if (!info[k]) { info[k] = v; infoChanged = true; }
   }
-  if (!nameChanged && !infoChanged) return;
+
+  // Whole-set replace (not a union): removing a label in Trello has to remove it
+  // here too, which a union could never express. Only ever reached on a real
+  // label event, see LABEL_ACTIONS.
+  const before = JSON.stringify(job.labels ?? []);
+  const labelsChanged = syncLabels !== undefined && JSON.stringify(syncLabels) !== before;
+
+  if (!nameChanged && !infoChanged && !labelsChanged) return;
 
   if (isPlaceholder(job.clientName)) job.clientName = displayName;
   if (isPlaceholder(job.title)) job.title = displayName;
   if (infoChanged) job.leadInfo = info;
+  if (labelsChanged) job.labels = syncLabels;
   job.updatedAt = now;
 
   await fetch(`${SUPABASE_URL}/rest/v1/app_data?on_conflict=key`, {
@@ -315,6 +362,126 @@ async function backfillLeadJob(jobId: string, displayName: string, leadFields: R
     headers: { ...supabaseHeaders, Prefer: 'resolution=merge-duplicates,return=minimal' },
     body: JSON.stringify({ key, value: job, updated_at: now }),
   });
+}
+
+// ── New-lead notification (in-app bell + web push) ──────────────────────────
+
+/** Office staff who work the LL funnel. Contractors and sales are excluded:
+ *  contractors never see leads, and sales cannot reach the LL board at all
+ *  (the Service Orders role grant is still an open decision, 2026-08-09). */
+const OFFICE_ROLES = new Set(['admin', 'coo', 'support']);
+
+const VAPID_PUBLIC_KEY  = (process.env.VAPID_PUBLIC_KEY ?? '').trim();
+const VAPID_PRIVATE_KEY = (process.env.VAPID_PRIVATE_KEY ?? '').trim();
+
+/** Every office-staff user id, via the admin API (roles live in user_metadata,
+ *  which PostgREST cannot reach). Best-effort: returns [] on any failure so a
+ *  notification problem can never cost us the lead import itself. */
+async function officeStaffIds(): Promise<string[]> {
+  const ids: string[] = [];
+  try {
+    for (let page = 1; page <= 5; page++) {
+      const res = await fetch(
+        `${SUPABASE_URL}/auth/v1/admin/users?page=${page}&per_page=200`,
+        { headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}`, apikey: SERVICE_ROLE_KEY } },
+      );
+      if (!res.ok) break;
+      const body = await res.json() as { users?: { id: string; user_metadata?: Record<string, unknown> }[] };
+      const users = body.users ?? [];
+      for (const u of users) {
+        if (OFFICE_ROLES.has(String(u.user_metadata?.role ?? ''))) ids.push(u.id);
+      }
+      if (users.length < 200) break;
+    }
+  } catch (err) {
+    console.error('[trello-webhook] officeStaffIds failed:', err);
+  }
+  return [...new Set(ids)];
+}
+
+/**
+ * Tell the office a lead just landed: a row in `notifications` (the bell, which
+ * syncs to every signed-in browser) plus best-effort web push to their phones.
+ *
+ * Fire-and-forget by design. The whole function is wrapped so that a broken
+ * notification path can NEVER fail the webhook: Trello retries non-200s, and a
+ * retry would be a no-op anyway (upsertLeadJob is create-if-absent), but a 500
+ * here would look like a failed import in the Trello webhook log.
+ *
+ * The notification id is derived from the card id, so a Trello redelivery
+ * resolves to the same row and cannot double-notify.
+ */
+async function notifyNewLead(jobId: string, cardId: string, displayName: string, listLabel: string, now: string): Promise<number> {
+  const ids = await officeStaffIds();
+  if (ids.length === 0) return 0;
+
+  const rows = ids.map(uid => ({
+    id: `notif-lead-${cardId}-${uid}`,
+    user_id: uid,
+    type: 'new_lead',
+    title: 'New lead from Trello',
+    message: `${displayName} landed in ${listLabel}`,
+    related_job_id: jobId,
+    related_contractor_id: null,
+    related_customer_id: null,
+    related_activity_id: null,
+    read: false,
+    created_at: now,
+  }));
+
+  const insertRes = await fetch(`${SUPABASE_URL}/rest/v1/notifications?on_conflict=id`, {
+    method: 'POST',
+    headers: { ...supabaseHeaders, Prefer: 'resolution=ignore-duplicates,return=minimal' },
+    body: JSON.stringify(rows),
+  });
+  if (!insertRes.ok) {
+    console.error('[trello-webhook] notification insert failed:', await insertRes.text().catch(() => ''));
+    return 0;
+  }
+
+  // Web push, strictly best-effort. The import and setVapidDetails both run
+  // INSIDE the try: malformed VAPID env makes setVapidDetails throw synchronously,
+  // and that exact call at module scope took all of /api/notify down for 2 days
+  // (gotcha_notify_vapid_module_crash). Lazy + guarded, it can only cost a log line.
+  if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
+    try {
+      const webPush = (await import('web-push')).default;
+      webPush.setVapidDetails('mailto:admin@conexsol.us', VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+
+      const subRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/push_subscriptions?user_id=in.(${ids.join(',')})&select=user_id,endpoint,subscription`,
+        { headers: supabaseHeaders },
+      );
+      if (subRes.ok) {
+        const subs = await subRes.json() as { user_id: string; endpoint: string; subscription: Record<string, unknown> }[];
+        const payload = JSON.stringify({
+          title: 'New lead from Trello',
+          body: `${displayName} landed in ${listLabel}`,
+          url: '/',
+        });
+        await Promise.all(subs.map(async row => {
+          try {
+            await webPush.sendNotification(
+              row.subscription as unknown as Parameters<typeof webPush.sendNotification>[0],
+              payload,
+              { TTL: 86400 },
+            );
+          } catch (err: unknown) {
+            // 410 Gone = the browser dropped the subscription; prune it.
+            if ((err as { statusCode?: number }).statusCode === 410) {
+              await fetch(
+                `${SUPABASE_URL}/rest/v1/push_subscriptions?endpoint=eq.${encodeURIComponent(row.endpoint)}`,
+                { method: 'DELETE', headers: supabaseHeaders },
+              ).catch(() => {});
+            }
+          }
+        }));
+      }
+    } catch (err) {
+      console.error('[trello-webhook] web push skipped:', (err as Error).message);
+    }
+  }
+  return rows.length;
 }
 
 /** Pure decision: does this board action land a card in a tracked leads list? */
@@ -410,6 +577,7 @@ async function handleLeadImportWebhook(req: VercelRequest, res: VercelResponse) 
     const now = new Date().toISOString();
 
     const card = await fetchCardForLeadImport(cardId);
+    const cardLabels = toJobLabels(card.labels);
     const { fields, vision, nameIsFile } = await extractCardFields(cardId, card);
     const { firstName, lastName, phone, email, address, city, state, zip } = fields;
     // Still no name (vision failed, plain image)? Fall back to the phone so the
@@ -435,7 +603,11 @@ async function handleLeadImportWebhook(req: VercelRequest, res: VercelResponse) 
     // to a no-op if the job is absent. Never creates, never overwrites a value
     // the team (or a prior successful import) already set.
     if (!target) {
-      await backfillLeadJob(jobId, displayName, leadInfoFields, now);
+      await backfillLeadJob(
+        jobId, displayName, leadInfoFields,
+        LABEL_ACTIONS.has(action.type) ? cardLabels : undefined,
+        now,
+      );
       console.info(`[trello-webhook] backfill ${action.type}: job ${jobId} (${displayName})`);
       return res.status(200).json({ job: { id: jobId, result: 'backfilled' } });
     }
@@ -475,6 +647,8 @@ async function handleLeadImportWebhook(req: VercelRequest, res: VercelResponse) 
       // later backfill's own emptiness check (Object.values(...).some(Boolean))
       // still treats the job as unseeded.
       ...(Object.keys(leadInfoFields).length > 0 ? { leadInfo: leadInfoFields } : {}),
+      // Trello's label chips, so the card reads the same on both boards.
+      ...(cardLabels.length > 0 ? { labels: cardLabels } : {}),
       // Empty, not today's date: the calendar buckets these via parseDateSafe
       // into "unscheduled" rather than dropping an unqualified lead onto today.
       scheduledDate: '',
@@ -493,8 +667,17 @@ async function handleLeadImportWebhook(req: VercelRequest, res: VercelResponse) 
 
     const jobResult = await upsertLeadJob(jobId, job, now);
 
-    console.info(`[trello-webhook] ${target.label}: job ${jobId} ${jobResult} (${displayName})`);
-    return res.status(200).json({ job: { id: jobId, result: jobResult } });
+    // Only on a genuinely new lead. 'exists' means a redelivery or a card dragged
+    // out of the list and back, and re-pinging the office for those would train
+    // everyone to ignore the bell. Never allowed to fail the import.
+    let notified = 0;
+    if (jobResult === 'created') {
+      notified = await notifyNewLead(jobId, cardId, displayName, target.label, now)
+        .catch(err => { console.error('[trello-webhook] notifyNewLead failed:', err); return 0; });
+    }
+
+    console.info(`[trello-webhook] ${target.label}: job ${jobId} ${jobResult} (${displayName}), ${cardLabels.length} label(s), notified ${notified}`);
+    return res.status(200).json({ job: { id: jobId, result: jobResult }, notified });
   } catch (err) {
     console.error('[trello-webhook] error:', err);
     return res.status(500).json({ error: err instanceof Error ? err.message : 'trello-webhook crashed' });
