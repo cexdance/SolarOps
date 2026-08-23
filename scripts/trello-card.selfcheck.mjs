@@ -30,6 +30,9 @@ assert.deepEqual(
 assert.deepEqual(toJobLabels([{ name: 'Completed/Did not proceed.' }]), [{ name: 'Completed/Did not proceed.', color: '' }]);
 assert.deepEqual(toJobLabels(undefined), []);
 
+// stageForList is used ONLY on the create path now (which intake list a new lead
+// arrives in). Trello no longer drives the column after that: the app owns
+// pipelineStage, see INTAKE_STAGE in trello-card.ts.
 // List -> stage. The two that a positional map gets WRONG: Trello orders
 // "Work Done - Collect Payment" (index 7) before "Needs follow-Up Service"
 // (index 8), while PIPELINE_STAGES has needs_follow_up first. Mapping by index

@@ -327,22 +327,33 @@ export function displayNameFor(f: Pick<LeadFields, 'firstName' | 'lastName' | 'p
  */
 const BACKFILL_ACTIONS = new Set([
   'updateCard', 'addAttachmentToCard', 'commentCard',
-  // Label events carry no contact data, but they are the ONLY unambiguous signal
-  // that the team re-labelled the card in Trello, so they mirror the label set
-  // across. See LABEL_ACTIONS below for why only these two overwrite labels.
+  // A label added seconds after intake is part of the same intake, so these
+  // events also finish the import. They do NOT hand Trello ongoing authority,
+  // see INTAKE_STAGE below.
   'addLabelToCard', 'removeLabelFromCard',
 ]);
 
 /**
- * Labels mirror Trello, but ONLY on an explicit label event.
+ * TRELLO IS INTAKE ONLY. THE APP OWNS THE RECORD. (user decision, 2026-08-23)
  *
- * The team can also set labels in-app (LabelPicker on LeadPanel/ServiceOrderPanel,
- * 00fafca). If every updateCard/commentCard re-pushed Trello's label set, an
- * in-app label would be silently reverted by the next unrelated card edit. Gating
- * on addLabelToCard/removeLabelFromCard means Trello wins only when someone
- * actually changed a label there, which is unambiguous intent.
+ * Trello is where a lead arrives, nothing more. Once it is on the LL board the
+ * office works it in the app, so nothing arriving from Trello may ever overwrite
+ * a value the app holds:
+ *
+ *   - `pipelineStage`  NEVER touched after create. The app owns the column.
+ *   - `labels`         union-ADD only, and only while the card is still at the
+ *                      intake stage. Never removes, never reorders.
+ *   - name/leadInfo/notes  filled ONLY where the job's own value is empty or is
+ *                      still the create-time placeholder. Completing an
+ *                      incomplete import is not an override.
+ *
+ * The empty-only rule matters because Trello fires createCard BEFORE it finishes
+ * writing the description and uploading the attachment (measured: +1s typically,
+ * +82min when a human drops the screenshot later), so the create-time import
+ * often sees a bare "image.jpeg" card. The later events finish that job, and
+ * only that job.
  */
-const LABEL_ACTIONS = new Set(['addLabelToCard', 'removeLabelFromCard']);
+const INTAKE_STAGE = 'leads';
 
 /**
  * Backfill for the LL-board job row: replace the placeholder display name AND
@@ -360,7 +371,6 @@ async function backfillLeadJob(
   leadFields: Record<string, string>,
   card: {
     labels?: { name: string; color: string }[];
-    stage?: string;
     notes: string;
     description: string;
   },
@@ -386,35 +396,35 @@ async function backfillLeadJob(
     if (!info[k]) { info[k] = v; infoChanged = true; }
   }
 
-  // Whole-set replace (not a union): removing a label in Trello has to remove it
-  // here too, which a union could never express. Only ever reached on a real
-  // label event, see LABEL_ACTIONS.
-  const before = JSON.stringify(job.labels ?? []);
-  const labelsChanged = syncLabels !== undefined && JSON.stringify(syncLabels) !== before;
+  // Labels: union-ADD, and only while the card is still at intake. A label the
+  // intake person adds seconds after creating the card still lands, but nothing
+  // Trello says can remove or reorder a label once the office is working the
+  // lead in the app. Deliberately NOT a whole-set replace: that would let a
+  // stale Trello card revert the app's own labels. See INTAKE_STAGE.
+  const atIntake = job.pipelineStage === INTAKE_STAGE;
+  const existing: { name: string; color: string }[] = Array.isArray(job.labels) ? job.labels : [];
+  const added = (atIntake && syncLabels ? syncLabels : [])
+    .filter(l => !existing.some((e) => e.name === l.name));
+  const labelsChanged = added.length > 0;
 
-  // The LL column IS the Trello list. Nothing used to maintain this after
-  // create, so every card the office moved in Trello stayed pinned to the stage
-  // it was imported at: 32 of 56 cards had drifted, 24 of them still sitting in
-  // "Leads" after being worked all the way to Done or Email Marketing.
-  // Reconciled from the card's CURRENT list, so one event of any kind repairs it.
-  const stageChanged = !!card.stage && job.pipelineStage !== card.stage;
+  // pipelineStage is NOT reconciled here on purpose: the app owns the column.
+  // (This previously mirrored the Trello list, which was correct while Trello
+  // was the system of record. It no longer is.)
 
-  // Repair the create-time placeholder note. Trello writes the desc a beat after
-  // createCard, so a card imported during that window kept
-  // 'Auto-imported from Trello card "image.jpeg"' forever and lost the real lead
-  // text, the contact block and the HS_ID. Only ever replaces that exact
-  // placeholder shape, so a note the team has written is never touched.
+  // Repair the create-time placeholder note, which loses the real lead text, the
+  // contact block, the Contract Name and the HS_ID when the desc lands after
+  // createCard. Only ever replaces that exact placeholder shape, so a note the
+  // team has written is never touched.
   const notePlaceholder = /^Auto-imported from Trello card "[^"]*"/.test(String(job.notes ?? '').trim());
   const notesChanged = notePlaceholder && card.notes.trim() !== String(job.notes ?? '').trim()
     && !/^Auto-imported from Trello card "[^"]*"/.test(card.notes.trim());
 
-  if (!nameChanged && !infoChanged && !labelsChanged && !stageChanged && !notesChanged) return;
+  if (!nameChanged && !infoChanged && !labelsChanged && !notesChanged) return;
 
   if (isPlaceholder(job.clientName)) job.clientName = displayName;
   if (isPlaceholder(job.title)) job.title = displayName;
   if (infoChanged) job.leadInfo = info;
-  if (labelsChanged) job.labels = syncLabels;
-  if (stageChanged) job.pipelineStage = card.stage;
+  if (labelsChanged) job.labels = [...existing, ...added];
   if (notesChanged) { job.notes = card.notes; job.description = card.description; }
   job.updatedAt = now;
 
@@ -684,12 +694,11 @@ async function handleLeadImportWebhook(req: VercelRequest, res: VercelResponse) 
     // creates, and never overwrites a value the team already set by hand.
     if (!target) {
       await backfillLeadJob(jobId, displayName, leadInfoFields, {
-        labels: LABEL_ACTIONS.has(action.type) ? cardLabels : undefined,
-        stage: stageForList(card.idList),
+        labels: cardLabels,
         notes: fullNotes,
         description: cardNote,
       }, now);
-      console.info(`[trello-webhook] backfill ${action.type}: job ${jobId} (${displayName}) stage=${stageForList(card.idList) ?? '?'}`);
+      console.info(`[trello-webhook] backfill ${action.type}: job ${jobId} (${displayName})`);
       return res.status(200).json({ job: { id: jobId, result: 'backfilled' } });
     }
 
