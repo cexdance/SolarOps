@@ -17,6 +17,9 @@ const SUPABASE_URL     = 'https://cjmhfagkkayelcsprbai.supabase.co';
 // .trim() strips trailing \n that Vercel env-pull embeds in quoted values
 const SERVICE_ROLE_KEY = (process.env.SUPABASE_SERVICE_ROLE_KEY ?? '').trim();
 const RESEND_API_KEY   = (process.env.RESEND_API_KEY ?? '').trim() || undefined;
+/** Office copy on every outbound email, so there is always a record in a human
+ *  inbox of what the app sent on our behalf. */
+const OFFICE_CC = 'cesar.jurado@conexsol.us';
 const VAPID_PUBLIC_KEY = (process.env.VAPID_PUBLIC_KEY ?? '').trim();
 const VAPID_PRIVATE_KEY = (process.env.VAPID_PRIVATE_KEY ?? '').trim();
 
@@ -113,6 +116,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       body: JSON.stringify({
         from: 'SolarOps <solar.ops@conexsol.us>',
         reply_to: 'solar.ops@conexsol.us',
+        cc: OFFICE_CC,
         to,
         subject: `Information needed for your site transfer${orderNo ? `, ${safe(orderNo)}` : ''}`,
         html: `
@@ -191,6 +195,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       body: JSON.stringify({
         from: 'SolarOps <solar.ops@conexsol.us>',
         reply_to: 'solar.ops@conexsol.us',
+        cc: OFFICE_CC,
         to,
         subject: `Your solar service is scheduled${when ? ` for ${safe(when)}` : ''}`,
         html: `
@@ -268,6 +273,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       body: JSON.stringify({
         from: 'SolarOps <solar.ops@conexsol.us>',
         reply_to: 'solar.ops@conexsol.us',
+        cc: OFFICE_CC,
         to,
         subject: `Payment processed${orderNo ? ` for ${safe(orderNo)}` : ''}`,
         html: `

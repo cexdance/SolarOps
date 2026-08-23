@@ -207,6 +207,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       subject:  `Service Quote ${woNumber}, Conexsol Energy`,
       html,
       reply_to: 'daniel.matos@conexsol.us',
+      cc:       'cesar.jurado@conexsol.us', // office copy of every outbound email
     }),
   });
 
