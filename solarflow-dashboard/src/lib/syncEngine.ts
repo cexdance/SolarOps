@@ -916,6 +916,35 @@ export async function pushToSupabase(state: AppState): Promise<void> {
 
     const deletedIds = Array.from(getDeletedCustomerIds());
 
+    // ── Phase 4: a contractor session pushes NO customer:/job: rows ──────────
+    // Phase 3 stopped contractors READING those prefixes (pullContractorScope),
+    // but left the write direction untouched, which is the "fix one direction of
+    // a bidirectional sync and leave the other" trap this repo has hit before.
+    //
+    // It was not a latent gap, it was live: pullContractorScope returns the
+    // endpoint's jobs/customers WITHOUT markClean, and isDirty() treats any key
+    // with no baseline as dirty, so every job the endpoint handed back was
+    // pushed straight back up as an admin job:{id} row on the next push. A
+    // contractor was writing admin records they are not even allowed to read.
+    //
+    // Mark them clean rather than merely skipping: an unmarked row stays dirty
+    // forever and would be retried on every push for the life of the session.
+    // Contractor-side edits are unaffected, they persist to the
+    // solarflow_contractor_jobs KV blob via saveContractorJobs, never to these
+    // per-record rows. The office mirrors that blob back into admin jobs.
+    //
+    // This is the client half of the app_data RLS policy that denies contractors
+    // customer:/job: access. Both halves must agree: with the RLS lock in place
+    // and this guard missing, every contractor push would throw on a policy
+    // violation and their sync would stop.
+    // Reuses the session already resolved at the top of this function; a second
+    // getActiveSession() here would be a redundant round trip and could trigger
+    // a concurrent refresh.
+    if (isContractorAccount(session.user?.user_metadata)) {
+      for (const c of state.customers) markClean(`${PREFIX.customer}${c.id}`, c);
+      for (const j of state.jobs)      markClean(`${PREFIX.job}${j.id}`, j);
+    }
+
     // ── Dirty customers only ─────────────────────────────────────────────────
     const dirtyCustomerRows = await dropStaleRows(
       state.customers
