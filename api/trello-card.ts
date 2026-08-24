@@ -41,6 +41,7 @@
 
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { requireUser } from './_auth';
 import { extractLeadFromImage, type ParsedLead } from './parse-lead-image';
 
 // Trello signs rawBody + callbackURL, so the bytes must be the ones on the wire.
@@ -774,6 +775,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method !== 'GET') {
       return res.status(405).json({ error: 'Method not allowed' });
     }
+
+    // Require a signed-in caller BEFORE touching Trello. This GET proxies a card
+    // back using the org's own TRELLO_API_KEY/TRELLO_API_TOKEN, so until now any
+    // anonymous caller with a card id got that card's lead PII (names, phones,
+    // emails, addresses mined from the description, checklists, custom fields and
+    // comments) and spent org API quota doing it. Same bug, same fix, as
+    // /api/solaredge on 2026-08-03. The only client call site
+    // (lib/trelloImporter.ts fetchTrelloCard) already sends the token via
+    // authedFetch, so this is server-side only and needs no frontend change.
+    //
+    // Deliberately placed AFTER the HEAD and POST branches above: Trello
+    // HEAD-verifies the callback URL and POSTs the webhook unauthenticated, and
+    // both must stay public. Only the GET proxy is gated here.
+    if (!(await requireUser(req, res))) return;
 
     // req.query values are string | string[] | undefined, normalize to string.
     // Previously typed as `string` and used directly with .match()/.trim(); if a
