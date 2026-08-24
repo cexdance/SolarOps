@@ -385,6 +385,16 @@ export async function fetchLogForUser(userEmail: string, limit = 200): Promise<C
 async function pushEntry(entry: ChangeEntry): Promise<void> {
   // Session is verified once in flushChangeLog before this is called.
   try {
+    // ignoreDuplicates => ON CONFLICT DO NOTHING. An audit row is never
+    // rewritten, and change_log has no UPDATE policy by design (it is
+    // append-only at the RLS layer). A plain upsert took the UPDATE path on a
+    // redelivery and hit a policy violation: the entry HAD landed, but the
+    // local "mark synced" write below never ran, so the same row was retried on
+    // every subsequent flush, forever. DO NOTHING makes a redelivery a no-op.
+    //
+    // actor_uid is deliberately not sent: change_log_stamp_actor_trg stamps it
+    // from auth.uid() server-side. user_email is client-supplied and therefore
+    // forgeable; actor_uid is the verified one.
     const { error } = await supabase.from('change_log').upsert({
       id:          entry.id,
       op_type:     entry.opType,
@@ -394,7 +404,7 @@ async function pushEntry(entry: ChangeEntry): Promise<void> {
       user_email:  entry.userEmail,
       device_id:   entry.deviceId,
       created_at:  entry.createdAt,
-    });
+    }, { onConflict: 'id', ignoreDuplicates: true });
 
     if (!error) {
       // Mark synced in local log
