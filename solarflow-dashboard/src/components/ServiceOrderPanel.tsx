@@ -20,7 +20,7 @@ import { Contractor, ContractorJob, JobPriority, ServiceRate } from '../types/co
 import { loadServiceRates, loadContractorJobs } from '../lib/contractorStore';
 import { searchParts, CatalogPart } from '../lib/partsCatalog';
 import { MentionTextarea, MentionUser, renderWithMentions, parseMentions, parseMentionEmails, fireMentionNotifications, handleFor } from './ui/MentionTextarea';
-import { sendSiteTransferRequest } from '../lib/siteTransferEmail';
+import { buildSiteTransferMailto, SITE_ID_GUIDE_URL } from '../lib/siteTransferEmail';
 import { formatMoney, formatCost } from '../lib/money';
 import { printServiceReport } from '../lib/printServiceReport';
 import { serviceOrderNo, workOrderNo, generateServiceOrderNumber, photoUrlStem } from '../lib/woHelpers';
@@ -291,7 +291,7 @@ export interface ServiceOrderPanelProps {
   siteInstallDate?: string; // ISO date, used for SE compensation eligibility check
   clientPaidJobCount?: number; // number of paid/closed WOs for this client, triggers recurring discount
   onClose: () => void;
-  onSave: (job: Partial<Job>) => void;
+  onSave: (job: Partial<Job>, shouldClose?: boolean) => void;
   onDeleteJob?: (jobId: string) => void;
   onUpdateSiteStatus?: (siteId: string, status: string) => void;
   onDispatch?: (job: ContractorJob) => void;
@@ -1148,34 +1148,26 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
   }, [newComment, commentAttachments, currentUserName, users, job, siteId]);
 
   // ── Site Transfer: request identifiers from the customer ─────────────────
-  // One click does both halves of the manual routine: email the client for the
-  // Site ID + inverter serial, and @mention Daniel to raise the invoice.
-  const [stRequesting, setStRequesting]   = useState(false);
-  const [stRequestMsg, setStRequestMsg]   = useState<string | null>(null);
-  const requestSiteTransferInfo = useCallback(async () => {
-    if (stRequesting) return;
-    setStRequesting(true);
-    setStRequestMsg(null);
+  // Opens a prefilled draft in the user's own mail app, then @mentions Daniel
+  // to raise the invoice. Not sent from the server: the conexsol.us Resend
+  // domain is unverified, so every automated send 403s.
+  const [stRequestMsg, setStRequestMsg] = useState<string | null>(null);
+  const requestSiteTransferInfo = useCallback(() => {
+    if (!customer?.email) return;
     const orderNo = job?.woNumber ? serviceOrderNo(job.woNumber) : '';
-    const r = await sendSiteTransferRequest({
-      customerEmail: customer?.email ?? '',
-      customerName:  customer?.name ?? '',
+    window.location.href = buildSiteTransferMailto({
+      customerEmail: customer.email,
+      customerName:  customer.name ?? '',
       orderNo,
     });
-    if (!r.success) {
-      setStRequestMsg(r.error ?? 'Failed to send');
-      setStRequesting(false);
-      return;
-    }
     const daniel = users.find(u => u.name.toLowerCase().includes('daniel'));
     addComment(
-      `Site transfer info requested from ${customer?.name || 'the customer'} (${customer?.email}). ` +
+      `Site transfer info requested from ${customer.name || 'the customer'} (${customer.email}). ` +
       (daniel ? `@${handleFor(daniel as MentionUser)} ` : '') +
       `please create the invoice for this site transfer${orderNo ? ` (${orderNo})` : ''}.`,
     );
-    setStRequestMsg('Email sent, Daniel notified');
-    setStRequesting(false);
-  }, [stRequesting, job, customer, users, addComment]);
+    setStRequestMsg('Draft opened, remember to attach the Site ID photo');
+  }, [job, customer, users, addComment]);
 
   const editComment = useCallback((id: string, text: string) => {
     setWoActivities(prev => prev.map(a => a.id === id ? { ...a, description: text } : a));
@@ -1365,7 +1357,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
   };
 
   // Save, optionally override woStatus (used when auto-saving after stage advance)
-  const handleSave = (statusOverride?: WOStatus, _keepOpen?: boolean) => {
+  const handleSave = (statusOverride?: WOStatus, keepOpen?: boolean) => {
     const effectiveWoStatus = statusOverride ?? woStatus;
     const { parts, total } = sumLineItems(lineItems);
     const fallbackTotal = laborHours * contractorPayRate + partsCostDirect;
@@ -1463,7 +1455,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
         : job?.snSyncScheduledAt,
       auditLog: nextAuditLog,
     };
-    onSave(partialJob);
+    onSave(partialJob, !keepOpen);
 
     // Fire @mention notifications from all text fields (non-blocking)
     if (users.length > 0) {
@@ -1510,7 +1502,8 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
       setShowSowDistribution(true);
     }
 
-    // Panel always stays open after save, user closes manually
+    // keepOpen=true (workflow-advance, RMA auto-save) never closes the panel;
+    // the explicit Save Changes button (no args) closes it via shouldClose above.
   };
 
   // Sync the ref on every render so async callbacks always call the fresh handleSave.
@@ -2281,12 +2274,21 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                   <div className="flex flex-wrap items-center gap-2 pt-1">
                     <button
                       onClick={requestSiteTransferInfo}
-                      disabled={stRequesting || !customer?.email}
-                      title={customer?.email ? 'Email the customer for the Site ID + inverter serial and @mention Daniel to invoice' : 'Customer has no email on file'}
+                      disabled={!customer?.email}
+                      title={customer?.email ? 'Open a prefilled draft in your mail app and @mention Daniel to invoice' : 'Customer has no email on file'}
                       className="px-3 py-2 text-xs font-semibold rounded-lg bg-teal-600 text-white hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
                     >
-                      {stRequesting ? 'Sending...' : 'Request info from customer'}
+                      Draft email to customer
                     </button>
+                    <a
+                      href={SITE_ID_GUIDE_URL}
+                      download="site-id-instructions.png"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-3 py-2 text-xs font-semibold rounded-lg border border-teal-300 text-teal-700 hover:bg-teal-100 transition-colors"
+                    >
+                      Site ID photo (attach it)
+                    </a>
                     {stRequestMsg && <span className="text-[11px] text-teal-700">{stRequestMsg}</span>}
                   </div>
                   <p className="text-[10px] text-teal-700">These values are saved with the service order and used by the admin agentic workflow to execute the SolarEdge ownership transfer.</p>

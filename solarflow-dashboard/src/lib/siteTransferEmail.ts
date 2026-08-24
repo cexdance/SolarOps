@@ -1,30 +1,46 @@
-import { supabase } from './supabase';
+/** Site transfer, customer information request.
+ *
+ *  Opens a prefilled draft in the user's own mail app rather than sending
+ *  through Resend. The `conexsol.us` sending domain is not verified, so every
+ *  Resend send 403s; until that is sorted the office sends these by hand.
+ *  The server path still exists (/api/notify action 'site-transfer-request')
+ *  and needs no change to come back: point the button at it again.
+ *
+ *  mailto cannot carry an attachment, so the instructions image is linked in
+ *  the body and the caller reminds the user to attach it.
+ */
+export const SITE_ID_GUIDE_URL =
+  'https://solarflow-dashboard-sooty.vercel.app/site-id-instructions.png';
 
-/** Emails the customer asking for the Site ID + inverter serial we need to run
- *  the SolarEdge ownership transfer. Server branch: /api/notify
- *  action 'site-transfer-request'. */
-export async function sendSiteTransferRequest(payload: {
+/** Office copy on every outbound email, matching the server-side CC. */
+export const OFFICE_CC = 'cesar.jurado@conexsol.us';
+
+export function buildSiteTransferMailto(opts: {
   customerEmail: string;
   customerName: string;
   orderNo?: string;
-}): Promise<{ success: boolean; error?: string }> {
-  if (!payload.customerEmail) return { success: false, error: 'Customer has no email on file' };
+}): string {
+  const subject = `Information needed for your site transfer${opts.orderNo ? `, ${opts.orderNo}` : ''}`;
 
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session?.access_token) return { success: false, error: 'Not authenticated' };
+  // \r\n, not \n: Outlook and some webmail clients drop bare newlines.
+  const body = [
+    `Hello ${opts.customerName || 'there'},`,
+    '',
+    'I am emailing you to request two pieces of information that we need to perform the "site transfer" of your installation and gain access to its monitoring. These pieces of information are:',
+    '',
+    '* Site ID: You can find this number by following the instructions detailed in the attached photo. In the mySolarEdge app, open the menu at the top left and tap "Site Details", the Site ID is listed there.',
+    '',
+    '* Full inverter serial number: This number is located on the label of the inverter.',
+    '',
+    'I appreciate your cooperation in providing us with this information. This will allow us to complete the process and ensure that your installation is properly monitored.',
+    '',
+    'If you have any questions or need additional assistance in finding these details, please do not hesitate to contact me.',
+    '',
+    'I look forward to your response.',
+  ].join('\r\n');
 
-  const res = await fetch('/api/notify', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${session.access_token}`,
-    },
-    body: JSON.stringify({ action: 'site-transfer-request', ...payload }),
-  });
-
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    return { success: false, error: body.error || `HTTP ${res.status}` };
-  }
-  return { success: true };
+  return `mailto:${encodeURIComponent(opts.customerEmail)}`
+    + `?cc=${encodeURIComponent(OFFICE_CC)}`
+    + `&subject=${encodeURIComponent(subject)}`
+    + `&body=${encodeURIComponent(body)}`;
 }
