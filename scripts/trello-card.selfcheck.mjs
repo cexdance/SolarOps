@@ -13,7 +13,7 @@
 // endpoint anyone added would have failed the deploy.
 import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
-import { splitName, extractContact, matchTargetList, isFilename, parseLeadDesc, displayNameFor, verifyTrelloSignature, toJobLabels, stageForList } from '/tmp/twcheck/trello-card.js';
+import { splitName, extractContact, matchTargetList, isFilename, parseLeadDesc, displayNameFor, verifyTrelloSignature, toJobLabels, stageForList, canReapLead } from '/tmp/twcheck/trello-card.js';
 
 // Trello label -> Job.labels. Must match what LabelPicker writes in-app, since
 // both render through labelChipClass (raw Trello colour key, name required).
@@ -29,6 +29,21 @@ assert.deepEqual(
 // The live board really does carry a null-coloured label ("Completed/Did not proceed.").
 assert.deepEqual(toJobLabels([{ name: 'Completed/Did not proceed.' }]), [{ name: 'Completed/Did not proceed.', color: '' }]);
 assert.deepEqual(toJobLabels(undefined), []);
+
+// canReapLead: a card deleted in Trello may only remove a lead the office has
+// NOT started working. Trello is intake; it must never delete real work.
+assert.equal(canReapLead({ pipelineStage: 'leads' }), true);
+assert.equal(canReapLead({ pipelineStage: 'leads', activityHistory: [] }), true);
+// advanced off the intake column in the app
+assert.equal(canReapLead({ pipelineStage: 'email_follow_up' }), false);
+// converted to a client
+assert.equal(canReapLead({ pipelineStage: 'leads', customerId: 'cust-1' }), false);
+// became a real service order
+assert.equal(canReapLead({ pipelineStage: 'leads', woNumber: 'WO-2608-11111' }), false);
+// someone logged a call/email against it
+assert.equal(canReapLead({ pipelineStage: 'leads', activityHistory: [{ type: 'Call' }] }), false);
+assert.equal(canReapLead(undefined), false);
+assert.equal(canReapLead(null), false);
 
 // stageForList is used ONLY on the create path now (which intake list a new lead
 // arrives in). Trello no longer drives the column after that: the app owns

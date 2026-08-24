@@ -16,6 +16,7 @@
 //
 //   node scripts/backfill-ll-trello-cards.mjs             # dry run, reports gaps
 //   node scripts/backfill-ll-trello-cards.mjs --apply     # replay the webhook
+//   node scripts/backfill-ll-trello-cards.mjs --reap      # remove leads whose card is gone
 //   node scripts/backfill-ll-trello-cards.mjs --selftest  # pure-logic check
 //
 // ponytail: serial with a delay, not parallel. Each replay can trigger a Claude
@@ -69,6 +70,8 @@ for (const p of [resolve(ROOT, 'solarflow-dashboard/.env.local'), resolve(ROOT, 
 }
 const SR = (process.env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
 if (!SR) { console.error('Missing SUPABASE_SERVICE_ROLE_KEY (solarflow-dashboard/.env).'); process.exit(1); }
+const TRELLO_KEY = (process.env.TRELLO_API_KEY || env.TRELLO_API_KEY || env.VITE_TRELLO_API_KEY || '').trim();
+const TRELLO_TOKEN = (process.env.TRELLO_API_TOKEN || env.TRELLO_API_TOKEN || env.VITE_TRELLO_TOKEN || '').trim();
 const SUPABASE = 'https://cjmhfagkkayelcsprbai.supabase.co';
 const PROD = (process.env.PROD_URL || 'https://solarflow-dashboard-sooty.vercel.app').replace(/\/$/, '');
 const APPLY = process.argv.includes('--apply');
@@ -87,6 +90,35 @@ async function allTrelloJobs() {
     from += 1000;
   }
   return rows.map(r => r.value).filter(Boolean);
+}
+
+// --reap: cards deleted in Trello before the webhook had a deleteCard handler
+// leave their lead behind forever. Replays the same deleteCard path the webhook
+// now runs, so the reap rules (untouched intake only) live in exactly one place.
+if (process.argv.includes('--reap')) {
+  if (!TRELLO_KEY || !TRELLO_TOKEN) {
+    console.error('--reap needs TRELLO_API_KEY/TRELLO_API_TOKEN (or the VITE_ names) in solarflow-dashboard/.env.local');
+    process.exit(1);
+  }
+  const all = await allTrelloJobs();
+  const orphans = [];
+  for (const j of all) {
+    const cardId = cardIdOf(j.id);
+    const r = await fetch(`https://api.trello.com/1/cards/${cardId}?key=${TRELLO_KEY}&token=${TRELLO_TOKEN}&fields=id`);
+    if (r.status === 404) orphans.push({ j, cardId });
+  }
+  console.log(`${all.length} LL cards; ${orphans.length} whose Trello card is gone.`);
+  orphans.forEach(({ j }) => console.log(`  ${j.clientName}  stage=${j.pipelineStage} customer=${j.customerId || '(none)'}`));
+  if (!APPLY) { console.log('\nDry run. Add --apply to reap them.'); process.exit(0); }
+  for (const { j, cardId } of orphans) {
+    const r = await fetch(`${PROD}/api/trello-card`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: { type: 'deleteCard', data: { card: { id: cardId }, board: { id: BOARD_ID } } } }),
+    });
+    console.log(`  ${j.clientName}: ${r.status} ${(await r.text()).slice(0, 90)}`);
+    await new Promise(x => setTimeout(x, 600));
+  }
+  process.exit(0);
 }
 
 const jobs = await allTrelloJobs();

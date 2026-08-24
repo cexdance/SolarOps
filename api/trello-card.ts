@@ -605,6 +605,77 @@ async function notifyNewLead(jobId: string, cardId: string, displayName: string,
   return rows.length;
 }
 
+/**
+ * A card deleted in Trello may reap its lead here, but ONLY while that lead is
+ * still untouched intake. Trello is where a lead ARRIVES; once the office has
+ * worked it (moved it off the leads column, linked a customer, given it an order
+ * number, logged a call) the app owns it, and someone tidying up Trello must not
+ * be able to delete real work.
+ */
+export function canReapLead(job: any): boolean {
+  if (!job) return false;
+  if (job.pipelineStage !== INTAKE_STAGE) return false;     // advanced by the office
+  if (job.customerId) return false;                        // converted to a client
+  if (job.woNumber) return false;                          // became a service order
+  if (Array.isArray(job.activityHistory) && job.activityHistory.length > 0) return false;
+  return true;
+}
+
+/**
+ * Reap the lead for a card that was deleted in Trello.
+ *
+ * Writes the job id into the shared `deleted_job_ids` tombstone row (which every
+ * client union-merges into localStorage on pull, syncEngine.ts) AND removes the
+ * per-record row, so the lead disappears on every device instead of being
+ * re-pulled forever.
+ *
+ * The caller MUST have confirmed with Trello that the card is really gone. The
+ * card id in a webhook payload is attacker-supplied and this endpoint fails open
+ * on signature, so "Trello returns 404 for this card" is the only claim here
+ * that cannot be forged.
+ */
+async function reapDeletedLead(jobId: string, now: string): Promise<'reaped' | 'kept' | 'absent'> {
+  const key = `job:${jobId}`;
+  const jobRes = await fetch(
+    `${SUPABASE_URL}/rest/v1/app_data?key=eq.${encodeURIComponent(key)}&select=value`,
+    { headers: supabaseHeaders },
+  );
+  if (!jobRes.ok) return 'absent';
+  const job = (await jobRes.json() as { value?: any }[])[0]?.value;
+  if (!job) return 'absent';
+  if (!canReapLead(job)) {
+    console.warn(`[trello-webhook] card deleted in Trello but the lead has been worked, KEEPING ${jobId} (stage=${job.pipelineStage}, customer=${job.customerId || 'none'})`);
+    return 'kept';
+  }
+
+  // Tombstone FIRST. If the row delete succeeded but the tombstone write failed,
+  // a client still holding the job locally would push it straight back.
+  const tombRes = await fetch(`${SUPABASE_URL}/rest/v1/app_data?key=eq.deleted_job_ids&select=value`, { headers: supabaseHeaders });
+  const current = tombRes.ok ? ((await tombRes.json() as { value?: string[] }[])[0]?.value ?? []) : [];
+  const ids = Array.isArray(current) ? current : [];
+  if (!ids.includes(jobId)) {
+    const put = await fetch(`${SUPABASE_URL}/rest/v1/app_data?on_conflict=key`, {
+      method: 'POST',
+      headers: { ...supabaseHeaders, Prefer: 'resolution=merge-duplicates,return=minimal' },
+      body: JSON.stringify({ key: 'deleted_job_ids', value: [...ids, jobId], updated_at: now }),
+    });
+    if (!put.ok) {
+      console.error('[trello-webhook] tombstone write failed, NOT deleting the row:', await put.text().catch(() => ''));
+      return 'kept';
+    }
+  }
+
+  // Then reap the row itself. Uses the service role, so this is not subject to
+  // the app_data RLS that makes the client-side reap a silent no-op.
+  const del = await fetch(`${SUPABASE_URL}/rest/v1/app_data?key=eq.${encodeURIComponent(key)}`, {
+    method: 'DELETE',
+    headers: { ...supabaseHeaders, Prefer: 'return=representation' },
+  });
+  const removed = del.ok ? ((await del.json().catch(() => [])) as unknown[]).length : 0;
+  console.info(`[trello-webhook] reaped ${jobId} (rows removed: ${removed})`);
+  return 'reaped';
+}
+
 /** Pure decision: does this board action land a card in a tracked leads list? */
 export function matchTargetList(action: TrelloWebhookAction): { boardId: string; listId: string; label: string } | undefined {
   const boardId = action.data?.board?.id;
@@ -680,6 +751,29 @@ async function handleLeadImportWebhook(req: VercelRequest, res: VercelResponse) 
 
     const action = payload.action;
     if (!action?.data?.card) return res.status(200).json({ skipped: 'no card in payload' });
+
+    // A card deleted in Trello reaps its lead here, so the board does not keep
+    // showing leads that no longer exist upstream. Handled before matchTargetList
+    // because a deleteCard action carries no list, and before the card fetch
+    // because the card is gone by definition.
+    if (action.type === 'deleteCard') {
+      if (!SERVICE_ROLE_KEY) return res.status(500).json({ error: 'Server not configured' });
+      const deletedCardId = action.data.card.id;
+      if (!/^[0-9a-fA-F]{24}$/.test(deletedCardId)) {
+        return res.status(400).json({ error: 'Malformed card id' });
+      }
+      // boardDecision() cannot help here: it reads the idBoard Trello returns for
+      // the card, and the card no longer exists. Confirming with Trello that the
+      // card is REALLY gone is the substitute, and it is the claim an attacker
+      // cannot forge: they cannot make a live card 404.
+      const probe = await fetch(`${TRELLO_BASE}/cards/${deletedCardId}?key=${API_KEY}&token=${API_TOKEN}&fields=id`);
+      if (probe.status !== 404) {
+        console.warn(`[trello-webhook] deleteCard for ${deletedCardId} but Trello still returns ${probe.status}, refusing to reap`);
+        return res.status(200).json({ skipped: 'card still exists in Trello' });
+      }
+      const result = await reapDeletedLead(`job-trello-${deletedCardId}`, new Date().toISOString());
+      return res.status(200).json({ job: { id: `job-trello-${deletedCardId}`, result } });
+    }
 
     const target = matchTargetList(action);
     if (!target && !BACKFILL_ACTIONS.has(action.type)) {
