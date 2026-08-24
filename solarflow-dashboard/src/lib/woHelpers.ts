@@ -413,3 +413,11 @@ export function findJobByWoNumber<J extends { woNumber?: string }>(
   if (!woNumber) return undefined;
   return jobs.find(j => j.woNumber === woNumber);
 }
+
+/** A site transfer is a SolarEdge ownership transfer run by the admin team: no
+ *  quote, no contractor, flat fee, Daniel invoices it directly. Both spellings
+ *  exist in live data (the service code, and the free-text service type on
+ *  older orders), so match either. Kept here rather than in the panel because
+ *  the Billing board needs the same test.  */
+export const isSiteTransferJob = (job: { serviceCode?: string; serviceType?: string }): boolean =>
+  job.serviceCode === 'SITE-TRX' || job.serviceType === 'Site Transfer';

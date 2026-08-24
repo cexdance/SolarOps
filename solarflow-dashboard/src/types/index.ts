@@ -395,6 +395,9 @@ export interface Job {
   // Site Transfer fields
   siteTransferInverterSerial?: string; // Inverter serial # for ownership transfer
   siteTransferSiteId?: string;         // SolarEdge Site ID for ownership transfer
+  /** Set when the transfer has actually been executed in SolarEdge. The card
+   *  stays in Invoiced either way, this only says whether the work is done. */
+  siteTransferCompletedAt?: string;
 
   // ── Contractor-entered fields mirrored onto the single source (Phase D) ──────
   // So data.jobs holds the COMPLETE work-order record (parts, signatures,

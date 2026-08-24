@@ -662,6 +662,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
   // Site transfer state
   const [stInverterSerial, setStInverterSerial] = useState(job?.siteTransferInverterSerial ?? '');
   const [stSiteId, setStSiteId] = useState(job?.siteTransferSiteId ?? '');
+  const [stCompletedAt, setStCompletedAt] = useState<string | undefined>(job?.siteTransferCompletedAt);
   const stMissingBoth = isSiteTransfer && !stInverterSerial && !stSiteId;
   const stMissingOne  = isSiteTransfer && ((!stInverterSerial && !!stSiteId) || (!!stInverterSerial && !stSiteId));
 
@@ -1456,6 +1457,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
       // Site Transfer
       siteTransferInverterSerial: isSiteTransfer ? (stInverterSerial || undefined) : undefined,
       siteTransferSiteId: isSiteTransfer ? (stSiteId || undefined) : undefined,
+      siteTransferCompletedAt: isSiteTransfer ? stCompletedAt : undefined,
       // Schedule SolarEdge SN sync within 2hrs when WO closes
       snSyncScheduledAt: (isSerialJob && sowNewSN && effectiveWoStatus === 'completed')
         ? (job?.snSyncCompletedAt ? job.snSyncScheduledAt : new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString())
@@ -2278,6 +2280,27 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                       </div>
                     </div>
                   </div>
+                  <label className="flex items-center gap-2 pt-1 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={!!stCompletedAt}
+                      onChange={e => {
+                        const v = e.target.checked ? new Date().toISOString() : undefined;
+                        setStCompletedAt(v);
+                        setTimeout(() => handleSaveRef.current(undefined, true), 0);
+                      }}
+                      className="w-4 h-4 accent-teal-600 cursor-pointer"
+                    />
+                    <span className="text-xs font-semibold text-slate-700">
+                      Transfer completed in SolarEdge
+                      {stCompletedAt && (
+                        <span className="ml-1 font-normal text-teal-700">
+                          on {new Date(stCompletedAt).toLocaleDateString()}
+                        </span>
+                      )}
+                    </span>
+                  </label>
+
                   <div className="flex flex-wrap items-center gap-2 pt-1">
                     <button
                       onClick={requestSiteTransferInfo}

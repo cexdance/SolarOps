@@ -22,6 +22,38 @@ const job = (p: Partial<Job>): Job => ({
   ...p,
 });
 
+describe('getBillingColumn, site transfers', () => {
+  // Daniel invoices the flat fee directly, no quote and no field work, so the
+  // card belongs in Invoiced from creation instead of sitting in New.
+  it('pins a site transfer to Invoiced from creation, by code or by type', () => {
+    expect(getBillingColumn(job({ serviceCode: 'SITE-TRX' }))).toBe('invoiced');
+    expect(getBillingColumn(job({ serviceType: 'Site Transfer' }))).toBe('invoiced');
+  });
+
+  it('keeps it in Invoiced even while woStatus still says draft', () => {
+    // The draft check runs first for every other order and would send this to New.
+    expect(getBillingColumn(job({ serviceCode: 'SITE-TRX', woStatus: 'draft' }))).toBe('invoiced');
+  });
+
+  it('still closes out normally once paid', () => {
+    expect(getBillingColumn(job({ serviceCode: 'SITE-TRX', status: 'paid' }))).toBe('paid');
+    expect(getBillingColumn(job({
+      serviceCode: 'SITE-TRX', status: 'paid', costsCoveredAt: '2026-08-01T00:00:00.000Z',
+    }))).toBe('costs_covered');
+  });
+
+  it('does not drag ordinary orders into Invoiced', () => {
+    expect(getBillingColumn(job({ serviceType: 'Site visit', woStatus: 'draft' }))).toBe('new');
+    expect(getBillingColumn(job({ serviceCode: 'OPT-1', woStatus: 'draft' }))).toBe('new');
+  });
+
+  it('is not confused by the completion flag, which never moves the column', () => {
+    expect(getBillingColumn(job({
+      serviceCode: 'SITE-TRX', siteTransferCompletedAt: '2026-08-20T00:00:00.000Z',
+    }))).toBe('invoiced');
+  });
+});
+
 describe('getBillingColumn', () => {
   it('lands a never-worked service call in New', () => {
     expect(getBillingColumn(job({}))).toBe('new');

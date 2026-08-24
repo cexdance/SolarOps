@@ -18,7 +18,7 @@ import {
 import { Job, Customer, User as UserType } from '../types';
 import type { Contractor } from '../types/contractor';
 import { sortJobsBy, JOB_SORT_OPTIONS, type JobSortOption } from '../lib/jobSort';
-import { serviceOrderNo } from '../lib/woHelpers';
+import { serviceOrderNo, isSiteTransferJob } from '../lib/woHelpers';
 import { notifyAdminForInvoice } from '../lib/quoteService';
 import { formatMoney, formatCost } from '../lib/money';
 import { WorkOrderCalendar } from './WorkOrderCalendar';
@@ -33,6 +33,15 @@ import { printServiceReport } from '../lib/printServiceReport';
 export type BillingCol = 'new' | 'quote_sent' | 'pending' | 'to_invoice' | 'invoiced' | 'paid' | 'costs_covered';
 
 export const getBillingColumn = (job: Job): BillingCol => {
+  // Site transfers have no quote and no field work: Daniel invoices the flat
+  // fee directly, so the card belongs in Invoiced from creation rather than
+  // sitting in New waiting for a stage that never comes. Paid still wins, so
+  // the card can be closed out normally. Whether the transfer has actually
+  // been executed in SolarEdge is siteTransferCompletedAt, not the column.
+  if (isSiteTransferJob(job)) {
+    if (job.status === 'paid') return job.costsCoveredAt ? 'costs_covered' : 'paid';
+    return 'invoiced';
+  }
   // woStatus is the field the Service Order panel actually drives through the
   // 8-stage pipeline, so it is checked FIRST for the two pre-work stages. When
   // woStatus still says draft or quote_sent, the work provably has not been
@@ -378,6 +387,10 @@ export const Billing: React.FC<BillingProps> = ({
   const moveToColumn = (jobId: string, col: BillingCol, coveredAtISO?: string) => {
     const job = jobs.find(j => j.id === jobId);
     if (!job || getBillingColumn(job) === col) return;
+    // A site transfer is pinned to Invoiced until it is paid, so a drop
+    // anywhere else would write a stage the board immediately renders back as
+    // Invoiced. Ignore it rather than silently patching a status nobody sees.
+    if (isSiteTransferJob(job) && col !== 'paid' && col !== 'costs_covered') return;
     const now = new Date().toISOString();
     // Close-out is the one stage whose date the admin sets by hand: costs are
     // often covered days after the fact, and this timestamp is what the
@@ -650,6 +663,23 @@ export const Billing: React.FC<BillingProps> = ({
                             </span>
                           ) : job.isPowercare && (
                             <span className="text-[9px] font-bold uppercase tracking-wide bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded-full">PowerCare</span>
+                          )}
+                          {/* Site transfers all sit in Invoiced, so the column
+                              no longer says whether the transfer itself has
+                              been run. The badge does. */}
+                          {isSiteTransferJob(job) && (
+                            <span
+                              title={job.siteTransferCompletedAt
+                                ? `Transfer executed in SolarEdge on ${new Date(job.siteTransferCompletedAt).toLocaleDateString()}`
+                                : 'Invoiced, but the SolarEdge transfer has not been marked done yet'}
+                              className={`text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full ${
+                                job.siteTransferCompletedAt
+                                  ? 'bg-teal-100 text-teal-700'
+                                  : 'bg-amber-100 text-amber-700'
+                              }`}
+                            >
+                              {job.siteTransferCompletedAt ? 'Transferred' : 'Transfer pending'}
+                            </span>
                           )}
                           {tier > 0 && age && (
                             <span
