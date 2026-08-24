@@ -660,6 +660,7 @@ export const SolarEdgeMonitoring: React.FC<Props> = ({
           ackedSites={ackedSites}
           onOpenSite={(site) => setPanelSite(site)}
           onAckAlert={handleAckAlert}
+          customerFor={(site) => customerBySiteId.bySiteId.get(site.siteId) ?? (site.clientId ? customerBySiteId.byClientId.get(site.clientId) : undefined)}
         />
       ) : (
       <>

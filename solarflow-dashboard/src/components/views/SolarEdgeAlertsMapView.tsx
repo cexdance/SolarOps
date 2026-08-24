@@ -6,8 +6,9 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { MapPin, Loader2, AlertTriangle, ExternalLink } from 'lucide-react';
+import { MapPin, Loader2, AlertTriangle, ExternalLink, Phone, Mail } from 'lucide-react';
 import { SolarEdgeSite } from '../../lib/solarEdgeSites';
+import { Customer } from '../../types';
 import { geocodeAddress } from '../../lib/addressValidator';
 
 interface Props {
@@ -16,6 +17,7 @@ interface Props {
   ackedSites: Set<string>;
   onOpenSite: (site: SolarEdgeSite) => void;
   onAckAlert: (siteId: string) => void;
+  customerFor?: (site: SolarEdgeSite) => Customer | undefined;
 }
 
 interface Coord { lat: number; lon: number }
@@ -67,7 +69,7 @@ const FitBounds: React.FC<{ points: [number, number][]; sig: string }> = ({ poin
   return null;
 };
 
-export const SolarEdgeAlertsMapView: React.FC<Props> = ({ sites, alertOverrides, ackedSites, onOpenSite, onAckAlert }) => {
+export const SolarEdgeAlertsMapView: React.FC<Props> = ({ sites, alertOverrides, ackedSites, onOpenSite, onAckAlert, customerFor }) => {
   const [coords, setCoords] = useState<Record<string, Coord>>({});
   const [geocoding, setGeocoding] = useState(false);
   const [failed, setFailed] = useState(0);
@@ -132,12 +134,28 @@ export const SolarEdgeAlertsMapView: React.FC<Props> = ({ sites, alertOverrides,
           const count = ov?.count ?? site.alerts;
           const impact = ov?.impact ?? site.highestImpact;
           const acked = ackedSites.has(site.siteId);
+          const cust = customerFor?.(site);
           return (
             <Marker key={site.siteId} position={[c.lat, c.lon]} icon={pinIcon(IMPACT_HEX[impact] ?? '#dc2626', acked)}>
               <Popup>
                 <div className="text-sm">
                   <p className="font-semibold text-slate-900 !m-0">{site.clientId || site.siteName}</p>
                   <p className="text-xs text-slate-500 !mt-1 !mb-0">{site.address}</p>
+                  {cust && (cust.name || cust.phone || cust.email) && (
+                    <div className="mt-1.5 space-y-0.5">
+                      {cust.name && <p className="text-xs text-slate-700 font-medium !m-0">{cust.name}</p>}
+                      {cust.phone && (
+                        <a href={`tel:${cust.phone}`} className="text-xs text-slate-600 hover:underline flex items-center gap-1">
+                          <Phone className="w-3 h-3" /> {cust.phone}
+                        </a>
+                      )}
+                      {cust.email && (
+                        <a href={`mailto:${cust.email}`} className="text-xs text-slate-600 hover:underline flex items-center gap-1 break-all">
+                          <Mail className="w-3 h-3 shrink-0" /> {cust.email}
+                        </a>
+                      )}
+                    </div>
+                  )}
                   <div className="flex items-center gap-1.5 flex-wrap mt-1.5">
                     <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded text-white whitespace-nowrap ${acked ? 'bg-slate-400' : ''}`}
                       style={acked ? undefined : { background: IMPACT_HEX[impact] ?? '#dc2626' }}>
