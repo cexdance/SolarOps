@@ -15,11 +15,12 @@ import {
   Target,
   Undo2,
 } from 'lucide-react';
-import { ContractorJob, InvoiceStatus, PaymentStatus } from '../../types/contractor';
+import { Contractor, ContractorJob, InvoiceStatus, PaymentStatus } from '../../types/contractor';
 import { formatMoney } from '../../lib/money';
 
 interface BillingModuleProps {
   jobs: ContractorJob[];
+  contractors?: Contractor[];
   onUpdateJob: (job: ContractorJob) => void;
 }
 
@@ -37,13 +38,14 @@ const paymentColors: Record<PaymentStatus, string> = {
   rejected: 'bg-red-100 text-red-700',
 };
 
-export const BillingModule: React.FC<BillingModuleProps> = ({ jobs, onUpdateJob }) => {
+export const BillingModule: React.FC<BillingModuleProps> = ({ jobs, contractors = [], onUpdateJob }) => {
   const [filterStatus, setFilterStatus] = useState<'all' | 'invoice' | 'payment'>('all');
+  const [contractorFilter, setContractorFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedJob, setSelectedJob] = useState<ContractorJob | null>(null);
   const [showJobDetail, setShowJobDetail] = useState(false);
   const [monthlyGoal, setMonthlyGoal] = useState<number>(10000);
-  const [timeframe, setTimeframe] = useState<'day' | 'week' | 'month' | 'qtr' | 'ytd' | 'custom'>('month');
+  const [timeframe, setTimeframe] = useState<'day' | 'week' | 'month' | 'qtr' | 'ytd' | 'custom' | 'all'>('month');
   const [customDateRange, setCustomDateRange] = useState<{start: string; end: string}>({
     start: '',
     end: ''
@@ -101,11 +103,22 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ jobs, onUpdateJob 
 
   const dateRange = getDateRange();
 
+  // Contractors that actually have service orders here, named from the roster.
+  // ponytail: recomputed per render, the list is tens of rows.
+  const contractorOptions = [...new Set(jobs.map(j => j.contractorId).filter(Boolean))]
+    .map(id => {
+      const c = contractors.find(x => x.id === id);
+      return { id, name: c?.contactName || c?.businessName || c?.email || id };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
+
   // Filter jobs - show all service orders (assigned, in_progress, completed)
   const allJobs = jobs.filter(j => {
     // Include all statuses: assigned, en_route, in_progress, documentation, completed, on_hold
     const validStatuses = ['assigned', 'en_route', 'in_progress', 'documentation', 'completed', 'on_hold', 'cancelled'];
     if (!validStatuses.includes(j.status)) return false;
+    if (contractorFilter !== 'all' && j.contractorId !== contractorFilter) return false;
+    if (timeframe === 'all') return true;
 
     // For date filtering, use scheduledDate for non-completed jobs, completedAt for completed
     let jobDate: string;
@@ -352,6 +365,7 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ jobs, onUpdateJob 
               { id: 'qtr', label: 'QTR' },
               { id: 'ytd', label: 'YTD' },
               { id: 'custom', label: 'CUSTOM' },
+              { id: 'all', label: 'ALL' },
             ].map((item) => (
               <button
                 key={item.id}
@@ -418,6 +432,18 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ jobs, onUpdateJob 
             Payments
           </button>
         </div>
+
+        {/* Contractor Filter */}
+        <select
+          value={contractorFilter}
+          onChange={(e) => setContractorFilter(e.target.value)}
+          className="w-full mb-4 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm"
+        >
+          <option value="all">All contractors</option>
+          {contractorOptions.map(c => (
+            <option key={c.id} value={c.id}>{c.name}</option>
+          ))}
+        </select>
 
         {/* Search */}
         <div className="relative">

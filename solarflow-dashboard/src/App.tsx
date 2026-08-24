@@ -3319,6 +3319,7 @@ function App() {
         return (
           <BillingModule
             jobs={contractorJobsView}
+            contractors={contractors}
             onUpdateJob={handleContractorJobUpdate}
           />
         );
