@@ -314,12 +314,13 @@ export const SiteProfilePanel: React.FC<Props> = ({
   const openNewWO  = () => { setWoTarget(undefined); setWoOpen(true); };
   const openEditWO = (job: Job) => { setWoTarget(job); setWoOpen(true); };
 
-  const handleWOSave = (partial: Partial<Job>) => {
+  const handleWOSave = (partial: Partial<Job>, shouldClose?: boolean) => {
     if (woTarget && onUpdateJob) {
       onUpdateJob({ ...woTarget, ...partial } as Job);
     } else if (onCreateJob) {
       onCreateJob({ ...partial, customerId: customer?.id ?? '' });
     }
+    if (shouldClose) setWoOpen(false);
   };
 
   useEffect(() => {

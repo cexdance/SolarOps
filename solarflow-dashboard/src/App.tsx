@@ -3167,9 +3167,9 @@ function App() {
         currentUserRole={currentUser?.role}
         customer={customer}
         onClose={() => { setSelectedJobId(null); setCurrentView(backView); }}
-        onSave={(partial) => {
+        onSave={(partial, shouldClose) => {
           handleUpdateJob({ ...job, ...partial, id: job.id } as Job);
-          // Panel stays open, user closes manually
+          if (shouldClose) { setSelectedJobId(null); setCurrentView(backView); }
         }}
         onDeleteJob={(jobId) => {
           handleDeleteJob(jobId);

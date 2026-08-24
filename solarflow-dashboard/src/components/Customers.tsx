@@ -4086,7 +4086,11 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                     const addr = job.siteAddress || customer.address;
                     const amount = (job.quoteAmount || job.totalAmount) || 0;
                     return (
-                      <div key={job.id} className="bg-white rounded-xl border border-slate-200 overflow-hidden hover:shadow-md transition-shadow">
+                      <div
+                        key={job.id}
+                        onClick={(e) => { if ((e.target as HTMLElement).closest('button,a')) return; setEditingJob(job); }}
+                        className="bg-white rounded-xl border border-slate-200 overflow-hidden hover:shadow-md transition-shadow cursor-pointer"
+                      >
 
                         {/* ── Header ──────────────────────────────────── */}
                         <div className="flex items-start justify-between px-4 pt-4 pb-2">
@@ -5237,9 +5241,9 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
           clientId={customer.clientId}
           job={null}
           onClose={() => setShowCreateWorkOrder(false)}
-          onSave={(jobData) => {
+          onSave={(jobData, shouldClose) => {
             onCreateJob({ ...jobData, customerId: customer.id });
-            setShowCreateWorkOrder(false);
+            if (shouldClose) setShowCreateWorkOrder(false);
           }}
           onDispatch={onDispatch}
           contractors={contractors}
@@ -5258,9 +5262,9 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
           clientId={customer.clientId}
           job={editingJob}
           onClose={() => setEditingJob(null)}
-          onSave={(jobData) => {
+          onSave={(jobData, shouldClose) => {
             if (onUpdateJob) onUpdateJob({ ...editingJob, ...jobData } as Job);
-            setEditingJob(null);
+            if (shouldClose) setEditingJob(null);
           }}
           onDeleteJob={(jobId) => {
             onDeleteJob?.(jobId);

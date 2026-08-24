@@ -1098,10 +1098,11 @@ export const Jobs: React.FC<JobsProps> = ({
           currentUserRole={currentUser?.role}
           users={users.map(u => ({ id: u.id, name: u.name, username: u.username, email: u.email }))}
           onClose={() => setEditingCreatedJob(null)}
-          onSave={(jobData) => {
+          onSave={(jobData, shouldClose) => {
             const updated = { ...editingCreatedJob, ...jobData } as Job;
             onUpdateJob(updated);
-            setEditingCreatedJob(updated);
+            if (shouldClose) setEditingCreatedJob(null);
+            else setEditingCreatedJob(updated);
           }}
         />
       )}
