@@ -37,7 +37,7 @@ import { canSeeFinancials, isFinancialView } from './lib/access';
 import { syncFromDB } from './lib/db';
 import { loadData, saveData, hydrateData } from './lib/dataStore';
 import { migrateWoPhotos, purgeUploadedBlobs } from './lib/photoStore';
-import { pickupJobsForContractor, toContractorJobView, serviceOrderNo, photoUrlStem, bareOrderNo, dedupeWoPhotos, mergeRmaEntries } from './lib/woHelpers';
+import { pickupJobsForContractor, toContractorJobView, serviceOrderNo, photoUrlStem, bareOrderNo, dedupeWoPhotos, mergeRmaEntries, findJobByWoNumber } from './lib/woHelpers';
 import { fireMentionNotifications, sendCustomerAppointmentEmail } from './components/ui/MentionTextarea';
 import { formatCost } from './lib/money';
 import { logChange, logJobChange, flushChangeLog } from './lib/changeLog';
@@ -1967,7 +1967,24 @@ function App() {
   };
 
   // Handlers
+  // ponytail: woNumber -> created job, so a second create for the SAME order
+  // number updates instead of inserting. The panel autosaves ~14 different ways
+  // while an order is still unsaved; without this each one became its own card.
+  // A ref, not `data.jobs`, because several saves can land in one tick before
+  // any setData commits.
+  const createdByWoNumber = useRef(new Map<string, Job>());
+
   const handleCreateJob = (job: Partial<Job>): Job => {
+    const already = job.woNumber
+      ? (createdByWoNumber.current.get(job.woNumber)
+         ?? findJobByWoNumber(data.jobs, job.woNumber))
+      : undefined;
+    if (already) {
+      const merged = { ...already, ...job, id: already.id } as Job;
+      createdByWoNumber.current.set(merged.woNumber!, merged);
+      handleUpdateJob(merged);
+      return merged;
+    }
     const newJob: Job = {
       id: `job-${Date.now()}`,
       customerId: job.customerId || '',
@@ -2011,6 +2028,7 @@ function App() {
     // fieldTimes map from the start.
     const stampedNewJob = stampJobFields(undefined, newJob);
     logChange('job.create', 'job', stampedNewJob.id, stampedNewJob, resolveActor());
+    if (stampedNewJob.woNumber) createdByWoNumber.current.set(stampedNewJob.woNumber, stampedNewJob);
     setData(prev => {
       const next = { ...prev, jobs: [...prev.jobs, stampedNewJob] };
       saveData(next);

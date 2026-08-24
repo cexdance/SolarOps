@@ -336,6 +336,13 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
   users = [],
 }) => {
   const isNew = !job;
+  // ponytail: one number per panel session. This used to be generated inline at
+  // every save site, so each of the ~14 autosaves on an unsaved order minted a
+  // fresh SO number and the parent inserted it as ANOTHER job (seen live:
+  // one order, three cards). Frozen here + upserted by woNumber in
+  // App.handleCreateJob, so N autosaves collapse onto one record.
+  const woNumberRef = useRef(generateServiceOrderNumber());
+  const stableWoNumber = job?.woNumber ?? woNumberRef.current;
   const serviceRates: ServiceRate[] = loadServiceRates();
 
   // Where a mention fired from this panel points. `siteId` is the CUSTOMER id
@@ -871,7 +878,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
     }
 
     if (woStatus === 'quote_approved' && onDispatch) {
-      const woNum = job?.woNumber ?? generateServiceOrderNumber();
+      const woNum = stableWoNumber;
       onDispatch(buildContractorJob(workOrderNo(woNum)));
       if (!isServiceAccountExpense) {
         updateClientStatus(siteId, 'wo_pending');
@@ -1401,7 +1408,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
       ...(isReroofJob ? { reroof } : {}),
       status: WO_TO_JOB_STATUS[effectiveWoStatus],
       woStatus: effectiveWoStatus,
-      woNumber: job?.woNumber ?? generateServiceOrderNumber(),
+      woNumber: stableWoNumber,
       scheduledDate,
       scheduledTime,
       notes,
@@ -4009,7 +4016,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
           customerName={customer?.name ?? siteName}
           customerEmail={customer?.email ?? ''}
           address={normalizedSiteAddress}
-          woNumber={serviceOrderNo(job?.woNumber ?? generateServiceOrderNumber())}
+          woNumber={serviceOrderNo(stableWoNumber)}
           jobId={job?.id ?? `wo-${Date.now()}`}
           lineItems={lineItems.map(li => ({
             description: li.description,
@@ -4041,7 +4048,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
             // 2. @mention Daniel Matos so he creates + sends the quote to accounting.
             //    Post a visible comment in the WO conversation AND fire the notification.
             const owner = users.find(u => /matos/i.test(u.name) || /daniel/i.test(u.name));
-            const woLabel = serviceOrderNo(job?.woNumber ?? generateServiceOrderNumber());
+            const woLabel = serviceOrderNo(stableWoNumber);
             if (owner) {
               const ownerEmail = (owner as MentionUser & { email?: string }).email;
               // Build a real @handle the mention parser recognises (username, else name-no-spaces).

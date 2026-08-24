@@ -403,3 +403,13 @@ export function jobMapsUrl(job: {
     .join(', ');
   return addr ? `https://maps.google.com/?q=${encodeURIComponent(addr)}` : null;
 }
+
+/** Find an existing order by number, for create-is-really-an-update.
+ *  A blank/absent number matches NOTHING: every legacy job without a woNumber
+ *  would otherwise collapse onto the first one. */
+export function findJobByWoNumber<J extends { woNumber?: string }>(
+  jobs: J[], woNumber: string | undefined,
+): J | undefined {
+  if (!woNumber) return undefined;
+  return jobs.find(j => j.woNumber === woNumber);
+}
