@@ -15,6 +15,7 @@ import {
   Target,
   Undo2,
   User,
+  Zap,
 } from 'lucide-react';
 import { Contractor, ContractorJob, InvoiceStatus, PaymentStatus } from '../../types/contractor';
 import { formatMoney } from '../../lib/money';
@@ -487,6 +488,13 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ jobs, contractors 
                     {job.customerName}
                     {job.clientId && (
                       <span className="ml-2 text-xs font-medium text-slate-500">{job.clientId}</span>
+                    )}
+                    {job.isPowercare && (
+                      // Same badge as the Jobs board (Jobs.tsx). These are the same
+                      // service orders, so they get the same marker, not a new one.
+                      <span className="ml-2 align-middle text-xs px-2 py-1 rounded-full bg-indigo-100 text-indigo-700 inline-flex items-center gap-1">
+                        <Zap className="w-3 h-3" />PowerCare
+                      </span>
                     )}
                   </h3>
                   <p className="text-sm text-slate-500">SO #{job.id}</p>
