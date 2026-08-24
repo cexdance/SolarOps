@@ -20,9 +20,36 @@ interface LeadPanelProps {
 
 const FIELD = 'w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-orange-400';
 
+/**
+ * Draft "log a contact action" text, per lead, at MODULE scope so it survives a
+ * remount of this panel.
+ *
+ * It has to live outside the component. Saving a contact field fires onSave on
+ * blur, which updates the job, pushes through the sync engine and re-renders
+ * this panel asynchronously - and the parent unmounts the panel outright if the
+ * jobs array transiently does not contain the lead. Either path resets useState
+ * and silently swallowed whatever the user had typed: two real notes were lost
+ * this way on 2026-08-24 and saved as the bare fallback "Call: contacted".
+ *
+ * Keyed by job id so two leads never share a draft. Cleared once the entry is
+ * actually logged.
+ */
+const logDrafts = new Map<string, string>();
+
+export function getLogDraft(jobId: string): string {
+  return logDrafts.get(jobId) ?? '';
+}
+export function setLogDraft(jobId: string, text: string): void {
+  if (text) logDrafts.set(jobId, text);
+  else logDrafts.delete(jobId);
+}
+
 export const LeadPanel: React.FC<LeadPanelProps> = ({ job, currentUserName, onSave, onConvertToClient, onClose }) => {
   const [info, setInfo] = useState<LeadInfo>(() => seedLeadInfo(job));
-  const [logText, setLogText] = useState('');
+  const [logText, setLogTextState] = useState(() => getLogDraft(job.id));
+  // Mirror every keystroke into the module-scope draft, so a remount mid-typing
+  // restores the text instead of losing it.
+  const setLogText = (t: string) => { setLogDraft(job.id, t); setLogTextState(t); };
   // Local activity mirror so logged actions render immediately.
   const [activity, setActivity] = useState<Activity[]>(job.activityHistory ?? []);
   const set = (k: keyof LeadInfo, v: string) => setInfo(p => ({ ...p, [k]: v }));
@@ -40,7 +67,7 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({ job, currentUserName, onSa
     };
     const next = [entry, ...activity];
     setActivity(next);
-    setLogText('');
+    setLogText('');            // clears the persisted draft too
     // Persist the log AND any in-progress contact edits in one save.
     onSave({ leadInfo: info, activityHistory: next });
   };

@@ -470,6 +470,8 @@ export const Jobs: React.FC<JobsProps> = ({
   // A customerless card is a LEAD (no Service Order panel can open it); it opens
   // the LeadPanel instead. Set to the job id being worked as a lead.
   const [leadPanelJobId, setLeadPanelJobId] = useState<string | null>(null);
+  // Last resolved lead, so a transient miss in `jobs` cannot unmount the panel.
+  const lastLeadRef = useRef<Job | null>(null);
 
   // ── Persist filters/sort to localStorage, so they survive a page leave/return
   // (same pattern as Customers.tsx's loadView/saveView). ─────────────────────
@@ -1040,8 +1042,15 @@ export const Jobs: React.FC<JobsProps> = ({
       {/* Lead card (customerless funnel job): add contact info, log calls/emails,
           and convert to a client. */}
       {leadPanelJobId && (() => {
-        const lead = jobs.find(j => j.id === leadPanelJobId);
-        if (!lead) return null;
+        // Fall back to the last known copy rather than unmounting. `jobs` is
+        // replaced wholesale by every sync pull/hydrate, and a transient miss
+        // used to drop this panel entirely, silently discarding whatever the
+        // user had typed into it (a lost call note, 2026-08-24). Rendering the
+        // previous object for a beat is strictly better than losing their work.
+        const found = jobs.find(j => j.id === leadPanelJobId);
+        if (found) lastLeadRef.current = found;
+        const lead = found ?? lastLeadRef.current;
+        if (!lead || lead.id !== leadPanelJobId) return null;
         return (
           <LeadPanel
             job={lead}
