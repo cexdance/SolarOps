@@ -198,3 +198,86 @@ will make the constraint fail validation.
 Steps 2 and 3 are worth doing regardless. Step 4 is genuinely not urgent: at 40 MB/year you could
 leave this table entirely alone for five years and be fine. The value in scheduling it now is that
 the policy gets written down while the reasoning is fresh, not that the bytes matter.
+
+---
+
+# DECISION (2026-08-23): warranty record lives on the service order
+
+Owner's call: the 24-month warranty record is the **service order itself**, not `change_log`.
+That settles the legal question and simplifies retention. It also has a consequence that needs
+recording, because it is not obvious.
+
+## Consequence: for 36 service orders, `change_log` IS the only surviving record
+
+Verified against live data:
+
+| | |
+|---|---:|
+| `job.delete` events | 42 |
+| ...that were real service orders (had a `woNumber`) | **36** |
+| ...deleted while `paid` or `completed` | **5** |
+| ...that were leads/drafts (no `woNumber`) | 6 |
+| most recent deletion | 2026-08-20 |
+
+Deleting a service order is a **hard delete**. `syncEngine.ts:1030` reaps tombstoned rows with
+`supabase.from('app_data').delete().in('key', keys)` and the row is gone from Postgres. There is
+no soft-delete tier and no recovery path.
+
+So for those 36 orders, the only thing that still describes them is the `snapshot` inside their
+`job.delete` audit row (~2.1 KB each). **Five of them were completed or paid work, which is
+precisely what a 24-month warranty covers.**
+
+**Therefore `job.delete`, `customer.delete` and `customer.merge` are not merely "tier A, low
+volume." They are warranty evidence and must never be deleted by any retention job, ever.** The
+tier A list above already excludes them from deletion; this is the reason it must stay that way.
+
+Note the snapshot averages ~2.1 KB, so it holds the job's fields but **not** its photos. Photo
+evidence for a deleted service order is not in `change_log`; whatever remains is orphaned in the
+`customer-files` bucket with nothing pointing at it.
+
+## Second finding: the tombstone reap is currently a silent no-op
+
+`app_data` has **0 DELETE policies**. PostgREST returns success with zero rows affected when RLS
+blocks a delete, and the reap only inspects `error`:
+
+```ts
+const { error } = await supabase.from('app_data').delete().in('key', keys);
+if (error) console.warn(...)          // never fires: RLS denial is not an error
+```
+
+Live state confirms the split: 29 job ids and 921 customer ids are tombstoned, but **7 job rows
+and 1 customer row are still physically present**. The rest were removed back when deletes still
+went through. So the code believes it is reaping and is not.
+
+Right now that failure is *protective*: it is the only reason recently deleted service orders
+still exist in the database at all. But a silent failure that happens to help is not a design, and
+it should not be left as one.
+
+**Two coherent options, and this is a product decision, not a technical one:**
+
+1. **Service orders are never hard-deleted** (fits the warranty position). Make the intent
+   explicit: keep the reap for leads/drafts only, or replace deletion with an archived/void state.
+   The current accidental behaviour becomes the documented behaviour.
+2. **Deletion really means deletion.** Add a DELETE policy so the reap works, and accept that
+   deleting an order destroys the warranty record, with the `job.delete` snapshot as the only trace.
+
+Either way, **make the reap report reality**: check the affected-row count rather than only
+`error`, so "I deleted 29 rows" and "I deleted 0 rows" stop looking identical.
+
+## Retention, settled
+
+Because the warranty record is the service order, `change_log` carries no legal weight for
+surviving orders, and tier B has no external deadline to satisfy.
+
+- **Tier A (never delete): unchanged, and now load-bearing.** `*.delete`, `customer.merge`,
+  permission and payment events. This is the warranty trace for the 36 deleted orders.
+- **Tier B: 24 months** is fine, and could be 12. Nothing depends on it.
+- **Tier C (telemetry): 90 days.**
+
+**Recommendation: do not schedule the deletion job yet.** At 3.38 MB/month the table reaches
+~200 MB in five years, which Postgres will not notice. Automating deletion buys nothing today and
+introduces a job that can only ever destroy data. The policy above is written down; wire it up when
+the table passes ~500 MB or when a query actually gets slow, whichever comes first.
+
+What *was* worth doing immediately is shipped: the 64 KB payload guard, which prevents the only
+problem this table has ever actually had.
