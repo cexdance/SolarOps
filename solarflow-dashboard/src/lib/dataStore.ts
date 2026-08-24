@@ -373,7 +373,16 @@ function massageState(parsed: AppState): AppState {
     ...state,
     customers,
     notifications:      Array.isArray(state.notifications)      ? state.notifications      : [],
-    solarEdgeExtraSites: Array.isArray(state.solarEdgeExtraSites) ? state.solarEdgeExtraSites : [],
+    // ponytail: legacy rows stored a NUMERIC clientId/siteId (SolarEdge accountId), which
+    // blew up `.toLowerCase()` in the monitoring search. Coerce on hydrate so stale local
+    // caches heal too, not just the rows normalized in Supabase.
+    solarEdgeExtraSites: Array.isArray(state.solarEdgeExtraSites)
+      ? state.solarEdgeExtraSites.map((s: any) => ({
+          ...s,
+          siteId:   s?.siteId   == null ? '' : String(s.siteId),
+          clientId: s?.clientId == null ? '' : String(s.clientId),
+        }))
+      : [],
     solarEdgeConfig: {
       apiKey,
       lastSync:        seConfig['lastSync'],

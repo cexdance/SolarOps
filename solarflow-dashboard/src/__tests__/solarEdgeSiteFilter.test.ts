@@ -99,4 +99,11 @@ describe('deriveClientId', () => {
     expect(deriveClientId('Munoz, Mildred TSP99999', 'ACC-1')).toBe('ACC-1');
     expect(deriveClientId('Some Site', '')).toBe('');
   });
+
+  // SolarEdge returns accountId as a NUMBER. A number leaking through here crashed the
+  // monitoring search on `clientId.toLowerCase()`.
+  it('always returns a string, even for a numeric accountId', () => {
+    expect(deriveClientId('Some Site', 273491 as unknown as string)).toBe('273491');
+    expect(deriveClientId('Some Site', undefined)).toBe('');
+  });
 });

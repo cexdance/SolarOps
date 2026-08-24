@@ -48,8 +48,9 @@ function SortIcon({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey | 
 }
 
 // Derive group from address state abbreviation
-const deriveGroup = (address: string): string => {
-  const upper = address.toUpperCase();
+const deriveGroup = (address?: string): string => {
+  // ponytail: typed string, but imported sites can arrive without an address (or non-string)
+  const upper = String(address ?? '').toUpperCase();
   // Check for state abbreviations in the address (typically ", FL, " or ", FL 3xxxx")
   if (/\bFL\b/.test(upper)) return 'Conexsol Florida';
   if (/\bPR\b/.test(upper)) return 'Puerto Rico';
@@ -396,11 +397,13 @@ export const SolarEdgeMonitoring: React.FC<Props> = ({
 
     if (search.trim()) {
       const q = search.toLowerCase();
+      // ponytail: String() not `|| ''` - imported sites can carry NUMERIC siteId/clientId,
+      // and a number survives the `|| ''` guard then explodes on .toLowerCase()
       rows = rows.filter(s =>
-        (s.clientId || '').toLowerCase().includes(q) ||
-        (s.siteName || '').toLowerCase().includes(q) ||
-        (s.address || '').toLowerCase().includes(q) ||
-        (s.siteId || '').includes(q)
+        String(s.clientId ?? '').toLowerCase().includes(q) ||
+        String(s.siteName ?? '').toLowerCase().includes(q) ||
+        String(s.address ?? '').toLowerCase().includes(q) ||
+        String(s.siteId ?? '').includes(q)
       );
     }
     if (statusFilter !== 'all') rows = rows.filter(s => s.status === statusFilter);

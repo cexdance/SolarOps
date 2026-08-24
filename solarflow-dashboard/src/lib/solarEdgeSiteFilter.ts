@@ -57,10 +57,12 @@ export function isFloridaSite(s: RawSite): boolean {
  * (Conexsol naming, e.g. "US-15523-2 Charles Roach" -> "US-15523-2"), else the
  * SolarEdge accountId. Empty string when neither applies.
  */
-export function deriveClientId(name?: string, accountId?: string): string {
-  const first = (name || '').trim().split(/\s+/)[0];
+export function deriveClientId(name?: string, accountId?: string | number): string {
+  const first = String(name ?? '').trim().split(/\s+/)[0];
   if (/^US-?\d/i.test(first)) return first;
-  return accountId || '';
+  // ponytail: SolarEdge accountId comes back NUMERIC; a number here poisons every
+  // downstream `clientId.toLowerCase()` call site
+  return accountId == null ? '' : String(accountId);
 }
 
 /** "us 15646" / "US-15646" -> "US-15646". Empty for anything that isn't a US-NNNNN token. */

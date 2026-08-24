@@ -2639,7 +2639,7 @@ function App() {
         .filter((s: any) => !flSiteIds.has(String(s.id)) && !existingExtraIds.has(String(s.id)))
         .map((s: any) => ({
           siteId: String(s.id),
-          clientId: s.accountId || '',
+          clientId: s.accountId == null ? '' : String(s.accountId),
           siteName: s.name || '',
           address: [s.location?.address, s.location?.city, s.location?.state, s.location?.zip].filter(Boolean).join(', '),
           status: s.status || 'Active',
@@ -2754,7 +2754,7 @@ function App() {
       .filter((s: any) => !flSiteIds.has(String(s.id)) && !existingExtraIds.has(String(s.id)))
       .map((s: any) => ({
         siteId:       String(s.id),
-        clientId:     s.name?.startsWith('US-') ? s.name.split(' ')[0] : (s.accountId || ''),
+        clientId:     s.name?.startsWith('US-') ? s.name.split(' ')[0] : (s.accountId == null ? '' : String(s.accountId)),
         siteName:     s.name || '',
         address:      [s.location?.address, s.location?.city, s.location?.state, s.location?.zip].filter(Boolean).join(', '),
         status:       s.status || 'Active',
