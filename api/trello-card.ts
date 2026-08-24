@@ -91,7 +91,15 @@ function callbackUrlFor(req: VercelRequest): string {
  * than silently dropping every lead.
  */
 export function verifyTrelloSignature(rawBody: string, callbackUrl: string, header: string | undefined, secret: string): boolean {
-  if (!secret) return true;
+  if (!secret) {
+    // Deliberate fail-open: failing closed would kill the lead pipeline on any
+    // deploy missing the var. But it must not be SILENT - unset was the steady
+    // state for long enough that nobody noticed. The authoritative board check
+    // in assertCardOnAllowedBoard() is what actually guards this path while the
+    // secret is absent; this only makes the weakened state visible in the logs.
+    console.warn('[trello-webhook] TRELLO_API_SECRET is unset, signature NOT verified (failing open)');
+    return true;
+  }
   if (!header) return false;
   const expected = createHmac('sha1', secret).update(rawBody + callbackUrl).digest();
   const got = Buffer.from(header, 'base64');
@@ -133,6 +141,47 @@ const LIST_STAGES: Record<string, string> = {
   '6a5a58e06fbf97144b5d96c7': 'closed_won',                // Closed - Won
   '6a5a58e06fbf97144b5d96c8': 'closed_archived',           // Closed - Archived
 };
+
+/**
+ * Boards this webhook will import from, taken from TARGET_LISTS so the two can
+ * never drift.
+ *
+ * This is the guard that does NOT depend on TRELLO_API_SECRET. `matchTargetList`
+ * reads the board id out of `action.data.board.id`, which is just whatever the
+ * caller POSTed; with the signature failing open, anyone can claim to be our
+ * board. And because this repo is PUBLIC, the real board and list ids are
+ * readable in this very file.
+ *
+ * So the attack was: create a card on your OWN board, POST a payload naming our
+ * board and list but YOUR card id, and the server fetches your card (our token
+ * can read any public card) and imports its contents as a lead, notifying ~13
+ * office users. `idBoard` comes back from Trello, not from the payload, so it
+ * cannot be forged.
+ */
+const ALLOWED_BOARD_IDS = new Set(TARGET_LISTS.map(t => t.boardId));
+
+/** True when a card Trello itself reports actually lives on a board we import from. */
+export function isAllowedBoard(idBoard: string | undefined): boolean {
+  return !!idBoard && ALLOWED_BOARD_IDS.has(idBoard);
+}
+
+/**
+ * What to do with a card, given the `idBoard` Trello returned.
+ *
+ * The three-way split matters. An ABSENT idBoard cannot be caused by an
+ * attacker: the fetch is ours and explicitly asks for the field, and every
+ * Trello card belongs to a board. So absence means our request or Trello's
+ * response shape changed, i.e. a bug. Rejecting on a bug would 403 every
+ * legitimate lead and take the pipeline down, which is the precise outcome the
+ * fail-open signature branch exists to avoid. So absence is 'unverified':
+ * allowed, but shouted about in the logs.
+ *
+ * A PRESENT idBoard that is not ours is the real attack, and is rejected.
+ */
+export function boardDecision(idBoard: string | undefined): 'allow' | 'reject' | 'unverified' {
+  if (!idBoard) return 'unverified';
+  return ALLOWED_BOARD_IDS.has(idBoard) ? 'allow' : 'reject';
+}
 
 /** The stage a card currently belongs in, or undefined for an untracked list. */
 export function stageForList(listId: string | undefined): string | undefined {
@@ -208,12 +257,12 @@ export function extractContact(text: string): { phone: string; email: string } {
 
 interface TrelloLabel { name?: string; color?: string }
 
-async function fetchCardForLeadImport(cardId: string): Promise<{ name: string; desc: string; shortUrl: string; labels?: TrelloLabel[]; idList?: string }> {
+async function fetchCardForLeadImport(cardId: string): Promise<{ name: string; desc: string; shortUrl: string; labels?: TrelloLabel[]; idList?: string; idBoard?: string }> {
   // idList is read on EVERY event, not just list-move events: reconciling
   // against the card's actual current list is self-healing, so a webhook
   // delivery we missed (or a move made while a deploy was in flight) is
   // corrected by the next event of any kind on that card.
-  const url = `${TRELLO_BASE}/cards/${cardId}?key=${API_KEY}&token=${API_TOKEN}&fields=name,desc,shortUrl,labels,idList`;
+  const url = `${TRELLO_BASE}/cards/${cardId}?key=${API_KEY}&token=${API_TOKEN}&fields=name,desc,shortUrl,labels,idList,idBoard`;
   const res = await fetch(url, { headers: { Accept: 'application/json' } });
   if (!res.ok) throw new Error(`Trello card fetch ${res.status}`);
   return res.json();
@@ -649,6 +698,23 @@ async function handleLeadImportWebhook(req: VercelRequest, res: VercelResponse) 
     const now = new Date().toISOString();
 
     const card = await fetchCardForLeadImport(cardId);
+
+    // Authoritative board check, BEFORE anything is written or anyone notified.
+    // Trello reported this idBoard, the caller did not, so a forged payload
+    // pointing at a card on someone else's board is rejected here even when the
+    // signature check is failing open. A bogus card id never reaches this line:
+    // the fetch above throws on a Trello 404.
+    const decision = boardDecision(card.idBoard);
+    if (decision === 'reject') {
+      console.warn('[trello-webhook] rejected: card', cardId, 'is on board', card.idBoard, 'which is not an import source');
+      return res.status(403).json({ error: 'Card is not on an allowed board' });
+    }
+    if (decision === 'unverified') {
+      // Not an attack vector (see boardDecision), so let the lead through rather
+      // than take the pipeline down, but make the blind spot impossible to miss.
+      console.error('[trello-webhook] card', cardId, 'returned no idBoard; board NOT verified. Check the Trello fields= query.');
+    }
+
     const cardLabels = toJobLabels(card.labels);
     const { fields, vision, nameIsFile } = await extractCardFields(cardId, card);
     const { firstName, lastName, phone, email, address, city, state, zip } = fields;
