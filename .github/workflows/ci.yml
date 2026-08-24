@@ -51,3 +51,66 @@ jobs:
 
       - name: Test
         run: pnpm test
+
+  # ── Deploy gate ────────────────────────────────────────────────────────────
+  # Until 2026-08-23 the Vercel Git integration deployed on every push to main
+  # IN PARALLEL with this workflow, so a red build-and-test stopped nothing: CI
+  # was a notification, not a gate. Deploying from here instead, with
+  # `needs: build-and-test`, means production is only ever reached by a commit
+  # whose real build (tsc -b && vite build) and full test suite went green.
+  #
+  # Requires the Vercel Git integration to be TURNED OFF for this project,
+  # otherwise both paths deploy and the race is back.
+  deploy:
+    needs: build-and-test
+    # Pushes to main only. PR runs must gate without shipping.
+    # The VERCEL_TOKEN clause makes this job SELF-ACTIVATING: it skips silently
+    # until the secret exists, so committing it does not turn every push red
+    # while the secrets are still being set up. Once the token is added it takes
+    # over, and the Vercel Git integration should be switched off at that point
+    # so the two paths do not both deploy.
+    if: |
+      github.event_name == 'push'
+      && github.ref == 'refs/heads/main'
+      && secrets.VERCEL_TOKEN != ''
+    runs-on: ubuntu-latest
+    # NOTE: deliberately NOT inheriting the top-level solarflow-dashboard
+    # working-directory. `vercel --prod` resolves vercel.json from its CWD, and
+    # running it from inside solarflow-dashboard once deployed a build with ZERO
+    # serverless functions, 404ing every /api/* route for ~21h on 2026-08-12.
+    # This job must stay at the repo root.
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+
+      - name: Deploy to production
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: vercel --prod --yes --token="${{ secrets.VERCEL_TOKEN }}"
+
+      - name: Verify the live build is actually this commit
+        run: |
+          # A push is not a deploy. Poll version.json until the live sha matches
+          # the commit that just passed CI, then prove the serverless functions
+          # actually built - a version.json match alone does not (2026-08-12).
+          TARGET="$(git rev-parse --short HEAD)"
+          BASE="https://solarflow-dashboard-sooty.vercel.app"
+          echo "Waiting for $TARGET to go live ..."
+          for i in $(seq 1 30); do
+            LIVE="$(curl -fsS "$BASE/version.json?_=$(date +%s)" | sed -n 's/.*"sha":"\([^"]*\)".*/\1/p')"
+            if [ "$LIVE" = "$TARGET" ]; then
+              echo "live: $TARGET"
+              # /api/users must answer 401, not a Vercel NOT_FOUND page.
+              CODE="$(curl -s -o /dev/null -w '%{http_code}' "$BASE/api/users")"
+              echo "/api/users -> $CODE"
+              [ "$CODE" = "401" ] || { echo "::error::serverless functions missing (expected 401, got $CODE)"; exit 1; }
+              exit 0
+            fi
+            echo "  [$i] live=$LIVE, retrying"
+            sleep 10
+          done
+          echo "::error::$TARGET never went live after 5 minutes"
+          exit 1
