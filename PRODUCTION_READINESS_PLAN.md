@@ -30,7 +30,23 @@ in one unauthenticated endpoint, and in process.
 
 ## P0 - live exposure
 
-### 1. `app_data` has no authorization, only authentication  [HIGHEST RISK]
+### 1. `app_data` has no authorization, only authentication  [FIXED 2026-08-23]
+
+**STATUS: SHIPPED.** Client half `8da0d9e`, migration `app_data_contractor_row_isolation`.
+Contractors now read and write 0 customer/job rows (165 KV rows retained); staff, no-role
+users and dual-role staff all keep full access, verified against the live policies plus a
+negative write test and a real staff login against production.
+
+The scope was bigger than this section assumed: a contractor session was ALREADY pushing
+admin `job:`/`customer:` rows back (Phase 3 scoped reads but never writes, and
+`pullContractorScope` never marks its results clean, so `isDirty` treated them all as
+dirty). Both halves had to move together, client first. See the 2026-08-23 note.
+
+STILL OPEN from this item: `change_log` has the identical bare policies, and contractors
+legitimately write it via `logJobChange`, so it needs its own analysis.
+
+<details><summary>Original finding</summary>
+
 
 VERIFIED live. RLS is enabled on `app_data`, which looks correct on a dashboard, but all
 three policies are:
@@ -48,6 +64,8 @@ identical gap.
 
 The pattern is already understood in this codebase: `notifications` correctly uses
 `auth.uid() = user_id`. It simply was never applied to the main table.
+
+</details>
 
 CAUTION: this is the highest-risk fix to perform, not just the highest-risk finding.
 Tightening these policies carelessly breaks all app access instantly, because the sync
