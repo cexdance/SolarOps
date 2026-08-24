@@ -14,6 +14,7 @@ import {
   X,
   Target,
   Undo2,
+  User,
 } from 'lucide-react';
 import { Contractor, ContractorJob, InvoiceStatus, PaymentStatus } from '../../types/contractor';
 import { formatMoney } from '../../lib/money';
@@ -103,13 +104,17 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ jobs, contractors 
 
   const dateRange = getDateRange();
 
+  // Contractor has no `name` field; this is the real fallback order.
+  // Shared by the filter dropdown and the card rows so the two can't drift.
+  const contractorName = (id: string) => {
+    const c = contractors.find(x => x.id === id);
+    return c?.contactName || c?.businessName || c?.email || id;
+  };
+
   // Contractors that actually have service orders here, named from the roster.
   // ponytail: recomputed per render, the list is tens of rows.
   const contractorOptions = [...new Set(jobs.map(j => j.contractorId).filter(Boolean))]
-    .map(id => {
-      const c = contractors.find(x => x.id === id);
-      return { id, name: c?.contactName || c?.businessName || c?.email || id };
-    })
+    .map(id => ({ id, name: contractorName(id) }))
     .sort((a, b) => a.name.localeCompare(b.name));
 
   // Filter jobs - show all service orders (assigned, in_progress, completed)
@@ -134,7 +139,11 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ jobs, contractors 
   // Filter by search
   const filteredJobs = allJobs.filter(job =>
     job.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    job.id.toLowerCase().includes(searchQuery.toLowerCase())
+    job.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    // Now that the client number is on the card, it has to be searchable too.
+    // `?? ''` not `job.clientId?.includes(...)`: an optional-chained miss is
+    // undefined, which is falsy, and would drop every clientId-less row.
+    (job.clientId ?? '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   // Calculate totals with profitability
@@ -474,7 +483,12 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ jobs, contractors 
               {/* Job Header */}
               <div className="flex items-start justify-between mb-3">
                 <div>
-                  <h3 className="font-semibold text-slate-900">{job.customerName}</h3>
+                  <h3 className="font-semibold text-slate-900">
+                    {job.customerName}
+                    {job.clientId && (
+                      <span className="ml-2 text-xs font-medium text-slate-500">{job.clientId}</span>
+                    )}
+                  </h3>
                   <p className="text-sm text-slate-500">SO #{job.id}</p>
                 </div>
                 <div className="text-right">
@@ -495,6 +509,12 @@ export const BillingModule: React.FC<BillingModuleProps> = ({ jobs, contractors 
                     ? new Date(job.completedAt).toLocaleDateString()
                     : job.scheduledDate?.split('T')[0] ?? '-'}
                 </span>
+                {job.contractorId && (
+                  <span className="flex items-center gap-1">
+                    <User className="w-3 h-3" />
+                    {contractorName(job.contractorId)}
+                  </span>
+                )}
               </div>
 
               {/* Profitability Column */}
