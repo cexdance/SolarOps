@@ -43,6 +43,16 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pnpm-
 
+      # The repo-root package.json holds the deps for the serverless `api/` tree
+      # (web-push, @vercel/node, docx). apiResilience.test.ts imports
+      # api/trello-card.ts, which lazily imports web-push, so a dashboard-only
+      # install fails to resolve it and the Test step dies. vercel.json's
+      # installCommand already does both; CI never mirrored it, which is why
+      # every run since at least 2026-08-23 has been red.
+      - name: Install root deps (serverless api/ tree)
+        working-directory: .
+        run: npm install
+
       - name: Install
         run: pnpm install --no-frozen-lockfile
 
@@ -69,10 +79,7 @@ jobs:
     # while the secrets are still being set up. Once the token is added it takes
     # over, and the Vercel Git integration should be switched off at that point
     # so the two paths do not both deploy.
-    if: |
-      github.event_name == 'push'
-      && github.ref == 'refs/heads/main'
-      && secrets.VERCEL_TOKEN != ''
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     # NOTE: deliberately NOT inheriting the top-level solarflow-dashboard
     # working-directory. `vercel --prod` resolves vercel.json from its CWD, and
@@ -89,9 +96,21 @@ jobs:
         env:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-        run: vercel --prod --yes --token="${{ secrets.VERCEL_TOKEN }}"
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          # Self-activating: skip cleanly until the token is configured, so this
+          # job does not turn every push red during setup. The `secrets` context
+          # is NOT available in a job-level `if`, which is why this guard lives
+          # in the step rather than up there.
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "VERCEL_TOKEN not set. Skipping deploy; the Vercel Git integration is still the deploy path."
+            echo "SKIPPED=1" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          vercel --prod --yes --token="$VERCEL_TOKEN"
 
       - name: Verify the live build is actually this commit
+        if: env.SKIPPED != '1'
         run: |
           # A push is not a deploy. Poll version.json until the live sha matches
           # the commit that just passed CI, then prove the serverless functions
