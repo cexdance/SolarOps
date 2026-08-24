@@ -1445,14 +1445,75 @@ export function mergeWoPhotos(winnerPhotos: WOPhoto[], loserPhotos: WOPhoto[]): 
   return dedupeWoPhotos(merged);
 }
 
-/** Merge a job pair: LWW winner + union of activities, upload-aware photo merge. */
-export function mergeJobPair(winner: Job, loser: Job): Job {
-  return {
-    ...winner,
-    // SO comments / team conversation feed, appended chronologically.
-    activityHistory: unionById(winner.activityHistory, loser.activityHistory, 'asc'),
-    woPhotos: mergeWoPhotos(winner.woPhotos ?? [], loser.woPhotos ?? []),
-  };
+// ── Per-field LWW for jobs (Phase 2 of spec_job_field_level_merge) ───────────
+// Whole-record LWW let a client on a stale copy edit ONE field, re-push the
+// whole job with a fresh updatedAt, and revert every field it never touched
+// (2026-06-30: a scheduledDate edit reverted someone else's contractor
+// reassignment). Phase 1 (6749ce2) started stamping `fieldTimes[field]` on
+// every write. This resolves each field independently against those stamps.
+//
+// Legacy records with no `fieldTimes` fall back to the record `updatedAt`, so
+// the merge reduces EXACTLY to the old record-level LWW for them. Mixed
+// old/new pairs behave as before; two stamped records merge per-field.
+
+/** Fields that are appended to, never edited. Unioned by id, order-independent. */
+const APPEND_FIELDS = new Set(['activityHistory', 'auditLog']);
+/** Tombstone lists: union-only, a shorter side must never resurrect a deletion. */
+const TOMBSTONE_FIELDS = new Set(['deletedPhotoStems']);
+/** Resolved by their own dedicated merge below, not by the field loop. */
+const CUSTOM_FIELDS = new Set(['fieldTimes', 'updatedAt', 'woPhotos']);
+
+/** Last-edit time for one field, falling back to the record time for legacy rows. */
+function fieldTime(j: Job, k: string): string {
+  return j.fieldTimes?.[k] ?? recordTime(j);
+}
+
+/** Merge two fieldTimes maps by per-key max. */
+export function mergeFieldTimes(
+  a: Record<string, string> | undefined,
+  b: Record<string, string> | undefined,
+): Record<string, string> | undefined {
+  if (!a && !b) return undefined;
+  const out: Record<string, string> = { ...(a ?? {}) };
+  for (const [k, t] of Object.entries(b ?? {})) {
+    if (!out[k] || t > out[k]) out[k] = t;
+  }
+  return out;
+}
+
+/**
+ * Merge a job pair field by field. ORDER-INDEPENDENT: there is no winner and no
+ * loser, so callers no longer need `remoteWins()` for jobs.
+ */
+export function mergeJobFields(a: Job, b: Job): Job {
+  const out = { ...a } as unknown as Record<string, unknown>;
+
+  for (const k of new Set([...Object.keys(a), ...Object.keys(b)])) {
+    if (CUSTOM_FIELDS.has(k)) continue;
+    const av = (a as unknown as Record<string, unknown>)[k];
+    const bv = (b as unknown as Record<string, unknown>)[k];
+
+    if (APPEND_FIELDS.has(k)) {
+      out[k] = unionById(av as Parameters<typeof unionById>[0], bv as Parameters<typeof unionById>[0], 'asc');
+      continue;
+    }
+    if (TOMBSTONE_FIELDS.has(k)) {
+      out[k] = Array.from(new Set([...(av as string[] ?? []), ...(bv as string[] ?? [])]));
+      continue;
+    }
+    out[k] = fieldTime(b, k) > fieldTime(a, k) ? bv : av;
+  }
+
+  // Photos keep their deletion-aware semantics, but the authoritative side is
+  // whoever touched woPhotos LAST, not whoever wrote the record last.
+  const merged = out as unknown as Job;
+  merged.woPhotos = fieldTime(b, 'woPhotos') > fieldTime(a, 'woPhotos')
+    ? mergeWoPhotos(b.woPhotos ?? [], a.woPhotos ?? [])
+    : mergeWoPhotos(a.woPhotos ?? [], b.woPhotos ?? []);
+
+  merged.fieldTimes = mergeFieldTimes(a.fieldTimes, b.fieldTimes);
+  merged.updatedAt = recordTime(a) > recordTime(b) ? a.updatedAt : b.updatedAt;
+  return merged;
 }
 
 export function mergeRemote(local: AppState, remote: Partial<AppState>): AppState {
@@ -1494,11 +1555,10 @@ export function mergeRemote(local: AppState, remote: Partial<AppState>): AppStat
     for (const [id, remoteJ] of remoteMap) {
       const localJ = localMap.get(id);
       if (!localJ) { merged.set(id, remoteJ); continue; }
-      // Last-writer-wins on updatedAt, but union the activity feed (comments)
-      // and keep whichever copy has more photos, so a stale remote pull (race
-      // with an in-flight push) can wipe neither comments nor photos.
-      const winner = remoteWins(remoteJ, localJ);
-      merged.set(id, winner ? mergeJobPair(remoteJ, localJ) : mergeJobPair(localJ, remoteJ));
+      // Per-field LWW: each field comes from whichever side edited it last, so a
+      // stale side re-pushing the whole record can no longer revert fields it
+      // never touched. Order-independent, hence no remoteWins() here.
+      merged.set(id, mergeJobFields(localJ, remoteJ));
     }
 
     // Same ghost-purge removal as customers above. Jobs are deleted only via

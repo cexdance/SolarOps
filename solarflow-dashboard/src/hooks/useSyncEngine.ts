@@ -1,6 +1,6 @@
 import { useCallback, useEffect, type MutableRefObject } from 'react';
 import { drainOutbox, resetOutboxAttempts } from '../lib/outbox';
-import { pullAndMerge, subscribeToChanges, mergeCustomerPair, mergeJobPair, mergeWoPhotos, resetSyncCursor } from '../lib/syncEngine';
+import { pullAndMerge, subscribeToChanges, mergeCustomerPair, mergeJobFields, mergeWoPhotos, resetSyncCursor } from '../lib/syncEngine';
 import { loadContractors, loadServiceRates, loadContractorJobs } from '../lib/contractorStore';
 import type { AppState, Customer, Job } from '../types';
 import type { Contractor, ContractorJob } from '../types/contractor';
@@ -151,8 +151,10 @@ export function useSyncEngine({
           return {
             ...prev,
             jobs: exists
-              // Union the comment feed (and photo heuristic) with the local copy.
-              ? prev.jobs.map(j => j.id === job.id ? mergeJobPair(job, j) : j)
+              // Per-field LWW against the local copy. This path never called
+              // remoteWins(), so it used to hand the remote copy an unconditional
+              // win over every scalar; mergeJobFields is order-independent.
+              ? prev.jobs.map(j => j.id === job.id ? mergeJobFields(job, j) : j)
               : [...prev.jobs, job],
           };
         });
