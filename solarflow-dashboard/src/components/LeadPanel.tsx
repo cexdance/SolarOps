@@ -4,10 +4,10 @@
 // it to a client. Everything is stored on the job (leadInfo + activityHistory)
 // until "Move to Client" creates the real Customer.
 import React, { useState } from 'react';
-import { Phone, Mail, FileText, X, UserCheck, PhoneCall } from 'lucide-react';
+import { Phone, Mail, FileText, X, UserCheck, PhoneCall, MessageSquare } from 'lucide-react';
 import type { Job, LeadInfo, Activity } from '../types';
 import { seedLeadInfo, leadDisplayName, formatImportedAt } from '../lib/leadConvert';
-import { rcCall } from '../lib/ringcentral';
+import { rcCall, rcSMS } from '../lib/ringcentral';
 import { LabelPicker } from './LabelPicker';
 
 interface LeadPanelProps {
@@ -102,6 +102,12 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({ job, currentUserName, onSa
               <input className={FIELD} placeholder="First name" value={info.firstName ?? ''} onChange={e => set('firstName', e.target.value)} onBlur={saveInfo} />
               <input className={FIELD} placeholder="Last name" value={info.lastName ?? ''} onChange={e => set('lastName', e.target.value)} onBlur={saveInfo} />
             </div>
+            {/* Reach the lead: call, text, email. Same trio and icons as the
+                customer record (CustomerManagement), so the actions read the
+                same everywhere. Each sits beside the field that feeds it and is
+                disabled until that field has a value, and each only LAUNCHES the
+                conversation: logging it stays the explicit step below, or every
+                misdial would write a contact record. */}
             <div className="flex gap-2">
               <input className={FIELD} placeholder="Phone" value={info.phone ?? ''} onChange={e => set('phone', e.target.value)} onBlur={saveInfo} />
               <button
@@ -113,8 +119,28 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({ job, currentUserName, onSa
               >
                 <PhoneCall className="w-4 h-4" /> Call
               </button>
+              <button
+                type="button"
+                onClick={() => info.phone && rcSMS(info.phone)}
+                disabled={!info.phone}
+                title="Text via RingCentral"
+                className="shrink-0 px-3 rounded-lg bg-purple-600 text-white text-sm font-medium hover:bg-purple-700 disabled:opacity-40 flex items-center gap-1"
+              >
+                <MessageSquare className="w-4 h-4" /> SMS
+              </button>
             </div>
-            <input className={FIELD} placeholder="Email" value={info.email ?? ''} onChange={e => set('email', e.target.value)} onBlur={saveInfo} />
+            <div className="flex gap-2">
+              <input className={FIELD} placeholder="Email" value={info.email ?? ''} onChange={e => set('email', e.target.value)} onBlur={saveInfo} />
+              <button
+                type="button"
+                onClick={() => info.email && window.open(`mailto:${info.email}`)}
+                disabled={!info.email}
+                title="Email this lead"
+                className="shrink-0 px-3 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-40 flex items-center gap-1"
+              >
+                <Mail className="w-4 h-4" /> Email
+              </button>
+            </div>
             <input className={FIELD} placeholder="Address" value={info.address ?? ''} onChange={e => set('address', e.target.value)} onBlur={saveInfo} />
             <div className="flex gap-2">
               <input className={FIELD} placeholder="City" value={info.city ?? ''} onChange={e => set('city', e.target.value)} onBlur={saveInfo} />
