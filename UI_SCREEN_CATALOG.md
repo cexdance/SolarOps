@@ -162,7 +162,7 @@ Text-only routing reference: [UI_UX_SCREEN_MAP.md](UI_UX_SCREEN_MAP.md)
 _(capture failed: page.reload: Timeout 30000ms exceeded.
 Call log:
   - waiting for navigation until "networkidle"
-    - navigated to "http://localhost:5173/"
+    - navigated to "https://solarflow-dashboard-sooty.vercel.app/"
 )_
 
 ---
