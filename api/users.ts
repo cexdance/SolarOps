@@ -22,6 +22,36 @@ interface Caller {
   permissions: string[];
 }
 
+interface RoleRow { user_id: string; role: string; permissions: string[] }
+
+/** Read a user's TRUSTED role + permits from public.user_roles.
+ *  Never read these from user_metadata: the user can edit that themselves
+ *  (supabase.auth.updateUser), so gating a write on it lets anyone self-grant
+ *  users.manage and then create admins or delete staff. */
+async function fetchRoleRow(userId: string): Promise<RoleRow | null> {
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/user_roles?user_id=eq.${userId}&select=user_id,role,permissions&limit=1`,
+    { headers: adminHeaders },
+  );
+  if (!res.ok) return null;
+  const rows = await res.json() as RoleRow[];
+  return rows[0] ?? null;
+}
+
+/** Mirror a role/permit change into the trusted table. The auth user_metadata
+ *  copy is kept in sync for display only. */
+async function upsertRoleRow(userId: string, role: string, permissions: string[]): Promise<boolean> {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/user_roles?on_conflict=user_id`, {
+    method: 'POST',
+    headers: { ...adminHeaders, Prefer: 'resolution=merge-duplicates' },
+    body: JSON.stringify({ user_id: userId, role, permissions, updated_at: new Date().toISOString() }),
+  });
+  if (!res.ok) {
+    console.error(`[api/users] user_roles upsert failed ${res.status}: ${(await res.text().catch(() => '')).slice(0, 200)}`);
+  }
+  return res.ok;
+}
+
 /** Validate the caller JWT and return their identity, or null if invalid. */
 async function verifyCaller(req: VercelRequest): Promise<Caller | null> {
   const token = (req.headers.authorization ?? '').replace('Bearer ', '');
@@ -31,12 +61,15 @@ async function verifyCaller(req: VercelRequest): Promise<Caller | null> {
   });
   if (!res.ok) return null;
   const u = await res.json() as Record<string, any>;
-  const meta = (u.user_metadata as Record<string, unknown>) ?? {};
+  const id = u.id as string;
+  // Authorization comes from the trusted table, NOT from u.user_metadata.
+  // A user with no row gets no role and no permits: fails closed.
+  const trusted = await fetchRoleRow(id);
   return {
-    id: u.id as string,
+    id,
     email: (u.email as string) ?? '',
-    role: (meta.role as string) ?? '',
-    permissions: Array.isArray(meta.permissions) ? (meta.permissions as string[]) : [],
+    role: trusted?.role ?? '',
+    permissions: Array.isArray(trusted?.permissions) ? trusted!.permissions : [],
   };
 }
 
@@ -45,18 +78,21 @@ function canManageUsers(c: Caller): boolean {
   return c.role === 'admin' || c.permissions.includes('users.manage');
 }
 
-function mapUser(u: Record<string, any>) {
+/** `trusted` is the public.user_roles row. Profile fields still come from
+ *  user_metadata (they are cosmetic), but role and permissions come from the
+ *  trusted table so the UI never shows a role the database will not honour. */
+function mapUser(u: Record<string, any>, trusted?: RoleRow | null) {
   const meta = (u.user_metadata as Record<string, unknown>) ?? {};
   return {
     id: u.id as string,
     name: (meta.name as string) ?? (u.email as string) ?? 'Staff',
     email: (u.email as string) ?? '',
     phone: (meta.phone as string) ?? '',
-    role: (meta.role as string) ?? 'admin',
+    role: trusted?.role ?? '',
     active: true,
     username: ((meta.username as string) ?? '').replace(/^@/, ''),
     avatar: (meta.avatar_url as string | undefined) ?? undefined,
-    permissions: Array.isArray(meta.permissions) ? (meta.permissions as string[]) : undefined,
+    permissions: Array.isArray(trusted?.permissions) ? trusted!.permissions : undefined,
   };
 }
 
@@ -95,9 +131,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       allUsers.push(...pageUsers);
       if (pageUsers.length < PER_PAGE) break; // last page reached
     }
+    // Staff membership is decided by public.user_roles, not by the metadata
+    // copy: a contractor who sets user_metadata.role='admin' must not appear
+    // in (or be actionable from) the staff directory.
+    const rolesRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/user_roles?select=user_id,role,permissions`,
+      { headers: adminHeaders },
+    );
+    if (!rolesRes.ok) {
+      console.error(`[api/users] user_roles fetch failed ${rolesRes.status}`);
+      return res.status(502).json({ error: 'Failed to fetch roles' });
+    }
+    const roleBy = new Map((await rolesRes.json() as RoleRow[]).map(r => [r.user_id, r]));
     const staff = allUsers
-      .filter(u => STAFF_ROLES.has(((u.user_metadata as any)?.role as string) ?? ''))
-      .map(mapUser);
+      .filter(u => STAFF_ROLES.has(roleBy.get(u.id as string)?.role ?? ''))
+      .map(u => mapUser(u, roleBy.get(u.id as string)));
     res.setHeader('Cache-Control', 'private, max-age=300');
     return res.status(200).json(staff);
   }
@@ -139,7 +187,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!createRes.ok) {
       return res.status(createRes.status).json({ error: created?.msg ?? 'Failed to create user' });
     }
-    return res.status(201).json(mapUser(created));
+
+    // Grant the role in the trusted table. Without this row the new user can
+    // sign in but RLS gives them nothing, so a failure here must not leave a
+    // half-created account behind: undo the auth user and report it.
+    const permits = cleanPermissions(permissions) ?? [];
+    if (!await upsertRoleRow(created.id as string, cleanRole, permits)) {
+      await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${created.id}`, {
+        method: 'DELETE', headers: adminHeaders,
+      }).catch(() => {});
+      return res.status(500).json({ error: 'Failed to assign role, user was not created' });
+    }
+    return res.status(201).json(mapUser(created, { user_id: created.id as string, role: cleanRole, permissions: permits }));
   }
 
   // ── PATCH: update role / permits / profile fields. ─────────────────────────
@@ -166,11 +225,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const current = await getRes.json() as Record<string, any>;
     const meta = { ...((current.user_metadata as Record<string, unknown>) ?? {}) };
 
-    if (role !== undefined) {
-      if (!STAFF_ROLES.has(String(role))) return res.status(400).json({ error: 'Invalid role' });
-      meta.role = String(role);
+    const currentTrusted = await fetchRoleRow(userId);
+    if (role !== undefined && !STAFF_ROLES.has(String(role))) {
+      return res.status(400).json({ error: 'Invalid role' });
     }
-    if (nextPermits !== undefined) meta.permissions = nextPermits;
+    const nextRole = role !== undefined ? String(role) : (currentTrusted?.role ?? '');
+    const nextPerms = nextPermits !== undefined ? nextPermits : (currentTrusted?.permissions ?? []);
+
+    // Trusted table first, metadata mirror second. If the mirror write fails the
+    // user still has correct access; if the order were reversed a failure would
+    // leave the UI showing a role the database does not grant.
+    if (role !== undefined || nextPermits !== undefined) {
+      if (!nextRole) return res.status(400).json({ error: 'User has no role, set one explicitly' });
+      if (!await upsertRoleRow(userId, nextRole, nextPerms)) {
+        return res.status(500).json({ error: 'Failed to update role' });
+      }
+    }
+
+    if (role !== undefined) meta.role = nextRole;
+    if (nextPermits !== undefined) meta.permissions = nextPerms;
     if (name !== undefined) meta.name = String(name);
     if (phone !== undefined) meta.phone = String(phone);
 
@@ -181,7 +254,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
     const updated = await updRes.json() as Record<string, any>;
     if (!updRes.ok) return res.status(updRes.status).json({ error: updated?.msg ?? 'Failed to update user' });
-    return res.status(200).json(mapUser(updated));
+    return res.status(200).json(mapUser(updated, { user_id: userId, role: nextRole, permissions: nextPerms }));
   }
 
   // ── DELETE: remove a staff user. ───────────────────────────────────────────
