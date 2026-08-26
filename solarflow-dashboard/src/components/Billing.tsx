@@ -34,13 +34,15 @@ export type BillingCol = 'new' | 'quote_sent' | 'pending' | 'to_invoice' | 'invo
 
 export const getBillingColumn = (job: Job): BillingCol => {
   // Site transfers have no quote and no field work: Daniel invoices the flat
-  // fee directly, so the card belongs in Invoiced from creation rather than
-  // sitting in New waiting for a stage that never comes. Paid still wins, so
-  // the card can be closed out normally. Whether the transfer has actually
-  // been executed in SolarEdge is siteTransferCompletedAt, not the column.
+  // fee directly, so the card belongs in Ready to Invoice from creation rather
+  // than sitting in New waiting for a stage that never comes. It only reaches
+  // Invoiced once someone actually invoices it (status invoiced), and Paid
+  // still wins so the card closes out normally. Whether the transfer has been
+  // executed in SolarEdge is siteTransferCompletedAt, not the column.
   if (isSiteTransferJob(job)) {
     if (job.status === 'paid') return job.costsCoveredAt ? 'costs_covered' : 'paid';
-    return 'invoiced';
+    if (job.status === 'invoiced') return 'invoiced';
+    return 'to_invoice';
   }
   // woStatus is the field the Service Order panel actually drives through the
   // 8-stage pipeline, so it is checked FIRST for the two pre-work stages. When
@@ -387,10 +389,11 @@ export const Billing: React.FC<BillingProps> = ({
   const moveToColumn = (jobId: string, col: BillingCol, coveredAtISO?: string) => {
     const job = jobs.find(j => j.id === jobId);
     if (!job || getBillingColumn(job) === col) return;
-    // A site transfer is pinned to Invoiced until it is paid, so a drop
-    // anywhere else would write a stage the board immediately renders back as
-    // Invoiced. Ignore it rather than silently patching a status nobody sees.
-    if (isSiteTransferJob(job) && col !== 'paid' && col !== 'costs_covered') return;
+    // A site transfer skips the quote and field-work stages, so it only moves
+    // forward from Ready to Invoice. A drop on an earlier column would write a
+    // stage the board immediately renders back as Ready to Invoice, so ignore
+    // it rather than silently patching a status nobody sees.
+    if (isSiteTransferJob(job) && col !== 'invoiced' && col !== 'paid' && col !== 'costs_covered') return;
     const now = new Date().toISOString();
     // Close-out is the one stage whose date the admin sets by hand: costs are
     // often covered days after the fact, and this timestamp is what the

@@ -24,15 +24,19 @@ const job = (p: Partial<Job>): Job => ({
 
 describe('getBillingColumn, site transfers', () => {
   // Daniel invoices the flat fee directly, no quote and no field work, so the
-  // card belongs in Invoiced from creation instead of sitting in New.
-  it('pins a site transfer to Invoiced from creation, by code or by type', () => {
-    expect(getBillingColumn(job({ serviceCode: 'SITE-TRX' }))).toBe('invoiced');
-    expect(getBillingColumn(job({ serviceType: 'Site Transfer' }))).toBe('invoiced');
+  // card belongs in Ready to Invoice from creation instead of sitting in New.
+  it('lands a site transfer in Ready to Invoice from creation, by code or by type', () => {
+    expect(getBillingColumn(job({ serviceCode: 'SITE-TRX' }))).toBe('to_invoice');
+    expect(getBillingColumn(job({ serviceType: 'Site Transfer' }))).toBe('to_invoice');
   });
 
-  it('keeps it in Invoiced even while woStatus still says draft', () => {
+  it('keeps it in Ready to Invoice even while woStatus still says draft', () => {
     // The draft check runs first for every other order and would send this to New.
-    expect(getBillingColumn(job({ serviceCode: 'SITE-TRX', woStatus: 'draft' }))).toBe('invoiced');
+    expect(getBillingColumn(job({ serviceCode: 'SITE-TRX', woStatus: 'draft' }))).toBe('to_invoice');
+  });
+
+  it('moves to Invoiced only once it is actually invoiced', () => {
+    expect(getBillingColumn(job({ serviceCode: 'SITE-TRX', status: 'invoiced' }))).toBe('invoiced');
   });
 
   it('still closes out normally once paid', () => {
@@ -42,7 +46,7 @@ describe('getBillingColumn, site transfers', () => {
     }))).toBe('costs_covered');
   });
 
-  it('does not drag ordinary orders into Invoiced', () => {
+  it('does not drag ordinary orders out of New', () => {
     expect(getBillingColumn(job({ serviceType: 'Site visit', woStatus: 'draft' }))).toBe('new');
     expect(getBillingColumn(job({ serviceCode: 'OPT-1', woStatus: 'draft' }))).toBe('new');
   });
@@ -50,7 +54,7 @@ describe('getBillingColumn, site transfers', () => {
   it('is not confused by the completion flag, which never moves the column', () => {
     expect(getBillingColumn(job({
       serviceCode: 'SITE-TRX', siteTransferCompletedAt: '2026-08-20T00:00:00.000Z',
-    }))).toBe('invoiced');
+    }))).toBe('to_invoice');
   });
 });
 
