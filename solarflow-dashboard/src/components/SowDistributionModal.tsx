@@ -20,12 +20,14 @@
  * Print: targets A4 via @page CSS injected in component.
  */
 
-import React, { useEffect, useState } from 'react';
-import { serviceOrderNo } from '../lib/woHelpers';
+import React, { useEffect, useMemo, useState } from 'react';
+import { serviceOrderNo, actualServiceCallCost } from '../lib/woHelpers';
+import { loadContractorJobs } from '../lib/contractorStore';
+import { formatCost } from '../lib/money';
 import {
   X, FileText, MapPin,
   Sun, Cloud, CloudRain, CloudSnow, CloudLightning,
-  AlertTriangle, CheckCircle, Briefcase, FileCheck, ChevronRight,
+  AlertTriangle, CheckCircle, Briefcase, FileCheck, ChevronRight, DollarSign,
 } from 'lucide-react';
 import { Job, WOPhoto } from '../types';
 import { Contractor } from '../types/contractor';
@@ -312,6 +314,18 @@ export const SowDistributionModal: React.FC<Props> = ({
   // WO Notes
   const woNotes = job.notes?.trim() || '';
 
+  // Actual service call cost: labor + parts + mileage + contractor-logged expenses.
+  // Expenses are read from the contractor job (one writer) rather than the admin Job.
+  const actualCost = useMemo(() => {
+    let expenses: { amount: number; status?: string }[] = [];
+    try {
+      expenses = loadContractorJobs()
+        .filter(cj => (cj.sourceJobId ?? cj.id) === job.id)
+        .flatMap(cj => cj.expenses ?? []);
+    } catch { /* contractor store unavailable, labor + parts only */ }
+    return actualServiceCallCost(job, expenses);
+  }, [job]);
+
   return (
     <>
       {/* Injected print styles */}
@@ -385,6 +399,14 @@ export const SowDistributionModal: React.FC<Props> = ({
                   {!contractorLabel && !laborHrs && (
                     <p className="text-xs text-slate-400 col-span-2">No manpower data recorded.</p>
                   )}
+                </div>
+              </Section>
+
+              {/* ── Actual Service Call Cost ──────────────────────────── */}
+              <Section label="Actual Service Call Cost" icon={<DollarSign className="w-3.5 h-3.5" />}>
+                <div className="flex items-baseline justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                  <p className="text-xs text-slate-500">Labor, parts and logged expenses</p>
+                  <p className="text-lg font-black text-slate-900 font-mono">{formatCost(actualCost)}</p>
                 </div>
               </Section>
 

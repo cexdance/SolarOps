@@ -536,6 +536,21 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
     }
   }, [job?.id]);
 
+  // Receipts the contractor logged in the field. Part of the ACTUAL service call
+  // cost. Read-only here for the same reason as contractorAdditions: one writer.
+  const contractorExpenseTotal = useMemo(() => {
+    if (!job?.id) return 0;
+    try {
+      return loadContractorJobs()
+        .filter(cj => (cj.sourceJobId ?? cj.id) === job.id)
+        .flatMap(cj => cj.expenses ?? [])
+        .filter(e => e.status !== 'rejected' && e.status !== 'draft')
+        .reduce((s, e) => s + (e.amount || 0), 0);
+    } catch {
+      return 0;
+    }
+  }, [job?.id]);
+
   // Stable upload folder, generated once per panel open. New WOs get a UUID
   // so photos don't all land in wo-photos/unsaved/. Existing WOs use job.id.
   const stableWoIdRef = useRef<string>(job?.id ?? `wo-${crypto.randomUUID()}`);
@@ -2987,7 +3002,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                 const totalLabor = baseLabor + labor;
                 const baseRevenue = quoteAmount > 0 ? quoteAmount : (total + baseLabor);
                 const revenue    = (applyRecurringDiscount ? baseRevenue * 0.9 : baseRevenue) + mileageCharge;
-                const totalCost  = totalLabor + parts + mileageCost;
+                const totalCost  = totalLabor + parts + mileageCost + contractorExpenseTotal;
                 const profit     = revenue - totalCost;
                 const margin     = revenue > 0 ? (profit / revenue) * 100 : 0;
                 const netProfit  = profit + seCompTotal;
@@ -3011,9 +3026,15 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                         <span className="font-medium text-slate-700">{formatMoney(mileageCost)}</span>
                       </div>
                     )}
+                    {contractorExpenseTotal > 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-slate-500">Contractor expenses</span>
+                        <span className="font-medium text-slate-700">{formatCost(contractorExpenseTotal)}</span>
+                      </div>
+                    )}
                     <div className="flex justify-between text-sm font-semibold text-slate-800 border-t border-slate-200 pt-1.5">
-                      <span>Total cost</span>
-                      <span>{formatMoney(totalCost)}</span>
+                      <span>Actual Service Call Cost</span>
+                      <span>{formatCost(totalCost)}</span>
                     </div>
 
                     <div className="border-t border-slate-200 pt-1.5 mt-0.5 space-y-1">
