@@ -1544,6 +1544,18 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
     : baseAction;
   const actionAdminOnly = isServiceAccountExpense && SERVICE_ACCOUNT_ACTIONS[woStatus]?.adminOnly;
   const { labor, parts, total } = sumLineItems(lineItems);
+
+  // ── Actual Service Call Cost ────────────────────────────────────────────────
+  // What the call really cost us: base contractor pay + extra labor line items +
+  // parts + Powercare mileage + contractor-logged receipts. Computed from LIVE
+  // panel state (not the saved job) so it tracks edits before Save. Kept at
+  // component scope because both the header readout and the Cost Breakdown
+  // render it, and two copies of this arithmetic would drift.
+  const baseLaborCost   = contractorPayUnit === 'flat' ? contractorPayRate : contractorPayRate * (laborHours || 0);
+  const mileageMiles    = isPowercare ? (travelMiles || 0) : 0;
+  const mileageCostLive = +(mileageMiles * 0.54).toFixed(2);
+  const actualCallCost  = +(baseLaborCost + labor + parts + mileageCostLive + contractorExpenseTotal).toFixed(2);
+
   const photosByCategory = PHOTO_CATEGORIES.reduce((acc, cat) => {
     acc[cat] = woPhotos.filter(p => p.category === cat);
     return acc;
@@ -2030,6 +2042,20 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
                 />
               </div>
+              {/* Actual Service Call Cost, at-a-glance. Derived, read-only: the
+                  inputs live in Parts & Labor. Full breakdown is down there. */}
+              <div className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                <div className="min-w-0">
+                  <p className="text-xs font-medium text-slate-500">Actual Service Call Cost</p>
+                  <p className="text-[11px] text-slate-400 truncate">
+                    Labor{parts > 0 ? ' + parts' : ''}
+                    {mileageMiles > 0 ? ` + ${mileageMiles} mi × $0.54` : ''}
+                    {contractorExpenseTotal > 0 ? ' + expenses' : ''}
+                  </p>
+                </div>
+                <p className="text-base font-bold text-slate-900 shrink-0">{formatCost(actualCallCost)}</p>
+              </div>
+
               {/* Service, fed from Excel rate table */}
               <div>
                   <div className="flex items-center justify-between mb-1">
@@ -2993,16 +3019,15 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
               {(lineItems.length > 0 || contractorPayRate > 0 || quoteAmount > 0) && (() => {
                 // Default contractor labor fee, always counted as cost even without a labor line item.
                 // Labor line items are EXTRA labor on top of the baseline pay.
-                const baseLabor = contractorPayUnit === 'flat'
-                  ? contractorPayRate
-                  : contractorPayRate * (laborHours || 0);
-                const milesValue = isPowercare ? (travelMiles || 0) : 0;
-                const mileageCost = +(milesValue * 0.54).toFixed(2);
+                // Shared with the header readout so the two can't disagree.
+                const baseLabor = baseLaborCost;
+                const milesValue = mileageMiles;
+                const mileageCost = mileageCostLive;
                 const mileageCharge = +(milesValue * 0.89).toFixed(2);
                 const totalLabor = baseLabor + labor;
                 const baseRevenue = quoteAmount > 0 ? quoteAmount : (total + baseLabor);
                 const revenue    = (applyRecurringDiscount ? baseRevenue * 0.9 : baseRevenue) + mileageCharge;
-                const totalCost  = totalLabor + parts + mileageCost + contractorExpenseTotal;
+                const totalCost  = actualCallCost;
                 const profit     = revenue - totalCost;
                 const margin     = revenue > 0 ? (profit / revenue) * 100 : 0;
                 const netProfit  = profit + seCompTotal;
