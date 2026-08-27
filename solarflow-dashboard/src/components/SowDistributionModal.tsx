@@ -326,6 +326,10 @@ export const SowDistributionModal: React.FC<Props> = ({
     return actualServiceCallCost(job, expenses);
   }, [job]);
 
+  // Mileage is reimbursed on Powercare only, at $0.54/mi. Already inside
+  // actualCost; surfaced here so the report shows WHY the total is what it is.
+  const powercareMiles = job.isPowercare ? (job.travelMiles || 0) : 0;
+
   return (
     <>
       {/* Injected print styles */}
@@ -405,7 +409,12 @@ export const SowDistributionModal: React.FC<Props> = ({
               {/* ── Actual Service Call Cost ──────────────────────────── */}
               <Section label="Actual Service Call Cost" icon={<DollarSign className="w-3.5 h-3.5" />}>
                 <div className="flex items-baseline justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                  <p className="text-xs text-slate-500">Labor, parts and logged expenses</p>
+                  <p className="text-xs text-slate-500">
+                    Labor, parts and logged expenses
+                    {powercareMiles > 0 && (
+                      <> · mileage {powercareMiles} mi × $0.54 = {formatCost(+(powercareMiles * 0.54).toFixed(2))}</>
+                    )}
+                  </p>
                   <p className="text-lg font-black text-slate-900 font-mono">{formatCost(actualCost)}</p>
                 </div>
               </Section>
