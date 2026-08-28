@@ -66,6 +66,7 @@ function badgeLabel(job: Job): string {
 import { ServiceOrderPanel } from './ServiceOrderPanel';
 import { LeadPanel } from './LeadPanel';
 import { leadToCustomer, formatImportedAt } from '../lib/leadConvert';
+import { claimClientNumber } from '../lib/clientRegistry';
 
 // Contractor workload buckets for the per-contractor filter summary. Uses the raw
 // `contractorJobStatus` (mirrored from the contractor portal) so "on route"
@@ -737,9 +738,30 @@ export const Jobs: React.FC<JobsProps> = ({
 
   // Convert a lead to a client: create the Customer from the lead's fields, link
   // it to the job, and advance the card to the first quote stage.
-  const handleConvertLead = (lead: Job) => {
-    const customerId = onCreateCustomer(leadToCustomer(lead));
-    onUpdateJob({ ...lead, customerId, leadInfo: undefined, pipelineStage: 'needs_first_quote', updatedAt: new Date().toISOString() });
+  // Converting a lead claims its US-1XXXX number in the client registry sheet
+  // (name written next to the number) before the Customer exists here, so the
+  // sheet stays the authority on the consecutive numbering. A failed registry
+  // write aborts the conversion: converting anyway would drift the two apart.
+  const handleConvertLead = async (lead: Job) => {
+    const payload = leadToCustomer(lead);
+    let clientId = lead.clientId;
+    try {
+      const reg = await claimClientNumber(payload.name ?? '', lead.clientId);
+      if (reg?.taken) {
+        const ok = window.confirm(
+          `${reg.clientId} is already assigned to "${reg.name}" in the client registry sheet.\n\n` +
+          `Convert this lead anyway, leaving the sheet unchanged?`
+        );
+        if (!ok) return;
+      } else if (reg) {
+        clientId = reg.clientId;
+      }
+    } catch (err) {
+      window.alert(`Could not update the client registry sheet:\n\n${(err as Error).message}\n\nNothing was converted. Try again.`);
+      return;
+    }
+    const customerId = onCreateCustomer({ ...payload, clientId });
+    onUpdateJob({ ...lead, clientId, customerId, leadInfo: undefined, pipelineStage: 'needs_first_quote', updatedAt: new Date().toISOString() });
     setLeadPanelJobId(null);
   };
 
