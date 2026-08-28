@@ -1570,6 +1570,18 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
     .filter(p => !isPdfAttachment(p) && (p.storageUrl || p.dataUrl))
     .map(p => ({ id: p.id, src: p.storageUrl || p.dataUrl, name: p.name }));
 
+  // PowerCare case # shown after the client name in the header. The RMA entries
+  // are the real source, but 0 of 16 live PowerCare jobs have one filled in, so
+  // fall back to the case # typed into the service report / notes.
+  // ponytail: drop the text fallback once case numbers are entered in the RMA
+  // modal, which is the only place that writes rmaEntries[].caseNumber.
+  const powercareCaseNo = useMemo(() => {
+    const fromRma = rmaEntries.find(e => (e.caseNumber ?? '').trim())?.caseNumber?.trim();
+    if (fromRma) return fromRma;
+    const text = `${job?.serviceReport ?? ''}\n${job?.notes ?? ''}`;
+    return text.match(/case\s*#?\s*:?\s*(\d{5,})/i)?.[1] ?? '';
+  }, [rmaEntries, job?.serviceReport, job?.notes]);
+
   const tabs = [
     { key: 'overview', label: 'Overview',        icon: <ClipboardList className="w-4 h-4" /> },
     { key: 'parts',    label: 'Parts & Labor',   icon: <Wrench className="w-4 h-4" /> },
@@ -1597,11 +1609,6 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
               <span className="text-xs font-mono text-slate-400 uppercase tracking-widest">
                 {job?.woNumber ? serviceOrderNo(job.woNumber) : 'New Service Order'}
               </span>
-              {clientId && (
-                <span className="px-2 py-0.5 bg-orange-500/20 text-orange-300 text-xs font-mono rounded">
-                  {clientId}
-                </span>
-              )}
               <WOStatusBadge status={woStatus} />
               {seSiteId && (
                 <a
@@ -1617,18 +1624,41 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                 </a>
               )}
             </div>
-            {onViewCustomer && siteId ? (
-              <button
-                type="button"
-                onClick={() => onViewCustomer(siteId)}
-                title="Open client card"
-                className="text-white font-semibold text-lg leading-snug truncate text-left hover:text-orange-300 hover:underline transition-colors"
-              >
-                {siteName}
-              </button>
-            ) : (
-              <p className="text-white font-semibold text-lg leading-snug truncate">{siteName}</p>
-            )}
+            {/* Code, name and PowerCare case # share one inline text run so a
+                single drag-select copies "US-15667 Todd Farley" in one go. The
+                explicit {' '} separators matter: JSX strips the newline between
+                elements, and a flex gap is not a character, so without them the
+                copied text comes out concatenated. */}
+            <div className="text-lg leading-snug truncate">
+              {clientId && (
+                <>
+                  <span className="font-mono font-semibold text-orange-300">{clientId}</span>{' '}
+                </>
+              )}
+              {onViewCustomer && siteId ? (
+                <button
+                  type="button"
+                  onClick={() => onViewCustomer(siteId)}
+                  title="Open client card"
+                  className="text-white font-semibold text-left hover:text-orange-300 hover:underline transition-colors align-baseline"
+                >
+                  {siteName}
+                </button>
+              ) : (
+                <span className="text-white font-semibold">{siteName}</span>
+              )}
+              {isPowercare && powercareCaseNo && (
+                <>
+                  {' '}
+                  <span
+                    title="PowerCare case number"
+                    className="font-mono text-sm text-emerald-300 whitespace-nowrap"
+                  >
+                    Case #{powercareCaseNo}
+                  </span>
+                </>
+              )}
+            </div>
             {normalizedSiteAddress && (
               <a
                 href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(normalizedSiteAddress)}`}
