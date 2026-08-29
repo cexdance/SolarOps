@@ -17,7 +17,7 @@ import JobMapView from './views/JobMapView';
 import { ViewJob, ViewJobPriority } from './views/jobViewTypes';
 import {
   Job, Customer, User as UserType, JobStatus, UrgencyLevel, WO_TO_JOB_STATUS, WOStatus,
-  PipelineStage, PIPELINE_STAGES, PIPELINE_STAGE_LABEL,
+  PipelineStage, PIPELINE_STAGES, PIPELINE_STAGE_LABEL, WOLineItem,
 } from '../types';
 
 // Map UrgencyLevel onto the shared map-view priority palette.
@@ -761,7 +761,32 @@ export const Jobs: React.FC<JobsProps> = ({
       return;
     }
     const customerId = onCreateCustomer({ ...payload, clientId });
-    onUpdateJob({ ...lead, clientId, customerId, leadInfo: undefined, pipelineStage: 'needs_first_quote', updatedAt: new Date().toISOString() });
+    // A converted lead starts as a site transfer: the SolarEdge ownership move is
+    // the first thing we do for a new client. Flat $120, no field work.
+    // ponytail: the rate lives in contractorStore (sr-20); duplicated here so the
+    // conversion doesn't need the catalog loaded. Read the catalog if it ever moves.
+    onUpdateJob({
+      ...lead,
+      clientId,
+      customerId,
+      solarEdgeClientId: clientId,
+      leadInfo: undefined,
+      pipelineStage: 'needs_first_quote',
+      serviceCode: 'SITE-TRX',
+      serviceType: 'Site Transfer',
+      quoteAmount: 120,
+      lineItems: (lead.lineItems ?? []).some(li => li.description.toLowerCase().includes('site transfer'))
+        ? lead.lineItems
+        : [...(lead.lineItems ?? []), {
+            id: `li-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            type: 'other' as WOLineItem['type'],
+            description: 'Site Transfer, SolarEdge ownership transfer (admin agentic workflow)',
+            quantity: 1,
+            unitCost: 120,
+            totalCost: 120,
+          }],
+      updatedAt: new Date().toISOString(),
+    });
     setLeadPanelJobId(null);
   };
 
