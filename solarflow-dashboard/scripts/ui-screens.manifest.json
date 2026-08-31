@@ -184,6 +184,14 @@
       "detail": "contractor/RateManagement. Rate cards per service type."
     },
     {
+      "id": "messages",
+      "view": "messages",
+      "group": "admin",
+      "title": "Messages (Internal Messenger)",
+      "purpose": "Staff-to-staff direct messages plus the @mentions inbox, in one From -> To rail.",
+      "notes": "Left rail lists every staff teammate with unread counts, plus a pinned Mentions row fed by mentionsStore. Right pane is the selected thread with a composer (Enter sends, Shift+Enter newlines). Backed by public.messages over Supabase Realtime."
+    },
+    {
       "id": "contractors",
       "group": "admin",
       "title": "Contractors",
