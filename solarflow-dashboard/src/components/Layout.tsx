@@ -30,6 +30,7 @@ import {
   RefreshCw,
   CheckCircle2,
   RotateCcw,
+  MessageSquare,
 } from 'lucide-react';
 import { User as UserType, AppNotification, Customer, Job } from '../types';
 
@@ -85,6 +86,7 @@ const allNavItems = [
   { id: 'billing',            label: 'Billing',            icon: Receipt,         badge: 'unbilled', roles: ['admin'] },
   { id: 'contractor-billing', label: 'Contractor Pay',     icon: DollarSign,      indent: true, parent: 'billing', roles: ['admin'] },
   { id: 'rates',              label: 'Service Rates',      icon: DollarSign,      indent: true, parent: 'billing', roles: ['admin'] },
+  { id: 'messages',           label: 'Messages',           icon: MessageSquare,                    roles: ['admin', 'coo', 'technician', 'support', 'sales'] },
   { id: 'contractors',        label: 'Contractors',        icon: UserCog,                          roles: ['admin', 'coo', 'support'] },
   { id: 'projects',           label: 'New Install',        icon: HardHat,                          roles: ['admin', 'coo', 'support'] },
   { id: 'inventory',          label: 'Inventory',          icon: Package,                          roles: ['admin', 'coo', 'support'] },

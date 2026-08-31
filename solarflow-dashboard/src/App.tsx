@@ -28,6 +28,7 @@ const SolarProjects      = lazy(() => import('./components/SolarProjects').then(
 const CRMDashboard       = lazy(() => import('./components/CRMDashboard').then(m => ({ default: m.CRMDashboard })));
 const CustomerManagement = lazy(() => import('./components/CustomerManagement').then(m => ({ default: m.CustomerManagement })));
 const Operations         = lazy(() => import('./components/Operations'));
+const Messenger          = lazy(() => import('./components/Messenger').then(m => ({ default: m.Messenger })));
 const SolarEdgeMonitoring = lazy(() => import('./components/SolarEdgeMonitoring').then(m => ({ default: m.SolarEdgeMonitoring })));
 const DispatchDashboard  = lazy(() => import('./components/DispatchDashboard').then(m => ({ default: m.DispatchDashboard })));
 const DispatchMap        = lazy(() => import('./components/DispatchMap'));
@@ -3367,6 +3368,16 @@ function App() {
             contractors={contractors}
             onOpenJob={(jobId) => handleViewChange('jobDetail', jobId)}
             onAssign={handleAssignJobsToContractor}
+          />
+        );
+
+      case 'messages':
+        return (
+          <Messenger
+            currentUser={currentUser}
+            users={data.users}
+            onOpenCustomer={(customerId) => { setSelectedCustomerId(customerId); setCurrentView('customers'); }}
+            onOpenWorkOrder={(jobId) => handleViewChange('jobDetail', jobId)}
           />
         );
 
