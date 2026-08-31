@@ -1,15 +1,19 @@
-// MentionsWidget, Ops Center widget showing @mentions for the current user
-// Reads from mentionsStore. Auto-refreshes on mentions-updated event.
+// MentionsWidget, Ops Center widget showing @mentions for the current user.
+// Mentions are derived from the server-backed `notifications` App already
+// fetches, polls and realtime-subscribes, so this stays live with no store.
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { AtSign, Check, ExternalLink, Search, X, Wrench, User as UserIcon, FileText } from 'lucide-react';
-import { getMentionsFor, markRead, markAllRead, MentionRecord } from '../lib/mentionsStore';
+import { getMentionsFor, MentionRecord } from '../lib/mentionsStore';
 import { Avatar } from './ui/Avatar';
-import { User } from '../types';
+import { User, AppNotification } from '../types';
 
 interface Props {
   userId: string;
   users: User[];
+  notifications: AppNotification[];
+  onMarkRead: (notificationId: string) => void;
+  onMarkAllRead: () => void;
   onOpenCustomer?: (customerId: string) => void;
   onOpenWorkOrder?: (jobId: string) => void;
 }
@@ -26,22 +30,11 @@ function relTime(iso: string): string {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-export const MentionsWidget: React.FC<Props> = ({ userId, users, onOpenCustomer, onOpenWorkOrder }) => {
-  const [tick, setTick] = useState(0);
+export const MentionsWidget: React.FC<Props> = ({ userId, users, notifications, onMarkRead, onMarkAllRead, onOpenCustomer, onOpenWorkOrder }) => {
   const [filter, setFilter] = useState<'unread' | 'all'>('unread');
   const [query, setQuery] = useState('');
 
-  useEffect(() => {
-    const refresh = () => setTick(t => t + 1);
-    window.addEventListener('solarops:mentions-updated', refresh);
-    window.addEventListener('storage', refresh);
-    return () => {
-      window.removeEventListener('solarops:mentions-updated', refresh);
-      window.removeEventListener('storage', refresh);
-    };
-  }, []);
-
-  const all = useMemo(() => getMentionsFor(userId), [userId, tick]);
+  const all = useMemo(() => getMentionsFor(notifications, userId), [notifications, userId]);
   const q = query.trim().toLowerCase();
   const visible = all
     .filter(m => (filter === 'unread' ? !m.read : true))
@@ -52,7 +45,7 @@ export const MentionsWidget: React.FC<Props> = ({ userId, users, onOpenCustomer,
   const unreadCount = all.filter(m => !m.read).length;
 
   const handleOpen = (m: MentionRecord) => {
-    markRead(m.id);
+    onMarkRead(m.id);
     // Anchor first, then navigate: ActivityFeed reads the hash as it renders and
     // scrolls to that exact comment. Same convention as the notification bell.
     if (m.activityId) window.location.hash = `activity-${m.activityId}`;
@@ -168,7 +161,7 @@ export const MentionsWidget: React.FC<Props> = ({ userId, users, onOpenCustomer,
       {/* Footer */}
       {unreadCount > 0 && (
         <button
-          onClick={() => markAllRead(userId)}
+          onClick={onMarkAllRead}
           className="mt-2 flex items-center justify-center gap-1.5 w-full py-1.5 text-xs text-slate-500 hover:text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors flex-shrink-0"
         >
           <Check className="w-3 h-3" />

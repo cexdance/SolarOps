@@ -44,7 +44,7 @@ import { formatCost } from './lib/money';
 import { logChange, logJobChange, flushChangeLog } from './lib/changeLog';
 import { notifyContractorPaid } from './lib/contractorPaidNotify';
 import { autoArchiveCompletedJobs, stampJobFields } from './lib/jobService';
-import { fetchMyNotifications, markNotificationReadRemote, markAllNotificationsReadRemote, startNotificationPolling, stopNotificationPolling, subscribeToNotifications, unsubscribeFromNotifications } from './lib/notifications';
+import { fetchMyNotifications, markNotificationReadRemote, markAllNotificationsReadRemote, markAllMentionsReadRemote, startNotificationPolling, stopNotificationPolling, subscribeToNotifications, unsubscribeFromNotifications } from './lib/notifications';
 import { processBillingTimers } from './lib/billingService';
 import { loadContractors, saveContractors, loadServiceRates, saveServiceRates, loadContractorJobs, saveContractorJobs, initializeContractorData, findInviteByToken, MIRRORED_KEYS } from './lib/contractorStore';
 import { hydrateKVMirror } from './lib/stateStore';
@@ -1359,6 +1359,16 @@ function App() {
       notifications: prev.notifications.map(n => ({ ...n, read: true })),
     }));
     markAllNotificationsReadRemote().catch((e) => console.error('[App] markAllNotificationsReadRemote failed', e));
+  };
+
+  // Scoped to mentions so clearing the mentions inbox leaves the rest of the
+  // bell alone. handleMarkAllNotificationsRead clears every type.
+  const handleMarkAllMentionsRead = () => {
+    setData(prev => ({
+      ...prev,
+      notifications: prev.notifications.map(n => n.type === 'mention' ? { ...n, read: true } : n),
+    }));
+    markAllMentionsReadRemote().catch((e) => console.error('[App] markAllMentionsReadRemote failed', e));
   };
 
   // Merge Supabase notifications into local state (dedup by id)
@@ -3346,6 +3356,9 @@ function App() {
       case 'dispatch':
         return (
           <DispatchDashboard
+            notifications={data.notifications}
+            onMarkMentionRead={handleMarkNotificationRead}
+            onMarkAllMentionsRead={handleMarkAllMentionsRead}
             customers={data.customers}
             jobs={data.jobs}
             contractors={contractors}
@@ -3376,6 +3389,9 @@ function App() {
           <Messenger
             currentUser={currentUser}
             users={data.users}
+            notifications={data.notifications}
+            onMarkMentionRead={handleMarkNotificationRead}
+            onMarkAllMentionsRead={handleMarkAllMentionsRead}
             onOpenCustomer={(customerId) => { setSelectedCustomerId(customerId); setCurrentView('customers'); }}
             onOpenWorkOrder={(jobId) => handleViewChange('jobDetail', jobId)}
           />

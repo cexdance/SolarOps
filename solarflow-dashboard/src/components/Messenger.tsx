@@ -1,7 +1,8 @@
 // Messenger, internal staff direct messages plus the @mentions inbox.
 //
 // Left rail is the From -> To list: one row per person you have a conversation
-// with, plus a pinned "Mentions" row fed by mentionsStore. Right pane is the
+// with, plus a pinned "Mentions" row fed by the server-backed notifications
+// App already polls and realtime-subscribes. Right pane is the
 // selected thread.
 //
 // ponytail: no group threads, no typing indicators, no attachments, no search
@@ -10,16 +11,19 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { AtSign, Send, MessageSquare, Search, ExternalLink, Wrench, User as UserIcon, FileText } from 'lucide-react';
 import { Avatar } from './ui/Avatar';
-import { User } from '../types';
+import { User, AppNotification } from '../types';
 import {
   Message, fetchMyMessages, sendMessage, markThreadRead,
   subscribeToMessages, unsubscribeFromMessages,
 } from '../lib/messenger';
-import { getMentionsFor, markRead, markAllRead, MentionRecord } from '../lib/mentionsStore';
+import { getMentionsFor, MentionRecord } from '../lib/mentionsStore';
 
 interface Props {
   currentUser: User | null;
   users: User[];
+  notifications: AppNotification[];
+  onMarkMentionRead: (notificationId: string) => void;
+  onMarkAllMentionsRead: () => void;
   onOpenCustomer?: (customerId: string) => void;
   onOpenWorkOrder?: (jobId: string) => void;
 }
@@ -44,13 +48,12 @@ function relTime(iso: string): string {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-export const Messenger: React.FC<Props> = ({ currentUser, users, onOpenCustomer, onOpenWorkOrder }) => {
+export const Messenger: React.FC<Props> = ({ currentUser, users, notifications, onMarkMentionRead, onMarkAllMentionsRead, onOpenCustomer, onOpenWorkOrder }) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [selected, setSelected] = useState<string>(MENTIONS);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const [query, setQuery] = useState('');
-  const [tick, setTick] = useState(0);
   const endRef = useRef<HTMLDivElement>(null);
 
   // currentUser is null for the first render or two after a reload while the
@@ -69,18 +72,10 @@ export const Messenger: React.FC<Props> = ({ currentUser, users, onOpenCustomer,
     return () => { live = false; unsubscribeFromMessages(); };
   }, [uid]);
 
-  // Mentions store is local + event-driven (see MentionsWidget)
-  useEffect(() => {
-    const refresh = () => setTick(t => t + 1);
-    window.addEventListener('solarops:mentions-updated', refresh);
-    window.addEventListener('storage', refresh);
-    return () => {
-      window.removeEventListener('solarops:mentions-updated', refresh);
-      window.removeEventListener('storage', refresh);
-    };
-  }, []);
-
-  const mentions = useMemo(() => (uid ? getMentionsFor(uid) : []), [uid, tick]);
+  const mentions = useMemo(
+    () => (uid ? getMentionsFor(notifications, uid) : []),
+    [notifications, uid],
+  );
   const mentionUnread = mentions.filter(m => !m.read).length;
 
   /** Who the message is with, from my point of view. */
@@ -141,7 +136,7 @@ export const Messenger: React.FC<Props> = ({ currentUser, users, onOpenCustomer,
   };
 
   const openMention = (m: MentionRecord) => {
-    markRead(m.id);
+    onMarkMentionRead(m.id);
     if (m.activityId) window.location.hash = `activity-${m.activityId}`;
     if (m.sourceType === 'customer') onOpenCustomer?.(m.sourceId);
     else if (m.sourceType === 'workOrder') onOpenWorkOrder?.(m.sourceId);
@@ -236,7 +231,7 @@ export const Messenger: React.FC<Props> = ({ currentUser, users, onOpenCustomer,
               </div>
               {mentionUnread > 0 && (
                 <button
-                  onClick={() => markAllRead(uid)}
+                  onClick={onMarkAllMentionsRead}
                   className="text-xs text-slate-500 hover:text-slate-700 border border-slate-200 rounded-lg px-2 py-1 hover:bg-slate-50"
                 >
                   Mark all read

@@ -82,6 +82,26 @@ export async function markAllNotificationsReadRemote(): Promise<void> {
   }
 }
 
+/**
+ * Mark every unread @mention read for the current user. Scoped to `type`
+ * so clearing the mentions inbox does not also clear the rest of the bell.
+ */
+export async function markAllMentionsReadRemote(): Promise<void> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) return;
+
+    await supabase
+      .from('notifications')
+      .update({ read: true })
+      .eq('user_id', session.user.id)
+      .eq('type', 'mention')
+      .eq('read', false);
+  } catch {
+    // silently ignore
+  }
+}
+
 // ── Realtime subscription ─────────────────────────────────────────────────────
 
 let _realtimeChannel: ReturnType<typeof supabase.channel> | null = null;

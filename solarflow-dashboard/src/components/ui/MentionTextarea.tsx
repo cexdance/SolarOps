@@ -318,20 +318,10 @@ export async function fireMentionNotifications(opts: {
   activityId?: string;
 }): Promise<void> {
   if (opts.mentionedUserIds.length === 0 && (!opts.mentionedUserEmails || opts.mentionedUserEmails.length === 0)) return;
-  try {
-    const { addMentions } = await import('../../lib/mentionsStore');
-    const snippet = opts.message.length > 240 ? opts.message.slice(0, 237) + '...' : opts.message;
-    addMentions(opts.mentionedUserIds.map(uid => ({
-      userId:        uid,
-      notifierName:  opts.notifierName,
-      sourceType:    opts.contextType,
-      sourceId:      opts.contextId,
-      activityId:    opts.activityId,
-      sourceLabel:   opts.context,
-      snippet,
-      createdAt:     new Date().toISOString(),
-    })));
-  } catch {/* ignore */}
+  // No local write. This used to also push into a localStorage mentions array,
+  // but it ran in the NOTIFIER's browser keyed by the RECIPIENT's id, so the
+  // mentioned person never had it on their own device. /api/notify writes the
+  // `notifications` row, which is what the inbox actually reads.
   try {
     const { supabase } = await import('../../lib/supabase');
     const { data: { session } } = await supabase.auth.getSession();

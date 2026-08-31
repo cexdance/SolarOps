@@ -52,6 +52,9 @@ interface DispatchDashboardProps {
   users: import('../types').User[];
   isMobile: boolean;
   currentUserId: string;
+  notifications: import('../types').AppNotification[];
+  onMarkMentionRead: (notificationId: string) => void;
+  onMarkAllMentionsRead: () => void;
   onViewCustomer: (customerId: string) => void;
   onViewChange: (view: string, id?: string) => void;
 }
@@ -1475,6 +1478,9 @@ const WidgetSlot: React.FC<{
   onRemove: (index: number) => void;
   editMode: boolean;
   currentUserId: string;
+  notifications: import('../types').AppNotification[];
+  onMarkMentionRead: (notificationId: string) => void;
+  onMarkAllMentionsRead: () => void;
   isDragOver: boolean;
   onDragStart: (index: number) => void;
   onDragOver: (e: React.DragEvent, index: number) => void;
@@ -1482,7 +1488,7 @@ const WidgetSlot: React.FC<{
   onDrop: (index: number) => void;
   onViewCustomer: (id: string) => void;
   onViewChange: (view: string, id?: string) => void;
-}> = ({ config, index, customers, jobs, contractors, users, onOpenAdd, onRemove, currentUserId, isDragOver, onDragStart, onDragOver, onDragLeave, onDrop, onViewCustomer, onViewChange }) => {
+}> = ({ config, index, customers, jobs, contractors, users, onOpenAdd, onRemove, currentUserId, notifications, onMarkMentionRead, onMarkAllMentionsRead, isDragOver, onDragStart, onDragOver, onDragLeave, onDrop, onViewCustomer, onViewChange }) => {
   if (!config) {
     return (
       <div
@@ -1552,7 +1558,7 @@ const WidgetSlot: React.FC<{
         {config.type === 'lead-pipeline'          && <LeadPipelineWidget />}
         {config.type === 'single-lead'            && config.leadId       && <SingleLeadWidget leadId={config.leadId} />}
         {config.type === 'todo-list'              && <TodoListWidget userId={currentUserId} customers={customers} onViewCustomer={onViewCustomer} />}
-        {config.type === 'mentions'               && <MentionsWidget userId={currentUserId} users={users} onOpenCustomer={onViewCustomer} onOpenWorkOrder={(jobId) => onViewChange?.('jobDetail', jobId)} />}
+        {config.type === 'mentions'               && <MentionsWidget userId={currentUserId} users={users} notifications={notifications} onMarkRead={onMarkMentionRead} onMarkAllRead={onMarkAllMentionsRead} onOpenCustomer={onViewCustomer} onOpenWorkOrder={(jobId) => onViewChange?.('jobDetail', jobId)} />}
         {config.type === 'address-cleanup'        && <AddressCleanupWidget userName={users.find(u => u.id === currentUserId)?.name || 'Unknown'} onViewCustomer={onViewCustomer} />}
         {config.type === 'deep-sync-metrics'      && <DeepSyncMetricsWidget userName={users.find(u => u.id === currentUserId)?.name || 'Unknown'} />}
       </WidgetErrorBoundary>
@@ -1562,7 +1568,7 @@ const WidgetSlot: React.FC<{
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 
-export const DispatchDashboard: React.FC<DispatchDashboardProps> = ({ customers, jobs, contractors, users, isMobile, currentUserId, onViewCustomer, onViewChange }) => {
+export const DispatchDashboard: React.FC<DispatchDashboardProps> = ({ customers, jobs, contractors, users, isMobile, currentUserId, notifications, onMarkMentionRead, onMarkAllMentionsRead, onViewCustomer, onViewChange }) => {
   const [layout,       setLayout]      = useState<(WidgetConfig | null)[]>(loadLayout);
   const [editMode,     setEditMode]    = useState(false);
   const [addSlot,      setAddSlot]     = useState<number | null>(null);
@@ -1737,6 +1743,9 @@ export const DispatchDashboard: React.FC<DispatchDashboardProps> = ({ customers,
               onRemove={handleRemove}
               editMode={editMode}
               currentUserId={currentUserId}
+              notifications={notifications}
+              onMarkMentionRead={onMarkMentionRead}
+              onMarkAllMentionsRead={onMarkAllMentionsRead}
               isDragOver={dragOverIdx === i}
               onDragStart={handleDragStart}
               onDragOver={handleDragOver}
