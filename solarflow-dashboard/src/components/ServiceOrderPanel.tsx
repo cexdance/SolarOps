@@ -1636,11 +1636,18 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                 </>
               )}
               {onViewCustomer && siteId ? (
+                /* Drag-selecting the name to copy it used to open the client card
+                   on mouse-up, and a button blocks selection outright in most
+                   engines, hence select-text. If the drag produced a selection,
+                   the user was copying, not navigating. */
                 <button
                   type="button"
-                  onClick={() => onViewCustomer(siteId)}
+                  onClick={() => {
+                    if ((window.getSelection()?.toString() ?? '').trim()) return;
+                    onViewCustomer(siteId);
+                  }}
                   title="Open client card"
-                  className="text-white font-semibold text-left hover:text-orange-300 hover:underline transition-colors align-baseline"
+                  className="select-text text-white font-semibold text-left hover:text-orange-300 hover:underline transition-colors align-baseline"
                 >
                   {siteName}
                 </button>
