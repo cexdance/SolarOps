@@ -23,6 +23,10 @@ export const LABEL_CATALOG: JobLabel[] = [
   { name: 'Needs Scheduling',               color: 'red_light' },
   { name: 'Needs Report',                   color: 'pink_dark' },
   { name: 'Powercare Report Sent',          color: 'pink' },
+  // Both exist on the Trello board but were missing here, so they could arrive
+  // by mirror yet never be picked or re-applied from the app.
+  { name: 'Lost to competition',            color: 'red' },
+  { name: 'Vm+txt',                         color: 'purple' },
   { name: 'Completed/Did not proceed.',     color: '' },
 ];
 

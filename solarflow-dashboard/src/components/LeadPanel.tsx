@@ -9,6 +9,7 @@ import type { Job, LeadInfo, Activity } from '../types';
 import { seedLeadInfo, leadDisplayName, formatImportedAt } from '../lib/leadConvert';
 import { rcCall, rcSMS } from '../lib/ringcentral';
 import { LabelPicker } from './LabelPicker';
+import { pushLabelsToTrello } from '../lib/trelloLabelSync';
 
 interface LeadPanelProps {
   job: Job;
@@ -94,7 +95,10 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({ job, currentUserName, onSa
 
         <div className="p-4 space-y-4">
           {/* Labels (also render as chips on the kanban card) */}
-          <LabelPicker value={job.labels ?? []} onChange={labels => onSave({ labels })} />
+          <LabelPicker
+            value={job.labels ?? []}
+            onChange={labels => { onSave({ labels }); pushLabelsToTrello(job, labels); }}
+          />
 
           {/* Contact info */}
           <div className="space-y-3">

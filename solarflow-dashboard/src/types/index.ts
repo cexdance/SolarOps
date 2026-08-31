@@ -158,6 +158,11 @@ export const PIPELINE_STAGES = [
   'email_follow_up',
   'closed_won',
   'closed_archived',
+  // Mirrors the Trello list of the same name, added to the board ~2026-08-29.
+  // Placed last, not first: Trello has it at position 0, which is why cards
+  // kept landing in it by accident, and repeating that ordering here would put
+  // a dead-end column in front of the funnel on the LL board too.
+  'lost_to_competition',
 ] as const;
 
 export type PipelineStage = typeof PIPELINE_STAGES[number];
@@ -176,6 +181,7 @@ export const PIPELINE_STAGE_LABEL: Record<PipelineStage, string> = {
   email_follow_up:           'Email Marketing Follow-Up',
   closed_won:                'Closed - Won',
   closed_archived:           'Closed - Archived',
+  lost_to_competition:       'Lost to Competition',
 };
 
 /** A Trello-style label chip mirrored onto a Job so the LL board reads like Trello.

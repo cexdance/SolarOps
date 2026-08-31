@@ -112,6 +112,13 @@ export function verifyTrelloSignature(rawBody: string, callbackUrl: string, head
 // state's board+list once its board exists, rather than one hardcoded pair.
 const TARGET_LISTS: { boardId: string; listId: string; label: string }[] = [
   { boardId: '6a5a58e06fbf97144b5d96c9', listId: '6a5a58e06fbf97144b5d96be', label: 'FL: Leads Services SolarEdge' },
+  // Added 2026-08-31. This list was created ~08-29 at position 0 of the board,
+  // so Trello's "Add a card" default put every new card here instead of in
+  // "Leads Services SolarEdge", and 5 leads never reached LL at all: the
+  // webhook fired, matchTargetList found nothing, and backfillLeadJob no-oped
+  // on a job that had never been created. Importing from it is the fix the
+  // user chose over reordering the board.
+  { boardId: '6a5a58e06fbf97144b5d96c9', listId: '6a921054f4c77bfac810188f', label: 'FL: LOST TO COMPETITION' },
 ];
 
 /**
@@ -127,6 +134,7 @@ const TARGET_LISTS: { boardId: string; listId: string; label: string }[] = [
  * scramble the rest at any time.
  */
 const LIST_STAGES: Record<string, string> = {
+  '6a921054f4c77bfac810188f': 'lost_to_competition',       // LOST TO COMPETITION
   '6a5a58e06fbf97144b5d96be': 'leads',                     // Leads Services SolarEdge
   '6a5a58e06fbf97144b5d96c2': 'needs_first_quote',         // Needs First Time Quoting/Invoicing
   '6a5a58e06fbf97144b5d96bf': 'first_quote_in_progress',   // First Time Quote/Invoice In Progress
@@ -282,6 +290,31 @@ export function toJobLabels(labels: TrelloLabel[] | undefined): { name: string; 
     .map(l => ({ name: (l.name as string).trim(), color: l.color ?? '' }));
 }
 
+/**
+ * Match key for a label name. MUST stay identical to labelKey() in
+ * solarflow-dashboard/src/lib/labelCatalog.ts.
+ *
+ * The dash class is not cosmetic. The live board spells one label
+ * "First Contact – Call Completed" with an EN DASH while LABEL_CATALOG spells
+ * it with a hyphen. Compared raw, the app and Trello would each see the other's
+ * spelling as a label the other is missing, and every mirror in one direction
+ * would trigger a mirror back in the other, forever. Normalizing makes the
+ * second round a no-op, which is what actually stops the echo.
+ */
+export function labelKey(name: string): string {
+  return name.toLowerCase().replace(/[‒-―]/g, '-').replace(/\s+/g, ' ').trim();
+}
+
+/** Set equality by normalized name. Order and colour are not part of identity. */
+export function sameLabelSet(
+  a: { name: string }[],
+  b: { name: string }[],
+): boolean {
+  const ka = new Set(a.map(l => labelKey(l.name)));
+  const kb = new Set(b.map(l => labelKey(l.name)));
+  return ka.size === kb.size && [...ka].every(k => kb.has(k));
+}
+
 const IMG_EXT_RE = /\.(jpe?g|png|gif|webp)$/i;
 
 /**
@@ -384,24 +417,41 @@ const BACKFILL_ACTIONS = new Set([
 ]);
 
 /**
- * TRELLO IS INTAKE ONLY. THE APP OWNS THE RECORD. (user decision, 2026-08-23)
+ * TRELLO MIRRORS THE BOARD. (user decision, 2026-08-31, revising 2026-08-23)
  *
- * Trello is where a lead arrives, nothing more. Once it is on the LL board the
- * office works it in the app, so nothing arriving from Trello may ever overwrite
- * a value the app holds:
+ * The 08-23 rule was "Trello is intake only, the app owns the record": nothing
+ * arriving from Trello could ever change a value the app held. That rule
+ * assumed two populations editing two boards. Today one person works both, so
+ * the divergence it prevented is not the divergence they actually hit, which is
+ * "I moved the card in Trello and LL still shows the old column".
  *
- *   - `pipelineStage`  NEVER touched after create. The app owns the column.
- *   - `labels`         union-ADD only, and only while the card is still at the
- *                      intake stage. Never removes, never reorders.
- *   - name/leadInfo/notes  filled ONLY where the job's own value is empty or is
- *                      still the create-time placeholder. Completing an
- *                      incomplete import is not an override.
+ * So `pipelineStage` and `labels` are now MIRRORED from Trello, and labels are
+ * pushed back the other way (see the PATCH branch). What is mirrored, and what
+ * is still intake-only:
+ *
+ *   - `pipelineStage`  mirrored, but ONLY on an actual list move (an updateCard
+ *                      carrying `listAfter`). Deliberately not on every event:
+ *                      a comment or an attachment must never drag a card back
+ *                      to whatever column Trello happens to have it in.
+ *   - `labels`         mirrored as a WHOLE SET, so a label removed in Trello is
+ *                      removed here. This is the direction that replaced the
+ *                      old union-add; the app->Trello direction is the PATCH
+ *                      branch, and the two converge because the mirror is
+ *                      idempotent (an echo produces no change, so no write).
+ *   - name/leadInfo/notes  UNCHANGED, still filled ONLY where the job's value
+ *                      is empty or is still the create-time placeholder.
+ *                      Completing an incomplete import is not an override, and
+ *                      a phone number corrected by hand must still survive.
  *
  * The empty-only rule matters because Trello fires createCard BEFORE it finishes
  * writing the description and uploading the attachment (measured: +1s typically,
  * +82min when a human drops the screenshot later), so the create-time import
  * often sees a bare "image.jpeg" card. The later events finish that job, and
  * only that job.
+ *
+ * ponytail: mirroring is last-writer-wins with no vector clock. That is correct
+ * for one operator and wrong for a team; when the intern lands, the upgrade is
+ * to compare the card's dateLastActivity against job.updatedAt before writing.
  */
 const INTAKE_STAGE = 'leads';
 
@@ -423,6 +473,8 @@ async function backfillLeadJob(
     labels?: { name: string; color: string }[];
     notes: string;
     description: string;
+    /** Set ONLY when this event was a real list move, see mirrorStage below. */
+    stage?: string;
   },
   now: string,
 ): Promise<void> {
@@ -446,20 +498,19 @@ async function backfillLeadJob(
     if (!info[k]) { info[k] = v; infoChanged = true; }
   }
 
-  // Labels: union-ADD, and only while the card is still at intake. A label the
-  // intake person adds seconds after creating the card still lands, but nothing
-  // Trello says can remove or reorder a label once the office is working the
-  // lead in the app. Deliberately NOT a whole-set replace: that would let a
-  // stale Trello card revert the app's own labels. See INTAKE_STAGE.
-  const atIntake = job.pipelineStage === INTAKE_STAGE;
+  // Labels: WHOLE-SET mirror of the card (2026-08-31, was union-add-at-intake).
+  // Removing a label in Trello now removes it here, which is the whole point of
+  // making the two boards one board. `syncLabels` undefined means the fetch did
+  // not report labels at all, which is not the same claim as "this card has no
+  // labels", so that case leaves the job alone rather than wiping it.
   const existing: { name: string; color: string }[] = Array.isArray(job.labels) ? job.labels : [];
-  const added = (atIntake && syncLabels ? syncLabels : [])
-    .filter(l => !existing.some((e) => e.name === l.name));
-  const labelsChanged = added.length > 0;
+  const mirrored = syncLabels ?? existing;
+  const labelsChanged = !sameLabelSet(existing, mirrored);
 
-  // pipelineStage is NOT reconciled here on purpose: the app owns the column.
-  // (This previously mirrored the Trello list, which was correct while Trello
-  // was the system of record. It no longer is.)
+  // pipelineStage: mirrored, but only when the caller proved this event was an
+  // actual list move. An undefined stage is "this event says nothing about the
+  // column", not "move it to the default", so it never writes.
+  const stageChanged = !!card.stage && card.stage !== job.pipelineStage;
 
   // Repair the create-time placeholder note, which loses the real lead text, the
   // contact block, the Contract Name and the HS_ID when the desc lands after
@@ -469,12 +520,13 @@ async function backfillLeadJob(
   const notesChanged = notePlaceholder && card.notes.trim() !== String(job.notes ?? '').trim()
     && !/^Auto-imported from Trello card "[^"]*"/.test(card.notes.trim());
 
-  if (!nameChanged && !infoChanged && !labelsChanged && !notesChanged) return;
+  if (!nameChanged && !infoChanged && !labelsChanged && !notesChanged && !stageChanged) return;
 
   if (isPlaceholder(job.clientName)) job.clientName = displayName;
   if (isPlaceholder(job.title)) job.title = displayName;
   if (infoChanged) job.leadInfo = info;
-  if (labelsChanged) job.labels = [...existing, ...added];
+  if (labelsChanged) job.labels = mirrored;
+  if (stageChanged) job.pipelineStage = card.stage;
   if (notesChanged) { job.notes = card.notes; job.description = card.description; }
   job.updatedAt = now;
 
@@ -854,12 +906,19 @@ async function handleLeadImportWebhook(req: VercelRequest, res: VercelResponse) 
     // as it stands right now. Self-guards to a no-op if the job is absent, never
     // creates, and never overwrites a value the team already set by hand.
     if (!target) {
+      // Only a real list move carries listAfter, and only a real list move is
+      // allowed to set the column. Read the stage from the id Trello reported
+      // moving the card INTO, never from card.idList: by the time we fetched
+      // the card it may already have been dragged again, and mirroring that
+      // would silently apply a move this event never described.
+      const movedTo = action.type === 'updateCard' ? action.data?.listAfter?.id : undefined;
       await backfillLeadJob(jobId, displayName, leadInfoFields, {
         labels: cardLabels,
         notes: fullNotes,
         description: cardNote,
+        stage: stageForList(movedTo),
       }, now);
-      console.info(`[trello-webhook] backfill ${action.type}: job ${jobId} (${displayName})`);
+      console.info(`[trello-webhook] backfill ${action.type}: job ${jobId} (${displayName})${movedTo ? ` moved to ${stageForList(movedTo) ?? 'untracked list'}` : ''}`);
       return res.status(200).json({ job: { id: jobId, result: 'backfilled' } });
     }
 
@@ -902,6 +961,23 @@ async function handleLeadImportWebhook(req: VercelRequest, res: VercelResponse) 
 
     const jobResult = await upsertLeadJob(jobId, job, now);
 
+    // A move INTO a tracked list is BOTH a target match and a list move, and
+    // upsertLeadJob is create-if-absent, so on 'exists' it writes nothing at
+    // all. Without this the most ordinary action there is, dragging a lead the
+    // app already knows about into "LOST TO COMPETITION", would leave LL
+    // sitting on the old column. Reconcile through the same backfill the
+    // untracked-list moves use, so there is one mirror, not two.
+    if (jobResult === 'exists') {
+      await backfillLeadJob(jobId, displayName, leadInfoFields, {
+        labels: cardLabels,
+        notes: fullNotes,
+        description: cardNote,
+        // The list the EVENT landed the card in, not card.idList, for the same
+        // reason as the untracked branch above.
+        stage: stageForList(target.listId),
+      }, now);
+    }
+
     // Only on a genuinely new lead. 'exists' means a redelivery or a card dragged
     // out of the list and back, and re-pinging the office for those would train
     // everyone to ignore the bell. Never allowed to fail the import.
@@ -919,6 +995,118 @@ async function handleLeadImportWebhook(req: VercelRequest, res: VercelResponse) 
   }
 }
 
+// ── App -> Trello label push (PATCH branch) ─────────────────────────────────
+
+/**
+ * Set a card's labels to exactly `names`, creating any the board lacks.
+ *
+ * Trello's card-label API is id-based and the app stores names, so this
+ * resolves through the board's label list. Matching is by labelKey, not raw
+ * name, or "First Contact - Call Completed" would be created a second time
+ * next to the board's existing en-dash spelling.
+ *
+ * ponytail: the board's labels are re-fetched per call. One extra request on a
+ * click a human made; cache it if the intern ever makes this hot.
+ */
+async function setCardLabels(
+  cardId: string,
+  boardId: string,
+  labels: { name: string; color: string }[],
+): Promise<{ set: number; created: string[] }> {
+  const auth = `key=${API_KEY}&token=${API_TOKEN}`;
+  const listRes = await fetch(`${TRELLO_BASE}/boards/${boardId}/labels?limit=1000&${auth}`);
+  if (!listRes.ok) throw new Error(`Trello board labels ${listRes.status}`);
+  const board = await listRes.json() as { id: string; name?: string; color?: string | null }[];
+
+  const byKey = new Map(board.map(l => [labelKey(l.name ?? ''), l.id]));
+  const ids: string[] = [];
+  const created: string[] = [];
+
+  for (const l of labels) {
+    const k = labelKey(l.name);
+    if (!k) continue;
+    let id = byKey.get(k);
+    if (!id) {
+      // The app's catalog can legitimately be ahead of the board (e.g.
+      // "Powercare Report Sent", added to LABEL_CATALOG 2026-08-31 and still
+      // absent from Trello). Dropping it would make the push silently lossy,
+      // which is the exact failure mode this whole change exists to end.
+      const mk = await fetch(
+        `${TRELLO_BASE}/labels?idBoard=${boardId}&name=${encodeURIComponent(l.name)}` +
+        `&color=${encodeURIComponent(l.color || 'null')}&${auth}`,
+        { method: 'POST' },
+      );
+      if (!mk.ok) {
+        console.warn(`[trello-labels] could not create "${l.name}" on board ${boardId}: ${mk.status}`);
+        continue;
+      }
+      id = ((await mk.json()) as { id: string }).id;
+      byKey.set(k, id);
+      created.push(l.name);
+    }
+    if (!ids.includes(id)) ids.push(id);
+  }
+
+  // One whole-set PUT, so a label removed in the app is removed on the card.
+  // idLabels= (empty) is how Trello is told "no labels", and is why this sends
+  // the parameter even when ids is empty.
+  const put = await fetch(
+    `${TRELLO_BASE}/cards/${cardId}?idLabels=${ids.join(',')}&${auth}`,
+    { method: 'PUT' },
+  );
+  if (!put.ok) throw new Error(`Trello card label PUT ${put.status}: ${await put.text().catch(() => '')}`);
+  return { set: ids.length, created };
+}
+
+/**
+ * PATCH /api/trello-card, body { cardId, labels: [{name, color}] }.
+ *
+ * Lives on this function rather than its own file only because the Vercel
+ * Hobby plan hard-caps api/ at 12 Serverless Functions and a 13th fails the
+ * whole deployment (confirmed live 2026-07-21). Splitting it out is a pure
+ * refactor the day the plan is upgraded.
+ *
+ * Signed-in callers only: this writes to the shared company board.
+ */
+async function handleLabelPush(req: VercelRequest, res: VercelResponse) {
+  if (!(await requireUser(req, res))) return;
+  if (!API_KEY || !API_TOKEN) return res.status(500).json({ error: 'Trello credentials not configured' });
+
+  const raw = await readRawBody(req);
+  let body: { cardId?: string; labels?: { name?: string; color?: string }[] };
+  try { body = raw ? JSON.parse(raw) : (req.body ?? {}); }
+  catch { return res.status(400).json({ error: 'Body is not valid JSON' }); }
+
+  const cardId = String(body.cardId ?? '').trim();
+  if (!/^[0-9a-fA-F]{24}$/.test(cardId)) return res.status(400).json({ error: 'Malformed card id' });
+  if (!Array.isArray(body.labels)) return res.status(400).json({ error: 'labels must be an array' });
+
+  const labels = body.labels
+    .map(l => ({ name: String(l?.name ?? '').trim(), color: String(l?.color ?? '').trim() }))
+    .filter(l => l.name);
+
+  // Same guard as the inbound webhook, in the outbound direction: a signed-in
+  // user must not be able to relabel an arbitrary card on someone else's board
+  // using the org's token. idBoard comes from Trello, so it cannot be forged.
+  const card = await fetch(`${TRELLO_BASE}/cards/${cardId}?fields=idBoard&key=${API_KEY}&token=${API_TOKEN}`);
+  if (card.status === 404) return res.status(404).json({ error: 'No such Trello card' });
+  if (!card.ok) return res.status(502).json({ error: `Trello card lookup ${card.status}` });
+  const { idBoard } = await card.json() as { idBoard?: string };
+  if (!isAllowedBoard(idBoard)) {
+    console.warn('[trello-labels] refused: card', cardId, 'is on board', idBoard);
+    return res.status(403).json({ error: 'Card is not on an allowed board' });
+  }
+
+  try {
+    const result = await setCardLabels(cardId, idBoard as string, labels);
+    console.info(`[trello-labels] card ${cardId}: set ${result.set} label(s)${result.created.length ? `, created ${result.created.join(', ')}` : ''}`);
+    return res.status(200).json(result);
+  } catch (err) {
+    console.error('[trello-labels] failed:', err);
+    return res.status(502).json({ error: err instanceof Error ? err.message : 'Trello label push failed' });
+  }
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Trello HEAD-verifies the callback URL synchronously when the webhook is
   // created. Must return 2xx or registration is rejected outright.
@@ -927,6 +1115,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
   if (req.method === 'POST') {
     return handleLeadImportWebhook(req, res);
+  }
+  if (req.method === 'PATCH') {
+    return handleLabelPush(req, res);
   }
   // Top-level safety net: if ANYTHING below throws, return a clean 500 instead
   // of Vercel's FUNCTION_INVOCATION_FAILED page (the previous behavior, an

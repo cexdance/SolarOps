@@ -13,6 +13,7 @@ import SiteMapView from './views/SiteMapView';
 import ReroofTab from './ReroofTab';
 import { Job, WOStatus, WOLineItem, WOPhoto, WOServiceStatus, WO_TO_JOB_STATUS, RMAEntry, AuditEntry, ReroofWorkflow } from '../types';
 import { LabelPicker } from './LabelPicker';
+import { pushLabelsToTrello } from '../lib/trelloLabelSync';
 import { updateClientStatus } from '../lib/siteProfileStore';
 import { normalizeStreetOrder } from '../lib/addressValidator';
 import { QuotePreviewModal } from './QuotePreviewModal';
@@ -1942,7 +1943,10 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
             <>
             {/* Labels: pick as many as needed; render as chips on the kanban card. */}
             <div className="px-6 pt-4">
-              <LabelPicker value={job?.labels ?? []} onChange={labels => onSave({ labels })} />
+              <LabelPicker
+                value={job?.labels ?? []}
+                onChange={labels => { onSave({ labels }); if (job) pushLabelsToTrello(job, labels); }}
+              />
             </div>
             <div className="p-6 lg:grid lg:grid-cols-[1.618fr_1fr] lg:gap-6 lg:items-start">
               {/* ── Comments & Activity: default DOM order keeps it first for

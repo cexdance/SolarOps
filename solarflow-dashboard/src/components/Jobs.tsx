@@ -340,6 +340,7 @@ const colColors: Record<string, string> = {
   email_follow_up: 'bg-yellow-50 border-yellow-200',
   closed_won: 'bg-emerald-50 border-emerald-200',
   closed_archived: 'bg-gray-50 border-gray-200',
+  lost_to_competition: 'bg-stone-50 border-stone-200',
 };
 
 // Column header dot. The tinted column background alone is too washed out to
@@ -366,6 +367,7 @@ const colDot: Record<string, string> = {
   email_follow_up: 'bg-yellow-500',
   closed_won: 'bg-emerald-500',
   closed_archived: 'bg-gray-400',
+  lost_to_competition: 'bg-stone-500',
 };
 
 // A Job with a pipeline stage but no work-order number is a pure LL funnel card
