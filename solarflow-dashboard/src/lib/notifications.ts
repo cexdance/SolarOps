@@ -27,8 +27,12 @@ function rowToNotification(row: Record<string, unknown>): AppNotification {
 // ── Fetch ─────────────────────────────────────────────────────────────────────
 
 /**
- * Pull the latest 50 notifications for the current authenticated user.
+ * Pull the latest notifications for the current authenticated user.
  * Returns [] if not authenticated or on error.
+ *
+ * The cap is 200, not 50, because the mentions inbox is derived from this same
+ * list: at 50 the inbox silently truncates as soon as other notification types
+ * crowd it out, and one live user already has 35 mentions inside the newest 50.
  */
 export async function fetchMyNotifications(): Promise<AppNotification[]> {
   try {
@@ -40,7 +44,7 @@ export async function fetchMyNotifications(): Promise<AppNotification[]> {
       .select('id, user_id, type, title, message, related_job_id, related_contractor_id, related_customer_id, related_activity_id, read, created_at')
       .eq('user_id', session.user.id)
       .order('created_at', { ascending: false })
-      .limit(50);
+      .limit(200);
 
     if (error || !data) return [];
     return data.map(rowToNotification);
