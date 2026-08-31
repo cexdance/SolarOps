@@ -163,7 +163,17 @@ function buildCatalog(results) {
     for (const screen of appScreens) {
       try {
         await page.evaluate((id) => localStorage.setItem('solarflow_current_view', id), screen.view);
-        await page.reload({ waitUntil: 'networkidle' });
+        // A screen that keeps talking to the network never reaches networkidle:
+        // the Dispatch Map geocodes every WO address against Nominatim, so it
+        // timed out and dropped out of the catalog entirely. The page is loaded
+        // by then, it is just still fetching, so fall back to the DOM being
+        // ready and give the late paint a moment.
+        try {
+          await page.reload({ waitUntil: 'networkidle' });
+        } catch {
+          await page.reload({ waitUntil: 'domcontentloaded' });
+          await sleep(4000);
+        }
         await sleep(1500);
         results.push({ ...screen, path: await shoot(page, screen) });
       } catch (e) {
