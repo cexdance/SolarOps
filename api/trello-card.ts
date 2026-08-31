@@ -1054,7 +1054,22 @@ async function setCardLabels(
     `${TRELLO_BASE}/cards/${cardId}?idLabels=${ids.join(',')}&${auth}`,
     { method: 'PUT' },
   );
-  if (!put.ok) throw new Error(`Trello card label PUT ${put.status}: ${await put.text().catch(() => '')}`);
+  if (!put.ok) {
+    const detail = await put.text().catch(() => '');
+    // Verified 2026-08-31: TRELLO_API_TOKEN is scoped read-only
+    // (Board write:false), so every write returns this exact 401 and Trello's
+    // own wording, "unauthorized card permission requested", names neither the
+    // token nor the scope. Say what is actually wrong, or the next person
+    // debugs the card id for an hour.
+    if (put.status === 401) {
+      throw new Error(
+        'TRELLO_API_TOKEN is read-only, so labels cannot be written back to Trello. ' +
+        'Re-issue the token with write scope and update the Vercel env var. ' +
+        `(Trello said: ${detail})`,
+      );
+    }
+    throw new Error(`Trello card label PUT ${put.status}: ${detail}`);
+  }
   return { set: ids.length, created };
 }
 
