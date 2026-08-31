@@ -422,6 +422,31 @@ export function findJobByWoNumber<J extends { woNumber?: string }>(
 export const isSiteTransferJob = (job: { serviceCode?: string; serviceType?: string }): boolean =>
   job.serviceCode === 'SITE-TRX' || job.serviceType === 'Site Transfer';
 
+/** PowerCare case # for the SO header. Nobody fills the structured fields in
+ *  practice, so the number is wherever the last person typed it: the RMA entry,
+ *  the customer record, or the client story (the comments/activity on the order
+ *  and on the customer, plus the service report and notes). Ordered strongest
+ *  source first; the text scan is last because it is a guess.
+ *  ponytail: text scan stays until case numbers land in the RMA modal, which is
+ *  the only place that writes rmaEntries[].caseNumber. */
+export function findPowercareCaseNo(src: {
+  rmaEntries?: { caseNumber?: string }[];
+  job?: { serviceReport?: string; notes?: string; activityHistory?: { description: string }[] };
+  customer?: { powerCareCaseNumber?: string; activityHistory?: { description: string }[] };
+}): string {
+  const fromRma = src.rmaEntries?.find(e => (e.caseNumber ?? '').trim())?.caseNumber?.trim();
+  if (fromRma) return fromRma;
+  const fromCustomer = (src.customer?.powerCareCaseNumber ?? '').trim();
+  if (fromCustomer) return fromCustomer;
+  const story = [
+    src.job?.serviceReport ?? '',
+    src.job?.notes ?? '',
+    ...(src.job?.activityHistory ?? []).map(a => a.description ?? ''),
+    ...(src.customer?.activityHistory ?? []).map(a => a.description ?? ''),
+  ].join('\n');
+  return story.match(/case\s*#?\s*:?\s*(\d{5,})/i)?.[1] ?? '';
+}
+
 /**
  * ACTUAL cost of the service call: contractor labor (base pay + extra labor line
  * items) + parts/consumables + mileage + contractor-logged expenses. This is what

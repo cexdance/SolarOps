@@ -23,7 +23,7 @@ import { MentionTextarea, MentionUser, renderWithMentions, parseMentions, parseM
 import { buildSiteTransferMailto, SITE_ID_GUIDE_URL } from '../lib/siteTransferEmail';
 import { formatMoney, formatCost } from '../lib/money';
 import { printServiceReport } from '../lib/printServiceReport';
-import { serviceOrderNo, workOrderNo, generateServiceOrderNumber, photoUrlStem } from '../lib/woHelpers';
+import { serviceOrderNo, workOrderNo, generateServiceOrderNumber, photoUrlStem, findPowercareCaseNo } from '../lib/woHelpers';
 import { SowDistributionModal, SOW_DISTRIBUTION_NAMES } from './SowDistributionModal';
 import { ImageLightbox } from './ImageLightbox';
 import { ActivityFeed, type FeedUser } from './ui/ActivityFeed';
@@ -1570,17 +1570,17 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
     .filter(p => !isPdfAttachment(p) && (p.storageUrl || p.dataUrl))
     .map(p => ({ id: p.id, src: p.storageUrl || p.dataUrl, name: p.name }));
 
-  // PowerCare case # shown after the client name in the header. The RMA entries
-  // are the real source, but 0 of 16 live PowerCare jobs have one filled in, so
-  // fall back to the case # typed into the service report / notes.
-  // ponytail: drop the text fallback once case numbers are entered in the RMA
-  // modal, which is the only place that writes rmaEntries[].caseNumber.
-  const powercareCaseNo = useMemo(() => {
-    const fromRma = rmaEntries.find(e => (e.caseNumber ?? '').trim())?.caseNumber?.trim();
-    if (fromRma) return fromRma;
-    const text = `${job?.serviceReport ?? ''}\n${job?.notes ?? ''}`;
-    return text.match(/case\s*#?\s*:?\s*(\d{5,})/i)?.[1] ?? '';
-  }, [rmaEntries, job?.serviceReport, job?.notes]);
+  // PowerCare case # shown after the client name in the header. Sources and
+  // their order live in findPowercareCaseNo; this just feeds it the order, the
+  // customer record and both activity streams (the "client story").
+  const powercareCaseNo = useMemo(
+    () => findPowercareCaseNo({ rmaEntries, job, customer }),
+    [rmaEntries, job, customer],
+  );
+
+  // A client on the PowerCare plan is PowerCare even when nobody ticked the box
+  // on this particular order, and the case # belongs on the header either way.
+  const showsPowercareCase = isPowercare || !!customer?.isPowerCare;
 
   const tabs = [
     { key: 'overview', label: 'Overview',        icon: <ClipboardList className="w-4 h-4" /> },
@@ -1647,7 +1647,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
               ) : (
                 <span className="text-white font-semibold">{siteName}</span>
               )}
-              {isPowercare && powercareCaseNo && (
+              {showsPowercareCase && powercareCaseNo && (
                 <>
                   {' '}
                   <span

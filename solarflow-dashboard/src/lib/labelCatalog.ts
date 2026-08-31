@@ -22,6 +22,7 @@ export const LABEL_CATALOG: JobLabel[] = [
   { name: 'Follow-up with Client',          color: 'red_dark' },
   { name: 'Needs Scheduling',               color: 'red_light' },
   { name: 'Needs Report',                   color: 'pink_dark' },
+  { name: 'Powercare Report Sent',          color: 'pink' },
   { name: 'Completed/Did not proceed.',     color: '' },
 ];
 
