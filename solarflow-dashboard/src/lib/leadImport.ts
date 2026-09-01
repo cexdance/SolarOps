@@ -3,7 +3,7 @@
 // both Add-Customer modals (Customers view + sales Customer Directory) reuse the
 // exact same mapping instead of drifting. UI lives in components/ImportPrefill.tsx.
 import * as XLSX from 'xlsx';
-import type { Customer, Job } from '../types';
+import type { Activity, Customer, Job } from '../types';
 
 /** Neutral, form-agnostic contact shape. Each modal maps this onto its own formData. */
 export interface ParsedContact {
@@ -177,6 +177,34 @@ export async function readSheetRows(file: File): Promise<Record<string, unknown>
 }
 
 /**
+ * The sheet block as a COMMENT, which is what the client card actually shows.
+ *
+ * The customer card renders `activityHistory` through ActivityFeed; `notes` is a
+ * separate field that does not appear there. Putting the sheet contents only in
+ * notes meant the import looked empty on the surface people read. So the block
+ * goes to both: notes as the durable field, this as the visible comment.
+ *
+ * The id is derived from the case number, not minted, so a re-import of the same
+ * sheet recognizes its own entry instead of stacking a second copy of it.
+ */
+export function sheetImportActivity(c: ParsedContact, when = new Date().toISOString()): Activity {
+  return {
+    id: `xls-case-${c.caseNumber || normalizePhone(c.phone) || when}`,
+    type: 'note_added',
+    description: `Imported from PowerCare case sheet\n\n${c.notes ?? ''}`.trim(),
+    timestamp: when,
+    userName: 'Excel import',
+  };
+}
+
+/** Union by id, newest first. An array inside a whole-record save must dedupe
+ *  or a re-import grows it without bound. */
+function withActivity(history: Activity[] | undefined, entry: Activity): Activity[] {
+  const had = history ?? [];
+  return had.some(a => a.id === entry.id) ? had : [entry, ...had];
+}
+
+/**
  * Match an imported row against customers already on file, by normalized email
  * then phone then name.
  *
@@ -224,9 +252,9 @@ export function findOrderForCase<J extends { notes?: string; woNumber?: string }
  * import twice does not stack duplicate blocks.
  */
 export function enrichCustomerFromRow<C extends {
-  notes?: string; isPowerCare?: boolean;
+  notes?: string; isPowerCare?: boolean; activityHistory?: Activity[];
   powerCareCaseNumber?: string; powerCareTrackingNumber?: string;
-}>(existing: C, c: ParsedContact): Partial<C> {
+}>(existing: C, c: ParsedContact, when?: string): Partial<C> {
   const block = c.notes ?? '';
   const had = existing.notes ?? '';
   const notes = !block || had.includes(block) ? had : [had, block].filter(Boolean).join('\n\n');
@@ -235,6 +263,8 @@ export function enrichCustomerFromRow<C extends {
     powerCareCaseNumber: existing.powerCareCaseNumber || c.caseNumber,
     powerCareTrackingNumber: existing.powerCareTrackingNumber || c.trackingNumber,
     notes,
+    // The comment is what the client card shows; notes alone read as empty.
+    activityHistory: withActivity(existing.activityHistory, sheetImportActivity(c, when)),
   } as Partial<C>;
 }
 
@@ -254,10 +284,12 @@ export function enrichCustomerFromRow<C extends {
 export function rowToPowerCareRecords(
   row: Record<string, unknown>,
   woNumber: string,
+  when = new Date().toISOString(),
 ): { customer: Partial<Customer>; job: Partial<Job> } {
   const c = mapRowToContact(row);
   const name = `${c.firstName ?? ''} ${c.lastName ?? ''}`.trim();
   const siteAddress = [c.address, c.city, c.state, c.zip].filter(Boolean).join(', ');
+  const comment = sheetImportActivity(c, when);
   return {
     customer: {
       name, firstName: c.firstName, lastName: c.lastName,
@@ -268,6 +300,7 @@ export function rowToPowerCareRecords(
       powerCareCaseNumber: c.caseNumber,
       powerCareTrackingNumber: c.trackingNumber,
       referralSource: 'SolarEdge PowerCare',
+      activityHistory: [comment],
     },
     job: {
       woNumber,
@@ -281,6 +314,7 @@ export function rowToPowerCareRecords(
       clientName: name,
       siteAddress,
       notes: c.notes ?? '',
+      activityHistory: [comment],
     },
   };
 }

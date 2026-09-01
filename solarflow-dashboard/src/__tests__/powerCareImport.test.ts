@@ -178,3 +178,48 @@ describe('findOrderForCase', () => {
     expect(findOrderForCase(withOrder, '')).toBeUndefined();
   });
 });
+
+// --- The sheet contents must land in the COMMENTS ---------------------------
+// The client card renders activityHistory through ActivityFeed; `notes` is a
+// separate field that does not show there. Contents in notes alone read as an
+// empty import on the surface people actually look at.
+import { sheetImportActivity } from '../lib/leadImport';
+
+describe('sheet contents in the comments', () => {
+  it('a new customer AND its order both carry the sheet block as a comment', () => {
+    const { customer, job } = rowToPowerCareRecords(row, 'SO-2609-00001');
+    for (const rec of [customer, job]) {
+      const c = rec.activityHistory?.[0];
+      expect(c?.type).toBe('note_added');
+      expect(c?.description).toContain('Part Number (old): SE10000H-US000BEU4');
+      expect(c?.description).toContain('Serial Number (old): SV2422-0740BF7B7-2D');
+      expect(c?.description).toContain('Account Name: SolarEdge Power Care Premium');
+      expect(c?.description).toContain('Actual Ship Date: 2026-08-27');
+      expect(c?.description).toContain('Case #: 7162665');
+    }
+  });
+
+  it('enriching a customer already on file adds the comment', () => {
+    const patch = enrichCustomerFromRow(onFile[0], mapRowToContact(row));
+    expect(patch.activityHistory).toHaveLength(1);
+    expect(patch.activityHistory?.[0].description).toContain('Serial Number (old): SV2422-0740BF7B7-2D');
+  });
+
+  it('re-importing does not stack a second copy of the same comment', () => {
+    const c = mapRowToContact(row);
+    const once = enrichCustomerFromRow(onFile[0], c);
+    const twice = enrichCustomerFromRow({ ...onFile[0], ...once }, c);
+    expect(twice.activityHistory).toHaveLength(1);
+  });
+
+  it('keeps comments the record already had', () => {
+    const prior = { id: 'a1', type: 'note_added' as const, description: 'Called client', timestamp: 'x' };
+    const patch = enrichCustomerFromRow({ ...onFile[0], activityHistory: [prior] }, mapRowToContact(row));
+    expect(patch.activityHistory).toHaveLength(2);
+    expect(patch.activityHistory?.map(a => a.id)).toContain('a1');
+  });
+
+  it('keys the comment id off the case number so it is stable across runs', () => {
+    expect(sheetImportActivity(mapRowToContact(row)).id).toBe('xls-case-7162665');
+  });
+});
