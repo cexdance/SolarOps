@@ -3,7 +3,7 @@ import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { formatMoney } from '../lib/money';
 import {
   Plus, Search, Calendar, MapPin, User, Clock, X, Wrench, Zap, LayoutGrid, List as ListIcon,
-  Power, Cpu, ClipboardCheck, PauseCircle, PlayCircle, ArrowUpDown, Archive,
+  Power, Cpu, ClipboardCheck, PauseCircle, PlayCircle, ArrowUpDown, Archive, FilterX,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import {
@@ -65,7 +65,7 @@ function badgeLabel(job: Job): string {
 }
 import { ServiceOrderPanel } from './ServiceOrderPanel';
 import { LeadPanel } from './LeadPanel';
-import { leadToCustomer, formatImportedAt } from '../lib/leadConvert';
+import { leadToCustomer, formatImportedAt, clientNumberOwner } from '../lib/leadConvert';
 import { claimClientNumber } from '../lib/clientRegistry';
 
 // Contractor workload buckets for the per-contractor filter summary. Uses the raw
@@ -562,6 +562,16 @@ export const Jobs: React.FC<JobsProps> = ({
   React.useEffect(() => { saveFilters({ customFrom }); }, [customFrom]);
   React.useEffect(() => { saveFilters({ customTo }); }, [customTo]);
 
+  // Any non-default filter means the board can be hiding cards for a reason the
+  // user has forgotten (they persist across sessions via FILTERS_KEY).
+  const filtersActive = searchQuery !== '' || filterStatus !== 'all' || filterContractor !== 'all'
+    || showArchived || showOnHold || powerCareOnly || filterPeriod !== 'all';
+  const clearFilters = () => {
+    setSearchQuery(''); setFilterStatus('all'); setFilterContractor('all');
+    setShowArchived(false); setShowOnHold(false); setPowerCareOnly(false);
+    setFilterPeriod('all'); setCustomFrom(''); setCustomTo('');
+  };
+
   const [viewMode, setViewMode] = useState<JobsViewMode>(() => {
     const saved = localStorage.getItem('solarops_jobs_view') as JobsViewMode | null;
     if (saved && JOBS_VIEW_MODES.includes(saved)) return saved;
@@ -762,6 +772,20 @@ export const Jobs: React.FC<JobsProps> = ({
       window.alert(`Could not update the client registry sheet:\n\n${(err as Error).message}\n\nNothing was converted. Try again.`);
       return;
     }
+    // The number we just claimed must not already be on a client. If it is, the
+    // sheet and the CRM have drifted, and onCreateCustomer's duplicate guard
+    // would file this lead under that stranger instead of creating it. See
+    // clientNumberOwner for the Danielle Ferrari / Andres Jimenez incident.
+    const owner = clientNumberOwner(customers, clientId, lead.customerId);
+    if (owner) {
+      window.alert(
+        `Client number ${clientId} is already on "${owner.name}" in this app.\n\n` +
+        `Converting would file this lead under that client instead of creating a new one, ` +
+        `so nothing was converted.\n\n` +
+        `Fix ${owner.name}'s client number (or the registry sheet) first, then try again.`
+      );
+      return;
+    }
     const customerId = onCreateCustomer({ ...payload, clientId });
     // A converted lead starts as a site transfer: the SolarEdge ownership move is
     // the first thing we do for a new client. Flat $120, no field work.
@@ -957,6 +981,18 @@ export const Jobs: React.FC<JobsProps> = ({
             {count > 0 && count}
           </button>
         ))}
+
+        {filtersActive && (
+          <button
+            type="button"
+            onClick={clearFilters}
+            title="Clear all filters"
+            className="flex items-center gap-1 h-[38px] px-2 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-600 hover:bg-slate-50 shrink-0"
+          >
+            <FilterX className="w-4 h-4" />
+            Clear
+          </button>
+        )}
 
         <div className="relative shrink-0">
           <ArrowUpDown className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />

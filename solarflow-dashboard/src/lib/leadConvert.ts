@@ -92,3 +92,31 @@ export function formatImportedAt(iso: string | undefined, now: Date = new Date()
   if (days < 0) return date;
   return days === 0 ? `${date} (today)` : `${date} (${days}d)`;
 }
+
+/**
+ * Does `clientId` already belong to a DIFFERENT client on file?
+ *
+ * "Move to Client" claims the next free number from the registry sheet and then
+ * hands it to the customer-create path, which dedupes on `clientId`. So a number
+ * the sheet just reported as FREE, matching a customer that already exists, is
+ * always drift between the sheet and the CRM, never a real duplicate. Merging on
+ * it silently files the new lead under a stranger.
+ *
+ * 2026-09-01: US-15688 was hand-typed onto Andres Jimenez (from US-15683) at
+ * 16:19 without claiming it in the sheet. At 20:59 the sheet handed US-15688 to
+ * the Danielle Ferrari lead, the duplicate guard matched Jimenez, and her two
+ * call logs were absorbed into his record while her card was wired to his id.
+ * No Danielle Ferrari client was ever created.
+ *
+ * `leadCustomerId` excuses the lead's own customer, so re-converting an
+ * already-converted lead is not a collision.
+ */
+export function clientNumberOwner<C extends { id: string; name: string; clientId?: string }>(
+  customers: C[],
+  clientId: string | undefined,
+  leadCustomerId?: string,
+): C | undefined {
+  const want = (clientId ?? '').trim();
+  if (!want) return undefined;
+  return customers.find(c => (c.clientId ?? '').trim() === want && c.id !== leadCustomerId);
+}
