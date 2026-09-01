@@ -22,11 +22,16 @@ const TAX_TYPE = Deno.env.get("XERO_SITE_TRANSFER_TAX_TYPE") ?? "";
 
 type Json = Record<string, unknown>;
 
-const CORS = {
+// Echo whatever the browser asks for. supabase-js always sends x-client-info, and
+// a header missing from this list makes the browser refuse to send the POST at all,
+// which surfaces as the useless "failed to send a request to the edge function".
+const cors = (req: Request) => ({
   "access-control-allow-origin": "*",
-  "access-control-allow-headers": "authorization, content-type, apikey",
+  "access-control-allow-headers":
+    req.headers.get("access-control-request-headers") ??
+    "authorization, content-type, apikey, x-client-info",
   "access-control-allow-methods": "POST, GET, OPTIONS",
-};
+});
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
 // Xero rotates the refresh token on EVERY use and kills the old one immediately.
@@ -132,11 +137,11 @@ Deno.serve(async (req) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
 
-  if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
+  if (req.method === "OPTIONS") return new Response(null, { headers: cors(req) });
 
   const caller = await whoIs(req, db);
   if (caller.kind === "denied") {
-    return Response.json({ ok: false, error: caller.why }, { status: 403, headers: CORS });
+    return Response.json({ ok: false, error: caller.why }, { status: 403, headers: cors(req) });
   }
 
   let body: Json = {};
@@ -191,7 +196,7 @@ Deno.serve(async (req) => {
         : !isSiteTransfer(j) ? "not a site transfer"
         : !j.woNumber ? "no order number, so this is not a service order"
         : `already ${String(j.status)}`;
-      return Response.json({ ok: false, error: why }, { status: 400, headers: CORS });
+      return Response.json({ ok: false, error: why }, { status: 400, headers: cors(req) });
     }
 
     for (const job of due) {
@@ -302,8 +307,8 @@ Deno.serve(async (req) => {
       out.push(row);
     }
 
-    return Response.json({ ok: true, dry, xeroConnected: !!auth, authNote, considered: due.length, results: out }, { headers: CORS });
+    return Response.json({ ok: true, dry, xeroConnected: !!auth, authNote, considered: due.length, results: out }, { headers: cors(req) });
   } catch (e) {
-    return Response.json({ ok: false, dry, error: String(e), results: out }, { status: 500, headers: CORS });
+    return Response.json({ ok: false, dry, error: String(e), results: out }, { status: 500, headers: cors(req) });
   }
 });
