@@ -3,6 +3,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { serviceOrderNo } from '../lib/woHelpers';
 import { loadData } from '../lib/dataStore';
 import { authedFetch } from '../lib/supabase';
+import { claimClientNumber } from '../lib/clientRegistry';
 import { compressImageToDataUrl } from '../lib/photoCompress';
 import {
   Plus,
@@ -3444,6 +3445,26 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
 
   // Form states
   const [editForm, setEditForm] = useState<Customer>(customer);
+  const [claimingClientId, setClaimingClientId] = useState(false);
+
+  // Clicking an EMPTY client-number field claims the next number from the
+  // registry sheet and writes this customer's name onto that row. Typing is
+  // still possible: a field that already has a number never calls out.
+  const handleClaimClientId = async () => {
+    if (claimingClientId || editForm.clientId) return;
+    const name = (editForm.name || '').trim();
+    if (!name) { window.alert('Enter the customer name first: the sheet needs a name for the row.'); return; }
+    setClaimingClientId(true);
+    try {
+      const reg = await claimClientNumber(name);
+      if (!reg) { window.alert('The client registry is not configured (VITE_CLIENT_REGISTRY_URL is unset).'); return; }
+      setEditForm(prev => ({ ...prev, clientId: reg.clientId, solarEdgeClientId: reg.clientId }));
+    } catch (err) {
+      window.alert(`Could not claim a client number:\n\n${(err as Error).message}`);
+    } finally {
+      setClaimingClientId(false);
+    }
+  };
   const [, setWorkOrderForm] = useState({
     title: '',
     description: '',
@@ -4688,7 +4709,8 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                     type="text"
                     value={editForm.clientId || ''}
                     onChange={(e) => setEditForm({ ...editForm, clientId: e.target.value })}
-                    placeholder="e.g. US-15015"
+                    onClick={handleClaimClientId}
+                    placeholder={claimingClientId ? 'Claiming...' : 'Click to claim the next number'}
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg font-mono text-sm focus:outline-none focus:ring-2 focus:ring-orange-300"
                   />
                 </div>
