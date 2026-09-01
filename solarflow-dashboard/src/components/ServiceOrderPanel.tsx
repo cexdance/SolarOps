@@ -22,6 +22,7 @@ import { loadServiceRates, loadContractorJobs } from '../lib/contractorStore';
 import { searchParts, CatalogPart } from '../lib/partsCatalog';
 import { MentionTextarea, MentionUser, renderWithMentions, parseMentions, parseMentionEmails, fireMentionNotifications, handleFor } from './ui/MentionTextarea';
 import { buildSiteTransferMailto, SITE_ID_GUIDE_URL } from '../lib/siteTransferEmail';
+import { supabase } from '../lib/supabase';
 import { formatMoney, formatCost } from '../lib/money';
 import { printServiceReport } from '../lib/printServiceReport';
 import { serviceOrderNo, workOrderNo, generateServiceOrderNumber, photoUrlStem, findPowercareCaseNo } from '../lib/woHelpers';
@@ -765,6 +766,37 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
   // Service account expense
   const [isServiceAccountExpense, setIsServiceAccountExpense] = useState(job?.isServiceAccountExpense ?? false);
   const isAdmin = currentUserRole === 'admin' || currentUserRole === 'coo';
+
+  // Site transfer -> Xero. The edge function owns the Xero credentials; nothing
+  // here touches Xero directly. It creates the client as a contact and leaves a
+  // DRAFT invoice for Daniel to approve, and is safe to press twice: the function
+  // looks the contact up by client number and the invoice by order number first.
+  const [xeroBusy, setXeroBusy] = useState(false);
+  const pushSiteTransferToXero = async () => {
+    setXeroBusy(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('xero-site-transfers', {
+        body: { jobId: job.id },
+      });
+      // invoke() reports a non-2xx as an error but keeps the body, which is where
+      // the useful reason lives. Surface that, not "Edge Function returned non-2xx".
+      const reason = (data as { error?: string } | null)?.error;
+      if (error && !reason) throw error;
+      if (reason) { alert(`Xero: ${reason}`); return; }
+      const r = (data as { results?: Array<{ name?: string; contact?: string; invoice?: string; warn?: string }> })?.results?.[0];
+      if (!r) { alert('Nothing to send.'); return; }
+      alert(
+        `Xero updated for ${r.name}\n\n` +
+        `Client: ${r.contact}\n` +
+        `Invoice: ${r.invoice ?? 'n/a'}` +
+        (r.warn ? `\n\nNote: ${r.warn}` : '')
+      );
+    } catch (e) {
+      alert(`Could not reach Xero: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setXeroBusy(false);
+    }
+  };
 
   // Discount, 10% for any of these types
   const isRecurringClient = clientPaidJobCount > 2;
@@ -3991,6 +4023,23 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                     <p className="mt-3 text-[10px] text-teal-700">
                       Admin team runs the SolarEdge ownership transfer via agentic workflow. No contractor assigned. Flat-fee transfer (priced in Xero).
                     </p>
+
+                    {isAdmin && (
+                      <div className="mt-3 pt-3 border-t border-teal-200">
+                        <button
+                          type="button"
+                          onClick={pushSiteTransferToXero}
+                          disabled={xeroBusy}
+                          className="inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold rounded-lg bg-teal-600 text-white hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {xeroBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Banknote className="w-3.5 h-3.5" />}
+                          {xeroBusy ? 'Sending to Xero...' : 'Create client + draft invoice in Xero'}
+                        </button>
+                        <p className="mt-1.5 text-[10px] text-teal-700">
+                          Adds the client to Xero if missing and leaves a draft invoice for Daniel to approve. Safe to press more than once.
+                        </p>
+                      </div>
+                    )}
                   </div>
                 )}
 
