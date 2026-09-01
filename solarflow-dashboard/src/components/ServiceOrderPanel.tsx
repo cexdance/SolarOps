@@ -113,6 +113,9 @@ const NEXT_STATUS: Record<WOStatus, WOStatus | null> = {
   paid:           null,
 };
 
+// ponytail: flat desk fee for a SolarEdge ownership transfer.
+const SITE_TRANSFER_COST = 120;
+
 const LINE_ITEM_TYPES: WOLineItem['type'][] = ['labor', 'part', 'other'];
 const PHOTO_CATEGORIES: WOPhoto['category'][] = [
   // General (all jobs)
@@ -1555,7 +1558,11 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
   const baseLaborCost   = contractorPayUnit === 'flat' ? contractorPayRate : contractorPayRate * (laborHours || 0);
   const mileageMiles    = isPowercare ? (travelMiles || 0) : 0;
   const mileageCostLive = +(mileageMiles * 0.54).toFixed(2);
-  const actualCallCost  = +(baseLaborCost + labor + parts + mileageCostLive + contractorExpenseTotal).toFixed(2);
+  // ponytail: a site transfer is a flat desk job, no contractor and no parts,
+  // so its real cost is the fixed fee, not the derived sum.
+  const actualCallCost  = isSiteTransfer
+    ? SITE_TRANSFER_COST
+    : +(baseLaborCost + labor + parts + mileageCostLive + contractorExpenseTotal).toFixed(2);
 
   const photosByCategory = PHOTO_CATEGORIES.reduce((acc, cat) => {
     acc[cat] = woPhotos.filter(p => p.category === cat);
@@ -2212,8 +2219,9 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                   })()}
                 </div>
 
-              {/* Scope of Work, grouped with Job Title/Service (what), not money fields */}
-              <div>
+              {/* Scope of Work, grouped with Job Title/Service (what), not money fields.
+                  Hidden for site transfers: the scope is fixed, the identifiers are the work. */}
+              <div className={isSiteTransfer ? 'hidden' : ''}>
                 <label className="block text-xs font-medium text-slate-500 mb-1">
                   Scope of Work / Notes
                   {users.length > 0 && <span className="ml-1 text-slate-400 font-normal">- type @ to mention · Ctrl/Cmd+V to paste images</span>}
@@ -2240,7 +2248,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-slate-500 mb-1">Scheduled Date</label>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">{isSiteTransfer ? 'Site Transfer Date' : 'Scheduled Date'}</label>
                   <input
                     type="date"
                     value={scheduledDate}
@@ -2401,6 +2409,14 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                     >
                       Site ID photo (attach it)
                     </a>
+                    <a
+                      href="https://www.solaredge.com/site-transfer"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-3 py-2 text-xs font-semibold rounded-lg border border-teal-300 text-teal-700 hover:bg-teal-100 transition-colors"
+                    >
+                      Submit transfer at SolarEdge
+                    </a>
                     {stRequestMsg && <span className="text-[11px] text-teal-700">{stRequestMsg}</span>}
                   </div>
                   <p className="text-[10px] text-teal-700">These values are saved with the service order and used by the admin agentic workflow to execute the SolarEdge ownership transfer.</p>
@@ -2434,7 +2450,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
               {/* Job sizing: labor, parts & PowerCare coverage */}
               <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4 space-y-4">
                 <div className="grid grid-cols-2 gap-4">
-                  <div>
+                  <div className={isSiteTransfer ? 'hidden' : ''}>
                     <label className="block text-xs font-medium text-slate-500 mb-1">Labor Hours</label>
                     <input
                       type="number"
