@@ -177,6 +177,68 @@ export async function readSheetRows(file: File): Promise<Record<string, unknown>
 }
 
 /**
+ * Match an imported row against customers already on file, by normalized email
+ * then phone then name.
+ *
+ * The app's own findDuplicateCustomer keys on clientId/solarEdgeSiteId, and an
+ * import carries neither (US-XXXXX numbers come from the Google Sheet, not from
+ * here), so without this a re-import of the same sheet silently doubles every
+ * customer. SolarEdge re-sends these case sheets, and the first import of
+ * 8.31.26 landed two customers by hand before the bulk path existed, so
+ * "already on file" is the normal case, not the exception.
+ */
+export function matchExistingCustomer<C extends {
+  id: string; name?: string; email?: string; phone?: string;
+}>(customers: C[], c: ParsedContact): C | undefined {
+  const email = (c.email ?? '').trim().toLowerCase();
+  const phone = normalizePhone(c.phone);
+  const name = `${c.firstName ?? ''} ${c.lastName ?? ''}`.trim().toLowerCase();
+  // A blank key must match NOTHING, or every record with no email collapses
+  // into one client. Same trap findDuplicateCustomer documents.
+  return customers.find(x => !!email && (x.email ?? '').trim().toLowerCase() === email)
+      ?? customers.find(x => !!phone && normalizePhone(x.phone) === phone)
+      ?? customers.find(x => !!name && (x.name ?? '').trim().toLowerCase() === name);
+}
+
+/**
+ * Has this case already been imported as a service order?
+ *
+ * Idempotency comes from the case number, which is SolarEdge's id for the work,
+ * not from anything this app mints. Re-importing a sheet must not open a second
+ * order for a case that already has one.
+ */
+export function findOrderForCase<J extends { notes?: string; woNumber?: string }>(
+  jobs: J[], caseNumber: string,
+): J | undefined {
+  const n = caseNumber.trim();
+  if (!n) return undefined;
+  return jobs.find(j => !!j.woNumber && new RegExp(`(^|\\D)${n}(\\D|$)`).test(j.notes ?? ''));
+}
+
+/**
+ * PowerCare fields an import contributes to a customer ALREADY on file.
+ *
+ * Deliberately narrow: it never touches name, address or clientId, because the
+ * record on file has been reviewed by a human and the sheet has not. Notes are
+ * appended only when the sheet's block is not already there, so running the
+ * import twice does not stack duplicate blocks.
+ */
+export function enrichCustomerFromRow<C extends {
+  notes?: string; isPowerCare?: boolean;
+  powerCareCaseNumber?: string; powerCareTrackingNumber?: string;
+}>(existing: C, c: ParsedContact): Partial<C> {
+  const block = c.notes ?? '';
+  const had = existing.notes ?? '';
+  const notes = !block || had.includes(block) ? had : [had, block].filter(Boolean).join('\n\n');
+  return {
+    isPowerCare: true,
+    powerCareCaseNumber: existing.powerCareCaseNumber || c.caseNumber,
+    powerCareTrackingNumber: existing.powerCareTrackingNumber || c.trackingNumber,
+    notes,
+  } as Partial<C>;
+}
+
+/**
  * A spreadsheet import is always a PowerCare case: the sheet SolarEdge sends
  * ("Cases for Conexsol") is the PowerCare work queue, so every row becomes a
  * PowerCare customer AND the service order to run it. Pure so the shape is

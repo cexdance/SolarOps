@@ -96,3 +96,85 @@ describe('generateServiceOrderNumber', () => {
     expect(new Set(nums).size).toBe(50);
   });
 });
+
+// --- Re-import safety -------------------------------------------------------
+// The 8.31.26 sheet was first imported by hand, one row at a time, before the
+// bulk path existed: both customers were already on file with a claimed
+// US-XXXXX and nothing else. Re-running the sheet must enrich those, not clone
+// them.
+import { matchExistingCustomer, findOrderForCase, enrichCustomerFromRow } from '../lib/leadImport';
+
+const onFile = [
+  { id: 'cust-1788285446169', name: 'CARLOS DIAZ', email: 'Carlosdiaz88@me.com', phone: '7863020089',
+    clientId: 'US-15689', notes: '' },
+  { id: 'cust-1788285518430', name: 'Wilber Vega', email: 'wilbervega25@gmail.com', phone: '8139938671',
+    clientId: 'US-15690', notes: '' },
+];
+
+describe('matchExistingCustomer', () => {
+  it('matches the record already on file by email, case-insensitively', () => {
+    const c = mapRowToContact(row);
+    expect(matchExistingCustomer(onFile, c)?.clientId).toBe('US-15689');
+  });
+
+  it('falls back to phone when the sheet has no email', () => {
+    const c = mapRowToContact({ ...row, 'Site Main Contact Email': '' });
+    expect(matchExistingCustomer(onFile, c)?.clientId).toBe('US-15689');
+  });
+
+  it('falls back to name when the sheet has neither', () => {
+    const c = mapRowToContact({ ...row, 'Site Main Contact Email': '', 'Site Main Contact Phone': '' });
+    expect(matchExistingCustomer(onFile, c)?.clientId).toBe('US-15689');
+  });
+
+  it('a blank key matches NOTHING, or every record with no email collapses into one', () => {
+    const blanks = [{ id: 'a', name: '', email: '', phone: '' }];
+    expect(matchExistingCustomer(blanks, { firstName: '', lastName: '', email: '', phone: '' })).toBeUndefined();
+  });
+
+  it('does not match a different person', () => {
+    const c = mapRowToContact({ 'Site Main Contact Name': 'Nobody Here', 'Site Main Contact Email': 'x@y.z' });
+    expect(matchExistingCustomer(onFile, c)).toBeUndefined();
+  });
+});
+
+describe('enrichCustomerFromRow', () => {
+  it('sets the PowerCare fields the hand entry never had, keeping the record', () => {
+    const patch = enrichCustomerFromRow(onFile[0], mapRowToContact(row));
+    expect(patch.isPowerCare).toBe(true);
+    expect(patch.powerCareCaseNumber).toBe('7162665');
+    expect(patch.powerCareTrackingNumber).toBe('1Z769A050307707031');
+    expect(patch.notes).toContain('Case #: 7162665');
+    expect(patch).not.toHaveProperty('name');      // never overwrites reviewed fields
+    expect(patch).not.toHaveProperty('clientId');
+  });
+
+  it('is idempotent: a second run does not stack the same block twice', () => {
+    const c = mapRowToContact(row);
+    const once = enrichCustomerFromRow(onFile[0], c);
+    const twice = enrichCustomerFromRow({ ...onFile[0], ...once }, c);
+    expect(twice.notes).toBe(once.notes);
+  });
+
+  it('keeps a case number already on the record rather than overwriting it', () => {
+    const patch = enrichCustomerFromRow({ ...onFile[0], powerCareCaseNumber: '999' }, mapRowToContact(row));
+    expect(patch.powerCareCaseNumber).toBe('999');
+  });
+});
+
+describe('findOrderForCase', () => {
+  const withOrder = [{ woNumber: 'SO-2609-00001', notes: 'Case #: 7162665\nV-CAP' }];
+  it('finds the order already opened for a case', () => {
+    expect(findOrderForCase(withOrder, '7162665')?.woNumber).toBe('SO-2609-00001');
+  });
+  it('does not match a different case, or a case number embedded in a longer number', () => {
+    expect(findOrderForCase(withOrder, '7099775')).toBeUndefined();
+    expect(findOrderForCase([{ woNumber: 'x', notes: 'Case #: 71626650' }], '7162665')).toBeUndefined();
+  });
+  it('ignores a lead with no woNumber, since only orders count', () => {
+    expect(findOrderForCase([{ notes: 'Case #: 7162665' }], '7162665')).toBeUndefined();
+  });
+  it('a blank case number matches nothing', () => {
+    expect(findOrderForCase(withOrder, '')).toBeUndefined();
+  });
+});

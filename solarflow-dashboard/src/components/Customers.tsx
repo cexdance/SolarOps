@@ -1,7 +1,7 @@
 // SolarFlow MVP - Customers Component (List View with Split Panel)
 import React, { useState, useRef, useEffect } from 'react';
 import { serviceOrderNo, generateServiceOrderNumber } from '../lib/woHelpers';
-import { rowToPowerCareRecords } from '../lib/leadImport';
+import { rowToPowerCareRecords, mapRowToContact, matchExistingCustomer, findOrderForCase, enrichCustomerFromRow } from '../lib/leadImport';
 import { loadData } from '../lib/dataStore';
 import { authedFetch } from '../lib/supabase';
 import { claimClientNumber } from '../lib/clientRegistry';
@@ -1146,6 +1146,9 @@ export const Customers: React.FC<CustomersProps> = ({
           onClose={() => setShowCreateModal(false)}
           onCreate={onCreateCustomer}
           onCreateJob={onCreateJob}
+          onUpdateCustomer={onUpdateCustomer}
+          existingCustomers={customers}
+          existingJobs={jobs}
           nextClientId={(() => {
             // Find highest US-XXXXX number across all customers
             let max = 15565;
@@ -5381,10 +5384,15 @@ interface CreateCustomerModalProps {
   onClose: () => void;
   onCreate: (customer: Partial<Customer>) => string;
   onCreateJob: (job: Partial<Job>) => void;
+  onUpdateCustomer: (customer: Customer) => void;
+  existingCustomers: Customer[];
+  existingJobs: Job[];
   nextClientId: string;
 }
 
-const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({ onClose, onCreate, onCreateJob, nextClientId }) => {
+const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({
+  onClose, onCreate, onCreateJob, onUpdateCustomer, existingCustomers, existingJobs, nextClientId,
+}) => {
   const [formData, setFormData] = useState({
     clientId: nextClientId,
     firstName: '',
@@ -5567,22 +5575,49 @@ const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({ onClose, onCr
    * claims the next one on click.
    */
   const importPowerCareRows = (rows: Record<string, unknown>[]): string => {
-    const byPerson = new Map<string, string>();
-    let orders = 0;
+    // Created earlier in THIS run. onCreate/onUpdateCustomer read the previous
+    // render's list, so nothing done in this loop is visible to the next
+    // iteration and the batch has to remember for itself.
+    const madeThisRun = new Map<string, string>();
+    let created = 0, enriched = 0, madeOrders = 0, skippedOrders = 0;
+
     for (const row of rows) {
+      const contact = mapRowToContact(row);
       const { customer, job } = rowToPowerCareRecords(row, generateServiceOrderNumber());
-      const key = (customer.email || customer.phone || customer.name || '').toLowerCase().trim();
-      let customerId = key ? byPerson.get(key) : undefined;
+      const batchKey = (contact.email || contact.phone || customer.name || '').toLowerCase().trim();
+
+      let customerId = batchKey ? madeThisRun.get(batchKey) : undefined;
       if (!customerId) {
-        customerId = onCreate({ ...customer, createdAt: new Date().toISOString() });
-        if (key) byPerson.set(key, customerId);
+        const existing = matchExistingCustomer(existingCustomers, contact);
+        if (existing) {
+          // On file already, from a hand entry or an earlier send of the same
+          // sheet. Keep the reviewed record and its clientId; add only the
+          // PowerCare fields and the sheet block.
+          onUpdateCustomer({ ...existing, ...enrichCustomerFromRow(existing, contact) });
+          customerId = existing.id;
+          enriched++;
+        } else {
+          customerId = onCreate({ ...customer, createdAt: new Date().toISOString() });
+          created++;
+        }
+        if (batchKey) madeThisRun.set(batchKey, customerId);
+      }
+
+      // Idempotency comes from SolarEdge's case number, not from anything here.
+      if (contact.caseNumber && findOrderForCase(existingJobs, contact.caseNumber)) {
+        skippedOrders++;
+        continue;
       }
       onCreateJob({ ...job, customerId });
-      orders++;
+      madeOrders++;
     }
-    const summary =
-      `Imported ${byPerson.size || orders} PowerCare customer${(byPerson.size || orders) === 1 ? '' : 's'} ` +
-      `and ${orders} service order${orders === 1 ? '' : 's'}.`;
+
+    const summary = [
+      created  ? `${created} new PowerCare customer${created === 1 ? '' : 's'}` : '',
+      enriched ? `${enriched} existing customer${enriched === 1 ? '' : 's'} updated` : '',
+      madeOrders ? `${madeOrders} service order${madeOrders === 1 ? '' : 's'} created` : '',
+      skippedOrders ? `${skippedOrders} case${skippedOrders === 1 ? '' : 's'} already had an order (skipped)` : '',
+    ].filter(Boolean).join(', ') || 'Nothing to import.';
     // Creating an order without a solarEdgeSiteId navigates to the Jobs board,
     // which unmounts this modal before the inline confirmation can be read.
     alert(summary);
