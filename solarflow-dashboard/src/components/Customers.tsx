@@ -2248,7 +2248,7 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
     setSendError(null);
 
     const smtpUser = localStorage.getItem('solarops_smtp_user');
-    const smtpPass = sessionStorage.getItem('solarops_smtp_pass');
+    const smtpPass = localStorage.getItem('solarops_smtp_pass') || sessionStorage.getItem('solarops_smtp_pass');
     const smtpHost = localStorage.getItem('solarops_smtp_host') || 'smtp.ionos.com';
     const smtpPort = parseInt(localStorage.getItem('solarops_smtp_port') || '465');
     const fromName = localStorage.getItem('solarops_smtp_from_name') || 'Conexsol Energy';
@@ -2290,15 +2290,10 @@ const ProductionSection: React.FC<{ customer: Customer }> = ({ customer }) => {
         setSendError('Network error, check your connection');
       }
     } else {
-      const subjectEnc = encodeURIComponent(subject);
-      const bcc = encodeURIComponent('cesar.jurado@conexsol.us');
-      window.open(
-        `mailto:${recipientEmail}?subject=${subjectEnc}&bcc=${bcc}&body=${encodeURIComponent('Please view the attached HTML report for your solar production summary.\n\n- Conexsol Service Team')}`,
-        '_blank'
-      );
-      setShowReportPreview(false);
-      setReportSent(true);
-      setTimeout(() => setReportSent(false), 4000);
+      // ponytail: no mailto fallback. mailto bodies are plain text, so the report
+      // silently arrived as one sentence. The SMTP password lives in sessionStorage,
+      // so it is gone in every new tab, which is how this kept happening.
+      setSendError('Email password not set for this session. Open Settings > Email and re-enter it, then send again.');
     }
     setSendingReport(false);
   };

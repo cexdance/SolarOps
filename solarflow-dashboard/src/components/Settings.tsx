@@ -133,7 +133,12 @@ export const Settings: React.FC<SettingsProps> = ({
   const [smtpHost, setSmtpHost] = useState(localStorage.getItem(SMTP_HOST_KEY) || 'smtp.ionos.com');
   const [smtpPort, setSmtpPort] = useState(localStorage.getItem(SMTP_PORT_KEY) || '465');
   const [smtpUser, setSmtpUser] = useState(localStorage.getItem(SMTP_USER_KEY) || '');
-  const [smtpPass, setSmtpPass] = useState(sessionStorage.getItem(SMTP_PASS_KEY) || '');
+  // ponytail: plaintext SMTP password in localStorage, on purpose. sessionStorage
+  // dropped it on every new tab, which silently downgraded report sends to a
+  // plain-text mailto. Upgrade path: move the credential server-side per user.
+  const [smtpPass, setSmtpPass] = useState(
+    localStorage.getItem(SMTP_PASS_KEY) || sessionStorage.getItem(SMTP_PASS_KEY) || ''
+  );
   const [smtpFromName, setSmtpFromName] = useState(localStorage.getItem(SMTP_FROM_KEY) || 'Conexsol Energy');
   const [showSmtpPass, setShowSmtpPass] = useState(false);
   const [smtpSaved, setSmtpSaved] = useState(!!localStorage.getItem(SMTP_USER_KEY));
@@ -145,7 +150,7 @@ export const Settings: React.FC<SettingsProps> = ({
     localStorage.setItem(SMTP_HOST_KEY, smtpHost.trim());
     localStorage.setItem(SMTP_PORT_KEY, smtpPort);
     localStorage.setItem(SMTP_USER_KEY, smtpUser.trim());
-    sessionStorage.setItem(SMTP_PASS_KEY, smtpPass);
+    localStorage.setItem(SMTP_PASS_KEY, smtpPass);
     localStorage.setItem(SMTP_FROM_KEY, smtpFromName.trim());
     setSmtpSaved(true);
     setShowSmtpSetup(false);
@@ -185,6 +190,7 @@ export const Settings: React.FC<SettingsProps> = ({
     localStorage.removeItem(SMTP_HOST_KEY);
     localStorage.removeItem(SMTP_PORT_KEY);
     localStorage.removeItem(SMTP_USER_KEY);
+    localStorage.removeItem(SMTP_PASS_KEY);
     sessionStorage.removeItem(SMTP_PASS_KEY);
     localStorage.removeItem(SMTP_FROM_KEY);
     setSmtpUser('');
