@@ -50,9 +50,24 @@ https://cjmhfagkkayelcsprbai.supabase.co/functions/v1/xero-oauth-callback
 Pick the Conexsol organisation and click **Allow**. You should land on a page that says
 "Connected". Close the tab. That is the last step, and you never do it again.
 
-## 4. One question to answer
+## 4. One thing to fix in the Xero app
+
+The app is currently NOT allowed to use the `accounting.transactions` permission.
+Xero refuses it with "invalid scope" (also `accounting.reports.read` and
+`accounting.journals.read`, while contacts, attachments and settings all work).
+
+Without it we can create clients but cannot create invoices, read contractor bills,
+or mark anything paid. Look on the app's Configuration page for a scopes or
+permissions section and enable Accounting transactions. If there is no such section,
+the app was likely created as the wrong integration type; delete it and create a new
+one as a **Web app**, then send the new client id and secret.
+
+## 5. One question to answer
 
 **Which Xero bank account do the contractor Zelle payments come out of?**
+
+And: **which revenue account code should the $120 site transfer post to?** The tax
+side is settled, you confirmed it is a flat fee with no tax.
 
 When you tick a contractor off as paid, the system posts that payment in Xero for you, and
 it needs to know which account to post it against. Give the account name exactly as it

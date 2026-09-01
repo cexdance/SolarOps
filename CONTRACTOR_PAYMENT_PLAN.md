@@ -177,3 +177,26 @@ to re-check if either ever moves. Keep the price in agent config, not hardcoded 
 - The 09-01 note flags that the Parts & Labor `totalCost` breakdown and `SowDistributionModal`
   each derive their own actual cost, so they can already disagree with the flat $120. Do not
   source the invoice amount from either; use the config value.
+
+
+---
+
+# 2026-09-01 verification against the live Xero app
+
+- **Redirect URI is correct and accepted.** Confirmed by hitting the authorize endpoint.
+- **BLOCKER FOUND: the app is refused `accounting.transactions`.** Xero 302s the authorize
+  request to an `invalid_scope` error. Same for `accounting.reports.read` and
+  `accounting.journals.read`. Accepted: contacts, attachments, settings, budgets.read,
+  files, assets, projects, payroll.employees. So it is NOT a read/write split and NOT the
+  redirect URI.
+  - Consequence: **client creation works, everything financial does not.** Creating an
+    invoice, reading contractor bills, and marking a bill paid ALL need transactions.
+    Phase 1 (the contractor bill workflow) is blocked entirely on this.
+  - Scopes trimmed to what the app allows so Daniel can connect today. `XERO_SCOPES` env
+    var overrides without a redeploy; add `accounting.transactions` back once the portal
+    is fixed, then re-authorise via `?force=1`.
+  - **RULE: test an OAuth app's scopes against the authorize endpoint BEFORE building on
+    them.** It needs no credentials and no consent: an unusable scope 302s to an error.
+    Same class of miss as the read-only Trello token.
+- **SETTLED: the $120 site transfer is a flat fee with NO TAX** (user, 2026-09-01). For a US
+  Xero org that is `TaxType: "NONE"`. Still needed: the revenue account code.

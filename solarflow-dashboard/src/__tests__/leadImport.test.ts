@@ -27,6 +27,10 @@ describe('mapRowToContact (SolarEdge export)', () => {
       firstName: 'Robert', lastName: 'Rivas',
       phone: '4075952086', email: 'rob@example.com',
       address: '123 Oak St', city: 'Tampa', state: 'FL', zip: '33601',
+      // Every column with no form field of its own now lands in the notes
+      // rather than being dropped. RMA State is ignored for the State FIELD
+      // (see above) but is still worth keeping on the record.
+      notes: 'RMA State: GA',
     });
   });
 

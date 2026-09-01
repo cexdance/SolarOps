@@ -1,6 +1,7 @@
 // SolarFlow MVP - Customers Component (List View with Split Panel)
 import React, { useState, useRef, useEffect } from 'react';
-import { serviceOrderNo } from '../lib/woHelpers';
+import { serviceOrderNo, generateServiceOrderNumber } from '../lib/woHelpers';
+import { rowToPowerCareRecords } from '../lib/leadImport';
 import { loadData } from '../lib/dataStore';
 import { authedFetch } from '../lib/supabase';
 import { claimClientNumber } from '../lib/clientRegistry';
@@ -209,7 +210,7 @@ interface CustomersProps {
   users: User[];
   contractors?: import('../types/contractor').Contractor[];
   currentUser: User | null;
-  onCreateCustomer: (customer: Partial<Customer>) => void;
+  onCreateCustomer: (customer: Partial<Customer>) => string;
   onUpdateCustomer: (customer: Customer) => void;
   onDeleteCustomer: (customerId: string) => void;
   onMergeCustomers: (primaryId: string, secondaryId: string, resolvedFields?: Partial<Customer>) => void;
@@ -1144,6 +1145,7 @@ export const Customers: React.FC<CustomersProps> = ({
         <CreateCustomerModal
           onClose={() => setShowCreateModal(false)}
           onCreate={onCreateCustomer}
+          onCreateJob={onCreateJob}
           nextClientId={(() => {
             // Find highest US-XXXXX number across all customers
             let max = 15565;
@@ -5377,11 +5379,12 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
 // Create Customer Modal Component
 interface CreateCustomerModalProps {
   onClose: () => void;
-  onCreate: (customer: Partial<Customer>) => void;
+  onCreate: (customer: Partial<Customer>) => string;
+  onCreateJob: (job: Partial<Job>) => void;
   nextClientId: string;
 }
 
-const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({ onClose, onCreate, nextClientId }) => {
+const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({ onClose, onCreate, onCreateJob, nextClientId }) => {
   const [formData, setFormData] = useState({
     clientId: nextClientId,
     firstName: '',
@@ -5552,6 +5555,40 @@ const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({ onClose, onCr
     }
   };
 
+  /**
+   * Every row of a PowerCare case export becomes a customer AND its service
+   * order. Rows repeat a customer when one client has two open cases, so the
+   * customer is created once and both orders hang off it: onCreate cannot see
+   * records made earlier in this same tick (it reads the previous render's
+   * list), so the batch keeps its own index.
+   *
+   * ponytail: no clientId is claimed. US-XXXXX numbers come from the Google
+   * Sheet, not from a local counter, and the empty client-number field already
+   * claims the next one on click.
+   */
+  const importPowerCareRows = (rows: Record<string, unknown>[]): string => {
+    const byPerson = new Map<string, string>();
+    let orders = 0;
+    for (const row of rows) {
+      const { customer, job } = rowToPowerCareRecords(row, generateServiceOrderNumber());
+      const key = (customer.email || customer.phone || customer.name || '').toLowerCase().trim();
+      let customerId = key ? byPerson.get(key) : undefined;
+      if (!customerId) {
+        customerId = onCreate({ ...customer, createdAt: new Date().toISOString() });
+        if (key) byPerson.set(key, customerId);
+      }
+      onCreateJob({ ...job, customerId });
+      orders++;
+    }
+    const summary =
+      `Imported ${byPerson.size || orders} PowerCare customer${(byPerson.size || orders) === 1 ? '' : 's'} ` +
+      `and ${orders} service order${orders === 1 ? '' : 's'}.`;
+    // Creating an order without a solarEdgeSiteId navigates to the Jobs board,
+    // which unmounts this modal before the inline confirmation can be read.
+    alert(summary);
+    return summary;
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onCreate({
@@ -5584,6 +5621,7 @@ const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({ onClose, onCr
               first row of a SolarEdge RMA export into the form. */}
           <ImportPrefill
             sources={['excel']}
+            onImportAll={importPowerCareRows}
             onParsed={(f) => setFormData(prev => ({
               ...prev,
               firstName: f.firstName ?? prev.firstName,

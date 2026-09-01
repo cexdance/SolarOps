@@ -9,14 +9,19 @@
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
-const SCOPES = [
+// This app is currently refused accounting.transactions (verified 2026-09-01 against
+// the authorize endpoint: it 302s to an invalid_scope error, as do reports.read and
+// journals.read, while contacts/attachments/settings/files/projects are all accepted).
+// Contacts alone is enough to create clients. Creating invoices, reading bills and
+// marking them paid all need transactions, so those stay off until the Xero app is
+// provisioned for it. Override without a redeploy by setting XERO_SCOPES.
+const SCOPES = Deno.env.get("XERO_SCOPES") ?? [
   "openid",
   "profile",
   "email",
   "offline_access", // ponytail: without this Xero issues NO refresh token and the agent dies in 30 minutes
-  "accounting.transactions",
-  "accounting.attachments.read",
-  "accounting.contacts.read",
+  "accounting.contacts",
+  "accounting.attachments",
 ].join(" ");
 
 const page = (title: string, body: string, status = 200) =>

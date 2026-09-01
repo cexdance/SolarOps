@@ -147,12 +147,22 @@ export const WO_STATUS_LABEL: Record<string, string> = {
   completed: 'Completed', invoiced: 'Invoiced', paid: 'Paid',
 };
 
+// Last sequence handed out in this tab. The sequence is the last 5 digits of
+// Date.now(), so a bulk import that mints several orders inside one millisecond
+// used to hand back the SAME number for every row, and handleCreateJob dedupes
+// by woNumber: 5 imported rows collapsed into 1 order. Monotonic per session
+// fixes that. Cross-tab collisions are still possible and still resolved by the
+// woNumber dedupe, which is the right answer there (same order, two tabs).
+let lastSoSeq = -1;
+
 /** Generate a fresh Service Order number (SO-YYMM-NNNNN). */
 export function generateServiceOrderNumber(): string {
   const now = new Date();
   const yymm = `${String(now.getFullYear()).slice(2)}${String(now.getMonth() + 1).padStart(2, '0')}`;
-  const seq = String(Date.now()).slice(-5);
-  return `SO-${yymm}-${seq}`;
+  let n = Number(String(Date.now()).slice(-5));
+  if (n <= lastSoSeq) n = lastSoSeq + 1;
+  lastSoSeq = n;
+  return `SO-${yymm}-${String(n % 100000).padStart(5, '0')}`;
 }
 
 // Statuses the contractor sees in their portal. A job assigned to a contractor

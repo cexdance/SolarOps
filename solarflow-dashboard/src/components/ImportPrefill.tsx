@@ -2,12 +2,14 @@
 // Two sources, both parse ONE record and hand the parsed fields back via onParsed;
 // the parent decides how to merge them onto its own formData.
 //   - screenshot: a SolarEdge lead-email image, parsed by Claude Vision (/api/parse-lead-image)
-//   - excel:      the first data row of an xlsx/xls/csv (SolarEdge "Site Main Contact / RMA" export)
+//   - excel:      an xlsx/xls/csv (SolarEdge "Site Main Contact / RMA / Cases" export).
+//                 With onImportAll, EVERY row is imported as a PowerCare customer
+//                 plus its service order; without it, row 1 prefills the form.
 // Extracted from the retired Lead Lobby so both Add-Customer modals share one implementation.
 import React, { useRef, useState } from 'react';
 import { Camera, FileSpreadsheet, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
 import { authedFetch } from '../lib/supabase';
-import { ParsedContact, mapRowToContact, mapVisionToContact, readFirstSheetRow } from '../lib/leadImport';
+import { ParsedContact, mapRowToContact, mapVisionToContact, readSheetRows } from '../lib/leadImport';
 
 type Source = 'screenshot' | 'excel';
 
@@ -16,7 +18,13 @@ const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
 export const ImportPrefill: React.FC<{
   sources: Source[];
   onParsed: (fields: ParsedContact) => void;
-}> = ({ sources, onParsed }) => {
+  /**
+   * Given, the Excel branch imports every row instead of prefilling the form,
+   * and shows the summary string this returns. Only hosts that can create both
+   * a customer and a service order supply it.
+   */
+  onImportAll?: (rows: Record<string, unknown>[]) => string;
+}> = ({ sources, onParsed, onImportAll }) => {
   const [open, setOpen] = useState<Source | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -61,15 +69,21 @@ export const ImportPrefill: React.FC<{
     reset();
     setBusy(true);
     try {
-      const row = await readFirstSheetRow(file);
-      if (!row) { setError('No rows found in that spreadsheet.'); return; }
-      const fields = mapRowToContact(row);
-      if (!fields.firstName && !fields.phone && !fields.email) {
-        setError('Could not find a name, phone, or email in the first row. Check the column headers.');
+      const rows = await readSheetRows(file);
+      if (!rows.length) { setError('No rows found in that spreadsheet.'); return; }
+      const usable = rows.filter(r => {
+        const f = mapRowToContact(r);
+        return f.firstName || f.phone || f.email;
+      });
+      if (!usable.length) {
+        setError('Could not find a name, phone, or email in any row. Check the column headers.');
         return;
       }
-      onParsed(fields);
-      setOk('First row loaded. Review the fields below, then save.');
+      if (onImportAll) { setOk(onImportAll(usable)); return; }
+      onParsed(mapRowToContact(usable[0]));
+      setOk(rows.length > 1
+        ? `First of ${rows.length} rows loaded. Review the fields below, then save.`
+        : 'First row loaded. Review the fields below, then save.');
     } catch (err) {
       setError(`Could not read the file: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
@@ -125,7 +139,11 @@ export const ImportPrefill: React.FC<{
           </button>
           {open === 'excel' && (
             <div className="px-3 pb-3 space-y-2">
-              <p className="text-[11px] text-slate-500">Upload a SolarEdge RMA export (.xlsx, .xls, .csv). The first row prefills the form.</p>
+              <p className="text-[11px] text-slate-500">
+                {onImportAll
+                  ? 'Upload a SolarEdge PowerCare case export (.xlsx, .xls, .csv). Every row becomes a PowerCare customer and a service order.'
+                  : 'Upload a SolarEdge RMA export (.xlsx, .xls, .csv). The first row prefills the form.'}
+              </p>
               <input ref={xlsRef} type="file" accept=".xlsx,.xls,.csv" className="hidden"
                 onChange={e => { const f = e.target.files?.[0]; if (f) parseExcel(f); }} />
               <button type="button" onClick={() => xlsRef.current?.click()}

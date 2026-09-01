@@ -10,6 +10,12 @@ import { BUILD_ID } from './lib/versionConfig';
 import { StorageWarningBanner } from './components/StorageWarningBanner';
 import { ErrorBoundary } from './shared/components/ErrorBoundary';
 import { SuspenseFallback } from './shared/components/SuspenseFallback';
+// Record ids are `<kind>-<Date.now()>`, which collides when several records are
+// created inside one millisecond (a bulk spreadsheet import does exactly that).
+// The suffix makes each mint unique without changing the id format, which
+// nothing parses.
+const uniqueSuffix = (): string => Math.random().toString(36).slice(2, 8);
+
 const Layout             = lazy(() => import('./components/Layout').then(m => ({ default: m.Layout })));
 const Dashboard          = lazy(() => import('./components/Dashboard').then(m => ({ default: m.Dashboard })));
 const Jobs               = lazy(() => import('./components/Jobs').then(m => ({ default: m.Jobs })));
@@ -1997,7 +2003,7 @@ function App() {
       return merged;
     }
     const newJob: Job = {
-      id: `job-${Date.now()}`,
+      id: `job-${Date.now()}-${uniqueSuffix()}`,
       customerId: job.customerId || '',
       technicianId: job.technicianId || '',
       title: job.title || '',
@@ -2286,7 +2292,7 @@ function App() {
     }
 
     const newCustomer: Customer = {
-      id: `cust-${Date.now()}`,
+      id: `cust-${Date.now()}-${uniqueSuffix()}`,
       name: customer.name || '',
       firstName: customer.firstName,
       lastName: customer.lastName,

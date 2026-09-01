@@ -2479,6 +2479,25 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                     {stRequestMsg && <span className="text-[11px] text-teal-700">{stRequestMsg}</span>}
                   </div>
                   <p className="text-[10px] text-teal-700">These values are saved with the service order and used by the admin agentic workflow to execute the SolarEdge ownership transfer.</p>
+
+                  {/* Xero handoff. Admin only, and deliberately NOT in the SOW report:
+                      that modal is the client-facing printable scope of work. */}
+                  {isAdmin && (
+                    <div className="pt-3 border-t border-teal-200">
+                      <button
+                        type="button"
+                        onClick={pushSiteTransferToXero}
+                        disabled={xeroBusy}
+                        className="inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold rounded-lg bg-teal-600 text-white hover:bg-teal-700 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {xeroBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Banknote className="w-3.5 h-3.5" />}
+                        {xeroBusy ? 'Sending to Xero...' : 'Create client in Xero'}
+                      </button>
+                      <p className="mt-1.5 text-[10px] text-teal-700">
+                        Adds this client to Xero if they are not there yet. Safe to press more than once. The draft invoice follows once the Xero app is allowed the accounting.transactions permission.
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
               <div className={isSiteTransfer ? 'hidden' : ''}>
@@ -4023,23 +4042,6 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                     <p className="mt-3 text-[10px] text-teal-700">
                       Admin team runs the SolarEdge ownership transfer via agentic workflow. No contractor assigned. Flat-fee transfer (priced in Xero).
                     </p>
-
-                    {isAdmin && (
-                      <div className="mt-3 pt-3 border-t border-teal-200">
-                        <button
-                          type="button"
-                          onClick={pushSiteTransferToXero}
-                          disabled={xeroBusy}
-                          className="inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold rounded-lg bg-teal-600 text-white hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          {xeroBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Banknote className="w-3.5 h-3.5" />}
-                          {xeroBusy ? 'Sending to Xero...' : 'Create client + draft invoice in Xero'}
-                        </button>
-                        <p className="mt-1.5 text-[10px] text-teal-700">
-                          Adds the client to Xero if missing and leaves a draft invoice for Daniel to approve. Safe to press more than once.
-                        </p>
-                      </div>
-                    )}
                   </div>
                 )}
 
