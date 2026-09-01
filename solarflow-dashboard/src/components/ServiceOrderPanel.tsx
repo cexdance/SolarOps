@@ -778,13 +778,24 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
       const { data, error } = await supabase.functions.invoke('xero-site-transfers', {
         body: { jobId: job.id },
       });
-      // invoke() reports a non-2xx as an error but keeps the body, which is where
-      // the useful reason lives. Surface that, not "Edge Function returned non-2xx".
-      const reason = (data as { error?: string } | null)?.error;
-      if (error && !reason) throw error;
-      if (reason) { alert(`Xero: ${reason}`); return; }
-      const r = (data as { results?: Array<{ name?: string; contact?: string; invoice?: string; warn?: string }> })?.results?.[0];
-      if (!r) { alert('Nothing to send.'); return; }
+
+      // invoke() returns data:null on a non-2xx and hangs the real Response off
+      // error.context. The reason we care about ("Not connected to Xero yet",
+      // "admin only", "already invoiced") is in that BODY, so read it before
+      // falling back to the useless "returned a non-2xx status code".
+      let payload = data as { error?: string; results?: Array<{ name?: string; contact?: string; invoice?: string; warn?: string }> } | null;
+      if (error) {
+        const ctx = (error as unknown as { context?: Response }).context;
+        if (ctx && typeof ctx.json === 'function') {
+          try { payload = await ctx.json(); } catch { /* body was not json */ }
+        }
+        const reason = payload?.error;
+        alert(reason ? `Xero: ${reason}` : `Xero call failed: ${error.message}`);
+        return;
+      }
+
+      const r = payload?.results?.[0];
+      if (!r) { alert('Nothing to send for this service order.'); return; }
       alert(
         `Xero updated for ${r.name}\n\n` +
         `Client: ${r.contact}\n` +
