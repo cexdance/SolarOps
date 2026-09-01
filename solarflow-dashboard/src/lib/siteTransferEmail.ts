@@ -28,7 +28,7 @@ export function buildSiteTransferMailto(opts: {
     '',
     'I am emailing you to request two pieces of information that we need to perform the "site transfer" of your installation and gain access to its monitoring. These pieces of information are:',
     '',
-    '* Site ID: You can find this number by following the instructions detailed in the attached photo. In the mySolarEdge app, open the menu at the top left and tap "Site Details", the Site ID is listed there.',
+    '* Site ID: Your Site ID is in the mySolarEdge app. Tap the menu icon in the top left corner, then tap "Site Details," and your Site ID will be right there.',
     '',
     '* Full inverter serial number: This number is located on the label of the inverter.',
     '',

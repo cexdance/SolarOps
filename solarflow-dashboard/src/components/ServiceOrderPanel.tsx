@@ -1687,6 +1687,33 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                 <ExternalLink className="w-3 h-3 shrink-0 opacity-0 group-hover:opacity-60 transition-opacity" />
               </a>
             )}
+            {/* Contact line: billing creates the customer in Xero from this
+                header, so the email and phone belong here rather than a click
+                away in the client card. Explicit {' '} separators keep a drag
+                across both copyable as "email phone", not concatenated. */}
+            {(customer?.email || customer?.phone) && (
+              <div className="text-sm mt-0.5 select-text">
+                {customer?.email && (
+                  <a
+                    href={`mailto:${customer.email}`}
+                    title="Email the customer"
+                    className="text-slate-400 hover:text-orange-300 transition-colors break-all"
+                  >
+                    {customer.email}
+                  </a>
+                )}
+                {customer?.email && customer?.phone && <span className="text-slate-600">{' · '}</span>}
+                {customer?.phone && (
+                  <a
+                    href={`tel:${customer.phone.replace(/[^\d+]/g, '')}`}
+                    title="Call the customer"
+                    className="text-slate-400 hover:text-orange-300 transition-colors whitespace-nowrap"
+                  >
+                    {customer.phone}
+                  </a>
+                )}
+              </div>
+            )}
             {/* Monitoring badge sits in the top header row (next to status), and
                 the service type moved to the right column under Report/Close, so
                 neither costs the name and address a whole row of their own. */}
