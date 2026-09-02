@@ -411,7 +411,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
 
   // Common manufacturers and parts for autofill
   const manufacturerSuggestions = ['SolarEdge', 'Enphase', 'SMA', 'Fronius', 'Sungrow', 'Generac', 'Tesla', 'LG', 'Panasonic', 'Canadian Solar', 'First Solar', 'Trina'];
-  const partDescriptionSuggestions = ['Inverter', 'Optimizer', 'Battery', 'Combiner Box', 'DC Disconnect', 'AC Disconnect', 'Breaker', 'Module', 'Rail', 'Conduit', 'Cable', 'Junction Box', 'Monitoring Device'];
+  const partDescriptionSuggestions = ['Site Transfer', 'Inverter', 'Optimizer', 'Battery', 'Combiner Box', 'DC Disconnect', 'AC Disconnect', 'Breaker', 'Module', 'Rail', 'Conduit', 'Cable', 'Junction Box', 'Monitoring Device'];
   // Travel miles
   const [travelMiles] = useState<number>(job?.travelMiles ?? 0);
   // Audit trail (stateful so the bottom Activity Timeline updates live as the
@@ -1386,6 +1386,42 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
   }, []);
 
   // RMA
+  /**
+   * Opens the SolarEdge site-transfer form carrying this order's Site ID and
+   * inverter serial in the URL fragment, where the autofill bookmarklet reads
+   * them. A server-side submission is not possible: the page is behind a
+   * Cloudflare bot check and the form carries a per-session Drupal token.
+   *
+   * Also files the Site Transfer RMA entry up front so the case number from
+   * the confirmation screen has somewhere to land. The id is derived from the
+   * JOB, not from the values, so clicking twice reuses the same entry.
+   */
+  const [rmaNumberDrafts, setRmaNumberDrafts] = useState<Record<string, string>>({});
+
+  const openSiteTransferForm = () => {
+    const slotId = `rma-sitetransfer-${job?.id ?? 'new'}`;
+    setRmaEntries(prev =>
+      prev.some(e => e.id === slotId)
+        ? prev
+        : [
+            ...prev,
+            {
+              id: slotId,
+              manufacturer: 'SolarEdge',
+              partDescription: 'Site Transfer',
+              rmaNumber: '',
+              status: 'pending' as const,
+              createdAt: new Date().toISOString(),
+              createdBy: currentUserName,
+            },
+          ],
+    );
+    const payload = encodeURIComponent(
+      JSON.stringify({ siteId: stSiteId || undefined, serial: stInverterSerial || undefined }),
+    );
+    window.open(`https://www.solaredge.com/site-transfer#solarops=${payload}`, '_blank', 'noopener');
+  };
+
   const handleAddRma = () => {
     if (!rmaForm.manufacturer || !rmaForm.partDescription) return;
     const entry: RMAEntry = {
@@ -2479,13 +2515,26 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                     >
                       Site ID photo (attach it)
                     </a>
-                    <a
-                      href="https://www.solaredge.com/site-transfer"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="px-3 py-2 text-xs font-semibold rounded-lg border border-teal-300 text-teal-700 hover:bg-teal-100 transition-colors"
+                    <button
+                      type="button"
+                      onClick={openSiteTransferForm}
+                      disabled={!stSiteId && !stInverterSerial}
+                      title={
+                        !stSiteId && !stInverterSerial
+                          ? 'Enter a Site ID or inverter serial first'
+                          : 'Opens the SolarEdge form carrying these values, and files a Site Transfer RMA to hold the case number'
+                      }
+                      className="px-3 py-2 text-xs font-semibold rounded-lg border border-teal-300 text-teal-700 hover:bg-teal-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
                     >
                       Submit transfer at SolarEdge
+                    </button>
+                    <a
+                      href="/site-transfer-autofill.html"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-3 py-2 text-xs font-semibold rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-100 transition-colors"
+                    >
+                      Autofill setup
                     </a>
                     {stRequestMsg && <span className="text-[11px] text-teal-700">{stRequestMsg}</span>}
                   </div>
@@ -3137,6 +3186,25 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                             {entry.rmaNumber && <span className="font-mono">{entry.rmaNumber}</span>}
                             {!entry.rmaNumber && entry.caseNumber && <span className="font-mono">{entry.caseNumber}</span>}
                           </p>
+                          {/* Somewhere to paste the case number the SolarEdge
+                              confirmation screen gives back. Only shown while
+                              the entry has no number at all, so existing rows
+                              stay read-only. */}
+                          {!entry.rmaNumber && !entry.caseNumber && (
+                            <input
+                              value={rmaNumberDrafts[entry.id] ?? ''}
+                              onChange={e => setRmaNumberDrafts(d => ({ ...d, [entry.id]: e.target.value }))}
+                              onBlur={() => {
+                                const v = (rmaNumberDrafts[entry.id] ?? '').trim();
+                                if (!v) return;
+                                setRmaEntries(prev =>
+                                  prev.map(x => (x.id === entry.id ? { ...x, rmaNumber: v, caseNumber: v } : x)),
+                                );
+                              }}
+                              placeholder="Paste RMA / case #"
+                              className="mt-0.5 px-2 py-1 text-xs font-mono border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-orange-400"
+                            />
+                          )}
                           <p className="text-slate-400">By {entry.createdBy} · {new Date(entry.createdAt).toLocaleDateString()}</p>
                         </div>
                         <div className="flex items-center gap-2 shrink-0">

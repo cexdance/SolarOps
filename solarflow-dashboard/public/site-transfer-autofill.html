@@ -1,0 +1,27 @@
+<!doctype html>
+<meta charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1">
+<title>SolarEdge site transfer autofill</title>
+<style>
+:root{color-scheme:light}
+body{font:15px/1.6 system-ui,sans-serif;max-width:640px;margin:40px auto;padding:0 20px;color:#1e293b;background:#fff}
+h1{font-size:20px}
+ol{padding-left:20px}li{margin:.5em 0}
+.bm{display:inline-block;padding:10px 18px;background:#0f766e;color:#fff;border-radius:8px;font-weight:600;text-decoration:none;cursor:grab}
+code{background:#f1f5f9;padding:1px 5px;border-radius:4px;font-size:13px}
+.note{background:#f8fafc;border-left:3px solid #0f766e;padding:10px 14px;font-size:14px}
+</style>
+<h1>SolarEdge site transfer autofill</h1>
+<p><strong>Drag this button to your bookmarks bar.</strong> One time, per browser.</p>
+<p><a class=bm href="javascript:(function%20()%20%7B%20var%20CONST%20=%20%7B%20party_number:%20'107077',%20customer_email:%20'anthony.lopez@conexsol.us',%20phone_number:%20'+1%20(786)%20899-7191',%20new_installer_account_id:%20'64793',%20verify_new_installer_account_id:%20'64793',%20first_name:%20'Anthony',%20last_name:%20'Lopez'%20%7D;%20var%20CHECK%20=%20%5B%20'edit-transfer-monitoring-checkbox',%20'edit-acknowledgment',%20'edit-declaration',%20'edit-terms-privacy'%20%5D;%20var%20RADIO%20=%20%5B'edit-serial-number-type-partialsn',%20'edit-site-id-radio-siteidinput'%5D;%20function%20copy(t)%20%7B%20try%20%7B%20navigator.clipboard.writeText(t);%20return%20true;%20%7D%20catch%20(e)%20%7B%7D%20var%20a%20=%20document.createElement('textarea');%20a.value%20=%20t;%20document.body.appendChild(a);%20a.select();%20try%20%7B%20document.execCommand('copy');%20%7D%20catch%20(e)%20%7B%7D%20document.body.removeChild(a);%20return%20true;%20%7D%20var%20form%20=%20document.getElementById('site-transfer-form');%20if%20(!form)%20%7B%20var%20txt%20=%20(document.body.innerText%20%7C%7C%20document.body.textContent%20%7C%7C%20'').replace(/%5Cs+/g,%20'%20');%20var%20m%20=%20txt.match(/(?:case%7Creference%7Cticket)%5Cb%5B%5E%5D%7B0,40%7D?%5Cb(%5BA-Z%5D%7B0,4%7D-?%5Cd%5B%5CdA-Z-%5D%7B4,%7D)/i);%20if%20(m)%20%7B%20copy(m%5B1%5D);%20alert('Case%20number%20'%20+%20m%5B1%5D%20+%20'%20copied.%5CnPaste%20it%20into%20the%20RMA%20entry%20in%20SolarOps.');%20%7D%20else%20%7B%20alert('No%20site-transfer%20form%20and%20no%20case%20number%20found.%20Copy%20it%20by%20hand%20from:%5Cn%5Cn'%20+%20txt.slice(0,%20400));%20%7D%20return;%20%7D%20var%20vars%20=%20%7B%7D;%20try%20%7B%20vars%20=%20JSON.parse(decodeURIComponent((location.hash.match(/solarops=(%5B%5E&%5D*)/)%20%7C%7C%20%5B%5D)%5B1%5D%20%7C%7C%20'%7B%7D'));%20%7D%20catch%20(e)%20%7B%7D%20function%20fire(el)%20%7B%20%5B'input',%20'change',%20'keyup',%20'blur'%5D.forEach(function%20(t)%20%7B%20el.dispatchEvent(new%20Event(t,%20%7B%20bubbles:%20true%20%7D));%20%7D);%20%7D%20function%20set(name,%20val)%20%7B%20var%20el%20=%20form.querySelector('%5Bname=%22'%20+%20name%20+%20'%22%5D');%20if%20(!el%20%7C%7C%20!val%20%7C%7C%20el.value%20===%20val)%20return%200;%20var%20setter%20=%20Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el),%20'value').set;%20setter.call(el,%20val);%20fire(el);%20return%201;%20%7D%20function%20pick(id)%20%7B%20var%20el%20=%20document.getElementById(id);%20if%20(!el%20%7C%7C%20el.checked)%20return%200;%20el.click();%20return%201;%20%7D%20var%20n%20=%200;%20RADIO.forEach(function%20(id)%20%7B%20n%20+=%20pick(id);%20%7D);%20Object.keys(CONST).forEach(function%20(k)%20%7B%20n%20+=%20set(k,%20CONST%5Bk%5D);%20%7D);%20if%20(vars.siteId)%20n%20+=%20set('site_id',%20vars.siteId);%20if%20(vars.serial)%20%7B%20var%20parts%20=%20String(vars.serial).trim().toUpperCase().split('-');%20n%20+=%20set('serial_hex',%20parts%5B0%5D);%20if%20(parts%5B1%5D)%20n%20+=%20set('serial_checksum',%20parts%5B1%5D);%20%7D%20CHECK.forEach(function%20(id)%20%7B%20n%20+=%20pick(id);%20%7D);%20alert('Filled%20'%20+%20n%20+%20'%20field(s).%5Cn%5CnIf%20the%20form%20just%20expanded,%20click%20this%20bookmarklet%20again%20to%20fill%20the%20rest,%20then%20review%20and%20submit.');%20%7D)();">SE Transfer Fill</a></p>
+<h2>How to use it</h2>
+<ol>
+<li>In the service order, open the Site Transfer card and click <strong>Submit transfer at SolarEdge</strong>. The SolarEdge form opens carrying that order's Site ID and inverter serial.</li>
+<li>Click the <strong>SE Transfer Fill</strong> bookmark. It fills the Customer Number and everything else it can see.</li>
+<li>The form expands once the Customer Number validates. <strong>Click the bookmark again</strong> to fill the fields that just appeared.</li>
+<li>Review every field, then submit the form yourself.</li>
+<li>On the confirmation screen, click the bookmark once more. It copies the case number to your clipboard.</li>
+<li>Back in the service order, paste it into the <strong>Site Transfer</strong> RMA entry that was created for you.</li>
+</ol>
+<p class=note>The bookmarklet never submits the form. It only fills fields, so you always see what is being sent before it goes.</p>
+<p style="color:#64748b;font-size:13px">Constants baked in: customer number 107077, installer account 64793, Anthony Lopez, anthony.lopez@conexsol.us, +1 (786) 899-7191. Only Site ID and inverter SN come from the service order.</p>
