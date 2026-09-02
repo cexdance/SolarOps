@@ -486,3 +486,36 @@ export function actualServiceCallCost(
     .reduce((s, e) => s + (e.amount || 0), 0);
   return +(baseLabor + extraLabor + parts + mileage + expenseSum).toFixed(2);
 }
+
+/**
+ * The contractor's service note, mirrored onto a job's activity feed as ONE
+ * comment that is updated in place.
+ *
+ * The mirrored entry used to carry an id hashed from the note TEXT. The field
+ * app saves on every keystroke, so every prefix hashed differently and appended
+ * an entry of its own: 1,690 comments across 28 orders, one of them spelling a
+ * single sentence out 116 times ("B", "Ba", "I", "In", ...). An id derived from
+ * the content cannot dedupe a value that changes on every save.
+ *
+ * A stable per-job id fixes it in both directions: appending locally becomes a
+ * replace, and `unionById` in the sync merge collapses two devices' copies to
+ * one entry instead of keeping both.
+ */
+export function mirrorContractorNote<A extends {
+  id?: string; type?: string; description?: string; timestamp?: string; userName?: string;
+}>(
+  history: A[] | undefined,
+  sourceJobId: string | undefined,
+  note: string,
+  userName: string,
+  when: string = new Date().toISOString(),
+): A[] {
+  const had = history ?? [];
+  const text = (note ?? '').trim();
+  if (!text) return had;
+  const id = `cnote-${sourceJobId}`;
+  const entry = { id, type: 'note_added', description: text, timestamp: when, userName } as unknown as A;
+  return had.some(a => a.id === id)
+    ? had.map(a => (a.id === id ? entry : a))
+    : [entry, ...had];
+}

@@ -44,7 +44,7 @@ import { canSeeFinancials, isFinancialView } from './lib/access';
 import { syncFromDB } from './lib/db';
 import { loadData, saveData, hydrateData } from './lib/dataStore';
 import { migrateWoPhotos, purgeUploadedBlobs } from './lib/photoStore';
-import { pickupJobsForContractor, toContractorJobView, serviceOrderNo, photoUrlStem, bareOrderNo, dedupeWoPhotos, mergeRmaEntries, findJobByWoNumber } from './lib/woHelpers';
+import { pickupJobsForContractor, toContractorJobView, serviceOrderNo, photoUrlStem, bareOrderNo, dedupeWoPhotos, mergeRmaEntries, findJobByWoNumber, mirrorContractorNote } from './lib/woHelpers';
 import { fireMentionNotifications, sendCustomerAppointmentEmail } from './components/ui/MentionTextarea';
 import { formatCost } from './lib/money';
 import { logChange, logJobChange, flushChangeLog } from './lib/changeLog';
@@ -1584,26 +1584,33 @@ function App() {
 
         // Surface the contractor's service note as a comment on the job's
         // activity feed so it flows to the Client Card Activity tab (the same
-        // aggregation that shows staff SO comments). Append-only with a
-        // content-stable id: mergeJobPair unions activityHistory by id, so the
-        // SAME note re-synced from another device collapses to one entry instead
-        // of spamming the feed on every contractor save.
+        // aggregation that shows staff SO comments). ONE entry per job, updated
+        // in place as the note changes.
+        //
+        // The id used to be a hash of the note TEXT. The field app saves on every
+        // keystroke, so each prefix hashed differently and appended an entry of
+        // its own: 1,690 mirrored comments across 28 orders, one of them
+        // spelling a single sentence out 116 times, "B" / "Ba" / "I" / "In"
+        // (SO-2608-07213, 2026-08-19). A content-derived id cannot dedupe a
+        // value that changes on every save, which is the one thing it had to do.
+        //
+        // The id is now stable per job, so unionById collapses every save to a
+        // single entry and the LWW winner supplies the text. serviceReport only
+        // ever holds the LATEST note anyway, so this feed was never a history of
+        // revisions.
+        //
+        // ponytail: a contractor who replaces their note wholesale overwrites the
+        // mirrored comment. Keep prior revisions only if someone asks; the
+        // service report itself has never kept them either.
         const contractorNote = (updatedJob.operationalNotes ?? updatedJob.completionNotes ?? '').trim();
         const prevContractorNote = (adminJob.serviceReport ?? '').trim();
         let woActivityHistory = adminJob.activityHistory ?? [];
         if (contractorNote && contractorNote !== prevContractorNote) {
-          let h = 0;
-          for (let i = 0; i < contractorNote.length; i++) h = (h * 31 + contractorNote.charCodeAt(i)) | 0;
-          const noteId = `cnote-${updatedJob.sourceJobId}-${h >>> 0}`;
-          if (!woActivityHistory.some(a => a.id === noteId)) {
-            const c = contractors.find(c => c.id === updatedJob.contractorId);
-            const cName = c?.businessName ?? c?.contactName ?? 'Contractor';
-            woActivityHistory = [
-              { id: noteId, type: 'note_added' as const, description: contractorNote,
-                timestamp: new Date().toISOString(), userName: cName },
-              ...woActivityHistory,
-            ];
-          }
+          const c = contractors.find(c => c.id === updatedJob.contractorId);
+          woActivityHistory = mirrorContractorNote(
+            woActivityHistory, updatedJob.sourceJobId, contractorNote,
+            c?.businessName ?? c?.contactName ?? 'Contractor',
+          );
         }
 
         const updatedAdminJob = {
