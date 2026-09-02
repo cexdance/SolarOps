@@ -76,6 +76,13 @@ describe('site-transfer autofill bookmarklet', () => {
     ).toBe(true);
   });
 
+  it('explains the drag instead of running when clicked on the install page', () => {
+    const { alerts, copied } = run('<h1 id="se-transfer-install-page">SolarEdge site transfer autofill</h1>');
+    expect(alerts[0]).toContain('bookmarks bar');
+    expect(alerts[0]).not.toContain('Copy it by hand');
+    expect(copied).toBe('');
+  });
+
   it('copies the case number off the confirmation screen', () => {
     const { copied } = run('<div>Thank you. Your case number is CS-4821907 and we will be in touch.</div>');
     expect(copied).toBe('CS-4821907');

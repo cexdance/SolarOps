@@ -42,6 +42,17 @@
     return true;
   }
 
+  // Clicking the button on the install page instead of dragging it is the
+  // obvious mistake, and the generic "no form here" message does not explain
+  // it. Detect that page and say what to do.
+  if (document.getElementById('se-transfer-install-page')) {
+    alert('This is the install page, not the SolarEdge form.\n\n' +
+      'Drag the "SE Transfer Fill" button UP to your bookmarks bar. ' +
+      'If you cannot see the bar, press Cmd+Shift+B to show it.\n\n' +
+      'Then click the bookmark while the SolarEdge site-transfer form is open.');
+    return;
+  }
+
   var form = document.getElementById('site-transfer-form');
 
   // Confirmation screen: no form left, just a case number to harvest.
