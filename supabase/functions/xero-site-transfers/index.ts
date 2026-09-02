@@ -149,6 +149,21 @@ Deno.serve(async (req) => {
     try { body = await req.json(); } catch { /* empty body is fine */ }
   }
   const dry = url.searchParams.get("dry") === "1" || body.dry === true;
+
+  // ?accounts=1 lists the revenue accounts so the right code for the site-transfer
+  // line can be picked from the real chart of accounts instead of guessed.
+  if (url.searchParams.get("accounts") === "1" || body.accounts === true) {
+    try {
+      const auth = await getAccess(db);
+      const res = await xero(auth, "/Accounts");
+      const revenue = (res?.Accounts ?? [])
+        .filter((a: Json) => ["REVENUE", "SALES", "OTHERINCOME"].includes(String(a.Type)))
+        .map((a: Json) => ({ code: a.Code, name: a.Name, type: a.Type, tax: a.TaxType }));
+      return Response.json({ ok: true, revenue }, { headers: cors(req) });
+    } catch (e) {
+      return Response.json({ ok: false, error: String(e) }, { status: 500, headers: cors(req) });
+    }
+  }
   // One job (the admin button) or every eligible one (the schedule).
   const jobId = String(body.jobId ?? url.searchParams.get("job") ?? "");
   const out: Json[] = [];
