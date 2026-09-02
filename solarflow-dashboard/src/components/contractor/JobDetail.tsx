@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { ContractorJob, ServiceStatus, PhotoCategory, JobPart, ContractorExpense, ExpenseCategory, ContractorLineItem } from '../../types/contractor';
 import { jobMapsUrl } from '../../lib/woHelpers';
+import { createDebouncedSaver, type DebouncedSaver } from '../../lib/debouncedSaver';
 import type { RMAEntry } from '../../types';
 import { loadInventory } from '../../lib/inventoryStore';
 import {
@@ -71,6 +72,16 @@ function getPhotoTabs(isNewInstall?: boolean, isOptimizerJob?: boolean, isInvert
   if (!isOptimizerJob) return base.filter(t => t.id !== 'voltage');
   return base;
 }
+
+/**
+ * How long the editor waits after the last change before saving.
+ *
+ * The auto-save writes the whole job and fans it out through the sync engine, so
+ * it must not run per keystroke. 700ms is past a normal typing gap and still
+ * lands well inside the time it takes to tap away from the field. Every path
+ * that could lose the tail (unmount, tab hidden, page hide) flushes explicitly.
+ */
+const SAVE_DEBOUNCE_MS = 700;
 
 const SERVICE_STATUS_OPTIONS: { id: ServiceStatus; label: string; color: string }[] = [
   { id: 'fully_operational',     label: 'Fully Operational',    color: 'border-emerald-400 bg-emerald-50 text-emerald-700' },
@@ -434,31 +445,67 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
   // before "Start Call" or after "Complete" still persist. Writes the FULL current
   // editor snapshot (not just photos+notes) so this save never clobbers other live
   // fields (serviceStatus, nextSteps, parts, ...) back to the prop's older values.
+  //
+  // DEBOUNCED, because this effect depends on three free-text fields. It used to
+  // fire per keystroke, so typing a service note pushed the whole job once per
+  // CHARACTER: that is what filled 28 work orders with 1,690 mirrored comments
+  // spelling their notes out letter by letter (fixed at the mirror in a268edc,
+  // fixed at the source here).
   const isMounted = useRef(false);
+  // The snapshot is rebuilt on demand from a ref, never captured when the timer
+  // is scheduled, so the save that lands is the LATEST state and not whatever
+  // was on screen 700ms ago.
+  const buildSnapshot = () => ({
+    ...job,
+    photos,
+    operationalNotes: serviceNotes,
+    serviceStatus,
+    nextSteps,
+    requiresFollowUp: requireFollowUp,
+    parts,
+    partsAmount: parts.reduce((s, p) => s + p.totalPrice, 0),
+    partsReimbursementRequested: parts.length > 0 ? partsReimbursement : false,
+    upsellFlagged,
+    upsellNotes: upsellFlagged ? upsellNotes : undefined,
+    ...(isOptimizerJob ? { optimizerCount } : {}),
+  });
+  const snapshotRef = useRef(buildSnapshot);
+  snapshotRef.current = buildSnapshot;
+  // One saver for the life of the panel. It reads the snapshot through the ref,
+  // so the write that lands always carries the latest state.
+  const saverRef = useRef<DebouncedSaver>();
+  if (!saverRef.current) {
+    saverRef.current = createDebouncedSaver(() => {
+      // Guard the save: a throw inside onUpdateJob (e.g. the admin mirror) used
+      // to propagate out of this effect and unmount the panel, which looked like
+      // the work order "closing" after a photo edit. Never let a save crash the
+      // view.
+      try {
+        onUpdateJob(snapshotRef.current());
+      } catch (e) {
+        console.error('[JobDetail] auto-save failed', e);
+      }
+    }, SAVE_DEBOUNCE_MS);
+  }
+
+  // A debounce must never be able to swallow work. Flush on unmount, and on the
+  // page going hidden: this is a phone in the field, where switching apps or
+  // locking the screen is the normal way a form gets left.
+  useEffect(() => {
+    const flush = () => saverRef.current?.flush();
+    const onHide = () => { if (document.visibilityState === 'hidden') flush(); };
+    document.addEventListener('visibilitychange', onHide);
+    window.addEventListener('pagehide', flush);
+    return () => {
+      document.removeEventListener('visibilitychange', onHide);
+      window.removeEventListener('pagehide', flush);
+      flush();
+    };
+  }, []);
+
   useEffect(() => {
     if (!isMounted.current) { isMounted.current = true; return; }
-    const partsTotal = parts.reduce((s, p) => s + p.totalPrice, 0);
-    // Guard the save: a throw inside onUpdateJob (e.g. the admin mirror) used to
-    // propagate out of this effect and unmount the panel, which looked like the
-    // work order "closing" after a photo edit. Never let a save crash the view.
-    try {
-      onUpdateJob({
-        ...job,
-        photos,
-        operationalNotes: serviceNotes,
-        serviceStatus,
-        nextSteps,
-        requiresFollowUp: requireFollowUp,
-        parts,
-        partsAmount: partsTotal,
-        partsReimbursementRequested: parts.length > 0 ? partsReimbursement : false,
-        upsellFlagged,
-        upsellNotes: upsellFlagged ? upsellNotes : undefined,
-        ...(isOptimizerJob ? { optimizerCount } : {}),
-      });
-    } catch (e) {
-      console.error('[JobDetail] auto-save failed', e);
-    }
+    saverRef.current?.schedule();
   // Depend on EVERY field this effect writes, so a change to serviceStatus,
   // parts, follow-up or upsell auto-saves on its own instead of waiting for the
   // next photo/notes edit. `job` is intentionally excluded to avoid a save loop
