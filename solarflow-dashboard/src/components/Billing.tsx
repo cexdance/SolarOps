@@ -32,6 +32,19 @@ import { printServiceReport } from '../lib/printServiceReport';
 // cards get an orange hue so Daniel spots them at a glance.
 export type BillingCol = 'new' | 'quote_sent' | 'pending' | 'to_invoice' | 'invoiced' | 'paid' | 'costs_covered';
 
+// The seven billing stages, in pipeline order. Module-level so the kanban
+// columns and the list-view stage filter share one vocabulary: a stage renamed
+// here is renamed in both places.
+export const BILLING_COLUMNS = [
+  { key: 'new'           as BillingCol, label: 'CREATE QUOTE',       sub: 'Every new service order: quote, service account, PowerCare', headerCls: 'bg-blue-50 border-blue-200 text-blue-700',       chipCls: 'bg-blue-600 text-white' },
+  { key: 'quote_sent'    as BillingCol, label: 'Quote Sent',         sub: 'Awaiting client approval',        headerCls: 'bg-violet-50 border-violet-200 text-violet-700',  chipCls: 'bg-violet-600 text-white' },
+  { key: 'pending'       as BillingCol, label: 'Pending Completion', sub: 'Approved, waiting on contractor', headerCls: 'bg-slate-100 border-slate-200 text-slate-700',    chipCls: 'bg-slate-600 text-white' },
+  { key: 'to_invoice'    as BillingCol, label: 'Ready to Invoice',   sub: 'Create and send in Xero',         headerCls: 'bg-red-50 border-red-200 text-red-700',           chipCls: 'bg-red-600 text-white' },
+  { key: 'invoiced'      as BillingCol, label: 'Invoiced',           sub: 'Awaiting payment',                headerCls: 'bg-purple-50 border-purple-200 text-purple-700',  chipCls: 'bg-purple-600 text-white' },
+  { key: 'paid'          as BillingCol, label: 'Paid',               sub: 'Client / SolarEdge paid',         headerCls: 'bg-green-50 border-green-200 text-green-700',     chipCls: 'bg-green-600 text-white' },
+  { key: 'costs_covered' as BillingCol, label: 'Costs Covered',      sub: 'Contractor + expenses settled',   headerCls: 'bg-emerald-50 border-emerald-200 text-emerald-700', chipCls: 'bg-emerald-600 text-white' },
+];
+
 export const getBillingColumn = (job: Job): BillingCol => {
   // Site transfers have no quote and no field work: Daniel invoices the flat
   // fee directly, so the card belongs in Ready to Invoice from creation rather
@@ -262,6 +275,19 @@ export const Billing: React.FC<BillingProps> = ({
     });
   };
 
+  // List view filters by billing STAGE, the same seven the kanban uses. The
+  // coarse all/unbilled/invoiced/paid dropdown cannot express "Ready to
+  // Invoice" or "Costs Covered", which is most of what Billing is for, so in
+  // list mode the stage chips replace it rather than stacking on top of it.
+  const LIST_STAGE_KEY = 'solarops_billing_list_stage';
+  const [listStage, setListStage] = useState<BillingCol | 'all'>(
+    () => (localStorage.getItem(LIST_STAGE_KEY) as BillingCol | 'all') || 'all'
+  );
+  const pickStage = (stage: BillingCol | 'all') => {
+    setListStage(stage);
+    localStorage.setItem(LIST_STAGE_KEY, stage);
+  };
+
   const LIST_SORT_KEY = 'solarops_billing_list_sort';
   const [listSortBy, setListSortBy] = useState<JobSortOption>(
     () => (localStorage.getItem(LIST_SORT_KEY) as JobSortOption) || 'none'
@@ -312,6 +338,23 @@ export const Billing: React.FC<BillingProps> = ({
   // the S1 sales funnel, belongs on the pipeline board.
   const serviceOrders = jobs.filter(isServiceOrder);
 
+  // An empty search must not filter anything. It used to: with no query the
+  // predicate still ran, and a job whose customerId resolves to nothing
+  // returned undefined and was DROPPED off the board silently. Real service
+  // orders do hit that path (2 live ones carry a woNumber but no linked
+  // customer), so the guard stays even now that leads are excluded above.
+  const matchesSearch = (job: Job) => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return true;
+    const customer = customers.find((c) => c.id === job.customerId);
+    return (
+      (job.clientName ?? '').toLowerCase().includes(q) ||
+      (job.siteAddress ?? '').toLowerCase().includes(q) ||
+      (customer?.name ?? '').toLowerCase().includes(q) ||
+      (customer?.address ?? '').toLowerCase().includes(q)
+    );
+  };
+
   // Filter jobs by status
   const filteredJobs = serviceOrders
     .filter((job) => {
@@ -322,28 +365,27 @@ export const Billing: React.FC<BillingProps> = ({
       if (filter === 'paid') return job.status === 'paid';
       return true;
     })
-    .filter((job) => {
-      // An empty search must not filter anything. It used to: with no query the
-      // predicate still ran, and a job whose customerId resolves to nothing
-      // returned undefined and was DROPPED off the board silently. Real service
-      // orders do hit that path (2 live ones carry a woNumber but no linked
-      // customer), so the guard stays even now that leads are excluded above.
-      const q = searchQuery.trim().toLowerCase();
-      if (!q) return true;
-      const customer = customers.find((c) => c.id === job.customerId);
-      return (
-        (job.clientName ?? '').toLowerCase().includes(q) ||
-        (job.siteAddress ?? '').toLowerCase().includes(q) ||
-        customer?.name.toLowerCase().includes(q) ||
-        customer?.address.toLowerCase().includes(q)
-      );
-    })
+    .filter(matchesSearch)
     .sort((a, b) => {
       // Sort by date, newest first
       const dateA = new Date(a.completedAt || a.scheduledDate || a.createdAt).getTime();
       const dateB = new Date(b.completedAt || b.scheduledDate || b.createdAt).getTime();
       return dateB - dateA;
     });
+
+  // List view: search plus the stage chip. It deliberately does NOT read the
+  // coarse status dropdown, which is hidden in this mode.
+  // Archived is excluded from All too, not just from the stages. It is not a
+  // billing stage, and if All counted them the seven chips would not sum to
+  // All: 24 orders silently unaccounted for on a money screen is how people
+  // stop trusting the numbers. Archived orders live on Service Orders.
+  const listSearched = serviceOrders.filter((j) => j.status !== 'archived' && matchesSearch(j));
+  const stageCount = (stage: BillingCol) =>
+    listSearched.filter((j) => getBillingColumn(j) === stage).length;
+  const listJobs =
+    listStage === 'all'
+      ? listSearched
+      : listSearched.filter((j) => getBillingColumn(j) === listStage);
 
   const unbilledJobs = serviceOrders.filter((j) => j.status === 'completed');
   const invoicedJobs = serviceOrders.filter((j) => j.status === 'invoiced');
@@ -520,7 +562,11 @@ export const Billing: React.FC<BillingProps> = ({
             <Calendar className="w-4 h-4" />
           </button>
         </div>
-        {/* Type dropdown */}
+        {/* Type dropdown. Kanban and calendar only: in list mode the stage
+            chips below are the status filter, and two status controls stacked
+            on one toolbar is how you end up filtering yourself into an empty
+            screen with no idea which one did it. */}
+        {viewMode !== 'list' && (
         <select
           value={filter}
           onChange={(e) => setFilter(e.target.value as 'all' | 'unbilled' | 'invoiced' | 'paid')}
@@ -531,6 +577,7 @@ export const Billing: React.FC<BillingProps> = ({
           <option value="invoiced">Invoiced ({invoicedJobs.length})</option>
           <option value="paid">Paid ({paidJobs.length})</option>
         </select>
+        )}
         {/* Search */}
         <div className="flex-1 relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
@@ -558,18 +605,46 @@ export const Billing: React.FC<BillingProps> = ({
         )}
       </div>
 
+      {/* Stage filter (list view). Same seven stages as the kanban columns, with
+          live counts, so the list can answer "what is waiting on me" instead of
+          being one undifferentiated scroll. */}
+      {viewMode === 'list' && (
+        <div className="flex flex-wrap gap-2 mb-6">
+          <button
+            onClick={() => pickStage('all')}
+            className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
+              listStage === 'all'
+                ? 'bg-slate-800 text-white'
+                : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+            }`}
+          >
+            All ({listSearched.length})
+          </button>
+          {BILLING_COLUMNS.map((col) => {
+            const count = stageCount(col.key);
+            const active = listStage === col.key;
+            return (
+              <button
+                key={col.key}
+                onClick={() => pickStage(col.key)}
+                title={col.sub}
+                className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
+                  active
+                    ? col.chipCls
+                    : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+                } ${count === 0 && !active ? 'opacity-50' : ''}`}
+              >
+                {col.label} ({count})
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {/* Kanban View: the billing pipeline. Drag a card to advance it. */}
       {viewMode === 'kanban' && (
         <div className="flex gap-4 overflow-x-auto pb-4">
-          {([
-            { key: 'new'           as BillingCol, label: 'CREATE QUOTE',       sub: 'Every new service order: quote, service account, PowerCare', headerCls: 'bg-blue-50 border-blue-200 text-blue-700' },
-            { key: 'quote_sent'    as BillingCol, label: 'Quote Sent',         sub: 'Awaiting client approval',     headerCls: 'bg-violet-50 border-violet-200 text-violet-700' },
-            { key: 'pending'       as BillingCol, label: 'Pending Completion', sub: 'Approved, waiting on contractor', headerCls: 'bg-slate-100 border-slate-200 text-slate-700' },
-            { key: 'to_invoice'    as BillingCol, label: 'Ready to Invoice',   sub: 'Create and send in Xero',      headerCls: 'bg-red-50 border-red-200 text-red-700' },
-            { key: 'invoiced'      as BillingCol, label: 'Invoiced',           sub: 'Awaiting payment',             headerCls: 'bg-purple-50 border-purple-200 text-purple-700' },
-            { key: 'paid'          as BillingCol, label: 'Paid',               sub: 'Client / SolarEdge paid',      headerCls: 'bg-green-50 border-green-200 text-green-700' },
-            { key: 'costs_covered' as BillingCol, label: 'Costs Covered',      sub: 'Contractor + expenses settled', headerCls: 'bg-emerald-50 border-emerald-200 text-emerald-700' },
-          ]).map(col => {
+          {BILLING_COLUMNS.map(col => {
             // Most critical first by default: the whole point of the markers is
             // that the worst card should not be the one you have to scroll to.
             const colSort = columnSortBy[col.key] ?? 'age_desc';
@@ -951,13 +1026,27 @@ export const Billing: React.FC<BillingProps> = ({
       {/* List View */}
       {viewMode === 'list' && (
       <div className="space-y-3">
-        {filteredJobs.length === 0 ? (
+        {listJobs.length === 0 ? (
           <div className="text-center py-12">
             <DollarSign className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-            <p className="text-slate-500">No {filter} jobs found</p>
+            <p className="text-slate-500">
+              No service orders in{' '}
+              {listStage === 'all'
+                ? 'Billing'
+                : BILLING_COLUMNS.find((c) => c.key === listStage)?.label}
+              {searchQuery.trim() ? ` matching "${searchQuery.trim()}"` : ''}
+            </p>
+            {listStage !== 'all' && (
+              <button
+                onClick={() => pickStage('all')}
+                className="mt-3 text-sm font-medium text-orange-600 hover:text-orange-700"
+              >
+                Show all stages
+              </button>
+            )}
           </div>
         ) : (
-          sortJobsBy(filteredJobs, listSortBy, contractors).map((job) => {
+          sortJobsBy(listJobs, listSortBy, contractors).map((job) => {
             const customer = getCustomer(job.customerId);
             const daysOld = getDaysSinceCompleted(job.completedAt);
             const billingStatus = getJobBillingStatus(job);

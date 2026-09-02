@@ -1,6 +1,8 @@
 # SolarFlow SaaS Dashboard — Module Design Guide
 *(ConexSol SolarOps Platform — UI/UX Design Reference)*
 
+Psychological grounding for every rule below: [Laws of UX](laws-of-ux.md).
+
 ---
 
 ## I. Core Design Philosophy & Strategy
