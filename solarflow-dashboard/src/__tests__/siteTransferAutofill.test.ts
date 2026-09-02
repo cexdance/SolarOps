@@ -66,11 +66,23 @@ describe('site-transfer autofill bookmarklet', () => {
     expect(on('edit-terms-privacy')).toBe(true);
   });
 
-  it('is re-runnable: a second pass over a filled form changes nothing', () => {
+  it('warns when only one of the two required identifiers is present', () => {
     const payload = encodeURIComponent(JSON.stringify({ siteId: '3860394' }));
+    const { alerts } = run(FORM, '#solarops=' + payload);
+    expect(alerts.some(a => a.includes('BOTH') && a.includes('inverter serial'))).toBe(true);
+  });
+
+  it('does not warn when both identifiers are present', () => {
+    const payload = encodeURIComponent(JSON.stringify({ siteId: '3860394', serial: 'SV0521-0730B8B06-0F' }));
+    const { alerts } = run(FORM, '#solarops=' + payload);
+    expect(alerts.some(a => a.includes('BOTH'))).toBe(false);
+  });
+
+  it('is re-runnable: a second pass over a filled form changes nothing', () => {
+    const payload = encodeURIComponent(JSON.stringify({ siteId: '3860394', serial: 'SV0521-0730B8B06-0F' }));
     const { dom, alerts } = run(FORM, '#solarops=' + payload);
     dom.window.eval(SRC);
-    expect(alerts[1]).toContain('Filled 0 field(s)');
+    expect(alerts[alerts.length - 1]).toContain('Filled 0 field(s)');
     expect(
       (dom.window.document.getElementById('edit-acknowledgment') as HTMLInputElement).checked,
     ).toBe(true);

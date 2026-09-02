@@ -100,7 +100,12 @@
   var n = 0;
   RADIO.forEach(function (id) { n += pick(id); });
   Object.keys(CONST).forEach(function (k) { n += set(k, CONST[k]); });
-  if (vars.siteId) n += set('site_id', vars.siteId);
+  n += set('site_id', vars.siteId);
+  if (!vars.siteId || !vars.serial) {
+    alert('Heads up: a site transfer needs BOTH the inverter serial and the Site ID.\n\nMissing: ' +
+      [!vars.serial && 'inverter serial', !vars.siteId && 'Site ID'].filter(Boolean).join(' and ') +
+      '\n\nFill it in on the service order and reopen this form.');
+  }
 
   // Partial SN is three boxes. A SolarEdge serial reads like BF10B459-DC:
   // body before the dash, checksum after.

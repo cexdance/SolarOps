@@ -683,8 +683,12 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
   const [stInverterSerial, setStInverterSerial] = useState(job?.siteTransferInverterSerial ?? '');
   const [stSiteId, setStSiteId] = useState(job?.siteTransferSiteId ?? '');
   const [stCompletedAt, setStCompletedAt] = useState<string | undefined>(job?.siteTransferCompletedAt);
+  // SolarEdge's form requires BOTH: serial_hex is a required field and the
+  // site id identifies which site to move. Either one missing blocks the
+  // transfer, so these two only pick the wording, not whether it is blocking.
   const stMissingBoth = isSiteTransfer && !stInverterSerial && !stSiteId;
   const stMissingOne  = isSiteTransfer && ((!stInverterSerial && !!stSiteId) || (!!stInverterSerial && !stSiteId));
+  const stCanSubmit   = !!stInverterSerial && !!stSiteId;
 
   // Preset parts by job type (injected when SOW modal opens)
   const INVERTER_PARTS = [
@@ -2389,13 +2393,13 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                   {stMissingBoth && (
                     <div className="flex items-start gap-2 rounded-lg bg-red-50 border border-red-200 p-3">
                       <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
-                      <p className="text-xs text-red-700 font-medium">Provide at least one identifier (Inverter Serial or Site ID) to progress this service order.</p>
+                      <p className="text-xs text-red-700 font-medium">SolarEdge needs BOTH the Inverter Serial Number and the Site ID. Neither is on file yet.</p>
                     </div>
                   )}
                   {stMissingOne && (
-                    <div className="flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 p-3">
-                      <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-                      <p className="text-xs text-amber-700">Only one identifier provided, contact SolarEdge support for the missing {!stInverterSerial ? 'Inverter Serial Number' : 'Site ID'}.</p>
+                    <div className="flex items-start gap-2 rounded-lg bg-red-50 border border-red-200 p-3">
+                      <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+                      <p className="text-xs text-red-700 font-medium">The transfer needs BOTH identifiers. Get the {!stInverterSerial ? 'Inverter Serial Number' : 'Site ID'} from the customer or SolarEdge support before submitting.</p>
                     </div>
                   )}
 
@@ -2404,7 +2408,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                     <div>
                       <label className="block text-xs font-semibold text-slate-600 mb-1.5">
                         Inverter Serial Number
-                        {!stInverterSerial && stSiteId && <span className="ml-1 text-amber-500 font-normal">(recommended)</span>}
+                        <span className="ml-1 text-red-500 font-normal">(required)</span>
                       </label>
                       <div className="flex gap-2">
                         <input
@@ -2442,7 +2446,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                     <div>
                       <label className="block text-xs font-semibold text-slate-600 mb-1.5">
                         SolarEdge Site ID
-                        {!stSiteId && stInverterSerial && <span className="ml-1 text-amber-500 font-normal">(recommended)</span>}
+                        <span className="ml-1 text-red-500 font-normal">(required)</span>
                       </label>
                       <div className="flex gap-2">
                         <input
@@ -2518,10 +2522,10 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                     <button
                       type="button"
                       onClick={openSiteTransferForm}
-                      disabled={!stSiteId && !stInverterSerial}
+                      disabled={!stCanSubmit}
                       title={
-                        !stSiteId && !stInverterSerial
-                          ? 'Enter a Site ID or inverter serial first'
+                        !stCanSubmit
+                          ? 'SolarEdge needs both the inverter serial and the Site ID'
                           : 'Opens the SolarEdge form carrying these values, and files a Site Transfer RMA to hold the case number'
                       }
                       className="px-3 py-2 text-xs font-semibold rounded-lg border border-teal-300 text-teal-700 hover:bg-teal-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
@@ -4063,15 +4067,15 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                     {stMissingBoth && (
                       <div className="mb-3 flex items-start gap-2 rounded-lg bg-red-50 border border-red-200 p-3">
                         <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
-                        <p className="text-xs text-red-700 font-medium">Provide at least one identifier (Inverter Serial or Site ID) before completing this transfer.</p>
+                        <p className="text-xs text-red-700 font-medium">SolarEdge needs BOTH the Inverter Serial Number and the Site ID before this transfer can be filed.</p>
                       </div>
                     )}
                     {stMissingOne && (
                       <div className="mb-3 flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 p-3">
                         <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
                         <div>
-                          <p className="text-xs text-amber-800 font-semibold">Only one identifier provided</p>
-                          <p className="text-xs text-amber-700 mt-0.5">Contact or chat SolarEdge support to obtain the missing {!stInverterSerial ? 'Inverter Serial Number' : 'Site ID'} before running the transfer.</p>
+                          <p className="text-xs text-amber-800 font-semibold">Missing a required identifier</p>
+                          <p className="text-xs text-amber-700 mt-0.5">SolarEdge requires both identifiers. Contact or chat SolarEdge support to obtain the missing {!stInverterSerial ? 'Inverter Serial Number' : 'Site ID'} before running the transfer.</p>
                           <a
                             href="https://www.solaredge.com/en/service-and-support"
                             target="_blank"

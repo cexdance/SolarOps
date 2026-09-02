@@ -5,6 +5,8 @@
  *   node scripts/solaredge-site-transfer.mjs --serial=SV0521-0730B8B06-0F --site-id=3860394
  *   node scripts/solaredge-site-transfer.mjs --serial=... --site-id=... --submit
  *
+ * Both identifiers are required.
+ *
  * Without --submit it fills the form, screenshots it and stops. That is the
  * default because submitting files a real ownership transfer with SolarEdge
  * and there is no undo.
@@ -77,9 +79,15 @@ export function findCaseNumber(text) {
 async function main() {
   const serial = arg('serial');
   const siteId = arg('site-id', '');
-  if (!serial && !flag('warm')) {
-    console.error('--serial is required: SolarEdge marks the inverter serial required and the site id optional.');
-    process.exit(2);
+  // Both are required. serial_hex is required by SolarEdge's own form, and the
+  // site id is what identifies which site to move, so a transfer filed without
+  // it lands on support's desk instead of going through.
+  if (!flag('warm')) {
+    const need = [!serial && '--serial', !siteId && '--site-id'].filter(Boolean);
+    if (need.length) {
+      console.error(`Missing ${need.join(' and ')}. A site transfer needs both the inverter serial and the Site ID.`);
+      process.exit(2);
+    }
   }
 
   const sn = splitSerial(serial);
@@ -143,7 +151,7 @@ async function main() {
     await page.fill('[name="serial_hex"]', sn.hex);
     if (sn.datecode) await page.fill('[name="serial_datecode"]', sn.datecode);
     if (sn.checksum) await page.fill('[name="serial_checksum"]', sn.checksum);
-    if (siteId) await page.fill('[name="site_id"]', siteId);
+    await page.fill('[name="site_id"]', siteId);
 
     // The installer-id pair is revealed by the monitoring checkbox, so it has
     // to be ticked before those fields can be filled.
@@ -165,7 +173,7 @@ async function main() {
       }
       return out;
     });
-    const missing = ['party_number', 'customer_email', 'serial_hex', 'phone_number', 'first_name', 'last_name']
+    const missing = ['party_number', 'customer_email', 'serial_hex', 'site_id', 'phone_number', 'first_name', 'last_name']
       .filter(k => !filled[k]);
     const shot = join(outDir, `${stamp}-filled.png`);
     await page.screenshot({ path: shot, fullPage: true });
