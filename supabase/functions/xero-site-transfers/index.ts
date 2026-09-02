@@ -214,7 +214,12 @@ Deno.serve(async (req) => {
       let contactAction = "existed";
       if (auth) {
         const found = await xero(auth, `/Contacts?where=${encodeURIComponent(`ContactNumber=="${clientId}"`)}`);
-        contactId = found?.Contacts?.[0]?.ContactID;
+        const hit = found?.Contacts?.[0];
+        contactId = hit?.ContactID;
+        // Name the match. A malformed Xero where-clause can return EVERY contact
+        // rather than erroring, and the first one would then look like a hit
+        // forever, silently skipping every client we meant to create.
+        if (hit) contactAction = `existed: ${hit.Name} / ${hit.ContactNumber ?? "NO CONTACT NUMBER"}`;
       } else {
         contactAction = "would create or reuse (Xero not checked)";
       }
