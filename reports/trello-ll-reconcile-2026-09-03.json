@@ -1,0 +1,1666 @@
+{
+ "matchedById": [
+  {
+   "cardId": "6a8323bc8eda2b056588cfd5",
+   "cardName": "Dan Henson",
+   "list": "Leads Services SolarEdge",
+   "url": "https://trello.com/c/5nJXkhUM",
+   "comments": 1,
+   "moves": 0,
+   "found": {},
+   "jobId": "job-trello-6a8323bc8eda2b056588cfd5",
+   "jobName": "Dan Henson",
+   "jobStage": "closed_archived",
+   "gaps": {},
+   "newComments": 1,
+   "newMoves": 0,
+   "wouldChange": true
+  },
+  {
+   "cardId": "6a870265a8835731a514fb78",
+   "cardName": "Alexis Crump Hernandez",
+   "list": "Leads Services SolarEdge",
+   "url": "https://trello.com/c/x0lkCQ0j",
+   "comments": 0,
+   "moves": 2,
+   "found": {},
+   "jobId": "job-trello-6a870265a8835731a514fb78",
+   "jobName": "ALEXIS Crump Hernandez",
+   "jobStage": "closed_archived",
+   "gaps": {},
+   "newComments": 0,
+   "newMoves": 2,
+   "wouldChange": true
+  },
+  {
+   "cardId": "6a84e3e2fefa5a26e5599969",
+   "cardName": "Makini Davis",
+   "list": "Leads Services SolarEdge",
+   "url": "https://trello.com/c/0hS0V5df",
+   "comments": 0,
+   "moves": 2,
+   "found": {},
+   "jobId": "job-trello-6a84e3e2fefa5a26e5599969",
+   "jobName": "Makini Davis",
+   "jobStage": "closed_archived",
+   "gaps": {},
+   "newComments": 0,
+   "newMoves": 2,
+   "wouldChange": true
+  },
+  {
+   "cardId": "6a90a182679365799249abf1",
+   "cardName": "Edward Suplee",
+   "list": "Leads Services SolarEdge",
+   "url": "https://trello.com/c/uCD0RYp8",
+   "comments": 0,
+   "moves": 2,
+   "found": {},
+   "jobId": "job-trello-6a90a182679365799249abf1",
+   "jobName": "Edward Suplee",
+   "jobStage": "site_transfer_processing",
+   "gaps": {},
+   "newComments": 0,
+   "newMoves": 2,
+   "wouldChange": true
+  },
+  {
+   "cardId": "6a92f14fcaba885fd780b9b0",
+   "cardName": "Peter Minnett",
+   "list": "Leads Services SolarEdge",
+   "url": "https://trello.com/c/oJqjlkzV",
+   "comments": 0,
+   "moves": 3,
+   "found": {
+    "solarEdgeSiteId": "3857476"
+   },
+   "jobId": "job-trello-6a92f14fcaba885fd780b9b0",
+   "jobName": "Peter Minnett",
+   "jobStage": "lost_to_competition",
+   "gaps": {
+    "solarEdgeSiteId": "3857476"
+   },
+   "newComments": 0,
+   "newMoves": 3,
+   "wouldChange": true
+  },
+  {
+   "cardId": "6a91d19e406e93030bd4e4f0",
+   "cardName": "Michael Addeo",
+   "list": "Leads Services SolarEdge",
+   "url": "https://trello.com/c/NSOJpMeU",
+   "comments": 1,
+   "moves": 2,
+   "found": {
+    "solarEdgeSiteId": "3387661"
+   },
+   "jobId": "job-trello-6a91d19e406e93030bd4e4f0",
+   "jobName": "Michael Addeo",
+   "jobStage": "closed_archived",
+   "gaps": {
+    "solarEdgeSiteId": "3387661"
+   },
+   "newComments": 1,
+   "newMoves": 2,
+   "wouldChange": true
+  },
+  {
+   "cardId": "6a8323ed08ad955e3d0eb1c1",
+   "cardName": "Alenis Lobo",
+   "list": "Leads Services SolarEdge",
+   "url": "https://trello.com/c/IedxhPGX",
+   "comments": 1,
+   "moves": 0,
+   "found": {},
+   "jobId": "job-trello-6a8323ed08ad955e3d0eb1c1",
+   "jobName": "Alenis Lobo",
+   "jobStage": "leads",
+   "gaps": {},
+   "newComments": 1,
+   "newMoves": 0,
+   "wouldChange": true
+  },
+  {
+   "cardId": "6a838d71f1b3a2d33ffec919",
+   "cardName": "Pedro Cordon",
+   "list": "Leads Services SolarEdge",
+   "url": "https://trello.com/c/oybefqnj",
+   "comments": 0,
+   "moves": 0,
+   "found": {},
+   "jobId": "job-trello-6a838d71f1b3a2d33ffec919",
+   "jobName": "Pedro Cordon",
+   "jobStage": "needs_first_quote",
+   "gaps": {},
+   "newComments": 0,
+   "newMoves": 0,
+   "wouldChange": false
+  },
+  {
+   "cardId": "6a85ab91a4c3bde19b741f41",
+   "cardName": "Andres Jimenez",
+   "list": "Leads Services SolarEdge",
+   "url": "https://trello.com/c/uTsdZ4fi",
+   "comments": 1,
+   "moves": 0,
+   "found": {},
+   "jobId": "job-trello-6a85ab91a4c3bde19b741f41",
+   "jobName": "Andres Jimenez",
+   "jobStage": "closed_won",
+   "gaps": {},
+   "newComments": 1,
+   "newMoves": 0,
+   "wouldChange": true
+  },
+  {
+   "cardId": "6a8876fe30bfd8867b616a03",
+   "cardName": "Travis Fullenkamp",
+   "list": "Leads Services SolarEdge",
+   "url": "https://trello.com/c/pSDCVh7c",
+   "comments": 0,
+   "moves": 0,
+   "found": {},
+   "jobId": "job-trello-6a8876fe30bfd8867b616a03",
+   "jobName": "Travis Fullenkamp",
+   "jobStage": "site_transfer_processing",
+   "gaps": {},
+   "newComments": 0,
+   "newMoves": 0,
+   "wouldChange": false
+  },
+  {
+   "cardId": "6a8c42d481492eceb9158389",
+   "cardName": "Michael Diffoot",
+   "list": "Leads Services SolarEdge",
+   "url": "https://trello.com/c/DjNtguHU",
+   "comments": 0,
+   "moves": 0,
+   "found": {},
+   "jobId": "job-trello-6a8c42d481492eceb9158389",
+   "jobName": "Michael Diffoot",
+   "jobStage": "leads",
+   "gaps": {},
+   "newComments": 0,
+   "newMoves": 0,
+   "wouldChange": false
+  },
+  {
+   "cardId": "6a8c4323bfdf9f7d8aaffaa4",
+   "cardName": "Bethany Powell",
+   "list": "Leads Services SolarEdge",
+   "url": "https://trello.com/c/JXV5kZXd",
+   "comments": 0,
+   "moves": 0,
+   "found": {},
+   "jobId": "job-trello-6a8c4323bfdf9f7d8aaffaa4",
+   "jobName": "Bethany Powell",
+   "jobStage": "site_transfer_processing",
+   "gaps": {},
+   "newComments": 0,
+   "newMoves": 0,
+   "wouldChange": false
+  },
+  {
+   "cardId": "6a8c966fafb61e460df24891",
+   "cardName": "Patricia Ortiz",
+   "list": "Leads Services SolarEdge",
+   "url": "https://trello.com/c/SkkBvJwp",
+   "comments": 0,
+   "moves": 0,
+   "found": {},
+   "jobId": "job-trello-6a8c966fafb61e460df24891",
+   "jobName": "Patricia Ortiz",
+   "jobStage": "leads",
+   "gaps": {},
+   "newComments": 0,
+   "newMoves": 0,
+   "wouldChange": false
+  },
+  {
+   "cardId": "6a8c96bcfa13f93c9f9ca84d",
+   "cardName": "Andrés Jiménez",
+   "list": "Leads Services SolarEdge",
+   "url": "https://trello.com/c/MRXAequO",
+   "comments": 0,
+   "moves": 0,
+   "found": {},
+   "jobId": "job-trello-6a8c96bcfa13f93c9f9ca84d",
+   "jobName": "Andres Jimenez",
+   "jobStage": "leads",
+   "gaps": {},
+   "newComments": 0,
+   "newMoves": 0,
+   "wouldChange": false
+  },
+  {
+   "cardId": "6a8c970655ffce14b9fc063c",
+   "cardName": "Alyssa Irvin",
+   "list": "Leads Services SolarEdge",
+   "url": "https://trello.com/c/JeEEgeb1",
+   "comments": 0,
+   "moves": 0,
+   "found": {},
+   "jobId": "job-trello-6a8c970655ffce14b9fc063c",
+   "jobName": "Alyssa Irvin",
+   "jobStage": "leads",
+   "gaps": {},
+   "newComments": 0,
+   "newMoves": 0,
+   "wouldChange": false
+  },
+  {
+   "cardId": "6a8d961f552ec091f8236078",
+   "cardName": "Zach Ross",
+   "list": "Leads Services SolarEdge",
+   "url": "https://trello.com/c/zRpGQMsV",
+   "comments": 0,
+   "moves": 0,
+   "found": {},
+   "jobId": "job-trello-6a8d961f552ec091f8236078",
+   "jobName": "Zach Ross",
+   "jobStage": "needs_first_quote",
+   "gaps": {},
+   "newComments": 0,
+   "newMoves": 0,
+   "wouldChange": false
+  },
+  {
+   "cardId": "6a8df299320dad92e740ad4f",
+   "cardName": "Junie Zolange",
+   "list": "Leads Services SolarEdge",
+   "url": "https://trello.com/c/Pv81ideH",
+   "comments": 0,
+   "moves": 0,
+   "found": {},
+   "jobId": "job-trello-6a8df299320dad92e740ad4f",
+   "jobName": "Junie Zolange",
+   "jobStage": "leads",
+   "gaps": {},
+   "newComments": 0,
+   "newMoves": 0,
+   "wouldChange": false
+  },
+  {
+   "cardId": "6a8f1d3d036299ef9464be3c",
+   "cardName": "Grif Blackstone",
+   "list": "Leads Services SolarEdge",
+   "url": "https://trello.com/c/GdKxNKKC",
+   "comments": 0,
+   "moves": 0,
+   "found": {},
+   "jobId": "job-trello-6a8f1d3d036299ef9464be3c",
+   "jobName": "Grif Blackstone",
+   "jobStage": "needs_first_quote",
+   "gaps": {},
+   "newComments": 0,
+   "newMoves": 0,
+   "wouldChange": false
+  },
+  {
+   "cardId": "6a8f1d9a357635ae8c8ecea7",
+   "cardName": "Maria Benitez",
+   "list": "Leads Services SolarEdge",
+   "url": "https://trello.com/c/eC7cThLb",
+   "comments": 0,
+   "moves": 0,
+   "found": {},
+   "jobId": "job-trello-6a8f1d9a357635ae8c8ecea7",
+   "jobName": "Maria Benitez",
+   "jobStage": "leads",
+   "gaps": {},
+   "newComments": 0,
+   "newMoves": 0,
+   "wouldChange": false
+  },
+  {
+   "cardId": "6a91d251fe40205f1bf66989",
+   "cardName": "Danielle Ferrari",
+   "list": "Leads Services SolarEdge",
+   "url": "https://trello.com/c/tlzOVXOg",
+   "comments": 1,
+   "moves": 0,
+   "found": {
+    "solarEdgeSiteId": "451846"
+   },
+   "jobId": "job-trello-6a91d251fe40205f1bf66989",
+   "jobName": "Danielle Ferrari",
+   "jobStage": "site_transfer_processing",
+   "gaps": {},
+   "newComments": 1,
+   "newMoves": 0,
+   "wouldChange": true
+  },
+  {
+   "cardId": "6a91fe9b5ff0497bb5b7a6d1",
+   "cardName": "Aaron Chalela",
+   "list": "Leads Services SolarEdge",
+   "url": "https://trello.com/c/qvjMW7lO",
+   "comments": 0,
+   "moves": 0,
+   "found": {
+    "solarEdgeSiteId": "1024965"
+   },
+   "jobId": "job-trello-6a91fe9b5ff0497bb5b7a6d1",
+   "jobName": "Aaron Chalela",
+   "jobStage": "leads",
+   "gaps": {
+    "solarEdgeSiteId": "1024965"
+   },
+   "newComments": 0,
+   "newMoves": 0,
+   "wouldChange": true
+  },
+  {
+   "cardId": "6a91feea8be060deea2d8449",
+   "cardName": "Donnie Hall",
+   "list": "Leads Services SolarEdge",
+   "url": "https://trello.com/c/jT9ewVTw",
+   "comments": 0,
+   "moves": 0,
+   "found": {},
+   "jobId": "job-trello-6a91feea8be060deea2d8449",
+   "jobName": "Donnie Hall",
+   "jobStage": "site_transfer_processing",
+   "gaps": {},
+   "newComments": 0,
+   "newMoves": 0,
+   "wouldChange": false
+  },
+  {
+   "cardId": "6a95f5edabd9190e325da4f9",
+   "cardName": "Willie Williams",
+   "list": "Leads Services SolarEdge",
+   "url": "https://trello.com/c/uedfE4cr",
+   "comments": 0,
+   "moves": 1,
+   "found": {
+    "solarEdgeSiteId": "2785390"
+   },
+   "jobId": "job-trello-6a95f5edabd9190e325da4f9",
+   "jobName": "Willie Williams",
+   "jobStage": "needs_first_quote",
+   "gaps": {
+    "solarEdgeSiteId": "2785390"
+   },
+   "newComments": 0,
+   "newMoves": 1,
+   "wouldChange": true
+  },
+  {
+   "cardId": "6a95f4bb05590981e47b3cfa",
+   "cardName": "Raniel Rios",
+   "list": "Leads Services SolarEdge",
+   "url": "https://trello.com/c/yANzakp5",
+   "comments": 0,
+   "moves": 1,
+   "found": {},
+   "jobId": "job-trello-6a95f4bb05590981e47b3cfa",
+   "jobName": "Raniel Rios",
+   "jobStage": "leads",
+   "gaps": {},
+   "newComments": 0,
+   "newMoves": 1,
+   "wouldChange": true
+  },
+  {
+   "cardId": "6a92f10cda6d5c4effa9beec",
+   "cardName": "Maceo Howell",
+   "list": "Leads Services SolarEdge",
+   "url": "https://trello.com/c/UrgxgprL",
+   "comments": 0,
+   "moves": 1,
+   "found": {},
+   "jobId": "job-trello-6a92f10cda6d5c4effa9beec",
+   "jobName": "Maceo Howell",
+   "jobStage": "leads",
+   "gaps": {},
+   "newComments": 0,
+   "newMoves": 1,
+   "wouldChange": true
+  },
+  {
+   "cardId": "6a95c7589e3955fddf5375a4",
+   "cardName": "Stephanie Deorta",
+   "list": "Leads Services SolarEdge",
+   "url": "https://trello.com/c/CVprof1E",
+   "comments": 0,
+   "moves": 1,
+   "found": {},
+   "jobId": "job-trello-6a95c7589e3955fddf5375a4",
+   "jobName": "Stephanie Deorta",
+   "jobStage": "needs_first_quote",
+   "gaps": {},
+   "newComments": 0,
+   "newMoves": 1,
+   "wouldChange": true
+  },
+  {
+   "cardId": "6a96b65d4f087fe332f9b7a3",
+   "cardName": "Stanley C Tarver",
+   "list": "Leads Services SolarEdge",
+   "url": "https://trello.com/c/GuemX9om",
+   "comments": 0,
+   "moves": 0,
+   "found": {
+    "solarEdgeSiteId": "2390573",
+    "address": "6959 Mauldin Ln"
+   },
+   "jobId": "job-trello-6a96b65d4f087fe332f9b7a3",
+   "jobName": "Stanley C Tarver",
+   "jobStage": "closed_archived",
+   "gaps": {
+    "solarEdgeSiteId": "2390573"
+   },
+   "newComments": 0,
+   "newMoves": 0,
+   "wouldChange": true
+  },
+  {
+   "cardId": "6a972406941fcb86b6ed4306",
+   "cardName": "Dan Peterson",
+   "list": "Leads Services SolarEdge",
+   "url": "https://trello.com/c/c5Mr70DO",
+   "comments": 0,
+   "moves": 0,
+   "found": {},
+   "jobId": "job-trello-6a972406941fcb86b6ed4306",
+   "jobName": "Dan Peterson",
+   "jobStage": "closed_archived",
+   "gaps": {},
+   "newComments": 0,
+   "newMoves": 0,
+   "wouldChange": false
+  },
+  {
+   "cardId": "6a972486072406d16723b7b5",
+   "cardName": "Junior Joseph",
+   "list": "Leads Services SolarEdge",
+   "url": "https://trello.com/c/WfzXBnza",
+   "comments": 0,
+   "moves": 0,
+   "found": {},
+   "jobId": "job-trello-6a972486072406d16723b7b5",
+   "jobName": "Junior Joseph",
+   "jobStage": "leads",
+   "gaps": {},
+   "newComments": 0,
+   "newMoves": 0,
+   "wouldChange": false
+  },
+  {
+   "cardId": "6a99aded6a8402d4bd92e2d9",
+   "cardName": "Shunacee Hicks",
+   "list": "Leads Services SolarEdge",
+   "url": "https://trello.com/c/InFOU2yp",
+   "comments": 0,
+   "moves": 0,
+   "found": {
+    "solarEdgeSiteId": "2803501"
+   },
+   "jobId": "job-trello-6a99aded6a8402d4bd92e2d9",
+   "jobName": "Shunacee Hicks",
+   "jobStage": "leads",
+   "gaps": {
+    "solarEdgeSiteId": "2803501"
+   },
+   "newComments": 0,
+   "newMoves": 0,
+   "wouldChange": true
+  },
+  {
+   "cardId": "6a99ae4479c86cd648cae060",
+   "cardName": "Basil Davis",
+   "list": "Leads Services SolarEdge",
+   "url": "https://trello.com/c/S8j1vGiy",
+   "comments": 0,
+   "moves": 0,
+   "found": {
+    "solarEdgeSiteId": "3424535"
+   },
+   "jobId": "job-trello-6a99ae4479c86cd648cae060",
+   "jobName": "Basil Davis",
+   "jobStage": "leads",
+   "gaps": {
+    "solarEdgeSiteId": "3424535"
+   },
+   "newComments": 0,
+   "newMoves": 0,
+   "wouldChange": true
+  },
+  {
+   "cardId": "6a99ae8e2442c7663de041ac",
+   "cardName": "Michael Wagner",
+   "list": "Leads Services SolarEdge",
+   "url": "https://trello.com/c/YLZ5dZTv",
+   "comments": 0,
+   "moves": 0,
+   "found": {
+    "solarEdgeSiteId": "4353022"
+   },
+   "jobId": "job-trello-6a99ae8e2442c7663de041ac",
+   "jobName": "Michael Wagner",
+   "jobStage": "leads",
+   "gaps": {
+    "solarEdgeSiteId": "4353022"
+   },
+   "newComments": 0,
+   "newMoves": 0,
+   "wouldChange": true
+  },
+  {
+   "cardId": "6a99af24ec779665bfde9196",
+   "cardName": "Rodo Andrade",
+   "list": "Leads Services SolarEdge",
+   "url": "https://trello.com/c/d6epvjPC",
+   "comments": 0,
+   "moves": 0,
+   "found": {},
+   "jobId": "job-trello-6a99af24ec779665bfde9196",
+   "jobName": "Rodo Andrade",
+   "jobStage": "leads",
+   "gaps": {},
+   "newComments": 0,
+   "newMoves": 0,
+   "wouldChange": false
+  },
+  {
+   "cardId": "6a99b01336ddf27b67d16827",
+   "cardName": "Taylor Williams",
+   "list": "Leads Services SolarEdge",
+   "url": "https://trello.com/c/Ld69ibNg",
+   "comments": 0,
+   "moves": 0,
+   "found": {},
+   "jobId": "job-trello-6a99b01336ddf27b67d16827",
+   "jobName": "Taylor Williams",
+   "jobStage": "leads",
+   "gaps": {},
+   "newComments": 0,
+   "newMoves": 0,
+   "wouldChange": false
+  },
+  {
+   "cardId": "6a99b8196e3d7dc89ce9c11d",
+   "cardName": "Keith Burgos",
+   "list": "Leads Services SolarEdge",
+   "url": "https://trello.com/c/9j4UwXXh",
+   "comments": 0,
+   "moves": 0,
+   "found": {
+    "solarEdgeSiteId": "3573194"
+   },
+   "jobId": "job-trello-6a99b8196e3d7dc89ce9c11d",
+   "jobName": "Keith Burgos",
+   "jobStage": "leads",
+   "gaps": {
+    "solarEdgeSiteId": "3573194"
+   },
+   "newComments": 0,
+   "newMoves": 0,
+   "wouldChange": true
+  },
+  {
+   "cardId": "6a67ac1f93d96ffe08b5b470",
+   "cardName": "US-15661 Ed Chase",
+   "list": "Quote Accepted - Needs Scheduling/Scheduled for Technician Visit (Service Solaredge)",
+   "url": "https://trello.com/c/xw2wHqN8",
+   "comments": 7,
+   "moves": 9,
+   "found": {
+    "solarEdgeSiteId": "1201222",
+    "serials": [
+     "SV1723-075025D68-3C",
+     "SJ0519-0731EFA2E-B9"
+    ],
+    "address": "6024 Williamsburg Way"
+   },
+   "jobId": "job-trello-6a67ac1f93d96ffe08b5b470",
+   "jobName": "Ed Chase",
+   "jobStage": "needs_scheduling",
+   "gaps": {
+    "solarEdgeSiteId": "1201222",
+    "leadInfo.address": "6024 Williamsburg Way"
+   },
+   "newComments": 7,
+   "newMoves": 9,
+   "wouldChange": true
+  },
+  {
+   "cardId": "6a3c75111b5327e17ddb52dd",
+   "cardName": "US-15670 Hannah Gunnoe",
+   "list": "Quote Accepted - Needs Scheduling/Scheduled for Technician Visit (Service Solaredge)",
+   "url": "https://trello.com/c/GVvONFe8",
+   "comments": 5,
+   "moves": 6,
+   "found": {
+    "solarEdgeSiteId": "3612595",
+    "serials": [
+     "SJ0222-07405FD86-FC"
+    ],
+    "siteTransferInverterSerial": "SJ0222-07405FD86-FC",
+    "address": "10401 SW 53rd St",
+    "city": "Cooper City",
+    "state": "FL",
+    "zip": "33328"
+   },
+   "jobId": "job-trello-6a3c75111b5327e17ddb52dd",
+   "jobName": "Hannah Gunnoe",
+   "jobStage": "needs_scheduling",
+   "gaps": {
+    "solarEdgeSiteId": "3612595",
+    "siteTransferInverterSerial": "SJ0222-07405FD86-FC",
+    "leadInfo.address": "10401 SW 53rd St",
+    "leadInfo.city": "Cooper City",
+    "leadInfo.state": "FL"
+   },
+   "newComments": 5,
+   "newMoves": 6,
+   "wouldChange": true
+  },
+  {
+   "cardId": "6a70e7d684573d88000493a5",
+   "cardName": "US-15669 Eusebio Valdes",
+   "list": "Quote Accepted - Needs Scheduling/Scheduled for Technician Visit (Service Solaredge)",
+   "url": "https://trello.com/c/gebP2UaH",
+   "comments": 3,
+   "moves": 8,
+   "found": {
+    "solarEdgeSiteId": "1060889",
+    "serials": [
+     "SM0423-07411E025-8A"
+    ],
+    "siteTransferInverterSerial": "SM0423-07411E025-8A",
+    "address": "2928 NW 95th Ter",
+    "city": "Miami",
+    "state": "FL",
+    "zip": "33147"
+   },
+   "jobId": "job-trello-6a70e7d684573d88000493a5",
+   "jobName": "Eusebio Valdes",
+   "jobStage": "needs_scheduling",
+   "gaps": {
+    "solarEdgeSiteId": "1060889",
+    "siteTransferInverterSerial": "SM0423-07411E025-8A",
+    "leadInfo.address": "2928 NW 95th Ter",
+    "leadInfo.state": "FL",
+    "leadInfo.zip": "33147"
+   },
+   "newComments": 3,
+   "newMoves": 8,
+   "wouldChange": true
+  },
+  {
+   "cardId": "6a68b7edccbdca84afef62f5",
+   "cardName": "US-15662 Maurean Medina",
+   "list": "Work Done - Collect Payment",
+   "url": "https://trello.com/c/31yUvrmU",
+   "comments": 4,
+   "moves": 9,
+   "found": {
+    "solarEdgeSiteId": "3044711",
+    "serials": [
+     "SJ3522-07407AF30-5A"
+    ],
+    "siteTransferInverterSerial": "SJ3522-07407AF30-5A",
+    "address": "340 Boardwalk Ave",
+    "city": "Haines City",
+    "state": "FL",
+    "zip": "33844"
+   },
+   "jobId": "job-trello-6a68b7edccbdca84afef62f5",
+   "jobName": "Maurean Medina",
+   "jobStage": "work_done_collect",
+   "gaps": {
+    "solarEdgeSiteId": "3044711",
+    "siteTransferInverterSerial": "SJ3522-07407AF30-5A",
+    "leadInfo.address": "340 Boardwalk Ave",
+    "leadInfo.city": "Haines City",
+    "leadInfo.state": "FL"
+   },
+   "newComments": 4,
+   "newMoves": 9,
+   "wouldChange": true
+  },
+  {
+   "cardId": "68d46d50e690561ae258388c",
+   "cardName": "US-15421 Rafael Padron",
+   "list": "Work Done - Collect Payment",
+   "url": "https://trello.com/c/hZ9zupKY",
+   "comments": 21,
+   "moves": 4,
+   "found": {
+    "solarEdgeSiteId": "3310258",
+    "serials": [
+     "SM2522-074082B51-F8"
+    ],
+    "siteTransferInverterSerial": "SM2522-074082B51-F8",
+    "address": "1811 SW 14 ST"
+   },
+   "jobId": "job-trello-68d46d50e690561ae258388c",
+   "jobName": "Rafael Padron",
+   "jobStage": "work_done_collect",
+   "gaps": {
+    "solarEdgeSiteId": "3310258",
+    "siteTransferInverterSerial": "SM2522-074082B51-F8",
+    "leadInfo.address": "1811 SW 14 ST"
+   },
+   "newComments": 21,
+   "newMoves": 4,
+   "wouldChange": true
+  },
+  {
+   "cardId": "66a90a81f97c2ebfba471fec",
+   "cardName": "US-15175 Pablo Herrera",
+   "list": "Work Done - Collect Payment",
+   "url": "https://trello.com/c/QrWzb5Oe",
+   "comments": 15,
+   "moves": 5,
+   "found": {},
+   "jobId": "job-trello-66a90a81f97c2ebfba471fec",
+   "jobName": "Pablo Herrera",
+   "jobStage": "work_done_collect",
+   "gaps": {},
+   "newComments": 15,
+   "newMoves": 5,
+   "wouldChange": true
+  },
+  {
+   "cardId": "68e3b9009025ef125a627933",
+   "cardName": "US-15435 Jose Tobar",
+   "list": "Work Done - Collect Payment",
+   "url": "https://trello.com/c/9aKw5P1a",
+   "comments": 18,
+   "moves": 4,
+   "found": {
+    "solarEdgeSiteId": "2726777",
+    "address": "3406 Briarwood Grove Dr",
+    "city": "Ocoee",
+    "state": "FL",
+    "zip": "34761"
+   },
+   "jobId": "job-trello-68e3b9009025ef125a627933",
+   "jobName": "Jose Tobar",
+   "jobStage": "work_done_collect",
+   "gaps": {
+    "solarEdgeSiteId": "2726777"
+   },
+   "newComments": 18,
+   "newMoves": 4,
+   "wouldChange": true
+  },
+  {
+   "cardId": "6a7628087e65c457a39df445",
+   "cardName": "Daniel Torres",
+   "list": "Done",
+   "url": "https://trello.com/c/ozUrt0Xg",
+   "comments": 2,
+   "moves": 3,
+   "found": {
+    "address": "2632 NW 52nd Ct",
+    "city": "Fort Lauderdale",
+    "state": "FL",
+    "zip": "33309"
+   },
+   "jobId": "job-trello-6a7628087e65c457a39df445",
+   "jobName": "Daniel Torres",
+   "jobStage": "done",
+   "gaps": {
+    "leadInfo.address": "2632 NW 52nd Ct",
+    "leadInfo.city": "Fort Lauderdale",
+    "leadInfo.state": "FL"
+   },
+   "newComments": 2,
+   "newMoves": 3,
+   "wouldChange": true
+  },
+  {
+   "cardId": "6a6d142c745b7af77a6dd196",
+   "cardName": "Gregory Hatton",
+   "list": "Done",
+   "url": "https://trello.com/c/XpEH9Mu4",
+   "comments": 2,
+   "moves": 1,
+   "found": {
+    "address": "1104 emerald dunes dr",
+    "city": "sun city center",
+    "state": "FL",
+    "zip": "33573"
+   },
+   "jobId": "job-trello-6a6d142c745b7af77a6dd196",
+   "jobName": "Gregory Hatton Sr",
+   "jobStage": "done",
+   "gaps": {
+    "leadInfo.address": "1104 emerald dunes dr",
+    "leadInfo.city": "sun city center",
+    "leadInfo.state": "FL"
+   },
+   "newComments": 2,
+   "newMoves": 1,
+   "wouldChange": true
+  },
+  {
+   "cardId": "6a6ba40274640412a6d2366e",
+   "cardName": "US-15671 Danraj Deonrain",
+   "list": "Done",
+   "url": "https://trello.com/c/kXYbYAoG",
+   "comments": 5,
+   "moves": 3,
+   "found": {
+    "address": "4201 SW 10th St",
+    "city": "Plantation",
+    "state": "FL",
+    "zip": "33317"
+   },
+   "jobId": "job-trello-6a6ba40274640412a6d2366e",
+   "jobName": "Danraj Deonrain",
+   "jobStage": "done",
+   "gaps": {
+    "leadInfo.address": "4201 SW 10th St",
+    "leadInfo.city": "Plantation",
+    "leadInfo.state": "FL"
+   },
+   "newComments": 5,
+   "newMoves": 3,
+   "wouldChange": true
+  },
+  {
+   "cardId": "6a7dc8a0515452d7e28093e5",
+   "cardName": "Camille Norris",
+   "list": "Email Marketing Follow-Up",
+   "url": "https://trello.com/c/XKcLcn6R",
+   "comments": 0,
+   "moves": 2,
+   "found": {},
+   "jobId": "job-trello-6a7dc8a0515452d7e28093e5",
+   "jobName": "Camille Norris",
+   "jobStage": "email_follow_up",
+   "gaps": {},
+   "newComments": 0,
+   "newMoves": 2,
+   "wouldChange": true
+  },
+  {
+   "cardId": "6a7b799d37c0dc90d0b9820d",
+   "cardName": "Robert Potter",
+   "list": "Email Marketing Follow-Up",
+   "url": "https://trello.com/c/YeqR8np3",
+   "comments": 2,
+   "moves": 1,
+   "found": {
+    "address": "829 hudson lane"
+   },
+   "jobId": "job-trello-6a7b799d37c0dc90d0b9820d",
+   "jobName": "Robert Potter",
+   "jobStage": "email_follow_up",
+   "gaps": {
+    "leadInfo.address": "829 hudson lane"
+   },
+   "newComments": 2,
+   "newMoves": 1,
+   "wouldChange": true
+  },
+  {
+   "cardId": "6a7b26fa3dab554afa3ec857",
+   "cardName": "Jamal Hairston",
+   "list": "Email Marketing Follow-Up",
+   "url": "https://trello.com/c/eVib0HLa",
+   "comments": 0,
+   "moves": 1,
+   "found": {},
+   "jobId": "job-trello-6a7b26fa3dab554afa3ec857",
+   "jobName": "Jamal Hairston",
+   "jobStage": "email_follow_up",
+   "gaps": {},
+   "newComments": 0,
+   "newMoves": 1,
+   "wouldChange": true
+  },
+  {
+   "cardId": "6a79c3e4e20900f0b5b8b1e0",
+   "cardName": "Scott Zornek",
+   "list": "Email Marketing Follow-Up",
+   "url": "https://trello.com/c/qwK9EZFv",
+   "comments": 1,
+   "moves": 1,
+   "found": {},
+   "jobId": "job-trello-6a79c3e4e20900f0b5b8b1e0",
+   "jobName": "Scott Zornek",
+   "jobStage": "email_follow_up",
+   "gaps": {},
+   "newComments": 1,
+   "newMoves": 1,
+   "wouldChange": true
+  },
+  {
+   "cardId": "6a749511cb26ddc2d01b50c8",
+   "cardName": "Jose Ramirez López",
+   "list": "Email Marketing Follow-Up",
+   "url": "https://trello.com/c/XHzze0FW",
+   "comments": 1,
+   "moves": 1,
+   "found": {},
+   "jobId": "job-trello-6a749511cb26ddc2d01b50c8",
+   "jobName": "Jose Ramirez Lopez",
+   "jobStage": "email_follow_up",
+   "gaps": {},
+   "newComments": 1,
+   "newMoves": 1,
+   "wouldChange": true
+  },
+  {
+   "cardId": "6a737722d60db5d75b5d407f",
+   "cardName": "Miriam Cabrera",
+   "list": "Email Marketing Follow-Up",
+   "url": "https://trello.com/c/J73XuuaL",
+   "comments": 1,
+   "moves": 1,
+   "found": {},
+   "jobId": "job-trello-6a737722d60db5d75b5d407f",
+   "jobName": "Miriam Cabrera",
+   "jobStage": "email_follow_up",
+   "gaps": {},
+   "newComments": 1,
+   "newMoves": 1,
+   "wouldChange": true
+  },
+  {
+   "cardId": "6a70cf42cec00cf4af5416b9",
+   "cardName": "Alejandro Batista",
+   "list": "Email Marketing Follow-Up",
+   "url": "https://trello.com/c/lmrjUlAt",
+   "comments": 1,
+   "moves": 1,
+   "found": {},
+   "jobId": "job-trello-6a70cf42cec00cf4af5416b9",
+   "jobName": "Alejandro Batista",
+   "jobStage": "email_follow_up",
+   "gaps": {},
+   "newComments": 1,
+   "newMoves": 1,
+   "wouldChange": true
+  },
+  {
+   "cardId": "6a6d1763bab92ba3f0058030",
+   "cardName": "Magdiel Carbon",
+   "list": "Email Marketing Follow-Up",
+   "url": "https://trello.com/c/VnCYE8rC",
+   "comments": 0,
+   "moves": 1,
+   "found": {},
+   "jobId": "job-trello-6a6d1763bab92ba3f0058030",
+   "jobName": "Magdiel Carbo",
+   "jobStage": "email_follow_up",
+   "gaps": {},
+   "newComments": 0,
+   "newMoves": 1,
+   "wouldChange": true
+  },
+  {
+   "cardId": "6a6c9493927965c1ef1f2ec7",
+   "cardName": "Roxanna Flores",
+   "list": "Email Marketing Follow-Up",
+   "url": "https://trello.com/c/AEIwLmY4",
+   "comments": 1,
+   "moves": 2,
+   "found": {},
+   "jobId": "job-trello-6a6c9493927965c1ef1f2ec7",
+   "jobName": "Roxanna Flores",
+   "jobStage": "email_follow_up",
+   "gaps": {},
+   "newComments": 1,
+   "newMoves": 2,
+   "wouldChange": true
+  },
+  {
+   "cardId": "6a6b91c771ab73b90603518c",
+   "cardName": "Gerardo Perez",
+   "list": "Email Marketing Follow-Up",
+   "url": "https://trello.com/c/z81LyXZs",
+   "comments": 1,
+   "moves": 2,
+   "found": {},
+   "jobId": "job-trello-6a6b91c771ab73b90603518c",
+   "jobName": "Gerardo Perez",
+   "jobStage": "email_follow_up",
+   "gaps": {},
+   "newComments": 1,
+   "newMoves": 2,
+   "wouldChange": true
+  },
+  {
+   "cardId": "6a67ae0a0528d9d8cb1e9d31",
+   "cardName": "Maayan Zdroyevski",
+   "list": "Email Marketing Follow-Up",
+   "url": "https://trello.com/c/9bR9IaGZ",
+   "comments": 1,
+   "moves": 1,
+   "found": {
+    "address": "43 GREENS ROAD"
+   },
+   "jobId": "job-trello-6a67ae0a0528d9d8cb1e9d31",
+   "jobName": "Maayan Zdroyevski",
+   "jobStage": "email_follow_up",
+   "gaps": {
+    "leadInfo.address": "43 GREENS ROAD"
+   },
+   "newComments": 1,
+   "newMoves": 1,
+   "wouldChange": true
+  },
+  {
+   "cardId": "6a63de0cfaa4c76b07e3f33e",
+   "cardName": "US-15659 Lisa Chung",
+   "list": "Closed – Won ✅",
+   "url": "https://trello.com/c/9bdqMGfs",
+   "comments": 2,
+   "moves": 9,
+   "found": {},
+   "jobId": "job-trello-6a63de0cfaa4c76b07e3f33e",
+   "jobName": "Lisa Chung",
+   "jobStage": "closed_won",
+   "gaps": {},
+   "newComments": 2,
+   "newMoves": 9,
+   "wouldChange": true
+  },
+  {
+   "cardId": "6a5f99855ad1d0cce305ab75",
+   "cardName": "US-15655 Shellie Blum",
+   "list": "Closed – Won ✅",
+   "url": "https://trello.com/c/2jJq5mrL",
+   "comments": 6,
+   "moves": 12,
+   "found": {
+    "solarEdgeSiteId": "4137278",
+    "serials": [
+     "SM2623-07413DEB2-17"
+    ],
+    "siteTransferInverterSerial": "SM2623-07413DEB2-17",
+    "address": "201 C F Kinney Road"
+   },
+   "jobId": "job-trello-6a5f99855ad1d0cce305ab75",
+   "jobName": "Shellie Blum",
+   "jobStage": "closed_won",
+   "gaps": {
+    "solarEdgeSiteId": "4137278",
+    "siteTransferInverterSerial": "SM2623-07413DEB2-17"
+   },
+   "newComments": 6,
+   "newMoves": 12,
+   "wouldChange": true
+  },
+  {
+   "cardId": "6a70a9e6816becd38bf2c482",
+   "cardName": "US-15668 Katherine Souza",
+   "list": "Closed – Won ✅",
+   "url": "https://trello.com/c/90kLCMSr",
+   "comments": 10,
+   "moves": 9,
+   "found": {
+    "solarEdgeSiteId": "3405001",
+    "serials": [
+     "SV2522-0740C1F88-27"
+    ],
+    "siteTransferInverterSerial": "SV2522-0740C1F88-27",
+    "address": "1184 Olympus Way"
+   },
+   "jobId": "job-trello-6a70a9e6816becd38bf2c482",
+   "jobName": "Katherine Souza",
+   "jobStage": "closed_won",
+   "gaps": {
+    "solarEdgeSiteId": "3405001",
+    "siteTransferInverterSerial": "SV2522-0740C1F88-27",
+    "leadInfo.address": "1184 Olympus Way"
+   },
+   "newComments": 10,
+   "newMoves": 9,
+   "wouldChange": true
+  },
+  {
+   "cardId": "6a68b7cc638bf6c26cb23a2d",
+   "cardName": "US-15660 Osmel Rodriguez",
+   "list": "Closed – Won ✅",
+   "url": "https://trello.com/c/aWFs9SZD",
+   "comments": 4,
+   "moves": 6,
+   "found": {
+    "solarEdgeSiteId": "658588",
+    "serials": [
+     "SJ5016-07F1612EF-96"
+    ],
+    "siteTransferInverterSerial": "SJ5016-07F1612EF-96",
+    "address": "2021 SW 4th st."
+   },
+   "jobId": "job-trello-6a68b7cc638bf6c26cb23a2d",
+   "jobName": "Osmel Rodriguez",
+   "jobStage": "closed_won",
+   "gaps": {
+    "solarEdgeSiteId": "658588",
+    "siteTransferInverterSerial": "SJ5016-07F1612EF-96",
+    "leadInfo.address": "2021 SW 4th st."
+   },
+   "newComments": 4,
+   "newMoves": 6,
+   "wouldChange": true
+  },
+  {
+   "cardId": "66e07896a38de75118eeff20",
+   "cardName": "US-15213 Fred Walumba (South Miami)",
+   "list": "Closed – Won ✅",
+   "url": "https://trello.com/c/q5S4v7uB",
+   "comments": 9,
+   "moves": 5,
+   "found": {},
+   "jobId": "job-trello-66e07896a38de75118eeff20",
+   "jobName": "Fred Walumba (South Miami)",
+   "jobStage": "closed_won",
+   "gaps": {},
+   "newComments": 9,
+   "newMoves": 5,
+   "wouldChange": true
+  },
+  {
+   "cardId": "6a5e77f16d41fe53caf59d04",
+   "cardName": "US-15656 Debbie Wood",
+   "list": "Closed – Won ✅",
+   "url": "https://trello.com/c/hcCGT8BF",
+   "comments": 3,
+   "moves": 9,
+   "found": {
+    "solarEdgeSiteId": "598117",
+    "serials": [
+     "SM4122-07410A0D5-F9"
+    ],
+    "siteTransferInverterSerial": "SM4122-07410A0D5-F9",
+    "address": "908 Ornelda St, SW",
+    "city": "Ruskin",
+    "state": "FL",
+    "zip": "33570"
+   },
+   "jobId": "job-trello-6a5e77f16d41fe53caf59d04",
+   "jobName": "Debbie Wood",
+   "jobStage": "closed_won",
+   "gaps": {
+    "solarEdgeSiteId": "598117",
+    "siteTransferInverterSerial": "SM4122-07410A0D5-F9"
+   },
+   "newComments": 3,
+   "newMoves": 9,
+   "wouldChange": true
+  },
+  {
+   "cardId": "6a68a8f022204f376c12d5fa",
+   "cardName": "Gil Hyatt",
+   "list": "Done",
+   "url": "https://trello.com/c/vFmKefwa",
+   "comments": 2,
+   "moves": 2,
+   "found": {
+    "address": "300 SE 9th Ct",
+    "city": "Pompano Beach",
+    "state": "FL",
+    "zip": "33060"
+   },
+   "jobId": "job-trello-6a68a8f022204f376c12d5fa",
+   "jobName": "Gil Hyatt",
+   "jobStage": "done",
+   "gaps": {
+    "leadInfo.address": "300 SE 9th Ct",
+    "leadInfo.city": "Pompano Beach",
+    "leadInfo.state": "FL"
+   },
+   "newComments": 2,
+   "newMoves": 2,
+   "wouldChange": true
+  },
+  {
+   "cardId": "6a626ce37f097682d1fbb85c",
+   "cardName": "Zorymarie Ocasio",
+   "list": "Done",
+   "url": "https://trello.com/c/WC64v3J1",
+   "comments": 4,
+   "moves": 5,
+   "found": {},
+   "jobId": "job-trello-6a626ce37f097682d1fbb85c",
+   "jobName": "Zorymarie Ocasio",
+   "jobStage": "done",
+   "gaps": {},
+   "newComments": 4,
+   "newMoves": 5,
+   "wouldChange": true
+  },
+  {
+   "cardId": "6a91d1e9e5b24cbb3346db89",
+   "cardName": "Edward Olivares",
+   "list": "Needs First Time Quoting/Invoicing",
+   "url": "https://trello.com/c/yXdQVsMH",
+   "comments": 0,
+   "moves": 1,
+   "found": {
+    "solarEdgeSiteId": "3584711"
+   },
+   "jobId": "job-trello-6a91d1e9e5b24cbb3346db89",
+   "jobName": "Edward Olivares",
+   "jobStage": "site_transfer_processing",
+   "gaps": {},
+   "newComments": 0,
+   "newMoves": 1,
+   "wouldChange": true
+  },
+  {
+   "cardId": "6a79c44f6b479290e61e5334",
+   "cardName": "US-15676 Myrna Laffossee",
+   "list": "Site Transfer is Completed/To Be Checked",
+   "url": "https://trello.com/c/BP96vng4",
+   "comments": 4,
+   "moves": 3,
+   "found": {
+    "solarEdgeSiteId": "3306494",
+    "serials": [
+     "SV1822-0740BB3B3-E5"
+    ],
+    "siteTransferInverterSerial": "SV1822-0740BB3B3-E5",
+    "address": "1142 Grayson DR",
+    "city": "Orlando",
+    "state": "FL",
+    "zip": "32825"
+   },
+   "jobId": "job-trello-6a79c44f6b479290e61e5334",
+   "jobName": "Myrna Laffossee",
+   "jobStage": "site_transfer_completed",
+   "gaps": {
+    "siteTransferInverterSerial": "SV1822-0740BB3B3-E5",
+    "leadInfo.address": "1142 Grayson DR",
+    "leadInfo.city": "Orlando",
+    "leadInfo.state": "FL",
+    "leadInfo.zip": "32825"
+   },
+   "newComments": 4,
+   "newMoves": 3,
+   "wouldChange": true
+  },
+  {
+   "cardId": "6a7b79eef7e3cef15879fb2a",
+   "cardName": "US-15677 Jonathan Snell",
+   "list": "Quote/Invoicing in Progress for Service",
+   "url": "https://trello.com/c/iCj3mvO0",
+   "comments": 3,
+   "moves": 5,
+   "found": {
+    "solarEdgeSiteId": "1203296",
+    "serials": [
+     "SJ1719-07318D48D-EC"
+    ],
+    "siteTransferInverterSerial": "SJ1719-07318D48D-EC",
+    "address": "327 Northside Dr, S",
+    "city": "Jacksonville",
+    "state": "FL",
+    "zip": "32218"
+   },
+   "jobId": "job-trello-6a7b79eef7e3cef15879fb2a",
+   "jobName": "Jonathan Snell",
+   "jobStage": "needs_first_quote",
+   "gaps": {
+    "solarEdgeSiteId": "1203296",
+    "siteTransferInverterSerial": "SJ1719-07318D48D-EC",
+    "leadInfo.address": "327 Northside Dr, S",
+    "leadInfo.city": "Jacksonville",
+    "leadInfo.state": "FL",
+    "leadInfo.zip": "32218"
+   },
+   "newComments": 3,
+   "newMoves": 5,
+   "wouldChange": true
+  },
+  {
+   "cardId": "6a67dfab03a0e2d03a80ae77",
+   "cardName": "US-15665 Sergio Guerreiro",
+   "list": "Quote/Invoicing in Progress for Service",
+   "url": "https://trello.com/c/IR2YQEmh",
+   "comments": 6,
+   "moves": 13,
+   "found": {
+    "solarEdgeSiteId": "893388",
+    "serials": [
+     "SJ2418-073178A0D-21"
+    ],
+    "siteTransferInverterSerial": "SJ2418-073178A0D-21",
+    "address": "862 LEMONGRASS LN",
+    "city": "WELLINGTON",
+    "state": "FL",
+    "zip": "33414"
+   },
+   "jobId": "job-trello-6a67dfab03a0e2d03a80ae77",
+   "jobName": "Sergio Guerreiro",
+   "jobStage": "service_quote_in_progress",
+   "gaps": {
+    "siteTransferInverterSerial": "SJ2418-073178A0D-21",
+    "leadInfo.address": "862 LEMONGRASS LN",
+    "leadInfo.city": "WELLINGTON",
+    "leadInfo.state": "FL"
+   },
+   "newComments": 6,
+   "newMoves": 13,
+   "wouldChange": true
+  },
+  {
+   "cardId": "6a74954f87f33212cdbe1b52",
+   "cardName": "US-15675 Michael Stone",
+   "list": "Quote/Invoicing in Progress for Service",
+   "url": "https://trello.com/c/rpix33Pz",
+   "comments": 5,
+   "moves": 8,
+   "found": {
+    "solarEdgeSiteId": "3290996",
+    "serials": [
+     "ST1921-0730EBBC0-FC"
+    ],
+    "siteTransferInverterSerial": "ST1921-0730EBBC0-FC"
+   },
+   "jobId": "job-trello-6a74954f87f33212cdbe1b52",
+   "jobName": "Michael Stone",
+   "jobStage": "service_quote_in_progress",
+   "gaps": {
+    "siteTransferInverterSerial": "ST1921-0730EBBC0-FC"
+   },
+   "newComments": 5,
+   "newMoves": 8,
+   "wouldChange": true
+  },
+  {
+   "cardId": "6a6939346e88bf209ed6dd6a",
+   "cardName": "US-15664 Temple Houston",
+   "list": "Needs follow-Up Service",
+   "url": "https://trello.com/c/rUG7AfD0",
+   "comments": 9,
+   "moves": 10,
+   "found": {
+    "solarEdgeSiteId": "325784",
+    "serials": [
+     "SU1519-0BF102DF4-F0"
+    ],
+    "siteTransferInverterSerial": "SU1519-0BF102DF4-F0",
+    "address": "152 Glencullen Cir",
+    "city": "Jupiter",
+    "state": "FL",
+    "zip": "33458"
+   },
+   "jobId": "job-trello-6a6939346e88bf209ed6dd6a",
+   "jobName": "Temple Houston",
+   "jobStage": "needs_follow_up",
+   "gaps": {
+    "solarEdgeSiteId": "325784",
+    "siteTransferInverterSerial": "SU1519-0BF102DF4-F0",
+    "leadInfo.address": "152 Glencullen Cir",
+    "leadInfo.city": "Jupiter",
+    "leadInfo.state": "FL"
+   },
+   "newComments": 9,
+   "newMoves": 10,
+   "wouldChange": true
+  },
+  {
+   "cardId": "6a61072459843e3a6be6946f",
+   "cardName": "Alan de Souza",
+   "list": "Done",
+   "url": "https://trello.com/c/jQPrWUR9",
+   "comments": 1,
+   "moves": 1,
+   "found": {
+    "solarEdgeSiteId": "3097858",
+    "address": "6167 Bonnie Brook Blvd"
+   },
+   "jobId": "job-trello-6a61072459843e3a6be6946f",
+   "jobName": "Alan De Souza",
+   "jobStage": "done",
+   "gaps": {
+    "solarEdgeSiteId": "3097858",
+    "leadInfo.address": "6167 Bonnie Brook Blvd"
+   },
+   "newComments": 1,
+   "newMoves": 1,
+   "wouldChange": true
+  },
+  {
+   "cardId": "6a5ba6c21faafd365dc80b00",
+   "cardName": "Alisa Schlueter",
+   "list": "Done",
+   "url": "https://trello.com/c/5NMo2LkI",
+   "comments": 1,
+   "moves": 1,
+   "found": {
+    "address": "6750 Winterset Gardens Rd"
+   },
+   "jobId": "job-trello-6a5ba6c21faafd365dc80b00",
+   "jobName": "Alisa Schlueter",
+   "jobStage": "closed_archived",
+   "gaps": {},
+   "newComments": 1,
+   "newMoves": 1,
+   "wouldChange": true
+  },
+  {
+   "cardId": "6a19898cbb55cae93dbf7e34",
+   "cardName": "US-15672 Karen Gaw",
+   "list": "Done",
+   "url": "https://trello.com/c/xVEr60nM",
+   "comments": 5,
+   "moves": 2,
+   "found": {
+    "address": "5561 sw 97th terrace"
+   },
+   "jobId": "job-trello-6a19898cbb55cae93dbf7e34",
+   "jobName": "Karen Gaw",
+   "jobStage": "done",
+   "gaps": {
+    "leadInfo.address": "5561 sw 97th terrace"
+   },
+   "newComments": 5,
+   "newMoves": 2,
+   "wouldChange": true
+  },
+  {
+   "cardId": "6a67ad256bffa63ad8f88936",
+   "cardName": "Michelle Anderson",
+   "list": "Email Marketing Follow-Up",
+   "url": "https://trello.com/c/6Var0CW0",
+   "comments": 1,
+   "moves": 1,
+   "found": {},
+   "jobId": "job-trello-6a67ad256bffa63ad8f88936",
+   "jobName": "Michelle Anderson",
+   "jobStage": "email_follow_up",
+   "gaps": {},
+   "newComments": 1,
+   "newMoves": 1,
+   "wouldChange": true
+  },
+  {
+   "cardId": "6a628b16118b4729f0a1bd8b",
+   "cardName": "Dante Moricoli",
+   "list": "Email Marketing Follow-Up",
+   "url": "https://trello.com/c/TqFzcTPS",
+   "comments": 1,
+   "moves": 1,
+   "found": {},
+   "jobId": "job-trello-6a628b16118b4729f0a1bd8b",
+   "jobName": "Dante Moricoli",
+   "jobStage": "email_follow_up",
+   "gaps": {},
+   "newComments": 1,
+   "newMoves": 1,
+   "wouldChange": true
+  },
+  {
+   "cardId": "6a626c765f637e9ed695b2ee",
+   "cardName": "Sean Moser",
+   "list": "Email Marketing Follow-Up",
+   "url": "https://trello.com/c/jUs8HjqF",
+   "comments": 1,
+   "moves": 1,
+   "found": {},
+   "jobId": "job-trello-6a626c765f637e9ed695b2ee",
+   "jobName": "Sean Moser",
+   "jobStage": "email_follow_up",
+   "gaps": {},
+   "newComments": 1,
+   "newMoves": 1,
+   "wouldChange": true
+  },
+  {
+   "cardId": "6a6159df46046f0d8ab9aed4",
+   "cardName": "Randall Pierre",
+   "list": "Email Marketing Follow-Up",
+   "url": "https://trello.com/c/2G3cMZVU",
+   "comments": 1,
+   "moves": 1,
+   "found": {},
+   "jobId": "job-trello-6a6159df46046f0d8ab9aed4",
+   "jobName": "Randall Pierre",
+   "jobStage": "email_follow_up",
+   "gaps": {},
+   "newComments": 1,
+   "newMoves": 1,
+   "wouldChange": true
+  },
+  {
+   "cardId": "6a61594699061f08bf0a8405",
+   "cardName": "Dana Estopinan",
+   "list": "Email Marketing Follow-Up",
+   "url": "https://trello.com/c/BFs31o9z",
+   "comments": 1,
+   "moves": 1,
+   "found": {},
+   "jobId": "job-trello-6a61594699061f08bf0a8405",
+   "jobName": "Dana Estopinan",
+   "jobStage": "email_follow_up",
+   "gaps": {},
+   "newComments": 1,
+   "newMoves": 1,
+   "wouldChange": true
+  },
+  {
+   "cardId": "6a5a926b434d2e545d23f161",
+   "cardName": "US-15652 David Shaffer",
+   "list": "Closed – Won ✅",
+   "url": "https://trello.com/c/Sfoa0JeK",
+   "comments": 6,
+   "moves": 8,
+   "found": {
+    "solarEdgeSiteId": "2901603",
+    "serials": [
+     "SM3023-074144FA1-78",
+     "SM3223-0741495D5-F2"
+    ],
+    "address": "11114 Romance Ct"
+   },
+   "jobId": "job-trello-6a5a926b434d2e545d23f161",
+   "jobName": "David Shaffer",
+   "jobStage": "closed_won",
+   "gaps": {
+    "solarEdgeSiteId": "2901603"
+   },
+   "newComments": 6,
+   "newMoves": 8,
+   "wouldChange": true
+  },
+  {
+   "cardId": "6a615a24f7bc2b11c0b27139",
+   "cardName": "US-15657 Beresford Reid",
+   "list": "Closed – Won ✅",
+   "url": "https://trello.com/c/qBQL8Ynl",
+   "comments": 2,
+   "moves": 8,
+   "found": {
+    "solarEdgeSiteId": "1680100",
+    "serials": [
+     "SJ5019-0730762CA-A6"
+    ],
+    "siteTransferInverterSerial": "SJ5019-0730762CA-A6",
+    "address": "3829 Moores Lake Rd",
+    "city": "Dover",
+    "state": "FL",
+    "zip": "33527"
+   },
+   "jobId": "job-trello-6a615a24f7bc2b11c0b27139",
+   "jobName": "Beresford Reid",
+   "jobStage": "closed_won",
+   "gaps": {
+    "solarEdgeSiteId": "1680100",
+    "siteTransferInverterSerial": "SJ5019-0730762CA-A6",
+    "leadInfo.address": "3829 Moores Lake Rd",
+    "leadInfo.city": "Dover",
+    "leadInfo.state": "FL"
+   },
+   "newComments": 2,
+   "newMoves": 8,
+   "wouldChange": true
+  },
+  {
+   "cardId": "6a6bb60d617bcce4f2f8c9ed",
+   "cardName": "Donna Cimbalo",
+   "list": "Closed – Archived   📁",
+   "url": "https://trello.com/c/UffOTMwW",
+   "comments": 1,
+   "moves": 1,
+   "found": {
+    "address": "15107 masthead landing circle"
+   },
+   "jobId": "job-trello-6a6bb60d617bcce4f2f8c9ed",
+   "jobName": "Donna Cimbalo",
+   "jobStage": "closed_archived",
+   "gaps": {
+    "leadInfo.address": "15107 masthead landing circle"
+   },
+   "newComments": 1,
+   "newMoves": 1,
+   "wouldChange": true
+  },
+  {
+   "cardId": "6a5f864d726feffb5dbe3974",
+   "cardName": "US-15654 Kraig Wold",
+   "list": "Closed – Archived   📁",
+   "url": "https://trello.com/c/lGo7mZzb",
+   "comments": 1,
+   "moves": 2,
+   "found": {},
+   "jobId": "job-trello-6a5f864d726feffb5dbe3974",
+   "jobName": "Kraig Wold",
+   "jobStage": "closed_archived",
+   "gaps": {},
+   "newComments": 1,
+   "newMoves": 2,
+   "wouldChange": true
+  }
+ ],
+ "matchedByName": [],
+ "trelloOnly": [
+  {
+   "cardId": "6a7c67f3ef89d504b405b074",
+   "cardName": "Reinaldo Pino",
+   "list": "Email Marketing Follow-Up",
+   "url": "https://trello.com/c/LiklU7EZ",
+   "comments": 0,
+   "moves": 2,
+   "found": {}
+  },
+  {
+   "cardId": "6a7c67e02f1bf5bc6e9f2d3a",
+   "cardName": "Máxime Boucher",
+   "list": "Email Marketing Follow-Up",
+   "url": "https://trello.com/c/UCUaOZk0",
+   "comments": 0,
+   "moves": 1,
+   "found": {}
+  },
+  {
+   "cardId": "6a5a5a0673de40de835be187",
+   "cardName": "Johanna Medina",
+   "list": "Email Marketing Follow-Up",
+   "url": "https://trello.com/c/XslLvGDd",
+   "comments": 1,
+   "moves": 4,
+   "found": {}
+  }
+ ]
+}
