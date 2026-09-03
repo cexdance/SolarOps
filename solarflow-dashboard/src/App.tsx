@@ -43,6 +43,7 @@ import { supabase, authedFetch } from './lib/supabase';
 import { canSeeFinancials, isFinancialView } from './lib/access';
 import { syncFromDB } from './lib/db';
 import { loadData, saveData, hydrateData } from './lib/dataStore';
+import { pushJobToTrello } from './lib/trelloSync';
 import { migrateWoPhotos, purgeUploadedBlobs } from './lib/photoStore';
 import { pickupJobsForContractor, toContractorJobView, serviceOrderNo, photoUrlStem, bareOrderNo, dedupeWoPhotos, mergeRmaEntries, findJobByWoNumber, mirrorContractorNote } from './lib/woHelpers';
 import { fireMentionNotifications, sendCustomerAppointmentEmail } from './components/ui/MentionTextarea';
@@ -2160,6 +2161,15 @@ function App() {
       saveData(next);
       return next;
     });
+
+    // Mirror the change onto the job's Trello card, if it has one. Hooked HERE,
+    // at the single save choke point, rather than on the individual controls:
+    // every LL edit path (the kanban drag, the LeadPanel, the SO panel) already
+    // funnels through this function, so one call covers all of them and a new
+    // control added later is mirrored without anyone remembering to wire it.
+    // Self-guards to a no-op for non-Trello jobs and for saves that changed
+    // nothing a card can represent. Fire-and-forget: see pushJobToTrello.
+    pushJobToTrello(prevForAssign, updatedJob);
 
     // Auto-mirror to contractor side: if a contractor is assigned and no
     // ContractorJob exists yet for this admin Job, create one. Previously the

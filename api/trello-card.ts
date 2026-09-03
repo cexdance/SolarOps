@@ -196,6 +196,23 @@ export function stageForList(listId: string | undefined): string | undefined {
   return listId ? LIST_STAGES[listId] : undefined;
 }
 
+/**
+ * The inverse: which Trello list a LL column pushes a card into.
+ *
+ * Built by inverting LIST_STAGES rather than written out a second time, so the
+ * two directions of the mirror cannot drift. A stage with no Trello list (were
+ * one ever added app-side only) returns undefined and is simply not pushed,
+ * which is why the caller must treat undefined as "leave the card alone"
+ * rather than "move it to a default".
+ */
+const STAGE_LISTS: Record<string, string> = Object.fromEntries(
+  Object.entries(LIST_STAGES).map(([listId, stage]) => [stage, listId]),
+);
+
+export function listForStage(stage: string | undefined): string | undefined {
+  return stage ? STAGE_LISTS[stage] : undefined;
+}
+
 interface TrelloWebhookAction {
   type: string;
   data?: {
@@ -630,6 +647,13 @@ async function notifyNewLead(jobId: string, cardId: string, displayName: string,
         const payload = JSON.stringify({
           title: 'New lead from Trello',
           body: `${displayName} landed in ${listLabel}`,
+          // Root, deliberately. The app has NO deep-link route: the only
+          // query params it reads are `mode`, `invite` and `box` (App.tsx),
+          // so a `?view=jobs&job=<id>` here would be ignored and land the
+          // reader on the dashboard anyway, while looking like it worked.
+          // The in-app bell DOES open the lead (Layout.tsx onOpenJob via
+          // related_job_id, set below); only web push is generic. Fix by
+          // adding the route, not by writing a URL nothing parses.
           url: '/',
         });
         await Promise.all(subs.map(async row => {
@@ -995,10 +1019,10 @@ async function handleLeadImportWebhook(req: VercelRequest, res: VercelResponse) 
   }
 }
 
-// ── App -> Trello label push (PATCH branch) ─────────────────────────────────
+// ── App -> Trello card push (PATCH branch) ──────────────────────────────────
 
 /**
- * Set a card's labels to exactly `names`, creating any the board lacks.
+ * Board label ids for `labels`, creating any the board lacks.
  *
  * Trello's card-label API is id-based and the app stores names, so this
  * resolves through the board's label list. Matching is by labelKey, not raw
@@ -1008,11 +1032,11 @@ async function handleLeadImportWebhook(req: VercelRequest, res: VercelResponse) 
  * ponytail: the board's labels are re-fetched per call. One extra request on a
  * click a human made; cache it if the intern ever makes this hot.
  */
-async function setCardLabels(
-  cardId: string,
+async function resolveLabelIds(
   boardId: string,
   labels: { name: string; color: string }[],
-): Promise<{ set: number; created: string[] }> {
+  created: string[],
+): Promise<string[]> {
   const auth = `key=${API_KEY}&token=${API_TOKEN}`;
   const listRes = await fetch(`${TRELLO_BASE}/boards/${boardId}/labels?limit=1000&${auth}`);
   if (!listRes.ok) throw new Error(`Trello board labels ${listRes.status}`);
@@ -1020,7 +1044,6 @@ async function setCardLabels(
 
   const byKey = new Map(board.map(l => [labelKey(l.name ?? ''), l.id]));
   const ids: string[] = [];
-  const created: string[] = [];
 
   for (const l of labels) {
     const k = labelKey(l.name);
@@ -1047,13 +1070,19 @@ async function setCardLabels(
     if (!ids.includes(id)) ids.push(id);
   }
 
-  // One whole-set PUT, so a label removed in the app is removed on the card.
-  // idLabels= (empty) is how Trello is told "no labels", and is why this sends
-  // the parameter even when ids is empty.
-  const put = await fetch(
-    `${TRELLO_BASE}/cards/${cardId}?idLabels=${ids.join(',')}&${auth}`,
-    { method: 'PUT' },
-  );
+  return ids;
+}
+
+/**
+ * Apply a set of card changes in ONE PUT.
+ *
+ * Trello's card PUT takes every field at once, so batching is both fewer
+ * requests and fewer webhook deliveries bouncing back at us: a move plus a
+ * relabel is one updateCard event instead of two.
+ */
+async function putCard(cardId: string, params: Record<string, string>): Promise<void> {
+  const qs = new URLSearchParams({ ...params, key: API_KEY, token: API_TOKEN });
+  const put = await fetch(`${TRELLO_BASE}/cards/${cardId}?${qs}`, { method: 'PUT' });
   if (!put.ok) {
     const detail = await put.text().catch(() => '');
     // Verified 2026-08-31: TRELLO_API_TOKEN is scoped read-only
@@ -1063,18 +1092,26 @@ async function setCardLabels(
     // debugs the card id for an hour.
     if (put.status === 401) {
       throw new Error(
-        'TRELLO_API_TOKEN is read-only, so labels cannot be written back to Trello. ' +
+        'TRELLO_API_TOKEN is read-only, so nothing can be written back to Trello. ' +
         'Re-issue the token with write scope and update the Vercel env var. ' +
         `(Trello said: ${detail})`,
       );
     }
-    throw new Error(`Trello card label PUT ${put.status}: ${detail}`);
+    throw new Error(`Trello card PUT ${put.status}: ${detail}`);
   }
-  return { set: ids.length, created };
 }
 
 /**
- * PATCH /api/trello-card, body { cardId, labels: [{name, color}] }.
+ * PATCH /api/trello-card, body { cardId, stage?, name?, labels? }.
+ *
+ * The app -> Trello half of the mirror. LL is the surface the office works;
+ * Trello is the surface Anthony works, and he does not use SolarOps. So a card
+ * he creates must arrive in LL untouched (the webhook), and everything done to
+ * it in LL afterwards must show up on his board without him doing anything.
+ *
+ * Only the fields the caller actually sends are written, so a stage-only drag
+ * does not rewrite the card's name or labels as a side effect. That is what
+ * makes this safe to call on every job save.
  *
  * Lives on this function rather than its own file only because the Vercel
  * Hobby plan hard-caps api/ at 12 Serverless Functions and a 13th fails the
@@ -1083,42 +1120,83 @@ async function setCardLabels(
  *
  * Signed-in callers only: this writes to the shared company board.
  */
-async function handleLabelPush(req: VercelRequest, res: VercelResponse) {
+async function handleCardPush(req: VercelRequest, res: VercelResponse) {
   if (!(await requireUser(req, res))) return;
   if (!API_KEY || !API_TOKEN) return res.status(500).json({ error: 'Trello credentials not configured' });
 
   const raw = await readRawBody(req);
-  let body: { cardId?: string; labels?: { name?: string; color?: string }[] };
+  let body: { cardId?: string; stage?: string; name?: string; labels?: { name?: string; color?: string }[] };
   try { body = raw ? JSON.parse(raw) : (req.body ?? {}); }
   catch { return res.status(400).json({ error: 'Body is not valid JSON' }); }
 
   const cardId = String(body.cardId ?? '').trim();
   if (!/^[0-9a-fA-F]{24}$/.test(cardId)) return res.status(400).json({ error: 'Malformed card id' });
-  if (!Array.isArray(body.labels)) return res.status(400).json({ error: 'labels must be an array' });
-
-  const labels = body.labels
-    .map(l => ({ name: String(l?.name ?? '').trim(), color: String(l?.color ?? '').trim() }))
-    .filter(l => l.name);
 
   // Same guard as the inbound webhook, in the outbound direction: a signed-in
-  // user must not be able to relabel an arbitrary card on someone else's board
+  // user must not be able to rewrite an arbitrary card on someone else's board
   // using the org's token. idBoard comes from Trello, so it cannot be forged.
-  const card = await fetch(`${TRELLO_BASE}/cards/${cardId}?fields=idBoard&key=${API_KEY}&token=${API_TOKEN}`);
+  // `name` is fetched in the same request because the rename below needs it.
+  const card = await fetch(`${TRELLO_BASE}/cards/${cardId}?fields=idBoard,name,idList&key=${API_KEY}&token=${API_TOKEN}`);
   if (card.status === 404) return res.status(404).json({ error: 'No such Trello card' });
   if (!card.ok) return res.status(502).json({ error: `Trello card lookup ${card.status}` });
-  const { idBoard } = await card.json() as { idBoard?: string };
-  if (!isAllowedBoard(idBoard)) {
-    console.warn('[trello-labels] refused: card', cardId, 'is on board', idBoard);
+  const current = await card.json() as { idBoard?: string; name?: string; idList?: string };
+  if (!isAllowedBoard(current.idBoard)) {
+    console.warn('[trello-push] refused: card', cardId, 'is on board', current.idBoard);
     return res.status(403).json({ error: 'Card is not on an allowed board' });
   }
 
+  const params: Record<string, string> = {};
+  const applied: string[] = [];
+  const created: string[] = [];
+
+  // Column. An unmapped stage sends nothing rather than defaulting the card
+  // somewhere, and a card already in the right list sends nothing either, which
+  // is what keeps a routine save from generating a pointless webhook delivery.
+  if (body.stage !== undefined) {
+    const idList = listForStage(String(body.stage));
+    if (!idList) {
+      console.warn(`[trello-push] stage "${body.stage}" maps to no Trello list, column not pushed`);
+    } else if (idList !== current.idList) {
+      params.idList = idList;
+      applied.push(`list -> ${body.stage}`);
+    }
+  }
+
+  // Name, but ONLY over a placeholder. Anthony's cards arrive named
+  // "image.jpeg" because Trello fires createCard before the attachment lands,
+  // and putting the real customer name on them is the single most useful thing
+  // this push does for him. Overwriting a name he actually typed is the single
+  // worst, so the guard is the whole feature: rename a filename, never a name.
+  const wanted = String(body.name ?? '').trim();
+  if (wanted && isFilename(current.name ?? '') && wanted !== current.name) {
+    params.name = wanted;
+    applied.push('name');
+  }
+
+  // Labels, whole-set.
+  if (Array.isArray(body.labels)) {
+    const labels = body.labels
+      .map(l => ({ name: String(l?.name ?? '').trim(), color: String(l?.color ?? '').trim() }))
+      .filter(l => l.name);
+    const ids = await resolveLabelIds(current.idBoard as string, labels, created);
+    // idLabels= (empty) is how Trello is told "no labels", which is why this is
+    // sent even when the list is empty: dropping it would make "remove the last
+    // label in LL" silently do nothing.
+    params.idLabels = ids.join(',');
+    applied.push(`${ids.length} label(s)`);
+  }
+
+  if (Object.keys(params).length === 0) {
+    return res.status(200).json({ skipped: 'nothing to push' });
+  }
+
   try {
-    const result = await setCardLabels(cardId, idBoard as string, labels);
-    console.info(`[trello-labels] card ${cardId}: set ${result.set} label(s)${result.created.length ? `, created ${result.created.join(', ')}` : ''}`);
-    return res.status(200).json(result);
+    await putCard(cardId, params);
+    console.info(`[trello-push] card ${cardId}: ${applied.join(', ')}${created.length ? `, created label(s) ${created.join(', ')}` : ''}`);
+    return res.status(200).json({ applied, created });
   } catch (err) {
-    console.error('[trello-labels] failed:', err);
-    return res.status(502).json({ error: err instanceof Error ? err.message : 'Trello label push failed' });
+    console.error('[trello-push] failed:', err);
+    return res.status(502).json({ error: err instanceof Error ? err.message : 'Trello push failed' });
   }
 }
 
@@ -1132,7 +1210,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return handleLeadImportWebhook(req, res);
   }
   if (req.method === 'PATCH') {
-    return handleLabelPush(req, res);
+    return handleCardPush(req, res);
   }
   // Top-level safety net: if ANYTHING below throws, return a clean 500 instead
   // of Vercel's FUNCTION_INVOCATION_FAILED page (the previous behavior, an

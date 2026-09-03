@@ -9,7 +9,6 @@ import type { Job, LeadInfo, Activity } from '../types';
 import { seedLeadInfo, leadDisplayName, formatImportedAt } from '../lib/leadConvert';
 import { rcCall, rcSMS } from '../lib/ringcentral';
 import { LabelPicker } from './LabelPicker';
-import { pushLabelsToTrello } from '../lib/trelloLabelSync';
 
 interface LeadPanelProps {
   job: Job;
@@ -95,10 +94,9 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({ job, currentUserName, onSa
 
         <div className="p-4 space-y-4">
           {/* Labels (also render as chips on the kanban card) */}
-          <LabelPicker
-            value={job.labels ?? []}
-            onChange={labels => { onSave({ labels }); pushLabelsToTrello(job, labels); }}
-          />
+          {/* The Trello push happens in App.handleUpdateJob, on the save this
+              triggers, so every path that edits a job mirrors, not just this one. */}
+          <LabelPicker value={job.labels ?? []} onChange={labels => onSave({ labels })} />
 
           {/* Contact info */}
           <div className="space-y-3">
