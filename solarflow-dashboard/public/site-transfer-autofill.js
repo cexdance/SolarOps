@@ -52,16 +52,39 @@
 
   var form = document.getElementById('site-transfer-form');
 
+  // Where to hand the case number back. Written on the form page (below) and
+  // read here: both runs are on solaredge.com, so this localStorage is the same
+  // one. The SolarOps origin cannot reach it, which is why the SO panel puts the
+  // slot id in the fragment instead.
+  var SLOT_KEY = 'solarops_transfer_slot';
+
   // Confirmation screen: no form left, just a case number to harvest.
   if (!form) {
+    // The completion URL carries it: /site-transfer-order-complete/free?case_number=7203551
+    var caseNo = (location.search.match(/[?&]case_number=([^&]+)/) || [])[1];
     var txt = (document.body.innerText || document.body.textContent || '').replace(/\s+/g, ' ');
-    var m = txt.match(/(?:case|reference|ticket|request)\b[^]{0,60}?\b([A-Z]{0,4}-?\d[\dA-Z-]{4,})/i);
-    if (m) {
-      copy(m[1]);
-      alert('Case number ' + m[1] + ' copied.\nPaste it into the RMA entry in SolarOps.');
+    if (caseNo) {
+      caseNo = decodeURIComponent(caseNo);
     } else {
-      alert('No site-transfer form and no case number found. Copy it by hand from:\n\n' + txt.slice(0, 400));
+      var m = txt.match(/(?:case|reference|ticket|request)\b[^]{0,60}?\b([A-Z]{0,4}-?\d[\dA-Z-]{4,})/i);
+      caseNo = m && m[1];
     }
+    if (!caseNo) {
+      alert('No site-transfer form and no case number found. Copy it by hand from:\n\n' + txt.slice(0, 400));
+      return;
+    }
+    var slot = null;
+    try { slot = JSON.parse(window.localStorage.getItem(SLOT_KEY) || 'null'); } catch (e) {}
+    // Always copy too: the hand-off can fail (tab opened without a slot, storage
+    // cleared), and a case number on the clipboard is never the wrong outcome.
+    copy(caseNo);
+    if (slot && slot.origin && slot.slotId) {
+      try { window.localStorage.removeItem(SLOT_KEY); } catch (e) {}
+      window.location.href = slot.origin + '/complete-site-transfer?slotId=' +
+        encodeURIComponent(slot.slotId) + '&caseNumber=' + encodeURIComponent(caseNo);
+      return;
+    }
+    alert('Case number ' + caseNo + ' copied.\nPaste it into the RMA entry in SolarOps.');
     return;
   }
 
@@ -77,6 +100,15 @@
       [!vars.serial && 'inverter serial', !vars.siteId && 'Site ID'].filter(Boolean).join(' and ') +
       '\n\nAdd it on the service order, then reopen this form from there.');
     return;
+  }
+
+  // Stash the hand-off target while the fragment is still on the URL; the
+  // confirmation page navigation drops it.
+  if (vars.slotId && vars.origin) {
+    try {
+      window.localStorage.setItem(SLOT_KEY,
+        JSON.stringify({ slotId: vars.slotId, origin: vars.origin }));
+    } catch (e) {}
   }
 
   function fire(el) {

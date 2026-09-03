@@ -133,6 +133,28 @@ export function markJobDeleted(jobId: string): void {
   } catch (e) { console.error('[dataStore] markJobDeleted tombstone write failed', e); }
 }
 
+// ── Un-tombstone, for undo ───────────────────────────────────────────────────
+// Only the undo path calls these. The remote lists union into the local ones on
+// every pull, so the caller must also push the shortened list (see
+// undo.clearUndoTombstones); dropping the id here alone lasts until the next poll.
+
+export function unmarkCustomersDeleted(ids: string[]): void {
+  try {
+    const key = 'solarflow_deleted_customer_ids';
+    const existing: string[] = JSON.parse(localStorage.getItem(key) || '[]');
+    const drop = new Set(ids);
+    localStorage.setItem(key, JSON.stringify(existing.filter(id => !drop.has(id))));
+  } catch (e) { console.error('[dataStore] unmarkCustomersDeleted failed', e); }
+}
+
+export function unmarkJobsDeleted(ids: string[]): void {
+  try {
+    const existing: string[] = JSON.parse(localStorage.getItem(DELETED_JOBS_KEY) || '[]');
+    const drop = new Set(ids);
+    localStorage.setItem(DELETED_JOBS_KEY, JSON.stringify(existing.filter(id => !drop.has(id))));
+  } catch (e) { console.error('[dataStore] unmarkJobsDeleted failed', e); }
+}
+
 // ── Always-on exclusion filter ────────────────────────────────────────────────
 // Runs on EVERY loadData(), not flag-gated, so bad accounts added by the
 // SolarEdge sync (or any other path) are removed on the next page load.

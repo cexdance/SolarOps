@@ -16,6 +16,34 @@ import type { ContractorJob, JobStatusContractor, PhotoCategory } from '../types
  * half. Absence on one side therefore never means "deleted", so this keeps
  * entries present on only one side, same rule as inventory.
  */
+/**
+ * Writes a SolarEdge case number onto the RMA slot the site-transfer bookmarklet
+ * was launched from. Returns null when no job holds that slot, which is a real
+ * outcome: the slot is created in ServiceOrderPanel state and only reaches the
+ * job on save, so an unsaved order has nowhere for the number to land.
+ */
+export function applyRmaCaseNumber<T extends { id: string; rmaEntries?: RMAEntry[] }>(
+  jobs: T[],
+  slotId: string,
+  caseNumber: string,
+): { jobs: T[]; jobId: string } | null {
+  const target = jobs.find(j => (j.rmaEntries ?? []).some(e => e.id === slotId));
+  if (!target) return null;
+  return {
+    jobId: target.id,
+    jobs: jobs.map(j =>
+      j.id !== target.id
+        ? j
+        : {
+            ...j,
+            rmaEntries: (j.rmaEntries ?? []).map(e =>
+              e.id === slotId ? { ...e, rmaNumber: caseNumber } : e,
+            ),
+          },
+    ),
+  };
+}
+
 export function mergeRmaEntries(
   a: RMAEntry[] | undefined,
   b: RMAEntry[] | undefined,

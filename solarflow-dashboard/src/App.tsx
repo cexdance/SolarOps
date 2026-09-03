@@ -3,7 +3,7 @@
 // View routing lives in src/components/AppRouter.tsx
 // Sync side-effects live in src/hooks/useSyncEngine.ts
 // Version-poll side-effect lives in src/hooks/useVersionPoll.ts
-import { useState, useEffect, useRef, useMemo, lazy, Suspense, startTransition } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback, lazy, Suspense, startTransition } from 'react';
 import { useVersionPoll } from './hooks/useVersionPoll';
 import { useSyncEngine }  from './hooks/useSyncEngine';
 import { BUILD_ID } from './lib/versionConfig';
@@ -45,7 +45,7 @@ import { syncFromDB } from './lib/db';
 import { loadData, saveData, hydrateData } from './lib/dataStore';
 import { pushJobToTrello } from './lib/trelloSync';
 import { migrateWoPhotos, purgeUploadedBlobs } from './lib/photoStore';
-import { pickupJobsForContractor, toContractorJobView, serviceOrderNo, photoUrlStem, bareOrderNo, dedupeWoPhotos, mergeRmaEntries, findJobByWoNumber, mirrorContractorNote } from './lib/woHelpers';
+import { pickupJobsForContractor, toContractorJobView, serviceOrderNo, photoUrlStem, bareOrderNo, dedupeWoPhotos, mergeRmaEntries, applyRmaCaseNumber, findJobByWoNumber, mirrorContractorNote } from './lib/woHelpers';
 import { fireMentionNotifications, sendCustomerAppointmentEmail } from './components/ui/MentionTextarea';
 import { formatCost } from './lib/money';
 import { logChange, logJobChange, flushChangeLog } from './lib/changeLog';
@@ -60,6 +60,7 @@ import { AppState, Job, Customer, User, AppNotification, SolarEdgeExtraSite, RMA
 import { FL_SITES } from './lib/solarEdgeSites';
 import { isFloridaSite, isAllowedCustomer, deriveClientId, findCustomerForSite } from './lib/solarEdgeSiteFilter';
 import { getDeletedCustomerIds, markJobDeleted, findDuplicateCustomer, hasDanglingCustomerRef } from './lib/dataStore';
+import { markUndo, peekUndo, takeUndo, applyUndo, clearUndo, clearUndoTombstones } from './lib/undo';
 import { mergeCustomerPair } from './lib/syncEngine';
 import { Contractor, ContractorStatus, ContractorJob, ContractorLineItem } from './types/contractor';
 import { addInteraction, loadCustomers, loadInteractions, saveInteractions } from './lib/customerStore';
@@ -67,7 +68,7 @@ import { validateAddress, normalizeStreetOrder, sameStreetAddress } from './lib/
 import { useUnreadBadge } from './hooks/useUnreadBadge';
 import { resolveSessionRoute, isContractorAccount } from './lib/authRouting';
 import { Eye, X, CloudOff } from 'lucide-react';
-import { Toaster } from 'sonner';
+import { Toaster, toast } from 'sonner';
 
 // ── Web Push helpers ────────────────────────────────────────────────────────
 
@@ -802,6 +803,40 @@ function App() {
     return findInviteByToken(token);
   });
 
+  // Site transfer completion: the bookmarklet lands here as
+  // /complete-site-transfer?slotId=...&caseNumber=... after SolarEdge confirms.
+  // Waits for dbReady: before hydration `data` holds boot defaults with no jobs,
+  // so the slot would never be found. Also waits for a signed-in user: dbReady
+  // flips in a `.finally` whether or not the pull authenticated, and consuming
+  // the params on the login screen would throw the case number away.
+  const siteTransferLanded = useRef(false);
+  useEffect(() => {
+    if (!dbReady || !data.currentUser || siteTransferLanded.current) return;
+    if (window.location.pathname !== '/complete-site-transfer') return;
+    const params = new URLSearchParams(window.location.search);
+    const slotId = params.get('slotId');
+    const caseNumber = params.get('caseNumber');
+    window.history.replaceState({}, '', '/');
+    siteTransferLanded.current = true;
+    if (!slotId || !caseNumber) return;
+
+    // Decide against the hydrated `data` so the toast is accurate; the updater
+    // below only writes. Reading a flag set inside the updater would race, React
+    // runs it on the next render, not at this call site.
+    if (!applyRmaCaseNumber(data.jobs, slotId, caseNumber)) {
+      toast.error(`Case ${caseNumber} matched no service order. It is on your clipboard, paste it into the RMA by hand.`);
+      return;
+    }
+    setData(prev => {
+      const hit = applyRmaCaseNumber(prev.jobs, slotId, caseNumber);
+      if (!hit) return prev;
+      const next = { ...prev, jobs: hit.jobs };
+      saveData(next);
+      return next;
+    });
+    toast.success(`Case ${caseNumber} saved to the Site Transfer RMA.`);
+  }, [dbReady, data.currentUser]);
+
   // Contractor data
   const [contractors, setContractors] = useState<Contractor[]>(() => {
     initializeContractorData();
@@ -1340,6 +1375,7 @@ function App() {
   };
 
   const handleLogout = async () => {
+    clearUndo();
     sessionStorage.removeItem('solarflow_session');
     sessionStorage.removeItem('solarflow_user_id');
     sessionStorage.removeItem('solarflow_contractor_mode');
@@ -1351,6 +1387,57 @@ function App() {
     // index.html is no-cache on Vercel, so a reload guarantees fresh assets.
     window.location.reload();
   };
+
+  // ── One level of undo ──────────────────────────────────────────────────────
+  // markUndo() arms a slot at the six user-mutation handlers; this reverts it.
+  // Only the records that mutation touched are restored, so anything that
+  // synced in from another device meanwhile survives untouched.
+  const handleUndo = useCallback(() => {
+    const s = takeUndo();
+    if (!s) return;
+    // Un-tombstone BEFORE restoring: the remote lists union into the local ones
+    // on every pull, so a restored record whose tombstone still stands is hidden
+    // again on the next poll. Fire-and-forget, the local half is synchronous.
+    void clearUndoTombstones(s).catch(e => console.error('[App] undo tombstone clear failed', e));
+    setData(prev => {
+      const next = applyUndo(prev, s);
+      saveData(next);
+      return next;
+    });
+    logChange('undo', 'app', s.label, { label: s.label }, data.currentUser?.email ?? 'unknown');
+    toast.success(`Undone: ${s.label}`, { id: 'undo' });
+  }, [data.currentUser?.email]);
+
+  // Offer the undo as a toast action. Fixed id so StrictMode's double-invoked
+  // updater collapses to one, and so a new mutation replaces the old offer,
+  // which is exactly what a single-slot undo should look like.
+  useEffect(() => {
+    const onArmed = (e: Event) => {
+      const label = (e as CustomEvent<{ label: string }>).detail?.label ?? 'Last change';
+      toast(label, {
+        id: 'undo',
+        duration: 8000,
+        action: { label: 'Undo', onClick: () => handleUndo() },
+      });
+    };
+    window.addEventListener('solarops:undo-armed', onArmed);
+    return () => window.removeEventListener('solarops:undo-armed', onArmed);
+  }, [handleUndo]);
+
+  // Cmd/Ctrl+Z. Never steal it from a text field: the browser's own text undo
+  // has to keep working, and that is where the shortcut is used most.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== 'z' || e.shiftKey) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+      if (!peekUndo()) return;
+      e.preventDefault();
+      handleUndo();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [handleUndo]);
 
   const handleMarkNotificationRead = (id: string) => {
     setData(prev => ({
@@ -1453,6 +1540,12 @@ function App() {
     setCurrentView('contractors');
   };
 
+  // NOT undoable, deliberately. This writes the contractorJobs blob AND mirrors
+  // into the admin Job. markUndo only tracks admin records, so an undo here would
+  // revert the mirror while the contractor's blob still held the new value, and
+  // the very next contractor save would mirror it straight back. A half-undo that
+  // silently re-applies itself is worse than no undo. Same for
+  // handleContractorProposeSchedule and handleContractorReportAdditionalItem.
   const handleContractorJobUpdate = (incomingJob: ContractorJob) => {
     // Stamp every contractor-side edit so cross-device merges resolve by
     // last-writer-wins instead of whole-blob clobber (CB-3).
@@ -2056,6 +2149,7 @@ function App() {
     if (stampedNewJob.woNumber) createdByWoNumber.current.set(stampedNewJob.woNumber, stampedNewJob);
     setData(prev => {
       const next = { ...prev, jobs: [...prev.jobs, stampedNewJob] };
+      markUndo(`Created work order ${stampedNewJob.woNumber ?? stampedNewJob.id}`, prev, next);
       saveData(next);
       return next;
     });
@@ -2072,6 +2166,7 @@ function App() {
   const handleCreateStandaloneRma = (entry: RMAEntry) => {
     setData(prev => {
       const next = { ...prev, standaloneRmas: [...(prev.standaloneRmas ?? []), entry] };
+      markUndo(`Created RMA ${entry.rmaNumber || entry.id}`, prev, next);
       saveData(next);
       return next;
     });
@@ -2084,6 +2179,7 @@ function App() {
         standaloneRmas: (prev.standaloneRmas ?? []).map(e =>
           e.id === entry.id ? { ...entry, updatedAt: new Date().toISOString() } : e),
       };
+      markUndo(`Edited RMA ${entry.rmaNumber || entry.id}`, prev, next);
       saveData(next);
       return next;
     });
@@ -2158,6 +2254,7 @@ function App() {
             : c
         ),
       };
+      markUndo(`Edited work order ${updatedJob.woNumber ?? updatedJob.id}`, prev, next);
       saveData(next);
       return next;
     });
@@ -2260,6 +2357,8 @@ function App() {
     markJobDeleted(jobId);
     setData(prev => {
       const next = { ...prev, jobs: prev.jobs.filter((j) => j.id !== jobId) };
+      const wo = prev.jobs.find(j => j.id === jobId)?.woNumber;
+      markUndo(`Deleted work order ${wo ?? jobId}`, prev, next);
       saveData(next);
       return next;
     });
@@ -2344,6 +2443,7 @@ function App() {
     // Use prev => pattern to avoid stale-closure data loss
     setData(prev => {
       const next = { ...prev, customers: [...prev.customers, newCustomer] };
+      markUndo(`Created ${newCustomer.name || 'customer'}`, prev, next);
       // Immediate synchronous save, never rely solely on the 500ms debounce
       saveData(next);
       return next;
@@ -2393,6 +2493,7 @@ function App() {
           ? prev.jobs.map(j => j.customerId === updatedCustomer.id ? { ...j, siteAddress: fullAddr } : j)
           : prev.jobs,
       };
+      markUndo(`Edited ${updatedCustomer.name || 'customer'}`, prev, next);
       saveData(next);
       return next;
     });
@@ -2435,6 +2536,8 @@ function App() {
         customers: prev.customers.filter((c) => c.id !== customerId),
         jobs: prev.jobs.filter((j) => j.customerId !== customerId),
       };
+      const name = prev.customers.find(c => c.id === customerId)?.name;
+      markUndo(`Deleted ${name || 'customer'}`, prev, next);
       saveData(next);
       return next;
     });
@@ -2495,6 +2598,7 @@ function App() {
         customers: prev.customers.filter(c => c.id !== secondaryId).map(c => c.id === primaryId ? merged : c),
         jobs: prev.jobs.map(j => j.customerId === secondaryId ? { ...j, customerId: primaryId } : j),
       };
+      markUndo(`Merged ${secondary.name || 'customer'} into ${primary.name || 'customer'}`, prev, next);
       // Persist - the previous version only updated React state, so the merge was
       // lost on reload and never pushed to Supabase.
       saveData(next);
@@ -2512,6 +2616,8 @@ function App() {
   };
 
   // SolarEdge API handlers
+  // Not undoable: touches solarEdgeConfig only, and markUndo arms nothing for a
+  // change with no customer/job/RMA records in it.
   const handleSaveSolarEdgeApiKey = (apiKey: string) => {
     setData(prev => {
       const next = {
@@ -2724,6 +2830,7 @@ function App() {
             dailyCallDate: syncedDateUTC,
           },
         };
+        markUndo(`SolarEdge sync, ${newCustomersFromSync.length} new customers`, prev, next);
         saveData(next);
         return next;
       });
@@ -2828,6 +2935,7 @@ function App() {
           customers: [...prev.customers, ...newCustomers],
           solarEdgeExtraSites: [...(prev.solarEdgeExtraSites ?? []), ...newExtraSites],
         };
+        markUndo(`Added ${newCustomers.length} Florida sites`, prev, next);
         saveData(next);
         return next;
       });
@@ -3016,6 +3124,7 @@ function App() {
         customers: dedupedCustomers,
         solarEdgeExtraSites: dedupedExtra,
       };
+      markUndo(`Applied SolarEdge import, ${accepted.length} changes`, prev, next);
       saveData(next);
       return next;
     });

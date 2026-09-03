@@ -1419,8 +1419,15 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
             },
           ],
     );
+    // slotId + origin ride along in the fragment: the bookmarklet runs on
+    // solaredge.com, so it cannot read anything this origin puts in localStorage.
     const payload = encodeURIComponent(
-      JSON.stringify({ siteId: stSiteId || undefined, serial: stInverterSerial || undefined }),
+      JSON.stringify({
+        siteId: stSiteId || undefined,
+        serial: stInverterSerial || undefined,
+        slotId,
+        origin: window.location.origin,
+      }),
     );
     window.open(`https://www.solaredge.com/site-transfer#solarops=${payload}`, '_blank', 'noopener');
   };
