@@ -556,10 +556,13 @@ export const Customers: React.FC<CustomersProps> = ({
     const matchesType = filterType === 'all' || customer.type === filterType;
     const matchesPowerCare = !powerCareOnly || !!customer.isPowerCare;
     // Per-column filters
-    const matchesCols = Object.entries(colFilters).every(([col, val]) => {
+    // ponytail: only VISIBLE columns filter. A filter on a hidden column has no
+    // input on screen, so it deletes rows with nothing to explain why.
+    const matchesCols = visibleCols.every((col) => {
+      const val = colFilters[col];
       if (!val) return true;
       const stats = getCustomerStats(customer.id);
-      return getCellValue(customer, col as ColId, stats).toLowerCase().includes(val.toLowerCase());
+      return getCellValue(customer, col, stats).toLowerCase().includes(val.toLowerCase());
     });
     return matchesSearch && matchesType && matchesPowerCare && matchesCols;
   });
@@ -650,7 +653,7 @@ export const Customers: React.FC<CustomersProps> = ({
     );
   }
 
-  const activeFilterCount = Object.values(colFilters).filter(Boolean).length;
+  const activeFilterCount = visibleCols.filter(id => colFilters[id]).length;
 
   // Pagination
   const PAGE_SIZE = 100;
