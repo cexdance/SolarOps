@@ -32,7 +32,7 @@ Sidebar source: `Layout.tsx` `allNavItems`. `roles` controls visibility. Indente
 |---|---|---|---|---|
 | Ops Center | `dispatch` | `DispatchDashboard` | DispatchDashboard.tsx | admin, coo, technician, support |
 | Dashboard | `dashboard` | `Dashboard` | Dashboard.tsx | admin, coo, technician, support |
-| Customers | `customers` | `Customers` | Customers.tsx | admin, coo, technician, support |
+| Customers | `customers` | `Customers` | Customers.tsx | admin, coo, technician, support, sales |
 | -- Lead Lobby | `lobby` | `LeadLobby` | LeadLobby.tsx | admin, coo, support, sales |
 | -- SolarEdge Sites | `solaredge` | `SolarEdgeMonitoring` | SolarEdgeMonitoring.tsx | admin, coo, support |
 | Work Orders | `jobs` | `Jobs` | Jobs.tsx | admin, coo, technician, support |
@@ -45,7 +45,6 @@ Sidebar source: `Layout.tsx` `allNavItems`. `roles` controls visibility. Indente
 | Inventory | `inventory` | `InventoryModule` | InventoryModule.tsx | admin, coo, support |
 | Settings | `settings` | `Settings` | Settings.tsx | admin, coo, support |
 | Sales CRM | `crm` | `CRMDashboard` | CRMDashboard.tsx | sales |
-| Clients | `customers2` | `CustomerManagement` | CustomerManagement.tsx | sales |
 
 ### Views reachable by drill-down (not in sidebar)
 

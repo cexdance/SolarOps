@@ -232,14 +232,6 @@
       "detail": "CRMDashboard. XP/levels/leaderboard, lead stages, activity logging. (sales role nav)"
     },
     {
-      "id": "customers2",
-      "group": "sales",
-      "title": "Clients (Sales)",
-      "view": "customers2",
-      "macro": "Sales-side client management.",
-      "detail": "CustomerManagement. Client 360, interactions (calls/emails/SMS/notes/meetings). (sales role nav)"
-    },
-    {
       "id": "my-jobs",
       "group": "contractor",
       "title": "Contractor Dashboard",
