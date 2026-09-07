@@ -65,7 +65,7 @@ import { Contractor, ContractorStatus, ContractorJob, ContractorLineItem } from 
 import { addInteraction, loadCustomers, loadInteractions, saveInteractions } from './lib/customerStore';
 import { validateAddress, normalizeStreetOrder, sameStreetAddress } from './lib/addressValidator';
 import { useUnreadBadge } from './hooks/useUnreadBadge';
-import { resolveSessionRoute, isContractorAccount, requiresPasswordChange } from './lib/authRouting';
+import { resolveSessionRoute, isContractorAccount } from './lib/authRouting';
 import { Eye, X, CloudOff } from 'lucide-react';
 import { Toaster, toast } from 'sonner';
 
@@ -126,6 +126,18 @@ async function subscribeToPush(accessToken?: string): Promise<void> {
   }
 }
 
+// Auth timeout error class for distinct error handling
+class AuthTimeoutError extends Error {
+  constructor(message = 'Authentication request timed out') {
+    super(message);
+    this.name = 'AuthTimeoutError';
+  }
+}
+
+function isAuthTimeoutError(err: unknown): err is AuthTimeoutError {
+  return err instanceof AuthTimeoutError;
+}
+
 // ── Passkey / WebAuthn helpers (imported from shared lib) ─────────────────────
 import {
   PASSKEY_STORE_KEY,
@@ -151,7 +163,6 @@ const LoginScreen: React.FC<{
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotSent, setForgotSent] = useState(false);
   const [forgotLoading, setForgotLoading] = useState(false);
-  const [forgotError, setForgotError] = useState('');
   const [passkeyAvailable, setPasskeyAvailable] = useState(false);
   const [passkeyStored, setPasskeyStored] = useState(false);
   useEffect((): (() => void) => {
@@ -222,10 +233,46 @@ const LoginScreen: React.FC<{
       avatar: (meta['avatar_url'] as string | undefined) ?? undefined,
     };
     if (offerPasskey && passkeyAvailable && !localStorage.getItem(PASSKEY_STORE_KEY)) {
-      setPasskeyStored(await registerPasskey(supaUser.id, supaUser.email ?? ''));
+      await registerPasskey(supaUser.id, supaUser.email ?? '');
+      setPasskeyStored(true);
     }
     onLogin(user, !!meta['mustChangePassword']);
   };
+
+  const AUTH_TIMEOUT_MS = 12_000; // 12s, Supabase auth must respond within this window
+
+// Auth timeout wrapper with custom error and optional retry
+async function authTimeoutWithRetry<T>(
+  p: Promise<T>,
+  timeoutMs = AUTH_TIMEOUT_MS,
+  retries = 0
+): Promise<T> {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await Promise.race<T>([
+        p,
+        new Promise<T>((_, reject) =>
+          setTimeout(() => reject(new AuthTimeoutError()), timeoutMs)
+        ),
+      ]);
+    } catch (err) {
+      if (isAuthTimeoutError(err)) {
+        if (attempt < retries) {
+          console.warn(`[Auth] Timeout on attempt ${attempt + 1}/${retries + 1}, retrying...`);
+          // Exponential backoff: 1s, 2s, 4s...
+          await new Promise(r => setTimeout(r, 1000 * 2 ** attempt));
+          continue;
+        }
+        throw new AuthTimeoutError(
+          `Authentication timed out after ${retries + 1} attempt(s). Check your internet connection.`
+        );
+      }
+      throw err;
+    }
+  }
+  // Should never reach here, but TypeScript needs it
+  throw new AuthTimeoutError('Authentication failed after retries');
+}
 
   const handlePasskeyLogin = async () => {
     setError('');
@@ -237,9 +284,10 @@ const LoginScreen: React.FC<{
         return;
       }
       // Try current session first; if JWT expired, refresh using the stored refresh token
-      let { data: { session } } = await supabase.auth.getSession();
+      // Use retry logic (2 retries = 3 attempts total) for better resilience on slow networks
+      let { data: { session } } = await authTimeoutWithRetry(supabase.auth.getSession(), AUTH_TIMEOUT_MS, 2);
       if (!session) {
-        const { data: refreshed } = await supabase.auth.refreshSession();
+        const { data: refreshed } = await authTimeoutWithRetry(supabase.auth.refreshSession(), AUTH_TIMEOUT_MS, 1);
         session = refreshed.session;
       }
       if (session?.user) {
@@ -247,8 +295,12 @@ const LoginScreen: React.FC<{
       } else {
         setError('Session expired. Please sign in with your password once to re-enable Face ID.');
       }
-    } catch {
-      setError('Sign in failed. Check your connection and try again.');
+    } catch (err: any) {
+      if (isAuthTimeoutError(err)) {
+        setError(err.message);
+      } else {
+        setError('Sign in failed. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
@@ -259,11 +311,13 @@ const LoginScreen: React.FC<{
     setError('');
     setLoading(true);
     try {
-      const { data, error: authError } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+      const { data, error: authError } = await authTimeoutWithRetry(
+        supabase.auth.signInWithPassword({ email, password }),
+        AUTH_TIMEOUT_MS,
+        2 // 2 retries for password auth too
+      );
       if (authError || !data.user) {
-        setError(authError && (authError.status === 0 || (authError.status ?? 0) >= 500)
-          ? 'Sign in failed. Check your connection and try again.'
-          : 'Invalid email or password.');
+        setError('Invalid email or password.');
         return;
       }
       const meta = data.user.user_metadata ?? {};
@@ -274,8 +328,12 @@ const LoginScreen: React.FC<{
         return;
       }
       await finishStaffLogin(data.user, true);
-    } catch {
-      setError('Sign in failed. Check your connection and try again.');
+    } catch (err: any) {
+      if (isAuthTimeoutError(err)) {
+        setError(err.message);
+      } else {
+        setError('Sign in failed. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
@@ -283,19 +341,11 @@ const LoginScreen: React.FC<{
 
   const handleForgotSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setForgotError('');
-    setForgotSent(false);
     setForgotLoading(true);
-    try {
-      const redirectTo = `${window.location.origin}/reset-password`;
-      const { error: recoveryError } = await supabase.auth.resetPasswordForEmail(forgotEmail.trim(), { redirectTo });
-      if (recoveryError) throw recoveryError;
-      setForgotSent(true);
-    } catch {
-      setForgotError('Unable to send a reset link. Please try again.');
-    } finally {
-      setForgotLoading(false);
-    }
+    const redirectTo = `${window.location.origin}/reset-password`;
+    await supabase.auth.resetPasswordForEmail(forgotEmail.trim(), { redirectTo });
+    setForgotLoading(false);
+    setForgotSent(true);
   };
 
   if (showForgot) {
@@ -309,21 +359,18 @@ const LoginScreen: React.FC<{
             <p className="text-slate-400 text-sm tracking-wide">Operations Management Platform</p>
           </div>
           <div className="bg-white rounded-2xl p-6 shadow-2xl">
-            <button onClick={() => { setShowForgot(false); setForgotSent(false); setForgotEmail(''); setForgotError(''); }} className="flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700 mb-4 min-h-[44px]">
+            <button onClick={() => { setShowForgot(false); setForgotSent(false); setForgotEmail(''); }} className="flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700 mb-4">
               ← Back to login
             </button>
             <h2 className="text-lg font-semibold text-slate-900 mb-1">Reset your password</h2>
             <p className="text-sm text-slate-500 mb-4">Enter your email and we'll send you a reset link.</p>
             {forgotSent ? (
-              <div role="status" className="p-4 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700">
+              <div className="p-4 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700">
                 Check your inbox, a reset link has been sent to <strong>{forgotEmail}</strong>.
               </div>
             ) : (
               <form onSubmit={handleForgotSubmit} className="space-y-4">
-                <label htmlFor="staff-reset-email" className="block text-sm font-medium text-slate-700">Email</label>
                 <input
-                  id="staff-reset-email"
-                  autoComplete="email"
                   type="email"
                   value={forgotEmail}
                   onChange={e => setForgotEmail(e.target.value)}
@@ -331,7 +378,6 @@ const LoginScreen: React.FC<{
                   className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
                   required
                 />
-                {forgotError && <div role="alert" className="text-sm text-red-600">{forgotError}</div>}
                 <button
                   type="submit"
                   disabled={forgotLoading}
@@ -385,9 +431,8 @@ const LoginScreen: React.FC<{
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label htmlFor="staff-email" className="block text-sm font-medium text-slate-700 mb-1">Email</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
               <input
-                id="staff-email"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -399,17 +444,16 @@ const LoginScreen: React.FC<{
             </div>
             <div>
               <div className="flex justify-between items-center mb-1">
-                <label htmlFor="staff-password" className="block text-sm font-medium text-slate-700">Password</label>
+                <label className="block text-sm font-medium text-slate-700">Password</label>
                 <button
                   type="button"
-                  onClick={() => { setShowForgot(true); setForgotError(''); }}
+                  onClick={() => setShowForgot(true)}
                   className="text-xs text-orange-500 hover:underline py-2 px-1 min-h-[44px] flex items-center"
                 >
                   Forgot password?
                 </button>
               </div>
               <input
-                id="staff-password"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -421,7 +465,7 @@ const LoginScreen: React.FC<{
             </div>
 
             {error && (
-              <div role="alert" className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600">
+              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600">
                 {error}
               </div>
             )}
@@ -439,7 +483,7 @@ const LoginScreen: React.FC<{
           <div className="mt-5 pt-5 border-t border-slate-100 text-center">
             <p className="text-sm text-slate-500">
               Are you a contractor?{' '}
-              <button onClick={onGoToContractor} className="text-orange-500 font-medium hover:underline inline-flex items-center min-h-[44px]">
+              <button onClick={onGoToContractor} className="text-orange-500 font-medium hover:underline">
                 Contractor Portal →
               </button>
             </p>
@@ -483,8 +527,9 @@ const PendingApprovalScreen: React.FC<{ contractor: Contractor; onLogout: () => 
 // Shown after first login when mustChangePassword flag is set
 
 const ForceChangePasswordScreen: React.FC<{
-  onDone: () => Promise<void>;
-}> = ({ onDone }) => {
+  isContractor?: boolean;
+  onDone: (newPassword: string) => void;
+}> = ({ isContractor, onDone }) => {
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [error, setError] = useState('');
@@ -497,19 +542,14 @@ const ForceChangePasswordScreen: React.FC<{
     if (password === '123456789') { setError('Please choose a different password'); return; }
     setError('');
     setLoading(true);
-    try {
-      // Password and completion flag must succeed together for either portal.
-      const { error: updateError } = await supabase.auth.updateUser({
-        password,
-        data: { mustChangePassword: false },
-      });
-      if (updateError) throw updateError;
-      await onDone();
-    } catch {
-      setError('Unable to update your password. Please try again.');
-    } finally {
-      setLoading(false);
+    if (!isContractor) {
+      const { error: err } = await supabase.auth.updateUser({ password });
+      if (err) { setError(err.message); setLoading(false); return; }
+      // Clear the flag in user_metadata
+      await supabase.auth.updateUser({ data: { mustChangePassword: false } });
     }
+    setLoading(false);
+    onDone(password);
   };
 
   return (
@@ -533,10 +573,8 @@ const ForceChangePasswordScreen: React.FC<{
           </div>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label htmlFor="force-new-password" className="block text-sm font-medium text-slate-700 mb-1">New password</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">New password</label>
               <input
-                id="force-new-password"
-                autoComplete="new-password"
                 type="password"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
@@ -547,10 +585,8 @@ const ForceChangePasswordScreen: React.FC<{
               />
             </div>
             <div>
-              <label htmlFor="force-confirm-password" className="block text-sm font-medium text-slate-700 mb-1">Confirm password</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Confirm password</label>
               <input
-                id="force-confirm-password"
-                autoComplete="new-password"
                 type="password"
                 value={confirm}
                 onChange={e => setConfirm(e.target.value)}
@@ -559,7 +595,7 @@ const ForceChangePasswordScreen: React.FC<{
                 required
               />
             </div>
-            {error && <p role="alert" className="text-sm text-red-500">{error}</p>}
+            {error && <p className="text-sm text-red-500">{error}</p>}
             <button
               type="submit"
               disabled={loading}
@@ -689,7 +725,25 @@ function App() {
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [selectCustomerSeq, setSelectCustomerSeq] = useState(0);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
-  // Authentication comes from Supabase; browser flags only select a portal.
+  // Authentication state - Supabase session + contractor sessionStorage
+  const validateContractorSession = (): boolean => {
+    const token = sessionStorage.getItem('solarflow_session');
+    const userId = sessionStorage.getItem('solarflow_user_id');
+    const isContractor = sessionStorage.getItem('solarflow_contractor_mode') === 'true';
+    if (!token || !userId || !isContractor) return false;
+    try {
+      const decoded = atob(token);
+      const parts = decoded.split(':');
+      if (parts.length < 3) return false;
+      const storedUserId = parts[0];
+      const timestamp = parseInt(parts[1]);
+      const SESSION_MAX_MS = 8 * 60 * 60 * 1000;
+      if (storedUserId !== userId) return false;
+      if (Date.now() - timestamp > SESSION_MAX_MS) return false;
+      return true;
+    } catch { return false; }
+  };
+
   const fetchStaffUsers = async (): Promise<User[]> => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -710,7 +764,7 @@ function App() {
   };
 
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [isContractorMode, setIsContractorMode] = useState(false);
+  const [isContractorMode, setIsContractorMode] = useState(() => validateContractorSession());
   // Staff user who is also linked to a contractor (dual-role: e.g. cesar.jurado@conexsol.us ↔ iMPower)
   const [linkedContractor, setLinkedContractor] = useState<Contractor | null>(null);
   const findLinkedContractor = (list: Contractor[], email?: string | null): Contractor | null => {
@@ -1130,34 +1184,43 @@ function App() {
 
   // Restore Supabase staff session on load and listen for auth state changes
   useEffect(() => {
-    let cancelled = false;
-    // Mode flags are navigation preferences only, never proof of a session.
+    // Contractor session takes priority, check it before Supabase
+    if (sessionStorage.getItem('solarflow_contractor_mode') === 'true') {
+      const contractorId = sessionStorage.getItem('solarflow_contractor_id');
+      const allContractors = loadContractors();
+      const contractor = contractorId ? allContractors.find(c => c.id === contractorId) ?? null : null;
+      setCurrentContractor(contractor);
+      setIsContractorMode(true);
+      setIsAuthenticated(true);
+      // Still subscribe to auth events but skip session restore
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+        if (event === 'PASSWORD_RECOVERY') setShowResetPassword(true);
+        else if (event === 'SIGNED_OUT') {
+          setIsAuthenticated(false);
+          setIsContractorMode(false);
+          setCurrentContractor(null);
+          setCurrentView('dashboard');
+        }
+      });
+      return () => subscription.unsubscribe();
+    }
+
     // Check for existing Supabase session (e.g., page refresh)
-    supabase.auth.getSession().then(({ data: { session }, error }) => {
-      if (cancelled) return;
-      if (error) throw error;
-      if (!session?.user) {
-        sessionStorage.removeItem('solarflow_contractor_mode');
-        sessionStorage.removeItem('solarflow_contractor_id');
-        setIsContractorMode(false);
-        return;
-      }
+    supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
         const meta = session.user.user_metadata ?? {};
-        // Client routing guard (protected roles/RLS enforce server access). A pure contractor
+        // CRITICAL ACCESS CONTROL: role is the source of truth. A pure contractor
         // (role === 'contractor') must NEVER be set up as staff, even when the
         // fragile sessionStorage contractor flag is gone (mobile Safari drops it
         // on tab reopen). Route the durable Supabase session straight to the
         // contractor portal, or sign out if no approved contractor record matches.
-        const prefersContractor = sessionStorage.getItem('solarflow_contractor_mode') === 'true';
-        if (isContractorAccount(meta) || (prefersContractor && meta['isContractor'] === true)) {
-          const decision = resolveSessionRoute({ ...meta, role: 'contractor' }, session.user.email ?? '', loadContractors());
+        if (isContractorAccount(meta)) {
+          const decision = resolveSessionRoute(meta, session.user.email ?? '', loadContractors());
           if (decision.route === 'contractor') {
             const linked = loadContractors().find(c => c.id === decision.contractorId) ?? null;
             sessionStorage.setItem('solarflow_contractor_mode', 'true');
             sessionStorage.setItem('solarflow_contractor_id', decision.contractorId);
             setCurrentContractor(linked);
-            setMustChangePassword(requiresPasswordChange(meta, linked?.mustChangePassword));
             setIsContractorMode(true);
             setIsAuthenticated(true);
           } else {
@@ -1177,10 +1240,6 @@ function App() {
           // Restore avatar from user_metadata so it shows on page load/refresh
           avatar: (meta['avatar_url'] as string | undefined) ?? undefined,
         };
-        sessionStorage.removeItem('solarflow_contractor_mode');
-        sessionStorage.removeItem('solarflow_contractor_id');
-        setIsContractorMode(false);
-        setMustChangePassword(requiresPasswordChange(meta));
         setData(prev => ({ ...prev, currentUser: user }));
         setIsAuthenticated(true);
         fetchStaffUsers().then(users => {
@@ -1205,22 +1264,12 @@ function App() {
         const linked = findLinkedContractor(loadContractors(), user.email);
         if (linked) setLinkedContractor(linked);
       }
-    }).catch(() => {
-      if (cancelled) return;
-      setIsAuthenticated(false);
-      setIsContractorMode(false);
-      setCurrentContractor(null);
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'PASSWORD_RECOVERY') {
         setShowResetPassword(true);
       } else if (event === 'SIGNED_OUT') {
-        cancelled = true;
-        sessionStorage.removeItem('solarflow_contractor_mode');
-        sessionStorage.removeItem('solarflow_contractor_id');
-        setMustChangePassword(false);
-        setLinkedContractor(null);
         setIsAuthenticated(false);
         setIsContractorMode(false);
         setCurrentContractor(null);
@@ -1233,7 +1282,6 @@ function App() {
     });
 
     return () => {
-      cancelled = true;
       subscription.unsubscribe();
       stopNotificationPolling();
       unsubscribeFromNotifications();
@@ -1291,8 +1339,7 @@ function App() {
     setData(prev => ({ ...prev, currentUser: user }));
     setIsAuthenticated(true);
     setIsContractorMode(false);
-    setMustChangePassword(forcePasswordChange);
-    if (forcePasswordChange) return;
+    if (forcePasswordChange) { setMustChangePassword(true); return; }
     // Get session for Web Push subscription (avoids race condition in subscribeToPush)
     const { data: { session } } = await supabase.auth.getSession();
     fetchStaffUsers().then(users => {
@@ -1315,29 +1362,29 @@ function App() {
     setLinkedContractor(findLinkedContractor(loadContractors(), user.email));
   };
 
-  const handleContractorLogin = (contractor: Contractor, forcePasswordChange = !!contractor.mustChangePassword) => {
+  const handleContractorLogin = (contractor: Contractor) => {
     sessionStorage.setItem('solarflow_contractor_mode', 'true');
     sessionStorage.setItem('solarflow_contractor_id', contractor.id);
     setCurrentContractor(contractor);
     setIsAuthenticated(true);
     setIsContractorMode(true);
-    setMustChangePassword(forcePasswordChange);
+    if (contractor.mustChangePassword) {
+      setMustChangePassword(true);
+    }
   };
 
   const handleLogout = async () => {
-    try {
-      // End the SDK session for both portals before removing navigation state.
-      const { error } = await supabase.auth.signOut({ scope: 'local' });
-      if (error) throw error;
-      clearUndo();
-      sessionStorage.removeItem('solarflow_session');
-      sessionStorage.removeItem('solarflow_user_id');
-      sessionStorage.removeItem('solarflow_contractor_mode');
-      sessionStorage.removeItem('solarflow_contractor_id');
-      window.location.reload();
-    } catch {
-      window.alert('Unable to sign out. Please try again.');
+    clearUndo();
+    sessionStorage.removeItem('solarflow_session');
+    sessionStorage.removeItem('solarflow_user_id');
+    sessionStorage.removeItem('solarflow_contractor_mode');
+    sessionStorage.removeItem('solarflow_contractor_id');
+    if (!isContractorMode) {
+      await supabase.auth.signOut();
     }
+    // Reload on sign-out so the next session always starts on the latest bundle.
+    // index.html is no-cache on Vercel, so a reload guarantees fresh assets.
+    window.location.reload();
   };
 
   // ── One level of undo ──────────────────────────────────────────────────────
@@ -3139,9 +3186,25 @@ function App() {
   if (mustChangePassword) {
     return (
       <ForceChangePasswordScreen
-        onDone={async () => {
-          // Auth metadata is the durable password-change state. Do not write
-          // passwords or a stale contractor blob through the general sync path.
+        isContractor={isContractorMode}
+        onDone={async (newPassword) => {
+          if (isContractorMode && currentContractor) {
+            // Change the real Supabase auth password (contractor login uses
+            // signInWithPassword). Without this the forced change was cosmetic:
+            // the record updated but the auth password stayed the default.
+            await supabase.auth.updateUser({
+              password: newPassword,
+              data: { mustChangePassword: false },
+            });
+            // Mirror the cleared flag into the contractor record/store too.
+            const { dbGet, dbSet } = await import('./lib/db');
+            const contractors = (await dbGet('solarflow_contractors') as Contractor[] | null) ?? [];
+            const updated = contractors.map((c: Contractor) =>
+              c.id === currentContractor.id ? { ...c, password: newPassword, mustChangePassword: false } : c
+            );
+            await dbSet('solarflow_contractors', updated);
+            setCurrentContractor(prev => prev ? { ...prev, password: newPassword, mustChangePassword: false } : prev);
+          }
           setMustChangePassword(false);
           if (!isContractorMode) {
             fetchStaffUsers().then(users => {
