@@ -995,7 +995,17 @@ export interface CRMAttachment {
   id: string;
   name: string;
   mimeType: string;
-  dataUrl: string;
+  /**
+   * Supabase Storage URL. New attachments always use this.
+   *
+   * `dataUrl` is the legacy form: the whole file base64-encoded into
+   * localStorage. That silently ate files, because localStorage caps at a few MB
+   * and `saveCustomers` only console.errors the QuotaExceededError, so the
+   * attachment just never appeared. It is kept readable so existing local
+   * attachments still render, but nothing writes it any more.
+   */
+  url?: string;
+  dataUrl?: string;
   size: number;
   createdAt: string;
 }

@@ -54,6 +54,8 @@ import {
   outcomeLabels,
 } from '../lib/customerStore';
 import { rcCall, rcSMS } from '../lib/ringcentral';
+import { uploadCustomerFilesPartial, type CustomerFileUpload } from '../lib/customerFileStorage';
+import { toast } from 'sonner';
 import { ImportPrefill } from './ImportPrefill';
 
 // Users for the system
@@ -379,8 +381,15 @@ export const CustomerManagement: React.FC<CustomerManagementProps> = ({ currentU
     setShowEditModal(false);
   };
 
-  // Handle file drops on the detail panel
-  const handleFileDrop = (files: FileList) => {
+  // Handle file drops on the detail panel.
+  //
+  // This used to base64 the whole file into localStorage as a dataUrl. Two bugs
+  // in one: localStorage caps at a few MB and saveCustomers only console.errors
+  // the QuotaExceededError, so a dropped file could vanish with no message at
+  // all; and a dataUrl in one browser's localStorage is unreadable by anyone
+  // else. Files now go to the customer-files bucket like every other upload in
+  // the app, so the bytes are durable and the URL is shareable.
+  const handleFileDrop = async (files: FileList) => {
     if (!selectedCustomerId) return;
     const allowed = ['image/', 'application/pdf', 'text/', 'application/vnd'];
     const validFiles = Array.from(files).filter(f =>
@@ -388,30 +397,49 @@ export const CustomerManagement: React.FC<CustomerManagementProps> = ({ currentU
     );
     if (!validFiles.length) return;
 
-    validFiles.forEach(file => {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const dataUrl = e.target?.result as string;
-        const attachment: CRMAttachment = {
-          id: `att-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-          name: file.name,
-          mimeType: file.type,
-          dataUrl,
-          size: file.size,
-          createdAt: new Date().toISOString(),
-        };
-        setCustomers(prev => {
-          const updated = prev.map(c =>
-            c.id === selectedCustomerId
-              ? { ...c, attachments: [...(c.attachments ?? []), attachment], updatedAt: new Date().toISOString() }
-              : c
-          );
-          saveCustomers(updated);
-          return updated;
-        });
-      };
-      reader.readAsDataURL(file);
-    });
+    const toUpload: CustomerFileUpload[] = [];
+    for (const file of validFiles) {
+      const dataUrl = await new Promise<string>((res, rej) => {
+        const reader = new FileReader();
+        reader.onload = e => res(e.target?.result as string);
+        reader.onerror = () => rej(new Error(`Could not read ${file.name}`));
+        reader.readAsDataURL(file);
+      }).catch(() => null);
+      if (!dataUrl) continue;
+      toUpload.push({
+        id: `att-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        name: file.name,
+        dataUrl,
+        mimeType: file.type || 'application/octet-stream',
+        size: file.size,
+      });
+    }
+    if (!toUpload.length) return;
+
+    const { uploaded, failed } = await uploadCustomerFilesPartial(toUpload, selectedCustomerId);
+
+    if (uploaded.length) {
+      const attachments: CRMAttachment[] = uploaded.map(u => ({
+        id: u.id,
+        name: u.name,
+        mimeType: u.mimeType,
+        url: u.url,
+        size: u.size,
+        createdAt: u.createdAt,
+      }));
+      setCustomers(prev => {
+        const updated = prev.map(c =>
+          c.id === selectedCustomerId
+            ? { ...c, attachments: [...(c.attachments ?? []), ...attachments], updatedAt: new Date().toISOString() }
+            : c
+        );
+        saveCustomers(updated);
+        return updated;
+      });
+    }
+    // A failed upload must say so. The old silent path is what made this hard to
+    // find in the first place.
+    for (const f of failed) toast.error(`${f.file.name}: ${f.error}`);
   };
 
   // Handle attachment delete
@@ -428,24 +456,52 @@ export const CustomerManagement: React.FC<CustomerManagementProps> = ({ currentU
     });
   };
 
-  // Handle pasted images from InteractionModal
-  const handleAddInteractionWithImages = (
+  // Handle pasted images from InteractionModal.
+  //
+  // The modal builds its previews as dataUrls, which is right for a thumbnail
+  // that has not been submitted yet. They are uploaded here, on submit, so what
+  // gets persisted is a bucket URL and not the whole image inside localStorage.
+  const handleAddInteractionWithImages = async (
     type: InteractionType,
     content: string,
     options?: { direction?: 'inbound' | 'outbound'; subject?: string; outcome?: InteractionOutcome; duration?: number; images?: CRMAttachment[] }
   ) => {
     handleAddInteraction(type, content, options);
-    if (options?.images?.length && selectedCustomerId) {
+    if (!options?.images?.length || !selectedCustomerId) return;
+
+    const { uploaded, failed } = await uploadCustomerFilesPartial(
+      options.images
+        .filter(img => img.dataUrl)
+        .map(img => ({
+          id: img.id,
+          name: img.name,
+          dataUrl: img.dataUrl as string,
+          mimeType: img.mimeType,
+          size: img.size,
+        })),
+      selectedCustomerId,
+    );
+
+    if (uploaded.length) {
+      const attachments: CRMAttachment[] = uploaded.map(u => ({
+        id: u.id,
+        name: u.name,
+        mimeType: u.mimeType,
+        url: u.url,
+        size: u.size,
+        createdAt: u.createdAt,
+      }));
       setCustomers(prev => {
         const updated = prev.map(c =>
           c.id === selectedCustomerId
-            ? { ...c, attachments: [...(c.attachments ?? []), ...(options.images ?? [])], updatedAt: new Date().toISOString() }
+            ? { ...c, attachments: [...(c.attachments ?? []), ...attachments], updatedAt: new Date().toISOString() }
             : c
         );
         saveCustomers(updated);
         return updated;
       });
     }
+    for (const f of failed) toast.error(`${f.file.name}: ${f.error}`);
   };
 
   return (
@@ -742,11 +798,11 @@ export const CustomerManagement: React.FC<CustomerManagementProps> = ({ currentU
                         return (
                           <div key={att.id} className="group relative bg-white border border-slate-200 rounded-xl overflow-hidden hover:shadow-md transition-shadow">
                             {isImage ? (
-                              <a href={att.dataUrl} download={att.name} className="block">
-                                <img src={att.dataUrl} alt={att.name} className="w-24 h-24 object-cover" />
+                              <a href={att.url ?? att.dataUrl} download={att.name} className="block">
+                                <img src={att.url ?? att.dataUrl} alt={att.name} className="w-24 h-24 object-cover" />
                               </a>
                             ) : (
-                              <a href={att.dataUrl} download={att.name} className="flex flex-col items-center justify-center w-24 h-24 gap-1 text-slate-500 hover:text-slate-700">
+                              <a href={att.url ?? att.dataUrl} download={att.name} className="flex flex-col items-center justify-center w-24 h-24 gap-1 text-slate-500 hover:text-slate-700">
                                 <FileIcon className="w-8 h-8 text-slate-400" />
                                 <span className="text-[10px] text-center px-1 truncate w-full text-center">{att.name}</span>
                               </a>
@@ -755,7 +811,7 @@ export const CustomerManagement: React.FC<CustomerManagementProps> = ({ currentU
                             <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
                               <div className="flex gap-1">
                                 <a
-                                  href={att.dataUrl}
+                                  href={att.url ?? att.dataUrl}
                                   download={att.name}
                                   className="p-1.5 bg-white rounded-lg shadow"
                                   title="Download"

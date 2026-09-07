@@ -3,7 +3,22 @@
 // fields and silently discarded activityHistory/files; the create modal never
 // called buildImportFiles at all. Both import paths must yield the same
 // comments + files for the same card.
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+// buildImportFiles copies each attachment into our own bucket through
+// /api/trello-card?attachment=. Stub that call so the test covers the mapping
+// and the failure handling, not the network.
+const authedFetch = vi.fn();
+vi.mock('../lib/supabase', () => ({
+  authedFetch: (...args: unknown[]) => authedFetch(...args),
+  supabase: {},
+}));
+
+const mirrorOk = (url: string) => ({
+  ok: true,
+  json: async () => ({ url, name: 'stored', mimeType: 'image/jpeg', size: 999 }),
+});
+
 import { buildImportActivities, buildImportFiles, extractAddress, TrelloCardData } from '../lib/trelloImporter';
 
 const card: TrelloCardData = {
@@ -34,18 +49,50 @@ describe('Trello import into a NEW customer', () => {
     expect(comments[1].userName).toBe('Tech B');
   });
 
-  it('carries every attachment, preferring the preview URL', () => {
-    const files = buildImportFiles(card);
+  beforeEach(() => authedFetch.mockReset());
+
+  // The bug this pins: attachments used to be stored as raw trello.com URLs, on
+  // the assumption they were public. They are not, so only the importing user
+  // could open them. Every stored URL must now point at our own bucket.
+  it('copies every attachment into our bucket instead of linking to Trello', async () => {
+    authedFetch
+      .mockResolvedValueOnce(mirrorOk('https://x.supabase.co/storage/v1/object/public/customer-files/c1/meter.jpg'))
+      .mockResolvedValueOnce(mirrorOk('https://x.supabase.co/storage/v1/object/public/customer-files/c1/invoice.pdf'));
+
+    const { files, failed } = await buildImportFiles(card, 'cust-1');
+
+    expect(failed).toHaveLength(0);
     expect(files).toHaveLength(2);
-    expect(files[0].url).toBe('https://trello.com/p/meter-big.jpg'); // preview wins
-    expect(files[1].url).toBe('https://trello.com/a/invoice.pdf');   // no preview, raw URL
+    expect(files.every(f => f.url.includes('/storage/v1/object/public/customer-files/'))).toBe(true);
+    expect(files.some(f => f.url.includes('trello.com'))).toBe(false);
     expect(files.every(f => f.source === 'trello')).toBe(true);
+
+    // The preview is the smaller render, so it is what gets copied for images.
+    expect(authedFetch.mock.calls[0][0]).toContain(encodeURIComponent('https://trello.com/p/meter-big.jpg'));
+    // No preview on the PDF, so the raw attachment URL is used.
+    expect(authedFetch.mock.calls[1][0]).toContain(encodeURIComponent('https://trello.com/a/invoice.pdf'));
   });
 
-  it('produces stable IDs so a re-import dedups instead of duplicating', () => {
-    expect(buildImportFiles(card).map(f => f.id))
-      .toEqual(buildImportFiles(card).map(f => f.id));
-    expect(buildImportFiles(card)[0].id).toBe('trello-file-AbC123-0');
+  // A file only the importer can open is worse than an obvious failure, so a
+  // copy that fails must be reported and dropped, never stored as a trello URL.
+  it('drops and reports an attachment it cannot copy, never falls back to the Trello URL', async () => {
+    authedFetch
+      .mockResolvedValueOnce(mirrorOk('https://x.supabase.co/storage/v1/object/public/customer-files/c1/meter.jpg'))
+      .mockResolvedValueOnce({ ok: false, status: 502, json: async () => ({ error: 'Trello download 401' }) });
+
+    const { files, failed } = await buildImportFiles(card, 'cust-1');
+
+    expect(files).toHaveLength(1);
+    expect(files.some(f => f.url.includes('trello.com'))).toBe(false);
+    expect(failed).toEqual([{ name: 'invoice.pdf', error: 'Trello download 401' }]);
+  });
+
+  it('produces stable IDs so a re-import dedups instead of duplicating', async () => {
+    authedFetch.mockResolvedValue(mirrorOk('https://x.supabase.co/storage/v1/object/public/customer-files/c1/f'));
+    const a = await buildImportFiles(card, 'cust-1');
+    const b = await buildImportFiles(card, 'cust-1');
+    expect(a.files.map(f => f.id)).toEqual(b.files.map(f => f.id));
+    expect(a.files[0].id).toBe('trello-file-AbC123-0');
   });
 
   it('carries the card labels as their own note', () => {

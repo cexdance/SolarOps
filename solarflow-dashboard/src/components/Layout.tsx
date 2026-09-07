@@ -20,7 +20,6 @@ import {
   Crosshair,
   MapPinned,
   TrendingUp,
-  UserCheck,
   HardHat,
   Bell,
   CheckCheck,
@@ -78,7 +77,7 @@ interface LayoutProps {
 const allNavItems = [
   { id: 'dispatch',           label: 'Ops Center',        icon: Crosshair,       dispatch: true,  roles: ['admin', 'coo', 'technician', 'support'] },
   { id: 'dashboard',          label: 'Dashboard',          icon: LayoutDashboard,                  roles: ['admin', 'coo', 'technician', 'support'] },
-  { id: 'customers',          label: 'Customers',          icon: Users,                            roles: ['admin', 'coo', 'technician', 'support'] },
+  { id: 'customers',          label: 'Customers',          icon: Users,                            roles: ['admin', 'coo', 'technician', 'support', 'sales'] },
   { id: 'solaredge',          label: 'SolarEdge Sites',    icon: Sun,             indent: true, parent: 'customers', roles: ['admin', 'coo', 'support'] },
   { id: 'jobs',               label: 'Service Orders',        icon: Wrench,                           roles: ['admin', 'coo', 'technician', 'support'] },
   { id: 'routes',             label: 'Dispatch Map',       icon: MapPinned,       indent: true, parent: 'jobs', roles: ['admin', 'coo', 'technician', 'support'] },
@@ -93,7 +92,11 @@ const allNavItems = [
   { id: 'settings',           label: 'Settings',           icon: Settings,                         roles: ['admin', 'coo', 'support'] },
   // Sales-only routes
   { id: 'crm',                label: 'Sales CRM',          icon: TrendingUp,                       roles: ['sales'] },
-  { id: 'customers2',         label: 'Clients',            icon: UserCheck,                        roles: ['sales'] },
+  // The sales-only 'customers2' ("Clients") route was removed 2026-09-07. It
+  // rendered CustomerManagement, which reads solarflow_customers: a localStorage
+  // store that is not in KV_SYNC_KEYS, seeded empty since SEC-12, and never
+  // synced to anyone. Sales now use the same Customers screen as everyone else,
+  // with deletion gated on the customers.delete permit they do not hold.
 ];
 
 export const Layout: React.FC<LayoutProps> = ({

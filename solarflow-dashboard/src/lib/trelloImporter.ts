@@ -69,6 +69,8 @@ export interface TrelloImportResult {
   contactInfo: { phone: string; email: string };
   activities: Activity[];
   files: CustomerFile[];
+  /** Attachments that could not be copied into our bucket. Surfaced, never silently dropped. */
+  failedFiles: Array<{ name: string; error: string }>;
   updates: Partial<Customer>;
   addressValidation?: ValidatedAddress;
 }
@@ -326,21 +328,66 @@ export function buildImportActivities(card: TrelloCardData, userName: string): A
 
 // ── Build CustomerFile entries ────────────────────────────────────────────────
 // IDs derive from the card's stable short key so re-importing the same card
-// produces identical IDs. Trello attachment URLs are publicly accessible, so
-// the preview (when present) or the raw URL is used directly.
+// produces identical IDs.
+//
+// Every attachment is COPIED into our own customer-files bucket via
+// /api/trello-card?attachment=. It used to be stored as the raw trello.com URL
+// on the assumption that those are publicly accessible. They are not: loading one
+// requires a Trello session with access to the board, so the importing user saw
+// the file and every other user got a broken link. That looked like a sync bug
+// for months and was not one (audited 2026-09-07, 189 files across 54 customers).
+//
+// An attachment that cannot be copied is DROPPED and reported, never stored as a
+// trello.com URL. A file that only one person can open is worse than an obvious
+// failure, because nobody finds out until the customer asks for it.
 
-export function buildImportFiles(card: TrelloCardData): CustomerFile[] {
+export interface ImportFilesResult {
+  files: CustomerFile[];
+  failed: Array<{ name: string; error: string }>;
+}
+
+export async function buildImportFiles(
+  card: TrelloCardData,
+  customerId: string,
+): Promise<ImportFilesResult> {
   const cardKey = card.shortUrl.split('/').pop() ?? card.shortUrl;
   const now = new Date().toISOString();
-  return card.attachments.map((a, i) => ({
-    id:        `trello-file-${cardKey}-${i}`,
-    name:      a.name,
-    url:       a.previewUrl ?? a.url,
-    mimeType:  a.mimeType,
-    size:      a.size,
-    source:    'trello' as const,
-    createdAt: now,
+
+  const results = await Promise.all(card.attachments.map(async (a, i) => {
+    // The preview is a downscaled render; prefer it for images so a 12MB phone
+    // photo does not trip the 10MB bucket cap, and fall back to the original.
+    const src = a.previewUrl ?? a.url;
+    try {
+      const res = await authedFetch(
+        `/api/trello-card?attachment=${encodeURIComponent(src)}&customerId=${encodeURIComponent(customerId)}`,
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `HTTP ${res.status}`);
+      }
+      const stored = await res.json();
+      const file: CustomerFile = {
+        id:        `trello-file-${cardKey}-${i}`,
+        name:      a.name || stored.name,
+        url:       stored.url,
+        mimeType:  stored.mimeType || a.mimeType,
+        size:      stored.size ?? a.size,
+        source:    'trello' as const,
+        createdAt: now,
+      };
+      return { file, failure: null };
+    } catch (err) {
+      return {
+        file: null,
+        failure: { name: a.name || `attachment ${i + 1}`, error: err instanceof Error ? err.message : String(err) },
+      };
+    }
   }));
+
+  return {
+    files: results.filter(r => r.file).map(r => r.file as CustomerFile),
+    failed: results.filter(r => r.failure).map(r => r.failure as { name: string; error: string }),
+  };
 }
 
 // ── Main entry point ──────────────────────────────────────────────────────────
@@ -377,7 +424,7 @@ export async function importTrelloCard(
   const existingActivityIds = new Set((customer.activityHistory ?? []).map(a => a.id));
   const activities = allActivities.filter(a => !existingActivityIds.has(a.id));
 
-  const files = buildImportFiles(card);
+  const { files, failed: failedFiles } = await buildImportFiles(card, customer.id);
 
   const existingFiles = customer.files ?? [];
   // Avoid duplicating files already imported from the same card
@@ -409,5 +456,5 @@ export async function importTrelloCard(
     }
   }
 
-  return { card, contactInfo, activities, files: newFiles, updates, addressValidation };
+  return { card, contactInfo, activities, files: newFiles, failedFiles, updates, addressValidation };
 }

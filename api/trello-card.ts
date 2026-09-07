@@ -1234,6 +1234,119 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // both must stay public. Only the GET proxy is gated here.
     if (!(await requireUser(req, res))) return;
 
+    // ── Attachment mirror ────────────────────────────────────────────────────
+    // GET ?attachment=<trello url>&customerId=<id> copies one Trello attachment
+    // into our own customer-files bucket and returns its public URL.
+    //
+    // Why this exists: the importer used to store the raw trello.com URL on the
+    // Customer record. Those URLs are NOT public, they need a Trello session with
+    // access to the board. The importing user could see the file and nobody else
+    // could, which read as a sync bug for months. 189 files across 54 customers
+    // were stored this way (audited 2026-09-07).
+    //
+    // The copy happens here rather than in the browser because the download needs
+    // the org's Trello OAuth credentials, which are server-side only, and because
+    // returning bytes through the function would hit Vercel's ~4.5MB response cap.
+    // Server to Supabase has no such limit.
+    if (req.query.attachment) {
+      const rawAtt = req.query.attachment;
+      const rawCust = req.query.customerId;
+      const attUrl = Array.isArray(rawAtt) ? rawAtt[0] : rawAtt;
+      const customerId = Array.isArray(rawCust) ? rawCust[0] : rawCust;
+
+      if (!attUrl || !customerId) {
+        return res.status(400).json({ error: 'attachment and customerId are both required.' });
+      }
+      if (!/^[A-Za-z0-9_-]{1,64}$/.test(customerId)) {
+        return res.status(400).json({ error: 'Invalid customerId.' });
+      }
+
+      // SSRF guard. This endpoint fetches an arbitrary caller-supplied URL with
+      // org credentials attached, so the host allowlist is load-bearing, not a
+      // formality. Only Trello's own attachment hosts, https only.
+      let parsed: URL;
+      try {
+        parsed = new URL(attUrl);
+      } catch {
+        return res.status(400).json({ error: 'attachment is not a valid URL.' });
+      }
+      const ALLOWED_HOSTS = ['trello.com', 'api.trello.com', 'trello-attachments.s3.amazonaws.com'];
+      const hostOk = ALLOWED_HOSTS.some(h => parsed.hostname === h || parsed.hostname.endsWith('.' + h));
+      if (parsed.protocol !== 'https:' || !hostOk) {
+        return res.status(400).json({ error: 'attachment must be an https trello.com URL.' });
+      }
+
+      if (!API_KEY || !API_TOKEN) {
+        return res.status(500).json({ error: 'Trello credentials not configured.' });
+      }
+      if (!SERVICE_ROLE_KEY) {
+        return res.status(500).json({ error: 'SUPABASE_SERVICE_ROLE_KEY not configured.' });
+      }
+
+      // Attachment downloads authenticate via the OAuth header. The ?key=&token=
+      // query form that works for the REST API does NOT work here, it returns the
+      // Trello login page as a 200 HTML body.
+      let att: Response;
+      try {
+        att = await fetch(parsed.toString(), {
+          headers: { Authorization: `OAuth oauth_consumer_key="${API_KEY}", oauth_token="${API_TOKEN}"` },
+        });
+      } catch (err) {
+        console.error('[Trello attachment] fetch failed:', err);
+        return res.status(502).json({ error: 'Could not reach Trello to download the attachment.' });
+      }
+      if (!att.ok) {
+        return res.status(att.status).json({ error: `Trello attachment download failed (${att.status}).` });
+      }
+
+      const contentType = att.headers.get('content-type') ?? 'application/octet-stream';
+      // A login/interstitial page comes back as 200 text/html. Storing that would
+      // silently replace the file with a web page, which is worse than failing.
+      if (/^text\/html/i.test(contentType)) {
+        return res.status(502).json({ error: 'Trello returned an HTML page, not the file. Check TRELLO_API_TOKEN board access.' });
+      }
+
+      const bytes = Buffer.from(await att.arrayBuffer());
+      const MAX_SIZE = 10 * 1024 * 1024; // matches the customer-files bucket limit
+      if (bytes.byteLength > MAX_SIZE) {
+        return res.status(413).json({ error: `Attachment too large (${Math.round(bytes.byteLength / 1024 / 1024)}MB). Max 10MB.` });
+      }
+      if (bytes.byteLength === 0) {
+        return res.status(502).json({ error: 'Trello returned an empty file.' });
+      }
+
+      const rawName = decodeURIComponent(parsed.pathname.split('/').pop() || 'trello-file');
+      const safeName = rawName.replace(/[^a-zA-Z0-9.-]/g, '_').slice(-120);
+      const month = new Date().toISOString().slice(0, 7);
+      const path = `${customerId}/${month}/${Date.now()}-${safeName}`;
+
+      const up = await fetch(
+        `${SUPABASE_URL}/storage/v1/object/customer-files/${encodeURI(path)}`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+            apikey: SERVICE_ROLE_KEY,
+            'Content-Type': contentType,
+            'x-upsert': 'true',
+          },
+          body: bytes,
+        },
+      );
+      if (!up.ok) {
+        const detail = await up.text().catch(() => '');
+        console.error('[Trello attachment] storage upload failed:', up.status, detail.slice(0, 300));
+        return res.status(502).json({ error: `Storage upload failed (${up.status}).` });
+      }
+
+      return res.status(200).json({
+        url: `${SUPABASE_URL}/storage/v1/object/public/customer-files/${encodeURI(path)}`,
+        name: rawName,
+        mimeType: contentType,
+        size: bytes.byteLength,
+      });
+    }
+
     // req.query values are string | string[] | undefined, normalize to string.
     // Previously typed as `string` and used directly with .match()/.trim(); if a
     // caller (or a duplicated query param) made it an array, the function

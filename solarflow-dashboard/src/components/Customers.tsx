@@ -63,6 +63,7 @@ const { ComposedChart, Bar, Line, XAxis, YAxis, Tooltip: RechartsTooltip, Respon
 import { Customer, CustomerFile, Job, ClientStatus, Activity, User, CustomerCategory, SystemType, SolarEdgeAlert } from '../types';
 import { loadAlerts } from '../lib/operationsStore';
 import { formatMoney } from '../lib/money';
+import { hasPermit } from '../lib/access';
 import { importTrelloCard, TrelloImportResult, fetchTrelloCard, extractContactInfo, extractAddress, buildImportActivities, buildImportFiles } from '../lib/trelloImporter';
 import { FL_SITES, SolarEdgeSite } from '../lib/solarEdgeSites';
 import { AddressAutocomplete } from './AddressAutocomplete';
@@ -608,8 +609,14 @@ export const Customers: React.FC<CustomersProps> = ({
     }
   };
 
+  // Sales reached this screen on 2026-09-07 (they used to have their own
+  // "Clients" view). Deletion here is real and tombstoning, so it gates on the
+  // customers.delete permit, which admin holds and sales does not. Without this
+  // the reroute would have quietly handed sales bulk customer deletion.
+  const canDeleteCustomers = hasPermit(currentUser, 'customers.delete');
+
   const handleBatchDelete = () => {
-    if (selectedIds.size === 0) return;
+    if (selectedIds.size === 0 || !canDeleteCustomers) return;
     if (!window.confirm(
       `Permanently delete ${selectedIds.size} customer${selectedIds.size !== 1 ? 's' : ''}?\n\nThey will be tombstoned and will not be re-imported from SolarEdge.`
     )) return;
@@ -1125,13 +1132,15 @@ export const Customers: React.FC<CustomersProps> = ({
               >
                 Clear
               </button>
-              <button
-                onClick={handleBatchDelete}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white text-sm font-medium rounded-lg transition-colors cursor-pointer"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                Delete {selectedIds.size}
-              </button>
+              {canDeleteCustomers && (
+                <button
+                  onClick={handleBatchDelete}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white text-sm font-medium rounded-lg transition-colors cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Delete {selectedIds.size}
+                </button>
+              )}
             </>
           )}
           <button
@@ -1225,7 +1234,7 @@ export const Customers: React.FC<CustomersProps> = ({
                             <p className="text-xs text-slate-400 truncate">{[rec.clientId, rec.address, rec.city].filter(Boolean).join(' · ')}</p>
                           </div>
                           <div className="flex gap-2 flex-shrink-0">
-                            {ri > 0 && (
+                            {ri > 0 && canDeleteCustomers && (
                               <button
                                 onClick={() => onDeleteCustomer(rec.id)}
                                 className="px-2.5 py-1 text-xs font-medium text-red-600 border border-red-200 rounded-lg hover:bg-red-50 cursor-pointer"
@@ -4867,7 +4876,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                     <GitMerge className="w-4 h-4" />
                     Merge Accounts
                   </button>
-                  {deleteStep === 0 ? (
+                  {!hasPermit(currentUser, 'customers.delete') ? null : deleteStep === 0 ? (
                     <button
                       onClick={() => setDeleteStep(1)}
                       className="flex items-center justify-center gap-1.5 py-2.5 text-red-600 border border-red-200 rounded-lg text-sm font-medium hover:bg-red-50 transition-colors cursor-pointer"
@@ -4974,6 +4983,15 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                       <div className="flex items-start gap-2">
                         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 mt-0.5 flex-shrink-0" />
                         <span>{trelloResult.files.length} photo/file{trelloResult.files.length > 1 ? 's' : ''} imported into Files tab</span>
+                      </div>
+                    )}
+                    {trelloResult.failedFiles.length > 0 && (
+                      <div className="flex items-start gap-2">
+                        <AlertTriangle className="w-3.5 h-3.5 text-amber-500 mt-0.5 flex-shrink-0" />
+                        <span>
+                          {trelloResult.failedFiles.length} attachment{trelloResult.failedFiles.length > 1 ? 's' : ''} could not be copied and will be skipped:{' '}
+                          {trelloResult.failedFiles.map(f => f.name).join(', ')}
+                        </span>
                       </div>
                     )}
                     {trelloResult.updates.phone && (
@@ -5547,7 +5565,12 @@ const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({
       const timeline  = buildImportActivities(card, 'Trello')
         .filter(a => !a.id.startsWith('trello-desc-'));
       const comments  = timeline.filter(a => a.id.startsWith('trello-comment-'));
-      const cardFiles = buildImportFiles(card);
+      // The customer does not exist yet on this path, so the attachments are
+      // filed under the card's own key. The storage path is only a folder name;
+      // what matters is that the bytes land in our bucket instead of staying as
+      // trello.com URLs that nobody but the importer can open.
+      const cardKey = (card.shortUrl.split('/').pop() ?? 'card').replace(/[^A-Za-z0-9_-]/g, '');
+      const { files: cardFiles, failed: cardFilesFailed } = await buildImportFiles(card, `trello-${cardKey}`);
       setPendingActivities(timeline);
       setPendingFiles(cardFiles);
       setPendingTrelloUrl(card.shortUrl);
@@ -5558,7 +5581,12 @@ const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({
         card.labels.length  ? `${card.labels.length} label${card.labels.length > 1 ? 's' : ''}` : '',
         cardFiles.length    ? `${cardFiles.length} attachment${cardFiles.length > 1 ? 's' : ''}` : '',
       ].filter(Boolean).join(' + ');
-      setTrelloOk(`Imported "${card.name}"${bits ? ` (${bits})` : ''}`);
+      setTrelloOk(
+        `Imported "${card.name}"${bits ? ` (${bits})` : ''}` +
+        (cardFilesFailed.length
+          ? `. ${cardFilesFailed.length} attachment${cardFilesFailed.length > 1 ? 's' : ''} could not be copied and were skipped: ${cardFilesFailed.map(f => f.name).join(', ')}`
+          : ''),
+      );
     } catch (err) {
       setTrelloError(err instanceof Error ? err.message : 'Failed to fetch card');
     } finally {

@@ -14,8 +14,13 @@
  *   • Supabase Realtime: INSERT/UPDATE on app_data → instant push to all tabs.
  *   • key index already exists (unique constraint), prefix scans are fast.
  *
- * Backward compat: blob rows (key='customers' etc.) are still written as a
- * fallback so old clients and admin recovery tools continue to work.
+ * The Phase 1 blob rows (key='customers', key='jobs') are GONE. Nothing has
+ * written them since 2026-06-11 and 2026-05-26 respectively, and nothing reads
+ * them, but the stale snapshots sat in app_data shadowing the per-record rows
+ * and disagreeing with them (264 blob entries vs 412 live rows when audited
+ * 2026-09-07). Archived to _bak_legacy_blobs_20260907 and deleted that day.
+ * Do not reintroduce a whole-array row: a second source of truth for the same
+ * records is how the "which one is right" questions start.
  *
  * Standalone KV keys (contractor_jobs, contractors, service_rates) still use
  * their own single-row approach from the Phase 1 KV extension.
