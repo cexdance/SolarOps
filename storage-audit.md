@@ -1,3 +1,6 @@
+> [!important] Documentation reconciliation, 2026-09-07
+> Historical diagnostic hypotheses. The August 6 session measured the contractor blob and rejected it as the quota root cause. Consult those later measurements before repeating the ranked diagnosis; new incidents require new evidence. See [[Audit Preparation 2026-09-07/00 Current documentation guidance]].
+
 # Storage-full modal: read-and-diagnose audit (2026-08-06)
 
 Scope: read-only. No source files changed except this report.

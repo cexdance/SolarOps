@@ -1,3 +1,6 @@
+> [!important] Documentation reconciliation, 2026-09-07
+> Legacy product/architecture specification. Current package manifest uses Tailwind 3.4.16; scoped CSS is permitted. Xero is server-side with app-triggered actions, and financial visibility has later exceptions. Historical feature lists and credentials are not present-day authority. See [[Audit Preparation 2026-09-07/00 Current documentation guidance]].
+
 # SolarOps - Project Specification for Claude Code
 
 ## Project Overview
@@ -563,10 +566,7 @@ solarflow-dashboard/
 
 ## 7. Login Credentials
 
-- **Admin**: `cesar.jurado@conexsol.us` / `1357`
-- **Demo Users**: Various in User array
-
----
+Credential values removed during documentation cleanup. Use the configured authentication flow and approved credential storage. Historical copies and credential rotation require separate verification.
 
 ## 8. Development Commands
 
@@ -625,7 +625,7 @@ When working with this project:
 1. **Run locally**: `npm install && npm run dev`
 2. **Add new features**: Create components in `src/components/`, add types in `src/types/index.ts`, add data logic in `src/lib/`
 3. **Testing**: Ensure build passes with `npm run build`
-4. **Styling**: Use TailwindCSS classes only (no custom CSS)
+4. **Styling**: Prefer existing Tailwind utilities; use scoped CSS when needed for layout, safe areas, printing, or accessibility
 5. **Icons**: Use Lucide React icons
 
 ---

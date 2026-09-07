@@ -1,3 +1,6 @@
+> [!important] Documentation reconciliation, 2026-09-07
+> Historical assessment. Later fixes supersede several authorization and process claims. Verify current posture through the reconciled audit queue, not this assessment alone. See [[Audit Preparation 2026-09-07/00 Current documentation guidance]].
+
 # SolarOps: engineering assessment
 
 Date: 2026-08-23. Version assessed: v1.7.6.2 (`17ad56a`).

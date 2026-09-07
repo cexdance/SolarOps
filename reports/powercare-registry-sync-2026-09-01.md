@@ -1,3 +1,6 @@
+> [!important] Documentation reconciliation, 2026-09-07
+> Historical before-repair comparison. Later September 1 notes record all 15 backfill rows addressed. September 3 records a separate CRM renumber with sheet correction still outstanding. Re-read both systems before any repair; this table is not a current write list. See [[Audit Preparation 2026-09-07/00 Current documentation guidance]].
+
 # PowerCare clients vs the client registry sheet
 Read live 2026-09-01 from the CRM (75 PowerCare customers) and
 "Conexsol Client List" tab `MAIN LIST ` (767 numbered rows, 674 assigned).

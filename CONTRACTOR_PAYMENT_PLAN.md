@@ -1,3 +1,9 @@
+> [!note] Accepted review decision
+> User decision, September 7: internal costs are office-only and must be omitted from customer-facing SOW/report copies. This is an acceptance criterion; implementation is not verified. See [[Audit Preparation 2026-09-07/06 Accepted review decisions]].
+
+> [!important] Documentation reconciliation, 2026-09-07
+> Versioned design plan. September 1 introduces SolarOps-triggered standalone Edge-function actions and records refused financial scopes. Keep credentials server-side; Daniel approves bills and sends money. The hourly schedule below is proposed and must not run before the writer is proven. See [[Audit Preparation 2026-09-07/00 Current documentation guidance]].
+
 # Contractor Payment Run - streamlining plan
 
 Decisions collected from the user 2026-08-28 / 08-29. Scope is final for v1.
@@ -23,10 +29,10 @@ Step 5 gets halved.
 
 ## Architecture: standalone agent, its own Xero OAuth
 
-SolarOps is never connected to Xero. The partner's objection does not apply to this design.
+Xero credentials are held by the standalone server integration. SolarOps can trigger that integration, as recorded September 1; it is no longer accurate to say the application has no connection to Xero.
 See "How the connection works" below.
 
-**Host: Supabase Edge Function on pg_cron, hourly.**
+**Proposed host: Supabase Edge Function. Hourly pg_cron is deferred until financial scopes and the writer are verified.**
 Not Vercel (`api/` sits at 13 files against a Hobby cap of 12). Not a Mac. Hourly is not
 about freshness: Xero refresh tokens rotate on every use and die after 60 days idle, so a
 schedule is what keeps the connection alive. A sleeping laptop locks itself out.

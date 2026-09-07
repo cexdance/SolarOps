@@ -1,3 +1,6 @@
+> [!important] Documentation reconciliation, 2026-09-07
+> Historical August 23 database snapshot, not current policy. Later August 23 notes record backup locking and app_data/change_log isolation; August 25 replaces forgeable metadata roles with trusted user_roles. The private-storage migration remains unverified. Old SQL recommendations below are not an execution plan. See [[Audit Preparation 2026-09-07/00 Current documentation guidance]].
+
 # SolarOps Live Database RLS Audit
 
 Diagnostic only. No DDL run, no files edited except this report. Queried live via the Supabase Management API (`https://api.supabase.com/v1/projects/cjmhfagkkayelcsprbai/database/query`) using the access token already configured for this project's Supabase MCP server, since the `mcp__supabase__*` tools were not exposed in this subagent's toolset. All queries were read-only `select` statements against `pg_catalog` / `information_schema` / `storage`.

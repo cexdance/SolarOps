@@ -1,0 +1,668 @@
+{
+  "base": "http://127.0.0.1:5187",
+  "mode": "local UI + synthetic auth/recovery responses; no live auth or data",
+  "capturedAt": "2026-09-07T20:43:56.446Z",
+  "summary": {
+    "PASS": 79,
+    "FAIL": 0,
+    "BLOCKED": 0
+  },
+  "results": [
+    {
+      "profile": "desktop-chromium",
+      "id": "staff-render",
+      "expectation": "Login screen renders",
+      "status": "PASS"
+    },
+    {
+      "profile": "desktop-chromium",
+      "id": "staff-overflow",
+      "expectation": "No horizontal page overflow",
+      "status": "PASS",
+      "detail": {
+        "document": 1440,
+        "viewport": 1440
+      }
+    },
+    {
+      "profile": "desktop-chromium",
+      "id": "staff-labels",
+      "expectation": "Email/password have associated accessible labels",
+      "status": "PASS"
+    },
+    {
+      "profile": "desktop-chromium",
+      "id": "staff-autocomplete",
+      "expectation": "Credential autofill semantics and masking",
+      "status": "PASS"
+    },
+    {
+      "profile": "desktop-chromium",
+      "id": "staff-empty",
+      "expectation": "Empty submit stays on login without an auth request",
+      "status": "PASS"
+    },
+    {
+      "profile": "desktop-chromium",
+      "id": "staff-invalid-email",
+      "expectation": "Malformed email rejected before auth request",
+      "status": "PASS"
+    },
+    {
+      "profile": "desktop-chromium",
+      "id": "staff-invalid-auth",
+      "expectation": "Rejected credentials show error and restore submit",
+      "status": "PASS"
+    },
+    {
+      "profile": "desktop-chromium",
+      "id": "staff-error-announcement",
+      "expectation": "Authentication error announced to assistive technology",
+      "status": "PASS"
+    },
+    {
+      "profile": "desktop-chromium",
+      "id": "staff-reset-navigation",
+      "expectation": "Forgot password screen reachable",
+      "status": "PASS"
+    },
+    {
+      "profile": "desktop-chromium",
+      "id": "staff-reset-label",
+      "expectation": "Reset email field has an accessible label",
+      "status": "PASS"
+    },
+    {
+      "profile": "desktop-chromium",
+      "id": "staff-reset-failure",
+      "expectation": "Recovery outage must not falsely claim a link was sent",
+      "status": "PASS"
+    },
+    {
+      "profile": "desktop-chromium",
+      "id": "contractor-render",
+      "expectation": "Login screen renders",
+      "status": "PASS"
+    },
+    {
+      "profile": "desktop-chromium",
+      "id": "contractor-overflow",
+      "expectation": "No horizontal page overflow",
+      "status": "PASS",
+      "detail": {
+        "document": 1440,
+        "viewport": 1440
+      }
+    },
+    {
+      "profile": "desktop-chromium",
+      "id": "contractor-labels",
+      "expectation": "Email/password have associated accessible labels",
+      "status": "PASS"
+    },
+    {
+      "profile": "desktop-chromium",
+      "id": "contractor-autocomplete",
+      "expectation": "Credential autofill semantics and masking",
+      "status": "PASS"
+    },
+    {
+      "profile": "desktop-chromium",
+      "id": "contractor-empty",
+      "expectation": "Empty submit stays on login without an auth request",
+      "status": "PASS"
+    },
+    {
+      "profile": "desktop-chromium",
+      "id": "contractor-invalid-email",
+      "expectation": "Malformed email rejected before auth request",
+      "status": "PASS"
+    },
+    {
+      "profile": "desktop-chromium",
+      "id": "contractor-invalid-auth",
+      "expectation": "Rejected credentials show error and restore submit",
+      "status": "PASS"
+    },
+    {
+      "profile": "desktop-chromium",
+      "id": "contractor-error-announcement",
+      "expectation": "Authentication error announced to assistive technology",
+      "status": "PASS"
+    },
+    {
+      "profile": "desktop-chromium",
+      "id": "contractor-password-toggle",
+      "expectation": "Show/hide password is accessible and functional",
+      "status": "PASS"
+    },
+    {
+      "profile": "desktop-chromium",
+      "id": "contractor-reset-navigation",
+      "expectation": "Forgot password screen reachable",
+      "status": "PASS"
+    },
+    {
+      "profile": "desktop-chromium",
+      "id": "contractor-reset-label",
+      "expectation": "Reset email field has an accessible label",
+      "status": "PASS"
+    },
+    {
+      "profile": "desktop-chromium",
+      "id": "contractor-reset-failure",
+      "expectation": "Recovery outage must not falsely claim a link was sent",
+      "status": "PASS"
+    },
+    {
+      "profile": "desktop-chromium",
+      "id": "portal-return",
+      "expectation": "Contractor page returns to staff login",
+      "status": "PASS"
+    },
+    {
+      "profile": "desktop-chromium",
+      "id": "uncaught-errors",
+      "expectation": "No uncaught page errors during covered flows",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-chromium",
+      "id": "staff-render",
+      "expectation": "Login screen renders",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-chromium",
+      "id": "staff-overflow",
+      "expectation": "No horizontal page overflow",
+      "status": "PASS",
+      "detail": {
+        "document": 393,
+        "viewport": 393
+      }
+    },
+    {
+      "profile": "mobile-chromium",
+      "id": "staff-labels",
+      "expectation": "Email/password have associated accessible labels",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-chromium",
+      "id": "staff-autocomplete",
+      "expectation": "Credential autofill semantics and masking",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-chromium",
+      "id": "staff-empty",
+      "expectation": "Empty submit stays on login without an auth request",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-chromium",
+      "id": "staff-invalid-email",
+      "expectation": "Malformed email rejected before auth request",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-chromium",
+      "id": "staff-invalid-auth",
+      "expectation": "Rejected credentials show error and restore submit",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-chromium",
+      "id": "staff-error-announcement",
+      "expectation": "Authentication error announced to assistive technology",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-chromium",
+      "id": "staff-touch-targets",
+      "expectation": "Active buttons meet project 44 by 44 target",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-chromium",
+      "id": "staff-reset-navigation",
+      "expectation": "Forgot password screen reachable",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-chromium",
+      "id": "staff-reset-label",
+      "expectation": "Reset email field has an accessible label",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-chromium",
+      "id": "staff-reset-failure",
+      "expectation": "Recovery outage must not falsely claim a link was sent",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-chromium",
+      "id": "contractor-render",
+      "expectation": "Login screen renders",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-chromium",
+      "id": "contractor-overflow",
+      "expectation": "No horizontal page overflow",
+      "status": "PASS",
+      "detail": {
+        "document": 393,
+        "viewport": 393
+      }
+    },
+    {
+      "profile": "mobile-chromium",
+      "id": "contractor-labels",
+      "expectation": "Email/password have associated accessible labels",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-chromium",
+      "id": "contractor-autocomplete",
+      "expectation": "Credential autofill semantics and masking",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-chromium",
+      "id": "contractor-empty",
+      "expectation": "Empty submit stays on login without an auth request",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-chromium",
+      "id": "contractor-invalid-email",
+      "expectation": "Malformed email rejected before auth request",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-chromium",
+      "id": "contractor-invalid-auth",
+      "expectation": "Rejected credentials show error and restore submit",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-chromium",
+      "id": "contractor-error-announcement",
+      "expectation": "Authentication error announced to assistive technology",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-chromium",
+      "id": "contractor-touch-targets",
+      "expectation": "Active buttons meet project 44 by 44 target",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-chromium",
+      "id": "contractor-password-toggle",
+      "expectation": "Show/hide password is accessible and functional",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-chromium",
+      "id": "contractor-reset-navigation",
+      "expectation": "Forgot password screen reachable",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-chromium",
+      "id": "contractor-reset-label",
+      "expectation": "Reset email field has an accessible label",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-chromium",
+      "id": "contractor-reset-failure",
+      "expectation": "Recovery outage must not falsely claim a link was sent",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-chromium",
+      "id": "portal-return",
+      "expectation": "Contractor page returns to staff login",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-chromium",
+      "id": "uncaught-errors",
+      "expectation": "No uncaught page errors during covered flows",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-webkit",
+      "id": "staff-render",
+      "expectation": "Login screen renders",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-webkit",
+      "id": "staff-overflow",
+      "expectation": "No horizontal page overflow",
+      "status": "PASS",
+      "detail": {
+        "document": 390,
+        "viewport": 390
+      }
+    },
+    {
+      "profile": "mobile-webkit",
+      "id": "staff-labels",
+      "expectation": "Email/password have associated accessible labels",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-webkit",
+      "id": "staff-autocomplete",
+      "expectation": "Credential autofill semantics and masking",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-webkit",
+      "id": "staff-empty",
+      "expectation": "Empty submit stays on login without an auth request",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-webkit",
+      "id": "staff-invalid-email",
+      "expectation": "Malformed email rejected before auth request",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-webkit",
+      "id": "staff-invalid-auth",
+      "expectation": "Rejected credentials show error and restore submit",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-webkit",
+      "id": "staff-error-announcement",
+      "expectation": "Authentication error announced to assistive technology",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-webkit",
+      "id": "staff-touch-targets",
+      "expectation": "Active buttons meet project 44 by 44 target",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-webkit",
+      "id": "staff-reset-navigation",
+      "expectation": "Forgot password screen reachable",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-webkit",
+      "id": "staff-reset-label",
+      "expectation": "Reset email field has an accessible label",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-webkit",
+      "id": "staff-reset-failure",
+      "expectation": "Recovery outage must not falsely claim a link was sent",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-webkit",
+      "id": "contractor-render",
+      "expectation": "Login screen renders",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-webkit",
+      "id": "contractor-overflow",
+      "expectation": "No horizontal page overflow",
+      "status": "PASS",
+      "detail": {
+        "document": 390,
+        "viewport": 390
+      }
+    },
+    {
+      "profile": "mobile-webkit",
+      "id": "contractor-labels",
+      "expectation": "Email/password have associated accessible labels",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-webkit",
+      "id": "contractor-autocomplete",
+      "expectation": "Credential autofill semantics and masking",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-webkit",
+      "id": "contractor-empty",
+      "expectation": "Empty submit stays on login without an auth request",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-webkit",
+      "id": "contractor-invalid-email",
+      "expectation": "Malformed email rejected before auth request",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-webkit",
+      "id": "contractor-invalid-auth",
+      "expectation": "Rejected credentials show error and restore submit",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-webkit",
+      "id": "contractor-error-announcement",
+      "expectation": "Authentication error announced to assistive technology",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-webkit",
+      "id": "contractor-touch-targets",
+      "expectation": "Active buttons meet project 44 by 44 target",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-webkit",
+      "id": "contractor-password-toggle",
+      "expectation": "Show/hide password is accessible and functional",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-webkit",
+      "id": "contractor-reset-navigation",
+      "expectation": "Forgot password screen reachable",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-webkit",
+      "id": "contractor-reset-label",
+      "expectation": "Reset email field has an accessible label",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-webkit",
+      "id": "contractor-reset-failure",
+      "expectation": "Recovery outage must not falsely claim a link was sent",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-webkit",
+      "id": "portal-return",
+      "expectation": "Contractor page returns to staff login",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-webkit",
+      "id": "uncaught-errors",
+      "expectation": "No uncaught page errors during covered flows",
+      "status": "PASS"
+    }
+  ],
+  "observations": [
+    {
+      "profile": "desktop-chromium",
+      "portal": "staff",
+      "buttonTargets": [
+        {
+          "name": "Forgot password?",
+          "width": 104,
+          "height": 44
+        },
+        {
+          "name": "Sign In",
+          "width": 400,
+          "height": 48
+        },
+        {
+          "name": "Contractor Portal →",
+          "width": 124,
+          "height": 44
+        }
+      ]
+    },
+    {
+      "profile": "desktop-chromium",
+      "portal": "contractor",
+      "buttonTargets": [
+        {
+          "name": "Forgot password?",
+          "width": 104,
+          "height": 44
+        },
+        {
+          "name": "Show password",
+          "width": 44,
+          "height": 44
+        },
+        {
+          "name": "Access Contractor Portal",
+          "width": 334,
+          "height": 56
+        },
+        {
+          "name": "Apply to join",
+          "width": 85,
+          "height": 44
+        },
+        {
+          "name": "Staff / Admin login",
+          "width": 113,
+          "height": 44
+        }
+      ]
+    },
+    {
+      "profile": "mobile-chromium",
+      "portal": "staff",
+      "buttonTargets": [
+        {
+          "name": "Forgot password?",
+          "width": 104,
+          "height": 44
+        },
+        {
+          "name": "Sign In",
+          "width": 313,
+          "height": 48
+        },
+        {
+          "name": "Contractor Portal →",
+          "width": 124,
+          "height": 44
+        }
+      ]
+    },
+    {
+      "profile": "mobile-chromium",
+      "portal": "contractor",
+      "buttonTargets": [
+        {
+          "name": "Forgot password?",
+          "width": 104,
+          "height": 44
+        },
+        {
+          "name": "Show password",
+          "width": 44,
+          "height": 44
+        },
+        {
+          "name": "Access Contractor Portal",
+          "width": 311,
+          "height": 56
+        },
+        {
+          "name": "Apply to join",
+          "width": 85,
+          "height": 44
+        },
+        {
+          "name": "Staff / Admin login",
+          "width": 113,
+          "height": 44
+        }
+      ]
+    },
+    {
+      "profile": "mobile-webkit",
+      "portal": "staff",
+      "buttonTargets": [
+        {
+          "name": "Forgot password?",
+          "width": 104,
+          "height": 44
+        },
+        {
+          "name": "Sign In",
+          "width": 310,
+          "height": 48
+        },
+        {
+          "name": "Contractor Portal →",
+          "width": 124,
+          "height": 44
+        }
+      ]
+    },
+    {
+      "profile": "mobile-webkit",
+      "portal": "contractor",
+      "buttonTargets": [
+        {
+          "name": "Forgot password?",
+          "width": 104,
+          "height": 44
+        },
+        {
+          "name": "Show password",
+          "width": 44,
+          "height": 44
+        },
+        {
+          "name": "Access Contractor Portal",
+          "width": 308,
+          "height": 56
+        },
+        {
+          "name": "Apply to join",
+          "width": 85,
+          "height": 44
+        },
+        {
+          "name": "Staff / Admin login",
+          "width": 113,
+          "height": 44
+        }
+      ]
+    }
+  ]
+}

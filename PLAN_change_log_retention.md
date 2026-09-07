@@ -1,3 +1,9 @@
+> [!note] Accepted review decision
+> User decision, September 7: archive service orders and preserve recoverable history. Retention deletion remains unscheduled. See [[Audit Preparation 2026-09-07/06 Accepted review decisions]].
+
+> [!important] Documentation reconciliation, 2026-09-07
+> Decision gate remains open. Preserve warranty/lifecycle evidence; no retention deletion is authorized or scheduled by this cleanup. Proposed retention durations and SQL are not an approved policy. See [[Audit Preparation 2026-09-07/00 Current documentation guidance]].
+
 # `change_log` upkeep and retention
 
 Written 2026-08-23 against live data. Table: 17,838 rows, 29 MB, oldest 2026-04-15.

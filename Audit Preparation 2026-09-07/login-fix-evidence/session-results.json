@@ -1,0 +1,177 @@
+{
+  "base": "http://127.0.0.1:5187",
+  "capturedAt": "2026-09-07T20:43:55.853Z",
+  "mode": "Synthetic session/browser UI regression only; no server authorization proof or real account access",
+  "summary": {
+    "PASS": 33,
+    "FAIL": 0,
+    "BLOCKED": 0
+  },
+  "results": [
+    {
+      "profile": "desktop-chromium",
+      "id": "cached-contractor-needs-auth",
+      "status": "PASS"
+    },
+    {
+      "profile": "desktop-chromium",
+      "id": "approved-session-restore",
+      "status": "PASS"
+    },
+    {
+      "profile": "desktop-chromium",
+      "id": "cached-id-cannot-change-identity",
+      "status": "PASS"
+    },
+    {
+      "profile": "desktop-chromium",
+      "id": "suspended-session-denied",
+      "status": "PASS"
+    },
+    {
+      "profile": "desktop-chromium",
+      "id": "contractor-logout-survives-reload",
+      "status": "PASS"
+    },
+    {
+      "profile": "desktop-chromium",
+      "id": "contractor-forced-password-survives-reload",
+      "status": "PASS"
+    },
+    {
+      "profile": "desktop-chromium",
+      "id": "contractor-rejected-password-retains-gate",
+      "status": "PASS"
+    },
+    {
+      "profile": "desktop-chromium",
+      "id": "contractor-successful-password-auth-only",
+      "status": "PASS"
+    },
+    {
+      "profile": "desktop-chromium",
+      "id": "staff-forced-password-survives-reload",
+      "status": "PASS"
+    },
+    {
+      "profile": "desktop-chromium",
+      "id": "staff-rejected-password-retains-gate",
+      "status": "PASS"
+    },
+    {
+      "profile": "desktop-chromium",
+      "id": "staff-successful-password-auth-only",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-chromium",
+      "id": "cached-contractor-needs-auth",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-chromium",
+      "id": "approved-session-restore",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-chromium",
+      "id": "cached-id-cannot-change-identity",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-chromium",
+      "id": "suspended-session-denied",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-chromium",
+      "id": "contractor-logout-survives-reload",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-chromium",
+      "id": "contractor-forced-password-survives-reload",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-chromium",
+      "id": "contractor-rejected-password-retains-gate",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-chromium",
+      "id": "contractor-successful-password-auth-only",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-chromium",
+      "id": "staff-forced-password-survives-reload",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-chromium",
+      "id": "staff-rejected-password-retains-gate",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-chromium",
+      "id": "staff-successful-password-auth-only",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-webkit",
+      "id": "cached-contractor-needs-auth",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-webkit",
+      "id": "approved-session-restore",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-webkit",
+      "id": "cached-id-cannot-change-identity",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-webkit",
+      "id": "suspended-session-denied",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-webkit",
+      "id": "contractor-logout-survives-reload",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-webkit",
+      "id": "contractor-forced-password-survives-reload",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-webkit",
+      "id": "contractor-rejected-password-retains-gate",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-webkit",
+      "id": "contractor-successful-password-auth-only",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-webkit",
+      "id": "staff-forced-password-survives-reload",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-webkit",
+      "id": "staff-rejected-password-retains-gate",
+      "status": "PASS"
+    },
+    {
+      "profile": "mobile-webkit",
+      "id": "staff-successful-password-auth-only",
+      "status": "PASS"
+    }
+  ]
+}

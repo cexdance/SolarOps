@@ -1,3 +1,6 @@
+> [!important] Documentation reconciliation, 2026-09-07
+> HISTORICAL, ABANDONED RUNBOOK. Do not execute this cutover. June 5 abandoned it and August 12 confirmed repo-root deployment. The original procedure below is retained as incident history. See [[Audit Preparation 2026-09-07/00 Current documentation guidance]].
+
 # Cutover: make solarflow-dashboard/api the LIVE tree
 
 ## Why

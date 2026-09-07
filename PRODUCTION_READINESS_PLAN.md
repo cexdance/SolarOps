@@ -1,3 +1,6 @@
+> [!important] Documentation reconciliation, 2026-09-07
+> Historical plan with partially updated status. Trello GET auth, backup locking, role isolation and append-only audit delivery were recorded fixed August 23; trusted role/permission authority followed August 25. CI gate code exists but hosted activation is unverified. Webhook secret and private storage remain verification candidates. Do not treat the old role-metadata recommendation or every original open item as current. See [[Audit Preparation 2026-09-07/00 Current documentation guidance]].
+
 # SolarOps production-readiness plan
 
 Date: 2026-08-23. Version at time of writing: v1.7.6.2 (`fecf33f`).

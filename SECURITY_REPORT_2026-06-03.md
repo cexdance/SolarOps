@@ -1,3 +1,6 @@
+> [!important] Documentation reconciliation, 2026-09-07
+> Historical security communication. Its broad assurances are not a current security certification; later audits found material gaps. Preserve for history, not as evidence that the app is safe today. See [[Audit Preparation 2026-09-07/00 Current documentation guidance]].
+
 # Reporte de Seguridad - SolarOps
 **Fecha:** 3 de junio de 2026  
 **Auditado por:** Escaneo automatizado de seguridad (Claude Code)  

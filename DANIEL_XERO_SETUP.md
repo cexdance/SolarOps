@@ -1,3 +1,6 @@
+> [!important] Documentation reconciliation, 2026-09-07
+> Historical setup instructions. The September 1 scope test found accounting.transactions refused. Reverify the actual app scopes before relying on these setup steps; do not assume authorization or financial capability is complete. See [[Audit Preparation 2026-09-07/00 Current documentation guidance]].
+
 # Xero setup - one time, about 10 minutes
 
 You only do this once. After that you never touch it again. Nothing here gives anyone

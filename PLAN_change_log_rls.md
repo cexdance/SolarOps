@@ -1,3 +1,6 @@
+> [!important] Documentation reconciliation, 2026-09-07
+> Historical implementation plan. August 23 records read/write separation and duplicate-safe inserts; August 25 replaces metadata authorization with user_roles. Do not execute the superseded SQL below as a current migration. See [[Audit Preparation 2026-09-07/00 Current documentation guidance]].
+
 # Plan: `change_log` read/write separation
 
 Status: ready to implement. Written 2026-08-23 against live data.

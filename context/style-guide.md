@@ -1,3 +1,6 @@
+> [!important] Documentation reconciliation, 2026-09-07
+> Theme verified September 7: Solar Gold #F5A623 and Teal Cyan #00B4CC remain global Tailwind tokens. The contractor #FF7200 XP accent is local, not a global rebrand. SolFlo #FE6501 belongs to the separate fork. See [[Audit Preparation 2026-09-07/00 Current documentation guidance]].
+
 # SolarOps — Style Guide
 **ConexSol SolarOps Platform** · Internal Design System
 

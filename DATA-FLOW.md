@@ -1,3 +1,6 @@
+> [!important] Documentation reconciliation, 2026-09-07
+> Historical v1.7.4 architecture and incident diagram. August 23 introduced per-field job merge. Customer and contractor KV paths need separate inspection; older cursor, blob, and timeout descriptions must not be used as current implementation specifications. See [[Audit Preparation 2026-09-07/00 Current documentation guidance]].
+
 # SolarOps Data Flow Architecture
 
 ```
