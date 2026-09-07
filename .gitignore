@@ -51,3 +51,8 @@ address-audit/
 solar_scout/.env
 solar_scout/leads.db
 solar_scout/.venv/
+
+# Local agent/tooling scratch, not project source
+.codex/
+node-jiti/
+.vercel.dead-project-backup/
