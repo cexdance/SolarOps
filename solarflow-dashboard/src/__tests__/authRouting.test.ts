@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   resolveSessionRoute,
   isContractorAccount,
+  requiresPasswordChange,
   SessionContractor,
 } from '../lib/authRouting';
 
@@ -66,5 +67,28 @@ describe('resolveSessionRoute', () => {
       const r = resolveSessionRoute({ role: 'contractor' }, email, contractors);
       expect(r.route).not.toBe('staff');
     }
+  });
+});
+
+
+describe('password-change restoration', () => {
+  it('preserves an auth requirement across either portal even without a cached flag', () => {
+    expect(requiresPasswordChange({ mustChangePassword: true }, false)).toBe(true);
+  });
+  it('does not reinstate a completed change from stale contractor data', () => {
+    expect(requiresPasswordChange({ mustChangePassword: false }, true)).toBe(false);
+  });
+  it('honors legacy contractor requirements when auth metadata has no decision', () => {
+    expect(requiresPasswordChange({}, true)).toBe(true);
+    expect(requiresPasswordChange(null)).toBe(false);
+  });
+});
+
+describe('contractor identity guard', () => {
+  it('never matches an empty authenticated identity to an empty cached email', () => {
+    expect(resolveSessionRoute({ role: 'contractor' }, '', [{ id: 'empty', email: '', status: 'approved' }])).toEqual({ route: 'deny' });
+  });
+  it.each(['suspended', 'rejected', 'pending'])('denies %s cached accounts', status => {
+    expect(resolveSessionRoute({ role: 'contractor' }, 'test@example.com', [{ id: 'test', email: 'test@example.com', status }])).toEqual({ route: 'deny' });
   });
 });
