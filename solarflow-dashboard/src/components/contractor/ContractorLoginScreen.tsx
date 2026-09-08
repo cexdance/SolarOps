@@ -5,6 +5,7 @@ import React, { useState, useEffect } from 'react';
 import { Sun, Mail, Lock, Eye, EyeOff, ArrowLeft, CheckCircle, AlertCircle, Zap } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { Contractor } from '../../types/contractor';
+import { requiresPasswordChange } from '../../lib/authRouting';
 import {
   isPlatformAuthAvailable,
   registerPasskey,
@@ -14,7 +15,7 @@ import {
 
 interface ContractorLoginScreenProps {
   contractors: Contractor[];
-  onContractorLogin: (contractor: Contractor) => void;
+  onContractorLogin: (contractor: Contractor, forcePasswordChange?: boolean) => void;
   onRegister: () => void;
   onGoToStaff: () => void;
 }
@@ -35,6 +36,7 @@ export const ContractorLoginScreen: React.FC<ContractorLoginScreenProps> = ({
   const [view, setView]             = useState<'login' | 'forgot' | 'sent'>('login');
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotError, setForgotError] = useState('');
 
   // Passkey
   const [passkeyAvailable, setPasskeyAvailable] = useState(false);
@@ -53,97 +55,96 @@ export const ContractorLoginScreen: React.FC<ContractorLoginScreenProps> = ({
     localStorage.setItem('solarops_reset_mode', 'contractor');
   }, []);
 
-  // ── Login ──────────────────────────────────────────────────────────────────
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    setLoading(true);
-
-    const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password });
-    setLoading(false);
-
-    if (authError || !data.user) {
-      setError('Invalid email or password.');
-      return;
-    }
-
-    const meta = data.user.user_metadata ?? {};
-    // Allow pure contractors OR dual-role users (isContractor=true)
+  const finishContractorLogin = async (user: import('@supabase/supabase-js').User, offerPasskey = false) => {
+    const meta = user.user_metadata ?? {};
     if (meta['role'] !== 'contractor' && !meta['isContractor']) {
       await supabase.auth.signOut();
       setError('This portal is for contractors only. Staff should use the staff login.');
       return;
     }
-
-    const contractor = contractors.find(
-      c => c.email === data.user!.email || c.altEmails?.includes(data.user!.email ?? '')
-    );
-
-    if (!contractor) {
+    const authenticatedEmail = (user.email ?? '').trim().toLowerCase();
+    const contractor = authenticatedEmail ? contractors.find(c =>
+      c.email.trim().toLowerCase() === authenticatedEmail ||
+      c.altEmails?.some(alias => alias.trim().toLowerCase() === authenticatedEmail),
+    ) : undefined;
+    if (!contractor || contractor.status !== 'approved') {
       await supabase.auth.signOut();
-      setError('Contractor account not found. Contact your administrator.');
+      setError(!contractor
+        ? 'Contractor account not found. Contact your administrator.'
+        : contractor.status === 'pending'
+          ? 'Your application is still pending approval.'
+          : 'Your account has been suspended or rejected.');
       return;
     }
-
-    if (contractor.status === 'pending') {
-      await supabase.auth.signOut();
-      setError('Your application is still pending approval.');
-      return;
+    if (offerPasskey && passkeyAvailable && !localStorage.getItem(PASSKEY_STORE_KEY_CONTRACTOR)) {
+      setPasskeyStored(await registerPasskey(user.id, user.email ?? '', PASSKEY_STORE_KEY_CONTRACTOR));
     }
-
-    if (contractor.status !== 'approved') {
-      await supabase.auth.signOut();
-      setError('Your account has been suspended or rejected.');
-      return;
-    }
-
-    // Register passkey on first login
-    if (passkeyAvailable && !localStorage.getItem(PASSKEY_STORE_KEY_CONTRACTOR)) {
-      await registerPasskey(data.user!.id, data.user!.email ?? '', PASSKEY_STORE_KEY_CONTRACTOR);
-      setPasskeyStored(true);
-    }
-
-    onContractorLogin(contractor);
+    const forcePasswordChange = requiresPasswordChange(meta, contractor.mustChangePassword);
+    onContractorLogin(contractor, forcePasswordChange);
   };
 
-  // ── Passkey login ─────────────────────────────────────────────────────────
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    try {
+      const { data, error: authError } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+      if (authError || !data.user) {
+        setError(authError && (authError.status === 0 || (authError.status ?? 0) >= 500)
+          ? 'Sign in failed. Check your connection and try again.'
+          : 'Invalid email or password.');
+        return;
+      }
+      await finishContractorLogin(data.user, true);
+    } catch {
+      setError('Sign in failed. Check your connection and try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handlePasskeyLogin = async () => {
     setError('');
     setLoading(true);
-    const rawId = await authenticateWithPasskey(PASSKEY_STORE_KEY_CONTRACTOR);
-    if (!rawId) {
+    try {
+      const rawId = await authenticateWithPasskey(PASSKEY_STORE_KEY_CONTRACTOR);
+      if (!rawId) {
+        setError('Face ID failed. Sign in with your password first.');
+        return;
+      }
+      let { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw sessionError;
+      if (!session) {
+        const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession();
+        if (refreshError) throw refreshError;
+        session = refreshed.session;
+      }
+      if (!session?.user) {
+        setError('Session expired. Sign in with your password to re-enable Face ID.');
+        return;
+      }
+      await finishContractorLogin(session.user);
+    } catch {
+      setError('Sign in failed. Check your connection and try again.');
+    } finally {
       setLoading(false);
-      setError('Face ID failed. Sign in with your password first.');
-      return;
-    }
-    let { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      const { data: refreshed } = await supabase.auth.refreshSession();
-      session = refreshed.session;
-    }
-    setLoading(false);
-    if (!session?.user) {
-      setError('Session expired. Sign in with your password to re-enable Face ID.');
-      return;
-    }
-    const contractor = contractors.find(
-      c => c.email === session.user!.email || c.altEmails?.includes(session.user!.email ?? '')
-    );
-    if (contractor?.status === 'approved') {
-      onContractorLogin(contractor);
-    } else {
-      setError('Contractor account not found or not approved.');
     }
   };
 
-  // ── Forgot password ───────────────────────────────────────────────────────
   const handleForgot = async (e: React.FormEvent) => {
     e.preventDefault();
+    setForgotError('');
     setForgotLoading(true);
-    const redirectTo = `${window.location.origin}/reset-password`;
-    await supabase.auth.resetPasswordForEmail(forgotEmail.trim(), { redirectTo });
-    setForgotLoading(false);
-    setView('sent');
+    try {
+      const redirectTo = `${window.location.origin}/reset-password`;
+      const { error: recoveryError } = await supabase.auth.resetPasswordForEmail(forgotEmail.trim(), { redirectTo });
+      if (recoveryError) throw recoveryError;
+      setView('sent');
+    } catch {
+      setForgotError('Unable to send a reset link. Please try again.');
+    } finally {
+      setForgotLoading(false);
+    }
   };
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -153,7 +154,7 @@ export const ContractorLoginScreen: React.FC<ContractorLoginScreenProps> = ({
     return (
       <Screen>
         <Card>
-          <div className="flex flex-col items-center text-center py-4">
+          <div role="status" className="flex flex-col items-center text-center py-4">
             <div className="w-16 h-16 rounded-full bg-orange-500/20 flex items-center justify-center mb-4">
               <CheckCircle className="w-8 h-8 text-orange-400" />
             </div>
@@ -184,7 +185,7 @@ export const ContractorLoginScreen: React.FC<ContractorLoginScreenProps> = ({
         <LogoHeader />
         <Card>
           <button
-            onClick={() => setView('login')}
+            onClick={() => { setView('login'); setError(''); setForgotError(''); }}
             className="flex items-center gap-1.5 text-sm text-slate-400 hover:text-orange-400 mb-5 transition-colors min-h-[44px]"
           >
             <ArrowLeft className="w-4 h-4" />
@@ -197,9 +198,12 @@ export const ContractorLoginScreen: React.FC<ContractorLoginScreenProps> = ({
           </p>
 
           <form onSubmit={handleForgot} className="space-y-4">
+            <label htmlFor="contractor-reset-email" className="block text-xs font-semibold text-slate-400 uppercase tracking-wider">Email</label>
             <div className="relative">
               <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
               <input
+                id="contractor-reset-email"
+                autoComplete="email"
                 type="email"
                 value={forgotEmail}
                 onChange={e => setForgotEmail(e.target.value)}
@@ -209,6 +213,7 @@ export const ContractorLoginScreen: React.FC<ContractorLoginScreenProps> = ({
               />
             </div>
 
+            {forgotError && <div role="alert" className="text-sm text-red-400">{forgotError}</div>}
             <button
               type="submit"
               disabled={forgotLoading}
@@ -263,10 +268,11 @@ export const ContractorLoginScreen: React.FC<ContractorLoginScreenProps> = ({
         <form onSubmit={handleLogin} className="space-y-4">
           {/* Email */}
           <div>
-            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Email</label>
+            <label htmlFor="contractor-email" className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Email</label>
             <div className="relative">
               <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
               <input
+                id="contractor-email"
                 type="email"
                 value={email}
                 onChange={e => setEmail(e.target.value)}
@@ -281,10 +287,10 @@ export const ContractorLoginScreen: React.FC<ContractorLoginScreenProps> = ({
           {/* Password */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider">Password</label>
+              <label htmlFor="contractor-password" className="block text-xs font-semibold text-slate-400 uppercase tracking-wider">Password</label>
               <button
                 type="button"
-                onClick={() => setView('forgot')}
+                onClick={() => { setView('forgot'); setForgotError(''); }}
                 className="text-xs text-orange-400 hover:text-orange-300 transition-colors py-1 px-1 min-h-[44px] flex items-center"
               >
                 Forgot password?
@@ -293,6 +299,7 @@ export const ContractorLoginScreen: React.FC<ContractorLoginScreenProps> = ({
             <div className="relative">
               <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
               <input
+                id="contractor-password"
                 type={showPass ? 'text' : 'password'}
                 value={password}
                 onChange={e => setPassword(e.target.value)}
@@ -304,7 +311,10 @@ export const ContractorLoginScreen: React.FC<ContractorLoginScreenProps> = ({
               <button
                 type="button"
                 onClick={() => setShowPass(v => !v)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors p-1"
+                aria-label={showPass ? 'Hide password' : 'Show password'}
+                aria-pressed={showPass}
+                aria-controls="contractor-password"
+                className="absolute right-1 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
               >
                 {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
@@ -313,7 +323,7 @@ export const ContractorLoginScreen: React.FC<ContractorLoginScreenProps> = ({
 
           {/* Error */}
           {error && (
-            <div className="flex items-start gap-2 p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-sm text-red-400">
+            <div role="alert" className="flex items-start gap-2 p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-sm text-red-400">
               <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
               {error}
             </div>
@@ -343,7 +353,7 @@ export const ContractorLoginScreen: React.FC<ContractorLoginScreenProps> = ({
             Not a contractor yet?{' '}
             <button
               onClick={onRegister}
-              className="text-orange-400 font-semibold hover:text-orange-300 transition-colors"
+              className="text-orange-400 font-semibold hover:text-orange-300 transition-colors inline-flex items-center min-h-[44px]"
             >
               Apply to join
             </button>
@@ -355,7 +365,7 @@ export const ContractorLoginScreen: React.FC<ContractorLoginScreenProps> = ({
       <div className="mt-4 text-center">
         <button
           onClick={onGoToStaff}
-          className="text-xs text-slate-500 hover:text-slate-400 transition-colors py-2 inline-flex items-center gap-1"
+          className="text-xs text-slate-500 hover:text-slate-400 transition-colors py-2 min-h-[44px] inline-flex items-center gap-1"
         >
           <Zap className="w-3 h-3" />
           Staff / Admin login

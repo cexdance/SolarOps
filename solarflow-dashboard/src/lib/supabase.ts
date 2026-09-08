@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { createAuthFetch } from './authFetch';
 
 // .trim() guards against Vercel env-pull artifacts that embed literal \n in quoted values
 const supabaseUrl     = (import.meta.env['VITE_SUPABASE_URL']      as string ?? '').trim();
@@ -32,6 +33,7 @@ function safeStorage(): Storage {
 }
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  global: { fetch: createAuthFetch((input, init) => fetch(input, init), supabaseUrl) },
   auth: {
     persistSession: true,
     storageKey: 'solarflow_auth',
