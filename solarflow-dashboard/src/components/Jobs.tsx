@@ -66,7 +66,7 @@ function badgeLabel(job: Job): string {
 import { ServiceOrderPanel } from './ServiceOrderPanel';
 import { LeadPanel } from './LeadPanel';
 import { leadToCustomer, formatImportedAt, clientNumberOwner } from '../lib/leadConvert';
-import { claimClientNumber } from '../lib/clientRegistry';
+import { claimClientNumber, releaseClientNumber } from '../lib/clientRegistry';
 
 // Contractor workload buckets for the per-contractor filter summary. Uses the raw
 // `contractorJobStatus` (mirrored from the contractor portal) so "on route"
@@ -782,6 +782,10 @@ export const Jobs: React.FC<JobsProps> = ({
   const convertLead = async (lead: Job) => {
     const payload = leadToCustomer(lead);
     let clientId = lead.clientId;
+    // Set only when this call MINTED a number, so an abort below can hand it
+    // back. A number the lead already carried is not ours to release: it stays
+    // with this lead either way.
+    let mintedClientId: string | undefined;
     try {
       const reg = await claimClientNumber(payload.name ?? '', lead.clientId);
       if (reg?.taken) {
@@ -792,6 +796,7 @@ export const Jobs: React.FC<JobsProps> = ({
         if (!ok) return;
       } else if (reg) {
         clientId = reg.clientId;
+        if (!lead.clientId) mintedClientId = reg.clientId;
       }
     } catch (err) {
       window.alert(`Could not update the client registry sheet:\n\n${(err as Error).message}\n\nNothing was converted. Try again.`);
@@ -803,10 +808,18 @@ export const Jobs: React.FC<JobsProps> = ({
     // clientNumberOwner for the Danielle Ferrari / Andres Jimenez incident.
     const owner = clientNumberOwner(customers, clientId, lead.customerId);
     if (owner) {
+      // Hand the number back before telling the operator, or this abort burns it
+      // and their retry claims a second row for the same lead.
+      const gaveBack = mintedClientId ? await releaseClientNumber(mintedClientId, payload.name ?? '') : false;
       window.alert(
         `Client number ${clientId} is already on "${owner.name}" in this app.\n\n` +
         `Converting would file this lead under that client instead of creating a new one, ` +
         `so nothing was converted.\n\n` +
+        (mintedClientId
+          ? gaveBack
+            ? `${mintedClientId} was released back to the registry sheet, so nothing was wasted.\n\n`
+            : `WARNING: ${mintedClientId} could NOT be released and is still holding "${payload.name}" in the sheet. Clear that row by hand.\n\n`
+          : '') +
         `Fix ${owner.name}'s client number (or the registry sheet) first, then try again.`
       );
       return;

@@ -81,6 +81,12 @@ function doPost(e) {
   }
   var name = String(req.name || '').trim();
   if (!name) return json_({ error: 'A client name is required.' });
+  // A claim is a WRITE, and the caller can still abort after it (its own checks
+  // run on the number we just handed back). Without a way to give the number
+  // back, every such abort burns one and the operator's retry claims another,
+  // which is one lead holding two rows. Taylor Williams, 2026-09-08: claimed at
+  // 18:06:56, aborted, retried at 18:07:48 and claimed again.
+  var releasing = String(req.op || '') === 'release';
 
   // Serialized so two people converting leads at the same second cannot claim
   // the same number. Without this the "first blank row" read is a race.
@@ -101,6 +107,24 @@ function doPost(e) {
     var last = sh.getLastRow();
     if (last < FIRST_DATA_ROW) return json_({ error: 'Registry sheet is empty.' });
     var rows = sh.getRange(FIRST_DATA_ROW, COL_ACCOUNT, last - FIRST_DATA_ROW + 1, 2).getValues();
+
+    // Giving a number back. Only ever clears a cell that still holds exactly the
+    // name we were told to expect, so a release that arrives late (after someone
+    // else legitimately took the row) is a no-op instead of a wipe.
+    if (releasing) {
+      var want = norm_(req.clientId);
+      if (!want) return json_({ error: 'release needs a clientId.' });
+      for (var r = 0; r < rows.length; r++) {
+        if (norm_(rows[r][0]) !== want) continue;
+        var held = String(rows[r][1]).trim();
+        if (norm_(held) !== norm_(name)) {
+          return json_({ clientId: String(rows[r][0]).trim(), name: held, released: false, reason: 'row no longer holds that name' });
+        }
+        sh.getRange(r + FIRST_DATA_ROW, COL_NAME).clearContent();
+        return json_({ clientId: String(rows[r][0]).trim(), name: '', released: true });
+      }
+      return json_({ error: 'Client number ' + req.clientId + ' is not in the registry sheet.' });
+    }
 
     var pick = pickRow_(rows, req.clientId);
     if (pick.error) return json_({ error: pick.error });

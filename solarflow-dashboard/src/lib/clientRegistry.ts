@@ -43,3 +43,32 @@ export async function claimClientNumber(name: string, clientId?: string): Promis
   if (!data?.clientId) throw new Error('Client registry returned no client number.');
   return data as RegistryResult;
 }
+
+/**
+ * Give a freshly claimed number back, because the caller aborted after claiming
+ * it. Without this, an abort burns the number: the row keeps the name, and the
+ * operator's retry claims the NEXT one, so one lead ends up holding two rows.
+ * That is what happened to Taylor Williams on 2026-09-08.
+ *
+ * `name` is what we wrote; the sheet only clears the cell if it still holds
+ * exactly that, so a late release cannot wipe someone else's row.
+ *
+ * Best effort by design: the caller is already on an error path, and failing to
+ * release must not replace the message the operator actually needs to read.
+ * Returns whether the number came back, so the caller can say so.
+ */
+export async function releaseClientNumber(clientId: string, name: string): Promise<boolean> {
+  if (!REGISTRY_URL || !clientId) return false;
+  try {
+    const res = await fetch(REGISTRY_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ op: 'release', clientId, name }),
+    });
+    if (!res.ok) return false;
+    const data = await res.json();
+    return data?.released === true;
+  } catch {
+    return false;
+  }
+}
