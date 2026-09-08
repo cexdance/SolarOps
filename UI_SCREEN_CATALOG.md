@@ -311,3 +311,7 @@ Text-only routing reference: [UI_UX_SCREEN_MAP.md](UI_UX_SCREEN_MAP.md)
 
 ---
 
+
+## Login release refresh, 2026-09-08
+
+Authentication screenshots refreshed for the login/session hardening release. The full capture script reached 23/24 screens; billing-kanban was interrupted by navigation, so its earlier catalog image remains the reference. Only the four authentication images are updated in this scoped release record. Live desktop and both mobile login smoke checks passed separately.
