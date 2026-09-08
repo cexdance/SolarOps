@@ -37,7 +37,10 @@ import { MentionUser } from './ui/MentionTextarea';
 
 export const SOW_DISTRIBUTION_NAMES = ['Anthony Lopez', 'Daniel Matos', 'Cesar Jurado'];
 
-const PHOTO_CATEGORIES: WOPhoto['category'][] = ['before', 'after', 'process', 'serial', 'parts'];
+const PHOTO_CATEGORIES: WOPhoto['category'][] = [
+  'before', 'after', 'process', 'progress', 'serial', 'old_serial', 'new_serial',
+  'parts', 'voltage', 'string_voltage', 'cabinet_old', 'cabinet_new', 'inv_overview', 'ppe',
+];
 const PHOTO_CATEGORY_LABELS: Record<WOPhoto['category'], string> = {
   before:         'Before',
   after:          'After',
@@ -252,6 +255,7 @@ const PRINT_STYLE = `
   /* Break control */
   .sow-section { break-inside: avoid; }
   .sow-photo-grid { break-inside: avoid; }
+  .sow-pdf-page { break-before: page; break-inside: avoid; height: auto !important; }
   img { break-inside: avoid; }
 }
 `;
@@ -269,10 +273,12 @@ export const SowDistributionModal: React.FC<Props> = ({
 }) => {
   const [weather, setWeather] = useState<WeatherResult | null | 'loading'>('loading');
 
-  // PDF attachments can't render as <img>, keep them out of the report
-  const woPhotos      = (job.woPhotos ?? []).filter(
-    p => p.mimeType !== 'application/pdf' && !/\.pdf(\?|$)/i.test(p.name || ''),
-  );
+  // PDFs can't render as <img>, so they get their own full page each further down
+  const isPdf         = (p: WOPhoto) =>
+    p.mimeType === 'application/pdf' || /\.pdf(\?|$)/i.test(p.name || '');
+  const allFiles      = job.woPhotos ?? [];
+  const woPhotos      = allFiles.filter(p => !isPdf(p));
+  const pdfDocs       = allFiles.filter(isPdf);
   const contractor    = contractors.find(c => c.id === job.contractorId);
 
   const contractorLabel = [contractor?.contactName, contractor?.businessName]
@@ -520,6 +526,29 @@ export const SowDistributionModal: React.FC<Props> = ({
                   </div>
                 </Section>
               )}
+
+              {/* ── PDF attachments, one page each ──────────────────── */}
+              {pdfDocs.map(doc => (
+                <div key={doc.id} className="sow-pdf-page pt-4">
+                  <div className="flex items-center gap-2 mb-2.5">
+                    <FileText className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                      Attachment
+                      <span className="ml-2 font-normal text-slate-400 normal-case tracking-normal">{doc.name}</span>
+                    </p>
+                    <div className="flex-1 h-px bg-slate-100" />
+                  </div>
+                  {/* ponytail: browsers do not print embedded PDF content, the
+                      header above keeps the attachment identified on paper.
+                      Merge the PDFs server-side if printed pages are required. */}
+                  <iframe
+                    src={doc.storageUrl ?? doc.dataUrl}
+                    title={doc.name}
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50"
+                    style={{ height: '80vh' }}
+                  />
+                </div>
+              ))}
 
               {/* ── Contractor Field Notes ───────────────────────────── */}
               {contractorNotes.trim() && (
