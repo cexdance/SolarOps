@@ -654,6 +654,17 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
       setAssignedContractorId(incoming);
     }
   }, [job?.contractorId]);
+  // Additional contractors who only need to SEE the order. Same adopt-external-
+  // change guard as the primary above, keyed on the joined ids.
+  const [supportContractorIds, setSupportContractorIds] = useState<string[]>(job?.supportContractorIds ?? []);
+  const lastPropSupportRef = useRef((job?.supportContractorIds ?? []).join(','));
+  useEffect(() => {
+    const incoming = (job?.supportContractorIds ?? []).join(',');
+    if (incoming !== lastPropSupportRef.current) {
+      lastPropSupportRef.current = incoming;
+      setSupportContractorIds(job?.supportContractorIds ?? []);
+    }
+  }, [job?.supportContractorIds]);
   const [contractorPayRate, setContractorPayRate] = useState<number>(job?.contractorPayRate ?? 125);
   // Pay rate/unit are derived from the service rate (see PowerCare toggle + service
   // select); the manual inputs were removed from the form, so the unit is read-only here.
@@ -1535,6 +1546,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
       solarEdgeClientId: clientId,
       clientName: siteName,
       contractorId: assignedContractorId || undefined,
+      supportContractorIds: supportContractorIds.length ? supportContractorIds : undefined,
       contractorPayRate,
       contractorPayUnit,
       contractorSentAt: effectiveWoStatus === 'scheduled' ? (job?.contractorSentAt ?? new Date().toISOString()) : job?.contractorSentAt,
@@ -2577,6 +2589,8 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                     onChange={e => {
                       setAssignedContractorId(e.target.value);
                       lastPropContractorRef.current = e.target.value;
+                      // A contractor is either the primary or a support, never both.
+                      setSupportContractorIds(prev => prev.filter(id => id !== e.target.value));
                       // Persist the reassignment NOW so it lands with a fresh updatedAt
                       // at the moment of the user's action, rather than riding along on
                       // some later unrelated save (which a stale client could beat).
@@ -2589,6 +2603,34 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                       <option key={c.id} value={c.id}>{c.contactName} · {c.businessName}</option>
                     ))}
                   </select>
+                )}
+                {assignedContractorId && approvedContractors.length > 1 && (
+                  <div className="mt-2">
+                    <label className="block text-xs font-medium text-slate-500 mb-1">
+                      Additional contractors (view only, primary still schedules)
+                    </label>
+                    <div className="max-h-32 overflow-y-auto rounded-lg border border-slate-200 divide-y divide-slate-100">
+                      {approvedContractors.filter(c => c.id !== assignedContractorId).map(c => (
+                        <label key={c.id} className="flex items-center gap-2 px-3 py-2 text-sm cursor-pointer hover:bg-slate-50">
+                          <input
+                            type="checkbox"
+                            checked={supportContractorIds.includes(c.id)}
+                            onChange={e => {
+                              const next = e.target.checked
+                                ? [...supportContractorIds, c.id]
+                                : supportContractorIds.filter(id => id !== c.id);
+                              setSupportContractorIds(next);
+                              lastPropSupportRef.current = next.join(',');
+                              // Persist now, same reasoning as the primary select.
+                              setTimeout(() => handleSaveRef.current(undefined, true), 0);
+                            }}
+                            className="rounded border-slate-300 text-orange-500 focus:ring-orange-400"
+                          />
+                          <span>{c.contactName} · {c.businessName}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
                 )}
               </div>
 

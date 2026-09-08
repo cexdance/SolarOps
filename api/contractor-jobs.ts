@@ -61,7 +61,7 @@ interface ContractorRecord {
   status?: string;
 }
 
-interface JobRow { id: string; contractorId?: string; customerId?: string; status?: string; woStatus?: string }
+interface JobRow { id: string; contractorId?: string; supportContractorIds?: string[]; customerId?: string; status?: string; woStatus?: string }
 
 /** Read one KV blob row from app_data. Returns null on any failure. */
 async function readKV<T>(key: string): Promise<T | null> {
@@ -121,9 +121,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Filtered server-side by contractorId inside the JSONB, so other
   // contractors' jobs never leave the database. The status filter runs here
   // because it depends on `woStatus ?? status`, which PostgREST cannot express.
-  const allMine = await readRows<JobRow>(
-    `key=like.job:*&value->>contractorId=eq.${encodeURIComponent(me.id)}&select=value`,
-  );
+  // Two queries rather than one `or=`: PostgREST's or= needs the jsonb-contains
+  // operand quoted inside the group, and getting that escaping wrong fails open
+  // (returns everything). Two narrow filters + a dedupe cannot.
+  const [primary, support] = await Promise.all([
+    readRows<JobRow>(`key=like.job:*&value->>contractorId=eq.${encodeURIComponent(me.id)}&select=value`),
+    readRows<JobRow>(`key=like.job:*&value->supportContractorIds=cs.${encodeURIComponent(JSON.stringify([me.id]))}&select=value`),
+  ]);
+  const allMine = [...new Map([...primary, ...support].map(j => [j.id, j])).values()];
   const jobs = allMine.filter(j => CONTRACTOR_VISIBLE_STATUSES.has(j.woStatus ?? j.status ?? ''));
 
   // ── Their contractor-job records ──────────────────────────────────────────

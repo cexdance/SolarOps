@@ -291,6 +291,9 @@ export interface Job {
   urgency: UrgencyLevel;
   isPowercare: boolean;
   contractorId?: string;
+  // Extra contractors who can SEE this order in their portal. The primary
+  // `contractorId` still owns scheduling and pay; these are along for the ride.
+  supportContractorIds?: string[];
   description?: string;
   priority?: UrgencyLevel;
   date?: string;

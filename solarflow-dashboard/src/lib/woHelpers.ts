@@ -210,12 +210,13 @@ const CONTRACTOR_VISIBLE_STATUSES: Set<string> = new Set([
 
 /**
  * Pick the admin Jobs that belong to a contractor.
- * Returns only jobs where `contractorId` matches AND the WO status implies
- * the job has been dispatched (not just drafted/quoted).
+ * Returns only jobs where the contractor is the primary (`contractorId`) or a
+ * listed support contractor, AND the WO status implies the job has been
+ * dispatched (not just drafted/quoted).
  */
 export function pickupJobsForContractor(contractorId: string, jobs: Job[]): Job[] {
   return jobs.filter(j =>
-    j.contractorId === contractorId &&
+    (j.contractorId === contractorId || (j.supportContractorIds ?? []).includes(contractorId)) &&
     // An archived order is gone for everyone. Checked explicitly because the
     // visible-status test reads woStatus FIRST, so an archived job carrying
     // woStatus 'paid' would otherwise reappear in the portal.

@@ -39,4 +39,19 @@ describe('pickupJobsForContractor', () => {
     const jobs = [job({ id: 'mine' }), job({ id: 'theirs', contractorId: 'c2' })];
     expect(ids(pickupJobsForContractor('c1', jobs))).toEqual(['mine']);
   });
+
+  it('shows an order to a listed support contractor as well as the primary', () => {
+    const jobs = [job({ id: 'shared', contractorId: 'c1', supportContractorIds: ['c2'] })];
+    expect(ids(pickupJobsForContractor('c1', jobs))).toEqual(['shared']);
+    expect(ids(pickupJobsForContractor('c2', jobs))).toEqual(['shared']);
+    expect(pickupJobsForContractor('c3', jobs)).toEqual([]);
+  });
+
+  it('applies the same status and archive gates to a support contractor', () => {
+    const jobs = [
+      job({ id: 'draft', woStatus: 'draft', supportContractorIds: ['c2'] }),
+      job({ id: 'gone', status: 'archived', woStatus: 'paid', supportContractorIds: ['c2'] }),
+    ];
+    expect(pickupJobsForContractor('c2', jobs)).toEqual([]);
+  });
 });
