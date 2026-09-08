@@ -7,7 +7,7 @@ import { Crosshair, AlertTriangle, Zap, Wrench, Plus, X, Sun,
   Clock, MapPin, LayoutGrid, Search, ChevronRight, ChevronUp, ChevronDown,
   TrendingUp, UserCog, ClipboardList, User, Check, Inbox, Pencil,
   Phone, Mail, CheckSquare, Trash2, Calendar, GripVertical, AtSign,
-  RefreshCw } from 'lucide-react';
+  RefreshCw, Users } from 'lucide-react';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 import * as _recharts from 'recharts';
 const { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } = _recharts as any;
@@ -18,6 +18,9 @@ import { loadTodos, saveTodos, TodoItem } from '../lib/todoStore';
 import { MentionsWidget } from './MentionsWidget';
 import { AddressCleanupWidget } from './AddressCleanupWidget';
 import { DeepSyncMetricsWidget } from './DeepSyncMetricsWidget';
+import { UserActivityWidget } from './UserActivityWidget';
+import { hasPermit, canManageUsers } from '../lib/access';
+import { Permission } from '../types';
 import { Contractor } from '../types/contractor';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -35,7 +38,8 @@ type WidgetType =
   | 'todo-list'
   | 'mentions'
   | 'address-cleanup'
-  | 'deep-sync-metrics';
+  | 'deep-sync-metrics'
+  | 'user-activity';
 
 interface WidgetConfig {
   type: WidgetType;
@@ -52,6 +56,9 @@ interface DispatchDashboardProps {
   users: import('../types').User[];
   isMobile: boolean;
   currentUserId: string;
+  /** The signed-in user. Passed directly: currentUserId is not guaranteed to
+   *  match a row in `users`, so gating a permit on a lookup silently denies. */
+  currentUser?: import('../types').User;
   notifications: import('../types').AppNotification[];
   onMarkMentionRead: (notificationId: string) => void;
   onMarkAllMentionsRead: () => void;
@@ -69,6 +76,8 @@ interface WidgetCatalogEntry {
   colorClass: string;
   bgClass: string;
   requires?: 'customer' | 'contractor' | 'job' | 'lead';
+  /** Hide this widget from anyone without the permit. */
+  permit?: Permission;
 }
 
 const WIDGET_CATALOG: WidgetCatalogEntry[] = [
@@ -180,6 +189,18 @@ const WIDGET_CATALOG: WidgetCatalogEntry[] = [
     icon: RefreshCw,
     colorClass: 'text-amber-600',
     bgClass: 'bg-amber-50',
+  },
+  {
+    type: 'user-activity',
+    label: 'Team Workload',
+    description: 'Estimated active time per person, today or the last 7 days',
+    icon: Users,
+    colorClass: 'text-orange-600',
+    bgClass: 'bg-orange-50',
+    // This ranks named staff by how much they worked. RLS lets any staff user
+    // read change_log, so the gate has to be here: it is the same permit that
+    // governs managing people.
+    permit: 'users.manage',
   },
 ];
 
@@ -779,9 +800,10 @@ const AddWidgetModal: React.FC<{
   contractors: Contractor[];
   leads: Lead[];
   placedSingletonTypes: Set<WidgetType>;
+  currentUser: import('../types').User | undefined;
   onAdd: (config: WidgetConfig) => void;
   onClose: () => void;
-}> = ({ customers, jobs, contractors, leads, placedSingletonTypes, onAdd, onClose }) => {
+}> = ({ customers, jobs, contractors, leads, placedSingletonTypes, currentUser, onAdd, onClose }) => {
   const [step, setStep]           = useState<'type' | 'configure'>('type');
   const [selectedType, setType]   = useState<WidgetCatalogEntry | null>(null);
   const [search, setSearch]       = useState('');
@@ -867,7 +889,7 @@ const AddWidgetModal: React.FC<{
           {/* ── Step 1: Pick type ── */}
           {step === 'type' && (
             <div className="grid grid-cols-2 gap-2">
-              {WIDGET_CATALOG.map(entry => {
+              {WIDGET_CATALOG.filter(e => !e.permit || hasPermit(currentUser, e.permit)).map(entry => {
                 const Icon = entry.icon;
                 const alreadyPlaced = !entry.requires && placedSingletonTypes.has(entry.type);
                 return (
@@ -1478,6 +1500,7 @@ const WidgetSlot: React.FC<{
   onRemove: (index: number) => void;
   editMode: boolean;
   currentUserId: string;
+  currentUser?: import('../types').User;
   notifications: import('../types').AppNotification[];
   onMarkMentionRead: (notificationId: string) => void;
   onMarkAllMentionsRead: () => void;
@@ -1488,7 +1511,7 @@ const WidgetSlot: React.FC<{
   onDrop: (index: number) => void;
   onViewCustomer: (id: string) => void;
   onViewChange: (view: string, id?: string) => void;
-}> = ({ config, index, customers, jobs, contractors, users, onOpenAdd, onRemove, currentUserId, notifications, onMarkMentionRead, onMarkAllMentionsRead, isDragOver, onDragStart, onDragOver, onDragLeave, onDrop, onViewCustomer, onViewChange }) => {
+}> = ({ config, index, customers, jobs, contractors, users, onOpenAdd, onRemove, currentUserId, currentUser, notifications, onMarkMentionRead, onMarkAllMentionsRead, isDragOver, onDragStart, onDragOver, onDragLeave, onDrop, onViewCustomer, onViewChange }) => {
   if (!config) {
     return (
       <div
@@ -1561,6 +1584,13 @@ const WidgetSlot: React.FC<{
         {config.type === 'mentions'               && <MentionsWidget userId={currentUserId} users={users} notifications={notifications} onMarkRead={onMarkMentionRead} onMarkAllRead={onMarkAllMentionsRead} onOpenCustomer={onViewCustomer} onOpenWorkOrder={(jobId) => onViewChange?.('jobDetail', jobId)} />}
         {config.type === 'address-cleanup'        && <AddressCleanupWidget userName={users.find(u => u.id === currentUserId)?.name || 'Unknown'} onViewCustomer={onViewCustomer} />}
         {config.type === 'deep-sync-metrics'      && <DeepSyncMetricsWidget userName={users.find(u => u.id === currentUserId)?.name || 'Unknown'} />}
+        {config.type === 'user-activity'          && (
+          canManageUsers(currentUser)
+            ? <UserActivityWidget users={users} />
+            : <div className="h-full flex items-center justify-center bg-white border border-slate-100 rounded-lg p-3">
+                <p className="text-xs text-slate-500 text-center">Team Workload needs the Manage users permit.</p>
+              </div>
+        )}
       </WidgetErrorBoundary>
     </div>
   );
@@ -1568,7 +1598,7 @@ const WidgetSlot: React.FC<{
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 
-export const DispatchDashboard: React.FC<DispatchDashboardProps> = ({ customers, jobs, contractors, users, isMobile, currentUserId, notifications, onMarkMentionRead, onMarkAllMentionsRead, onViewCustomer, onViewChange }) => {
+export const DispatchDashboard: React.FC<DispatchDashboardProps> = ({ customers, jobs, contractors, users, isMobile, currentUserId, currentUser, notifications, onMarkMentionRead, onMarkAllMentionsRead, onViewCustomer, onViewChange }) => {
   const [layout,       setLayout]      = useState<(WidgetConfig | null)[]>(loadLayout);
   const [editMode,     setEditMode]    = useState(false);
   const [addSlot,      setAddSlot]     = useState<number | null>(null);
@@ -1665,6 +1695,7 @@ export const DispatchDashboard: React.FC<DispatchDashboardProps> = ({ customers,
           contractors={contractors}
           leads={crmLeads}
           placedSingletonTypes={placedSingletonTypes}
+          currentUser={currentUser}
           onAdd={handleWidgetAdd}
           onClose={() => setAddSlot(null)}
         />
@@ -1743,6 +1774,7 @@ export const DispatchDashboard: React.FC<DispatchDashboardProps> = ({ customers,
               onRemove={handleRemove}
               editMode={editMode}
               currentUserId={currentUserId}
+              currentUser={currentUser}
               notifications={notifications}
               onMarkMentionRead={onMarkMentionRead}
               onMarkAllMentionsRead={onMarkAllMentionsRead}

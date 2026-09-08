@@ -3433,6 +3433,7 @@ function App() {
             users={data.users}
             isMobile={isMobile}
             currentUserId={data.currentUser?.id || 'user-1'}
+            currentUser={data.currentUser}
             onViewCustomer={(customerId) => {
               setSelectedCustomerId(customerId);
               setCurrentView('customers');
