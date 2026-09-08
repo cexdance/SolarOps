@@ -44,10 +44,13 @@ vi.stubGlobal('localStorage', fakeStorage);
 
 // ---------- navigator.onLine -------------------------------------------------
 
-Object.defineProperty(navigator, 'onLine', {
-  configurable: true,
-  get: () => true,
-});
+// Node-only suites have no navigator on the Node 20 CI runtime.
+if (typeof navigator !== 'undefined') {
+  Object.defineProperty(navigator, 'onLine', {
+    configurable: true,
+    get: () => true,
+  });
+}
 
 // ---------- Reset between tests ----------------------------------------------
 
