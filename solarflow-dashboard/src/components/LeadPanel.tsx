@@ -15,6 +15,8 @@ interface LeadPanelProps {
   currentUserName?: string;
   onSave: (partial: Partial<Job>) => void;
   onConvertToClient: () => void;
+  /** True while the client number is being claimed from the registry sheet. */
+  converting?: boolean;
   onClose: () => void;
 }
 
@@ -44,7 +46,7 @@ export function setLogDraft(jobId: string, text: string): void {
   else logDrafts.delete(jobId);
 }
 
-export const LeadPanel: React.FC<LeadPanelProps> = ({ job, currentUserName, onSave, onConvertToClient, onClose }) => {
+export const LeadPanel: React.FC<LeadPanelProps> = ({ job, currentUserName, onSave, onConvertToClient, onClose, converting = false }) => {
   const [info, setInfo] = useState<LeadInfo>(() => seedLeadInfo(job));
   const [logText, setLogTextState] = useState(() => getLogDraft(job.id));
   // Mirror every keystroke into the module-scope draft, so a remount mid-typing
@@ -182,8 +184,16 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({ job, currentUserName, onSa
 
         <div className="p-4 border-t border-slate-200 sticky bottom-0 bg-white flex justify-between gap-2">
           <button onClick={() => { saveInfo(); onClose(); }} className="px-4 py-2 text-sm font-medium text-slate-600 rounded-lg border border-slate-200 hover:bg-slate-50">Save & Close</button>
-          <button onClick={onConvertToClient} className="px-4 py-2 text-sm font-semibold text-white bg-orange-500 rounded-lg hover:bg-orange-600 flex items-center gap-1.5">
-            <UserCheck className="w-4 h-4" /> Move to Client
+          {/* Claiming the client number takes a couple of seconds against the
+              registry sheet. Without a disabled state the panel looks inert for
+              that whole time and gets clicked again, which claims a second
+              number and creates a second client (Daniel Torres, 2026-09-08). */}
+          <button
+            onClick={onConvertToClient}
+            disabled={converting}
+            className="px-4 py-2 text-sm font-semibold text-white bg-orange-500 rounded-lg hover:bg-orange-600 disabled:opacity-60 disabled:cursor-wait flex items-center gap-1.5"
+          >
+            <UserCheck className="w-4 h-4" /> {converting ? 'Claiming number...' : 'Move to Client'}
           </button>
         </div>
       </div>

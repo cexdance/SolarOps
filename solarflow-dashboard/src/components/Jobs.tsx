@@ -754,7 +754,32 @@ export const Jobs: React.FC<JobsProps> = ({
   // (name written next to the number) before the Customer exists here, so the
   // sheet stays the authority on the consecutive numbering. A failed registry
   // write aborts the conversion: converting anyway would drift the two apart.
+  //
+  // Re-entrancy: claiming the number is a ~2-4s network round trip, and for all
+  // of it the panel looks untouched, so the operator clicks again. Both clicks
+  // then read the same stale `lead` (clientId still unset), each claims a fresh
+  // number, and onCreateCustomer's guard keys on clientId, so click 2 can never
+  // match the client click 1 just made. That is two clients and two burned
+  // numbers from one lead. Seen with Daniel Torres on 2026-09-08, US-15699 and
+  // US-15700, clicks 2.9s apart; Blackstone, Deorta and Anthony Client are the
+  // same shape. The ref is the actual guard because it blocks within a single
+  // tick; the state only drives the button's disabled/label.
+  const convertingLeadRef = useRef(false);
+  const [convertingLead, setConvertingLead] = useState(false);
+
   const handleConvertLead = async (lead: Job) => {
+    if (convertingLeadRef.current) return;
+    convertingLeadRef.current = true;
+    setConvertingLead(true);
+    try {
+      await convertLead(lead);
+    } finally {
+      convertingLeadRef.current = false;
+      setConvertingLead(false);
+    }
+  };
+
+  const convertLead = async (lead: Job) => {
     const payload = leadToCustomer(lead);
     let clientId = lead.clientId;
     try {
@@ -1157,6 +1182,7 @@ export const Jobs: React.FC<JobsProps> = ({
             currentUserName={currentUser?.name}
             onSave={(partial) => onUpdateJob({ ...lead, ...partial, updatedAt: new Date().toISOString() })}
             onConvertToClient={() => handleConvertLead(lead)}
+            converting={convertingLead}
             onClose={() => setLeadPanelJobId(null)}
           />
         );
