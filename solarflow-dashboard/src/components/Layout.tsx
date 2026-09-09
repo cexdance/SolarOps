@@ -36,6 +36,7 @@ import { User as UserType, AppNotification, Customer, Job } from '../types';
 // Inbox-style dimension chips for the notifications panel
 const NOTIF_GROUPS: Record<string, AppNotification['type'][]> = {
   mentions: ['mention'],
+  messages: ['message'],
   leads: ['new_lead'],
   completed: ['contractor_completed'],
   billing: ['late_fee_1', 'late_fee_2', 'contractor_autopay'],
@@ -45,6 +46,8 @@ const NOTIF_CHIPS: { key: string; label: string }[] = [
   { key: 'all', label: 'All' },
   { key: 'unread', label: 'Unread' },
   { key: 'mentions', label: 'Mentions' },
+  // Direct messages (lib/messenger.ts sendMessage -> api/notify kind:'dm').
+  { key: 'messages', label: 'Messages' },
   // New leads off the Trello board (api/trello-card.ts notifyNewLead).
   { key: 'leads', label: 'Leads' },
   { key: 'completed', label: 'Completed' },
@@ -403,7 +406,12 @@ export const Layout: React.FC<LayoutProps> = ({
                           }
                           // A work-order mention opens the service order; everything
                           // else opens the customer record.
-                          if (notif.relatedJobId && onOpenJob) {
+                          // A DM carries no job or customer id, so route on the
+                          // type: open the Messages screen.
+                          if (notif.type === 'message') {
+                            onViewChange('messages');
+                            setNotifOpen(false);
+                          } else if (notif.relatedJobId && onOpenJob) {
                             onOpenJob(notif.relatedJobId);
                             setNotifOpen(false);
                           } else if (notif.relatedCustomerId && onSelectCustomer) {

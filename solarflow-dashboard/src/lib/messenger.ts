@@ -72,10 +72,31 @@ export async function sendMessage(toUserId: string, body: string): Promise<Messa
       .single();
 
     if (error || !data) return null;
+    notifyRecipient(session.access_token, toUserId, text);
     return rowToMessage(data);
   } catch {
     return null;
   }
+}
+
+/**
+ * Put a DM in the recipient's bell (and on their device, if they registered for
+ * push). Fire-and-forget: the message itself is already stored, so a failure
+ * here must never fail the send.
+ *
+ * The row is written by /api/notify under the service role because
+ * `public.notifications` has SELECT and UPDATE policies only, so a client
+ * cannot insert a row for somebody else.
+ */
+function notifyRecipient(accessToken: string, toUserId: string, body: string): void {
+  void fetch('/api/notify', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ kind: 'dm', mentionedUserIds: [toUserId], message: body }),
+  }).catch(() => { /* non-blocking */ });
 }
 
 /** Mark every unread message received from `fromUserId` as read. */

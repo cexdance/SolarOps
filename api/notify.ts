@@ -336,7 +336,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // `notifierName` is deliberately NOT read from the body any more; `notifier`
   // above is derived from the verified token instead. The client still sends it,
   // and ignoring it is the fix.
-  const { mentionedUserIds, customerName, customerId, message, contextType, activityId } = (req.body ?? {}) as Record<string, unknown>;
+  const { mentionedUserIds, customerName, customerId, message, contextType, activityId, kind } = (req.body ?? {}) as Record<string, unknown>;
+  // A direct message reuses this whole path (verify, targeted lookup, insert,
+  // push). Only the wording, the row `type`, and the email opt-out differ.
+  const isDm = kind === 'dm';
   if (!Array.isArray(mentionedUserIds) || mentionedUserIds.length === 0) {
     return res.status(400).json({ error: 'mentionedUserIds required' });
   }
@@ -376,17 +379,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const contextId = (customerId as string | undefined) ?? null;
   const isWorkOrder = contextType === 'workOrder';
   const now = new Date().toISOString();
+  const dmTitle = `${notifier} sent you a message`;
+  const dmBody  = `"${String(message ?? '').slice(0, 200)}${String(message ?? '').length > 200 ? '…' : ''}"`;
   const rows = mentioned.map(u => ({
     id: `notif-${u.id}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     user_id: u.id,
-    type: 'mention',
-    title: `${notifier} mentioned you`,
-    message: message
-      ? `In ${customerName || 'a customer record'}: "${String(message).slice(0, 200)}${String(message).length > 200 ? '…' : ''}"`
-      : `You were mentioned in ${customerName || 'a customer record'}`,
-    related_job_id:      isWorkOrder ? contextId : null,
-    related_customer_id: isWorkOrder ? null : contextId,
-    related_activity_id: (activityId as string | undefined) ?? null,
+    type: isDm ? 'message' : 'mention',
+    title: isDm ? dmTitle : `${notifier} mentioned you`,
+    message: isDm
+      ? dmBody
+      : message
+        ? `In ${customerName || 'a customer record'}: "${String(message).slice(0, 200)}${String(message).length > 200 ? '…' : ''}"`
+        : `You were mentioned in ${customerName || 'a customer record'}`,
+    // A DM points at no job or customer. The bell opens the Messages screen
+    // from the row type instead.
+    related_job_id:      isDm ? null : isWorkOrder ? contextId : null,
+    related_customer_id: isDm ? null : isWorkOrder ? null : contextId,
+    related_activity_id: isDm ? null : (activityId as string | undefined) ?? null,
     read: false,
     created_at: now,
   }));
@@ -417,8 +426,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         await Promise.all(
           subs.map(async (row) => {
             const payload = JSON.stringify({
-              title: `${notifier} mentioned you`,
-              body:  message
+              title: isDm ? dmTitle : `${notifier} mentioned you`,
+              body:  isDm ? dmBody : message
                 ? `In ${customerName || 'a service order'}: "${String(message).slice(0, 120)}${String(message).length > 120 ? '…' : ''}"`
                 : `You were mentioned in ${customerName || 'a service order'}`,
               url: '/',
@@ -445,7 +454,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // ── Send email to each mentioned user (fire-and-forget) ───────────────────
-  if (RESEND_API_KEY) {
+  // ponytail: DMs deliberately skip email. Chat is high-frequency, and one
+  // message per email would train people to filter the whole address.
+  if (RESEND_API_KEY && !isDm) {
     for (const u of mentioned) {
       const email = u.email;
       const name  = (u.user_metadata?.name as string) ?? email ?? 'there';
