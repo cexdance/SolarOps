@@ -1312,6 +1312,145 @@ async function handleCardPush(req: VercelRequest, res: VercelResponse) {
   }
 }
 
+// ── Daily convergence sweep (Vercel cron, GET ?sweep=1) ─────────────────────
+
+/**
+ * Which side's edit is newer. Within `tieMs` the two clocks cannot be trusted
+ * to order the edits (Trello action dates vs browser-stamped fieldTimes), so
+ * it is a 'tie' and the caller applies its tie rule.
+ */
+export function newerSide(trelloAt: string | undefined, llAt: string | undefined, tieMs = 120_000): 'trello' | 'll' | 'tie' {
+  const t = Date.parse(trelloAt ?? '') || 0;
+  const l = Date.parse(llAt ?? '') || 0;
+  if (Math.abs(t - l) < tieMs) return 'tie';
+  return t > l ? 'trello' : 'll';
+}
+
+const CRON_SECRET = (process.env.CRON_SECRET ?? '').trim();
+/** More differences than this in one night means something systemic broke
+ *  (a dead webhook, a bad deploy). Repair this many and report the rest,
+ *  rather than let a sweep mass-rewrite the board on a bad day. */
+const SWEEP_MAX_FIXES = 30;
+
+/**
+ * Converge the Trello board and LL once a day.
+ *
+ * The mirror is edge-triggered in both directions: a push that failed, a
+ * webhook delivery that never arrived, a browser that was offline, or a
+ * direct database repair all leave the two boards disagreeing until someone
+ * happens to touch that card again. This closes that gap. Rules, identical
+ * to the 2026-09-10 one-time repair:
+ *   - card with no LL job  -> import it, through the webhook's own create path
+ *   - column differs       -> newer edit wins; a tie goes to LL (09-03 rule)
+ *   - labels differ        -> newer edit wins; a tie takes the UNION
+ * Cheap by construction: one Trello call for every card, one query for every
+ * job, and per-card history only for the cards that actually differ.
+ */
+async function handleSweep(req: VercelRequest, res: VercelResponse) {
+  if (!CRON_SECRET) return res.status(503).json({ error: 'CRON_SECRET not configured' });
+  const presented = Buffer.from((req.headers.authorization ?? '').replace(/^Bearer /, ''));
+  const expected = Buffer.from(CRON_SECRET);
+  if (presented.length !== expected.length || !timingSafeEqual(presented, expected)) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  if (!API_KEY || !API_TOKEN || !SERVICE_ROLE_KEY) return res.status(500).json({ error: 'Server not configured' });
+
+  const boardId = TARGET_LISTS[0].boardId;
+  const auth = `key=${API_KEY}&token=${API_TOKEN}`;
+  const cardsRes = await fetch(`${TRELLO_BASE}/boards/${boardId}/cards?fields=name,idList,labels,isTemplate&${auth}`);
+  if (!cardsRes.ok) return res.status(502).json({ error: `Trello cards ${cardsRes.status}` });
+  const cards = (await cardsRes.json() as { id: string; name: string; idList: string; labels: TrelloLabel[]; isTemplate?: boolean }[])
+    .filter(c => !c.isTemplate);
+  const listNames = new Map((await (await fetch(`${TRELLO_BASE}/boards/${boardId}/lists?fields=name&${auth}`)).json() as { id: string; name: string }[]).map(l => [l.id, l.name]));
+
+  const rowsRes = await fetch(`${SUPABASE_URL}/rest/v1/app_data?key=like.job:job-trello-*&select=value`, { headers: supabaseHeaders });
+  if (!rowsRes.ok) return res.status(502).json({ error: `Supabase jobs ${rowsRes.status}` });
+  const jobs = new Map((await rowsRes.json() as { value: any }[]).map(r => [String(r.value?.id ?? '').slice('job-trello-'.length), r.value]));
+
+  const report = { cards: cards.length, imported: [] as string[], stageToLL: [] as string[], stageToTrello: [] as string[], labelsToLL: [] as string[], labelsToTrello: [] as string[], deferred: 0, errors: [] as string[] };
+  let fixes = 0;
+  const now = new Date().toISOString();
+  const selfUrl = `https://${req.headers['x-forwarded-host'] || req.headers.host}/api/trello-card`;
+
+  for (const card of cards) {
+    const job = jobs.get(card.id);
+    const wantStage = stageForList(card.idList);
+    const cardLabels = toJobLabels(card.labels);
+    const stageDiff = !!job && !!wantStage && wantStage !== job.pipelineStage;
+    const labelDiff = !!job && !sameLabelSet(Array.isArray(job.labels) ? job.labels : [], cardLabels);
+    if (job && !stageDiff && !labelDiff) continue;
+    if (fixes >= SWEEP_MAX_FIXES) { report.deferred++; continue; }
+    fixes++;
+
+    try {
+      if (!job) {
+        // Through the webhook itself, so there is one importer and one set of
+        // parse rules. A lead found here is one nobody was told about, so the
+        // new-lead notification firing is correct, not noise.
+        const r = await fetch(selfUrl, {
+          method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ action: { type: 'createCard', data: { card: { id: card.id, name: card.name }, list: { id: card.idList, name: listNames.get(card.idList) }, board: { id: boardId } } } }),
+        });
+        if (r.ok) report.imported.push(card.name); else report.errors.push(`import ${card.name}: ${r.status}`);
+        continue;
+      }
+
+      const acts = await (await fetch(`${TRELLO_BASE}/cards/${card.id}/actions?filter=createCard,updateCard&limit=200&${auth}`)).json() as { type: string; date: string; data?: { listAfter?: unknown; old?: Record<string, unknown> } }[];
+      const recTime = job.updatedAt as string | undefined;
+      const next = { ...job };
+      const llChanged: string[] = [];
+      const trelloParams: Record<string, string> = {};
+
+      if (stageDiff) {
+        const trelloAt = acts.find(a => a.type === 'createCard' || a.data?.listAfter)?.date;
+        const side = newerSide(trelloAt, job.fieldTimes?.pipelineStage ?? recTime);
+        if (side === 'trello') { next.pipelineStage = wantStage; llChanged.push('pipelineStage'); report.stageToLL.push(card.name); }
+        else {
+          const idList = listForStage(job.pipelineStage);
+          // A column whose Trello list is gone or archived has nowhere to go;
+          // leave both sides alone rather than invent a destination.
+          if (idList && idList !== card.idList) {
+            const l = await (await fetch(`${TRELLO_BASE}/lists/${idList}?fields=idBoard,closed&${auth}`)).json() as { idBoard?: string; closed?: boolean };
+            if (l.idBoard === boardId && !l.closed) { trelloParams.idList = idList; report.stageToTrello.push(card.name); }
+          }
+        }
+      }
+
+      if (labelDiff) {
+        const trelloAt = acts.find(a => a.type === 'createCard' || (a.data?.old && 'idLabels' in a.data.old))?.date;
+        const side = newerSide(trelloAt, job.fieldTimes?.labels ?? recTime);
+        const llLabels: { name: string; color: string }[] = Array.isArray(job.labels) ? job.labels : [];
+        const union = [...llLabels, ...cardLabels.filter(c => !llLabels.some(l => labelKey(l.name) === labelKey(c.name)))];
+        const toLL = side === 'trello' ? cardLabels : side === 'tie' ? union : null;
+        const toTrello = side === 'll' ? llLabels : side === 'tie' ? union : null;
+        if (toLL && !sameLabelSet(llLabels, toLL)) { next.labels = toLL; llChanged.push('labels'); report.labelsToLL.push(card.name); }
+        if (toTrello && !sameLabelSet(cardLabels, toTrello)) {
+          trelloParams.idLabels = (await resolveLabelIds(boardId, toTrello, [])).join(',');
+          report.labelsToTrello.push(card.name);
+        }
+      }
+
+      if (llChanged.length) {
+        stampMirroredFields(next, llChanged, now);
+        const w = await fetch(`${SUPABASE_URL}/rest/v1/app_data?on_conflict=key`, {
+          method: 'POST',
+          headers: { ...supabaseHeaders, Prefer: 'resolution=merge-duplicates,return=minimal' },
+          body: JSON.stringify({ key: `job:${job.id}`, value: next, updated_at: now }),
+        });
+        if (!w.ok) report.errors.push(`LL ${card.name}: ${w.status}`);
+      }
+      if (Object.keys(trelloParams).length) await putCard(card.id, trelloParams);
+    } catch (err) {
+      report.errors.push(`${card.name}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  const summary = `imported ${report.imported.length}, stage->LL ${report.stageToLL.length}, stage->Trello ${report.stageToTrello.length}, labels->LL ${report.labelsToLL.length}, labels->Trello ${report.labelsToTrello.length}, deferred ${report.deferred}, errors ${report.errors.length}`;
+  if (report.deferred > 0) console.error(`[trello-sweep] ${report.deferred} differences DEFERRED past the ${SWEEP_MAX_FIXES}-fix cap: something systemic is wrong`);
+  console.info(`[trello-sweep] ${summary}`);
+  return res.status(200).json({ summary, ...report });
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Trello HEAD-verifies the callback URL synchronously when the webhook is
   // created. Must return 2xx or registration is rejected outright.
@@ -1323,6 +1462,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
   if (req.method === 'PATCH') {
     return handleCardPush(req, res);
+  }
+  // Vercel cron: GET with `Authorization: Bearer $CRON_SECRET`, which is not a
+  // Supabase JWT, so this must run before the signed-in-user check below.
+  if (req.method === 'GET' && req.query?.sweep !== undefined) {
+    try { return await handleSweep(req, res); }
+    catch (err) {
+      console.error('[trello-sweep] crashed:', err);
+      return res.status(500).json({ error: err instanceof Error ? err.message : 'sweep crashed' });
+    }
   }
   // Top-level safety net: if ANYTHING below throws, return a clean 500 instead
   // of Vercel's FUNCTION_INVOCATION_FAILED page (the previous behavior, an

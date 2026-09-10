@@ -61,6 +61,7 @@
     }
   ],
   "crons": [
-    { "path": "/api/notify?action=daily-report", "schedule": "0 3 * * *" }
+    { "path": "/api/notify?action=daily-report", "schedule": "0 3 * * *" },
+    { "path": "/api/trello-card?sweep=1", "schedule": "0 10 * * *" }
   ]
 }

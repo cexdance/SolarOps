@@ -12,7 +12,7 @@
 //     live in separate files by necessity (api/ cannot import from src/), which
 //     is exactly the setup where one gets fixed and the other does not.
 import { describe, it, expect } from 'vitest';
-import { matchTargetList, stageForList, listForStage, trustedStage, sameLabelSet, labelKey, stampMirroredFields, parseLeadDesc, parseSiteId } from '../../../api/trello-card';
+import { matchTargetList, stageForList, listForStage, trustedStage, sameLabelSet, labelKey, stampMirroredFields, parseLeadDesc, parseSiteId, newerSide } from '../../../api/trello-card';
 import { mergeJobFields } from '../lib/syncEngine';
 import { labelKey as clientLabelKey, LABEL_CATALOG } from '../lib/labelCatalog';
 import { trelloCardIdOf, cardPatchFor, boardColumns, type TrelloList } from '../lib/trelloSync';
@@ -145,6 +145,22 @@ describe("Anthony's New Lead card template parses", () => {
     expect(parseSiteId('call 3612595 tomorrow')).toBeUndefined();
     expect(parseSiteId('Site ID: 12345')).toBeUndefined();
     expect(parseSiteId('SolarEdge Site ID: 451846')).toBe('451846');
+  });
+});
+
+describe('newerSide: the daily sweep decides who wins', () => {
+  it('the clearly newer edit wins', () => {
+    // Zach Ross: moved in Trello 09-08, LL column last set 08-28.
+    expect(newerSide('2026-09-08T22:55:00Z', '2026-08-28T22:55:34Z')).toBe('trello');
+    expect(newerSide('2026-08-25T17:48:00Z', '2026-08-28T22:49:00Z')).toBe('ll');
+  });
+  it('edits under 2 minutes apart are a TIE, because the two clocks cannot order them', () => {
+    // Hicks: both sides stamped inside the same minute on 09-03.
+    expect(newerSide('2026-09-03T21:38:10Z', '2026-09-03T21:38:50Z')).toBe('tie');
+  });
+  it('a side with no timestamp at all loses to one that has any', () => {
+    expect(newerSide(undefined, '2026-09-01T00:00:00Z')).toBe('ll');
+    expect(newerSide('2026-09-01T00:00:00Z', undefined)).toBe('trello');
   });
 });
 
