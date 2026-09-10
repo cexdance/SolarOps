@@ -59,5 +59,8 @@
         }
       ]
     }
+  ],
+  "crons": [
+    { "path": "/api/notify?action=daily-report", "schedule": "0 3 * * *" }
   ]
 }
