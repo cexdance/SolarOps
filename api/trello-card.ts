@@ -191,9 +191,38 @@ export function boardDecision(idBoard: string | undefined): 'allow' | 'reject' |
   return ALLOWED_BOARD_IDS.has(idBoard) ? 'allow' : 'reject';
 }
 
-/** The stage a card currently belongs in, or undefined for an untracked list. */
+/**
+ * The LL stage for a Trello list. EVERY list on the board has one.
+ *
+ * Lists LL has always known keep their semantic key ('leads', 'done', ...),
+ * which existing jobs and Move to Client ('needs_first_quote') depend on. Any
+ * other list gets `list:<id>` (user decision 2026-09-10: "columns on Trello,
+ * new or renamed, need to reflect the LL"). Keyed by id, never by name, so a
+ * rename in Trello never orphans the cards in that column.
+ *
+ * This replaced "undefined for an untracked list". That silently dropped every
+ * move into a list created after this file was last edited, and it happened
+ * three times: LOST TO COMPETITION (08-29), Service Quote Accepted, and
+ * Scheduled/In Process (all 2026). A list nobody told the code about is now an
+ * ordinary column, not a hole.
+ */
 export function stageForList(listId: string | undefined): string | undefined {
-  return listId ? LIST_STAGES[listId] : undefined;
+  if (!listId) return undefined;
+  return LIST_STAGES[listId] ?? (/^[0-9a-f]{24}$/i.test(listId) ? `list:${listId}` : undefined);
+}
+
+/**
+ * The stage for a list id taken from a webhook PAYLOAD, which the caller
+ * controls. A known list is safe by construction. An unknown one is accepted
+ * only when Trello itself reports the card sitting in it right now, otherwise
+ * a forged `listAfter` could file a real card under a list on someone else's
+ * board. Returning undefined means "this event says nothing about the column",
+ * and the next event (or the daily sweep) settles it.
+ */
+export function trustedStage(payloadListId: string | undefined, cardIdList: string | undefined): string | undefined {
+  if (!payloadListId) return undefined;
+  if (LIST_STAGES[payloadListId]) return LIST_STAGES[payloadListId];
+  return payloadListId === cardIdList ? stageForList(payloadListId) : undefined;
 }
 
 /**
@@ -210,15 +239,17 @@ const STAGE_LISTS: Record<string, string> = Object.fromEntries(
 );
 
 export function listForStage(stage: string | undefined): string | undefined {
-  return stage ? STAGE_LISTS[stage] : undefined;
+  if (!stage) return undefined;
+  const m = /^list:([0-9a-f]{24})$/i.exec(stage);
+  return STAGE_LISTS[stage] ?? (m ? m[1] : undefined);
 }
 
 interface TrelloWebhookAction {
   type: string;
   data?: {
     card?: { id: string; name: string; shortLink?: string };
-    list?: { id: string };       // present on createCard
-    listAfter?: { id: string };  // present on updateCard ONLY when it's a list move
+    list?: { id: string; name?: string };       // present on createCard
+    listAfter?: { id: string; name?: string };  // present on updateCard ONLY when it's a list move
     board?: { id: string };
   };
 }
@@ -282,12 +313,14 @@ export function extractContact(text: string): { phone: string; email: string } {
 
 interface TrelloLabel { name?: string; color?: string }
 
-async function fetchCardForLeadImport(cardId: string): Promise<{ name: string; desc: string; shortUrl: string; labels?: TrelloLabel[]; idList?: string; idBoard?: string }> {
+async function fetchCardForLeadImport(cardId: string): Promise<{ name: string; desc: string; shortUrl: string; labels?: TrelloLabel[]; idList?: string; idBoard?: string; isTemplate?: boolean }> {
   // idList is read on EVERY event, not just list-move events: reconciling
   // against the card's actual current list is self-healing, so a webhook
   // delivery we missed (or a move made while a deploy was in flight) is
   // corrected by the next event of any kind on that card.
-  const url = `${TRELLO_BASE}/cards/${cardId}?key=${API_KEY}&token=${API_TOKEN}&fields=name,desc,shortUrl,labels,idList,idBoard`;
+  // isTemplate: Anthony's "New Lead" card template lives on the board. It is a
+  // card like any other to the webhook, and must never become a lead.
+  const url = `${TRELLO_BASE}/cards/${cardId}?key=${API_KEY}&token=${API_TOKEN}&fields=name,desc,shortUrl,labels,idList,idBoard,isTemplate`;
   const res = await fetch(url, { headers: { Accept: 'application/json' } });
   if (!res.ok) throw new Error(`Trello card fetch ${res.status}`);
   return res.json();
@@ -782,15 +815,25 @@ async function reapDeletedLead(jobId: string, now: string): Promise<'reaped' | '
   return 'reaped';
 }
 
-/** Pure decision: does this board action land a card in a tracked leads list? */
+/**
+ * Pure decision: does this action land a card in a list on an import board?
+ *
+ * ANY list on the board, not only the intake list (2026-09-10). Every card on
+ * this board is a lead or a job, all 91 of them had one, and a card created in
+ * a list the code did not name used to vanish silently: 5 leads on 08-29 when
+ * LOST TO COMPETITION was added in front of the intake list. Now wherever
+ * Anthony creates a card, it arrives, in the column matching its list.
+ * `label` is only the human wording for the new-lead notification.
+ */
 export function matchTargetList(action: TrelloWebhookAction): { boardId: string; listId: string; label: string } | undefined {
   const boardId = action.data?.board?.id;
-  const landedListId =
-    action.type === 'createCard' ? action.data?.list?.id :
-    action.type === 'updateCard' ? action.data?.listAfter?.id :
+  const landed =
+    action.type === 'createCard' ? action.data?.list :
+    action.type === 'updateCard' ? action.data?.listAfter :
     undefined;
-  if (!landedListId) return undefined;
-  return TARGET_LISTS.find(t => t.boardId === boardId && t.listId === landedListId);
+  if (!landed?.id || !boardId || !ALLOWED_BOARD_IDS.has(boardId)) return undefined;
+  const known = TARGET_LISTS.find(t => t.boardId === boardId && t.listId === landed.id);
+  return known ?? { boardId, listId: landed.id, label: `FL: ${landed.name ?? 'Services board'}` };
 }
 
 
@@ -899,6 +942,11 @@ async function handleLeadImportWebhook(req: VercelRequest, res: VercelResponse) 
 
     const card = await fetchCardForLeadImport(cardId);
 
+    // A card template is Anthony's form, not a lead. Checked on every event, not
+    // only createCard: a card marked as a template after creation still fires
+    // updateCard, and must not be backfilled or re-imported either.
+    if (card.isTemplate) return res.status(200).json({ skipped: 'card is a template' });
+
     // Authoritative board check, BEFORE anything is written or anyone notified.
     // Trello reported this idBoard, the caller did not, so a forged payload
     // pointing at a card on someone else's board is rejected here even when the
@@ -970,9 +1018,9 @@ async function handleLeadImportWebhook(req: VercelRequest, res: VercelResponse) 
         labels: cardLabels,
         notes: fullNotes,
         description: cardNote,
-        stage: stageForList(movedTo),
+        stage: trustedStage(movedTo, card.idList),
       }, now);
-      console.info(`[trello-webhook] backfill ${action.type}: job ${jobId} (${displayName})${movedTo ? ` moved to ${stageForList(movedTo) ?? 'untracked list'}` : ''}`);
+      console.info(`[trello-webhook] backfill ${action.type}: job ${jobId} (${displayName})${movedTo ? ` moved to ${trustedStage(movedTo, card.idList) ?? 'unverified list'}` : ''}`);
       return res.status(200).json({ job: { id: jobId, result: 'backfilled' } });
     }
 
@@ -1027,8 +1075,9 @@ async function handleLeadImportWebhook(req: VercelRequest, res: VercelResponse) 
         notes: fullNotes,
         description: cardNote,
         // The list the EVENT landed the card in, not card.idList, for the same
-        // reason as the untracked branch above.
-        stage: stageForList(target.listId),
+        // reason as the untracked branch above; trustedStage refuses a list
+        // id Trello does not confirm, now that any list can be a target.
+        stage: trustedStage(target.listId, card.idList),
       }, now);
     }
 
@@ -1184,8 +1233,19 @@ async function handleCardPush(req: VercelRequest, res: VercelResponse) {
   // is what keeps a routine save from generating a pointless webhook delivery.
   if (body.stage !== undefined) {
     const idList = listForStage(String(body.stage));
-    if (!idList) {
-      console.warn(`[trello-push] stage "${body.stage}" maps to no Trello list, column not pushed`);
+    // A `list:<id>` stage names a list the CLIENT chose. Trello's card PUT will
+    // happily move a card onto a list on ANOTHER board the token can reach,
+    // which would carry a customer's lead off this board entirely. So the list
+    // must be confirmed as an open list on the card's own board first.
+    let listOk = !!idList && !String(body.stage).startsWith('list:');
+    if (idList && !listOk) {
+      const l = await fetch(`${TRELLO_BASE}/lists/${idList}?fields=idBoard,closed&key=${API_KEY}&token=${API_TOKEN}`);
+      const info = l.ok ? await l.json() as { idBoard?: string; closed?: boolean } : {};
+      listOk = info.idBoard === current.idBoard && !info.closed;
+      if (!listOk) console.warn(`[trello-push] refused list ${idList}: board ${info.idBoard}, closed ${info.closed}`);
+    }
+    if (!idList || !listOk) {
+      console.warn(`[trello-push] stage "${body.stage}" maps to no usable Trello list, column not pushed`);
     } else if (idList !== current.idList) {
       params.idList = idList;
       applied.push(`list -> ${body.stage}`);
@@ -1374,6 +1434,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         name: rawName,
         mimeType: contentType,
         size: bytes.byteLength,
+      });
+    }
+
+    // GET ?lists=1 : the board's lists, in Trello's order, each with the LL
+    // stage it maps to. The LL kanban draws its columns from this, so a list
+    // added or renamed in Trello shows up in LL on the next load with no code
+    // change (user decision 2026-09-10). Closed lists are included, flagged, so
+    // LL can keep showing a column that still holds cards rather than hide them.
+    if (req.query.lists !== undefined) {
+      if (!API_KEY || !API_TOKEN) return res.status(500).json({ error: 'Trello credentials not configured' });
+      const boardId = TARGET_LISTS[0].boardId;
+      const r = await fetch(`${TRELLO_BASE}/boards/${boardId}/lists?filter=all&fields=name,closed,pos&key=${API_KEY}&token=${API_TOKEN}`);
+      if (!r.ok) return res.status(502).json({ error: `Trello lists ${r.status}` });
+      const lists = await r.json() as { id: string; name: string; closed: boolean; pos: number }[];
+      res.setHeader('Cache-Control', 'private, max-age=30');
+      return res.status(200).json({
+        boardId,
+        lists: lists
+          .sort((a, b) => a.pos - b.pos)
+          .map(l => ({ id: l.id, name: l.name, closed: l.closed, stage: stageForList(l.id) })),
       });
     }
 

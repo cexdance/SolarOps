@@ -12,10 +12,10 @@
 //     live in separate files by necessity (api/ cannot import from src/), which
 //     is exactly the setup where one gets fixed and the other does not.
 import { describe, it, expect } from 'vitest';
-import { matchTargetList, stageForList, listForStage, sameLabelSet, labelKey, stampMirroredFields } from '../../../api/trello-card';
+import { matchTargetList, stageForList, listForStage, trustedStage, sameLabelSet, labelKey, stampMirroredFields } from '../../../api/trello-card';
 import { mergeJobFields } from '../lib/syncEngine';
 import { labelKey as clientLabelKey, LABEL_CATALOG } from '../lib/labelCatalog';
-import { trelloCardIdOf, cardPatchFor } from '../lib/trelloSync';
+import { trelloCardIdOf, cardPatchFor, boardColumns, type TrelloList } from '../lib/trelloSync';
 import { PIPELINE_STAGES, type Job } from '../types';
 
 const BOARD = '6a5a58e06fbf97144b5d96c9';
@@ -41,12 +41,81 @@ describe('LOST TO COMPETITION is an import source', () => {
     expect(stageForList(LEADS)).toBe('leads');
   });
 
-  it('still ignores a list nobody mapped, rather than defaulting it somewhere', () => {
-    expect(stageForList('0'.repeat(24))).toBeUndefined();
+  // REVERSED 2026-09-10 (user: "columns on Trello, new or renamed, need to
+  // reflect the LL"). An unmapped list used to be ignored, and that silently
+  // swallowed every card moved into or created in a new list, three times.
+  it('gives a list nobody mapped its own column, keyed by id', () => {
+    const newList = '6a9c0000000000000000beef';
+    expect(stageForList(newList)).toBe(`list:${newList}`);
+    expect(listForStage(`list:${newList}`)).toBe(newList);
+    expect(stageForList(listForStage(`list:${newList}`))).toBe(`list:${newList}`);
+  });
+
+  it('imports a card created in ANY list on the board, labelled by the list name', () => {
+    const m = matchTargetList({
+      type: 'createCard',
+      data: { card: { id: 'a'.repeat(24), name: 'x' }, list: { id: '6a9c0000000000000000beef', name: 'Scheduled/In Process' }, board: { id: BOARD } },
+    });
+    expect(m?.label).toBe('FL: Scheduled/In Process');
+  });
+
+  it('still refuses a list on a board we do not import from', () => {
     expect(matchTargetList({
-      type: 'updateCard',
-      data: { card: { id: 'a'.repeat(24), name: 'x' }, listAfter: { id: '0'.repeat(24) }, board: { id: BOARD } },
+      type: 'createCard',
+      data: { card: { id: 'a'.repeat(24), name: 'x' }, list: { id: '0'.repeat(24) }, board: { id: 'f'.repeat(24) } },
     })).toBeUndefined();
+  });
+
+  it('never invents a stage from a non-id', () => {
+    expect(stageForList('not-an-id')).toBeUndefined();
+    expect(listForStage('list:nope')).toBeUndefined();
+    expect(listForStage('made_up_stage')).toBeUndefined();
+  });
+});
+
+describe('boardColumns: LL columns follow the Trello board', () => {
+  const NEW = '6a9c0000000000000000beef';
+  const lists: TrelloList[] = [
+    { id: '6a5a58e06fbf97144b5d96be', name: 'Leads Services SolarEdge', closed: false, stage: 'leads' },
+    { id: '6a5a58e06fbf97144b5d96c1', name: 'Done', closed: false, stage: 'done' },
+    { id: NEW, name: 'Scheduled/In Process', closed: false, stage: `list:${NEW}` },
+    { id: '6a921054f4c77bfac810188f', name: 'LOST TO COMPETITION', closed: true, stage: 'lost_to_competition' },
+  ];
+
+  it("uses Trello's order and Trello's names, so a rename shows up in LL", () => {
+    const cols = boardColumns([{ ...lists[0], name: 'New Leads (renamed)' }, lists[1], lists[2]], []);
+    expect(cols.map(c => c.title)).toEqual(['New Leads (renamed)', 'Done', 'Scheduled/In Process']);
+    expect(cols[2].stage).toBe(`list:${NEW}`);
+  });
+
+  it('hides an archived Trello list only while it is empty in LL', () => {
+    expect(boardColumns(lists, []).some(c => c.stage === 'lost_to_competition')).toBe(false);
+    const withCard = boardColumns(lists, [{ pipelineStage: 'lost_to_competition' }]);
+    expect(withCard.find(c => c.stage === 'lost_to_competition')?.closed).toBe(true);
+  });
+
+  it('NEVER hides a card: a stage with no column gets a trailing bucket', () => {
+    const cols = boardColumns(lists, [{ pipelineStage: 'needs_follow_up' }]); // not on this board
+    expect(cols[cols.length - 1]).toEqual({ stage: 'not_on_board', title: 'Not on the Trello board' });
+    expect(boardColumns(lists, [{ pipelineStage: 'leads' }]).some(c => c.stage === 'not_on_board')).toBe(false);
+  });
+
+  it('falls back to the built-in columns before Trello has ever answered', () => {
+    const cols = boardColumns(null, []);
+    expect(cols.map(c => c.stage)).toEqual([...PIPELINE_STAGES]);
+  });
+});
+
+describe('trustedStage: a payload list id is only believed when Trello agrees', () => {
+  const unknown = '6a9c0000000000000000beef';
+  it('trusts a known list outright', () => {
+    expect(trustedStage(LEADS, 'anything')).toBe('leads');
+  });
+  it('trusts an unknown list only when the card is really in it', () => {
+    expect(trustedStage(unknown, unknown)).toBe(`list:${unknown}`);
+  });
+  it('refuses an unknown list the card is NOT in (forged or stale payload)', () => {
+    expect(trustedStage(unknown, LEADS)).toBeUndefined();
   });
 });
 

@@ -17,8 +17,9 @@ import JobMapView from './views/JobMapView';
 import { ViewJob, ViewJobPriority } from './views/jobViewTypes';
 import {
   Job, Customer, User as UserType, JobStatus, UrgencyLevel, WO_TO_JOB_STATUS, WOStatus,
-  PipelineStage, PIPELINE_STAGES, PIPELINE_STAGE_LABEL, WOLineItem,
+  PipelineStage, isPipelineStageKey, WOLineItem,
 } from '../types';
+import { boardColumns, cachedTrelloLists, fetchTrelloLists, type TrelloList } from '../lib/trelloSync';
 
 // Map UrgencyLevel onto the shared map-view priority palette.
 const MAP_PRIORITY: Record<UrgencyLevel, ViewJobPriority> = {
@@ -300,7 +301,7 @@ const JobCard: React.FC<JobCardProps> = ({ job, customer, contractorName, isDrag
 };
 
 interface KanbanColumnProps {
-  status: JobStatus | 'on_hold' | PipelineStage | 'unstaged';
+  status: JobStatus | 'on_hold' | PipelineStage | 'unstaged' | 'not_on_board';
   title: string;
   columnJobs: Job[];
   allJobs: Job[];
@@ -375,8 +376,9 @@ const colDot: Record<string, string> = {
 // on the LL board, never the main Service Orders board / list / map / count.
 const isPipelineOnly = (j: Job) => !!j.pipelineStage && !j.woNumber;
 
-const PIPELINE_STAGE_SET = new Set<string>(PIPELINE_STAGES);
-const isPipelineStage = (s: string): s is PipelineStage => PIPELINE_STAGE_SET.has(s);
+// Accepts `list:<id>` stages too: a column for a Trello list LL has no built-in
+// key for is still a real drop target.
+const isPipelineStage = isPipelineStageKey;
 
 const JOBS_VIEW_MODES = ['list', 'kanban', 'calendar', 'map', 'tryout'] as const;
 type JobsViewMode = typeof JOBS_VIEW_MODES[number];
@@ -401,6 +403,9 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({
     if (!jobId) return;
     const job = allJobs.find(j => j.id === jobId);
     if (!job) return;
+    // A display bucket for cards whose column is gone, not a stage. Dropping a
+    // card here must not invent one.
+    if (status === 'not_on_board') return;
     // Tryout board: pipeline stage is orthogonal to status/woStatus, so a drop
     // here moves ONLY pipelineStage. Execution status, billing and contractor
     // visibility are deliberately left alone.
@@ -437,7 +442,7 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({
   return (
     <div
       className={`w-[218px] shrink-0 rounded-xl border-2 transition-colors duration-150 p-2 ${
-        isOver ? 'border-orange-400 bg-orange-50' : colColors[status]
+        isOver ? 'border-orange-400 bg-orange-50' : (colColors[status] ?? 'bg-slate-50 border-slate-200')
       }`}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
@@ -657,6 +662,18 @@ export const Jobs: React.FC<JobsProps> = ({
   const filteredJobs = useMemo(() => jobs.filter(j => jobMatches(j, false)), [jobs, jobMatches]);
   // The LL funnel board ignores the contractor/status filters (see forLL above).
   const llJobs = useMemo(() => jobs.filter(j => jobMatches(j, false, true)), [jobs, jobMatches]);
+  // LL columns follow the Trello board's lists (order, names, new lists).
+  // Cached lists draw instantly; a fresh fetch runs each time the LL board is
+  // opened, so a list renamed in Trello shows its new name on the next visit.
+  const [trelloLists, setTrelloLists] = useState<TrelloList[] | null>(() => cachedTrelloLists());
+  useEffect(() => {
+    if (viewMode !== 'tryout') return undefined;
+    let live = true;
+    fetchTrelloLists().then(l => { if (live && l) setTrelloLists(l); });
+    return () => { live = false; };
+  }, [viewMode]);
+  const llColumns = useMemo(() => boardColumns(trelloLists, llJobs), [trelloLists, llJobs]);
+  const llColumnStages = useMemo(() => new Set<string>(llColumns.map(c => c.stage)), [llColumns]);
   // Real service orders for the main board/list/map/count. LL-only funnel cards
   // (pipeline stage, no woNumber) are excluded here and live only on the LL board.
   const boardJobs = useMemo(() => filteredJobs.filter(j => !isPipelineOnly(j)), [filteredJobs]);
@@ -1107,14 +1124,16 @@ export const Jobs: React.FC<JobsProps> = ({
           main board/list/map (boardJobs). Showing them here buried the funnel. */}
       {viewMode === 'tryout' && (
         <div className="flex gap-3 overflow-x-auto pb-4">
-          {PIPELINE_STAGES.map(col => (
+          {llColumns.map(col => (
             <KanbanColumn
-              key={col}
-              status={col}
-              title={col === 'done' ? 'Completed' : PIPELINE_STAGE_LABEL[col]}
-              columnJobs={col === 'done'
-                ? llJobs.filter(j => j.pipelineStage === col || j.status === 'completed')
-                : llJobs.filter(j => j.pipelineStage === col)}
+              key={col.stage}
+              status={col.stage}
+              title={col.closed ? `${col.title} (archived in Trello)` : col.title}
+              columnJobs={col.stage === 'not_on_board'
+                ? llJobs.filter(j => j.pipelineStage && !llColumnStages.has(j.pipelineStage))
+                : col.stage === 'done'
+                  ? llJobs.filter(j => j.pipelineStage === col.stage || j.status === 'completed')
+                  : llJobs.filter(j => j.pipelineStage === col.stage)}
               allJobs={jobs}
               draggedJobId={draggedJobId}
               customers={customers}

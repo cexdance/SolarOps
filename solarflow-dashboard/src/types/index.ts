@@ -165,9 +165,18 @@ export const PIPELINE_STAGES = [
   'lost_to_competition',
 ] as const;
 
-export type PipelineStage = typeof PIPELINE_STAGES[number];
+/** A stage LL has a built-in key for. These are the OFFLINE FALLBACK column set;
+ *  when online, the LL board draws its columns from the Trello board itself. */
+export type KnownPipelineStage = typeof PIPELINE_STAGES[number];
 
-export const PIPELINE_STAGE_LABEL: Record<PipelineStage, string> = {
+/** Any LL stage: a known key, or `list:<trello list id>` for a Trello list LL
+ *  has no built-in key for (added or created on the board after this code). */
+export type PipelineStage = KnownPipelineStage | `list:${string}`;
+
+export const isPipelineStageKey = (s: string): s is PipelineStage =>
+  (PIPELINE_STAGES as readonly string[]).includes(s) || /^list:[0-9a-f]{24}$/i.test(s);
+
+export const PIPELINE_STAGE_LABEL: Record<KnownPipelineStage, string> = {
   leads:                     'Leads Services SolarEdge',
   needs_first_quote:         'Needs First Time Quoting/Invoicing',
   first_quote_in_progress:   'First Time Quote/Invoice In Progress',
