@@ -12,16 +12,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import webPush from 'web-push';
 import { escapeHtml, singleLine, isUuid } from './_notifyGuards';
-import { runDailyReport } from './_dailyReport';
-import { timingSafeEqual } from 'node:crypto';
-
-/** Constant-time compare that does not leak length via early return. */
-function safeEqual(a: string, b: string): boolean {
-  const ab = Buffer.from(a);
-  const bb = Buffer.from(b);
-  if (ab.length !== bb.length) return false;
-  return timingSafeEqual(ab, bb);
-}
 
 const SUPABASE_URL     = 'https://cjmhfagkkayelcsprbai.supabase.co';
 // .trim() strips trailing \n that Vercel env-pull embeds in quoted values
@@ -30,10 +20,6 @@ const RESEND_API_KEY   = (process.env.RESEND_API_KEY ?? '').trim() || undefined;
 /** Office copy on every outbound email, so there is always a record in a human
  *  inbox of what the app sent on our behalf. */
 const OFFICE_CC = 'cesar.jurado@conexsol.us';
-/** Set in Vercel; Vercel then sends it as the cron's Authorization header. */
-const CRON_SECRET      = (process.env.CRON_SECRET ?? '').trim();
-/** Optional. Absent means the Telegram leg stays inert instead of failing. */
-const TELEGRAM_BOT_TOKEN = (process.env.TELEGRAM_BOT_TOKEN ?? '').trim() || undefined;
 const VAPID_PUBLIC_KEY = (process.env.VAPID_PUBLIC_KEY ?? '').trim();
 const VAPID_PRIVATE_KEY = (process.env.VAPID_PRIVATE_KEY ?? '').trim();
 
@@ -71,39 +57,6 @@ const RATE_LIMIT = 10;
 const RATE_WINDOW_MS = 60_000;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // ── Nightly workload report (Vercel cron) ──────────────────────────────────
-  // Vercel invokes crons with GET and `Authorization: Bearer $CRON_SECRET`.
-  // That is NOT a Supabase JWT, so this branch has to run before the caller
-  // check below, which would otherwise 401 the job every night.
-  //
-  // It lives on /api/notify rather than in its own file because the Hobby plan
-  // caps `api/` at 12 functions and we are at the cap.
-  if (req.method === 'GET' && req.query?.action === 'daily-report') {
-    if (!CRON_SECRET) {
-      // Refuse rather than run unauthenticated: this endpoint reads everyone's
-      // activity and sends mail.
-      return res.status(503).json({ error: 'CRON_SECRET not configured' });
-    }
-    const presented = (req.headers.authorization ?? '').replace('Bearer ', '');
-    if (!safeEqual(presented, CRON_SECRET)) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
-    try {
-      const result = await runDailyReport({
-        serviceRoleKey: SERVICE_ROLE_KEY,
-        resendApiKey: RESEND_API_KEY,
-        telegramBotToken: TELEGRAM_BOT_TOKEN,
-      });
-      console.log('[daily-report]', JSON.stringify(result));
-      return res.status(result.status === 'error' ? 500 : 200).json(result);
-    } catch (err) {
-      // A thrown job is a silent failure at 11pm, so make it loud in the logs
-      // and in the response the cron records.
-      console.error('[daily-report] failed:', (err as Error).message);
-      return res.status(500).json({ status: 'error', reason: (err as Error).message });
-    }
-  }
-
   if (req.method !== 'POST') return res.status(405).end();
 
   // ── Validate caller JWT ────────────────────────────────────────────────────

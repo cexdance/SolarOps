@@ -29,7 +29,6 @@ import { uploadAvatarToStorage } from '../lib/photoStorage';
 import { logUpload } from '../lib/changeLog';
 import { LogViewer } from './admin/LogViewer';
 import { UserPermissionsPanel } from './admin/UserPermissionsPanel';
-import { DailyReportSettings } from './admin/DailyReportSettings';
 import { canManageUsers } from '../lib/access';
 
 interface SettingsProps {
@@ -634,9 +633,6 @@ export const Settings: React.FC<SettingsProps> = ({
           <PhotoCleanupCard />
         </div>
       )}
-
-      {/* End-of-day report, requires users.manage: it mails staff hours. */}
-      {canManageUsers(currentUser) && <DailyReportSettings />}
 
       {/* User Permissions, requires users.manage permit */}
       {canManageUsers(currentUser) && (
