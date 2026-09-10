@@ -7,7 +7,7 @@
  * POST /api/parse-lead-image
  * Body: { imageBase64: string, mimeType: string }
  * Returns: { firstName, lastName, email, phone, address, city, state, zip,
- *             notes, hsId, contractName }
+ *             notes, hsId, contractName, siteId }
  */
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
@@ -29,7 +29,8 @@ Return ONLY a valid JSON object with exactly these fields (use empty string "" i
   "zip": "",
   "notes": "",
   "hsId": "",
-  "contractName": ""
+  "contractName": "",
+  "siteId": ""
 }
 
 Rules:
@@ -38,13 +39,25 @@ Rules:
 - notes: the "notes:" field content from the email
 - hsId: the HS_ID value (numbers only, no formatting)
 - contractName: the "Contract Name:" field value
+- siteId: the "SITE ID:" value (numbers only, no formatting)
 - Do not include any text outside the JSON object`;
 
 export type ParsedLead = {
   firstName: string; lastName: string; email: string; phone: string;
   address: string; city: string; state: string; zip: string;
   notes: string; hsId: string; contractName: string;
+  // Every SolarEdge lead email prints "SITE ID:", and it was never extracted
+  // (found 2026-09-10 on the Shunacee Hicks screenshot). Optional so existing
+  // consumers of this shape are untouched.
+  siteId?: string;
 };
+
+/** A vision-read site id, kept only if it has the shape of one (5-7 digits),
+ *  so a misread HS_ID (11 digits) or phone can never land in solarEdgeSiteId. */
+export function validSiteId(raw: unknown): string | undefined {
+  const d = String(raw ?? '').replace(/\D/g, '');
+  return /^\d{5,7}$/.test(d) ? d : undefined;
+}
 
 const VALID_IMAGE_MIME = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'] as const;
 

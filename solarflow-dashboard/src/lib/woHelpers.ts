@@ -71,6 +71,24 @@ export function mergeRmaEntries(
  * orthogonal to execution state, so this must never touch `status`/`woStatus`,
  * which drive billing and CONTRACTOR_VISIBLE_STATUSES.
  */
+/**
+ * The first candidate that is a REAL SolarEdge site id (5-7 digits; 246 live
+ * customers range exactly 5-7), else undefined.
+ *
+ * ServiceOrderPanel's `siteId` prop is a CONTEXT id: most callers pass the
+ * customer's id (Customers, App, Jobs), and only the SolarEdge site panel
+ * passes a real site. The panel saved that prop straight into
+ * `job.solarEdgeSiteId`, so every save from a customer page overwrote the real
+ * site id with `cust-...`: 175 service orders on 2026-09-10, 174 of them
+ * holding exactly their own customer id, against 25 with a real site. It
+ * also destroyed any site id a Trello lead brought in, the first time the
+ * office saved its order. A customer id is never all digits, so the shape
+ * check is enough to tell them apart.
+ */
+export function realSiteId(...candidates: (string | undefined | null)[]): string | undefined {
+  return candidates.map(c => String(c ?? '').trim()).find(c => /^\d{5,7}$/.test(c)) || undefined;
+}
+
 export function pipelineDropPatch(
   job: Pick<Job, 'pipelineStage'>,
   target: PipelineStage | 'unstaged',

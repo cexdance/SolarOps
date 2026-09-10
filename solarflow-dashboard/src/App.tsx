@@ -2106,8 +2106,12 @@ function App() {
       saveData(next);
       return next;
     });
-    // Don't navigate away when creating from a site panel (WO has solarEdgeSiteId set)
-    if (!job.solarEdgeSiteId) setCurrentView('jobs');
+    // Don't navigate away when creating from a site or customer panel. This
+    // used to test solarEdgeSiteId alone, which only worked because the
+    // ServiceOrderPanel wrote the CUSTOMER id into that field (the bug fixed
+    // with realSiteId). Every create path that should stay put passes
+    // customerId (Customers, Jobs, SiteProfilePanel), so test that too.
+    if (!job.solarEdgeSiteId && !job.customerId) setCurrentView('jobs');
     return stampedNewJob;
   };
 

@@ -42,7 +42,7 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { requireUser } from './_auth';
-import { extractLeadFromImage, type ParsedLead } from './parse-lead-image';
+import { extractLeadFromImage, validSiteId, type ParsedLead } from './parse-lead-image';
 
 // Trello signs rawBody + callbackURL, so the bytes must be the ones on the wire.
 // Vercel's body parser would re-serialize them and break every signature, hence
@@ -288,13 +288,14 @@ const LABEL_TO_FIELD: Record<string, keyof ParsedLead> = {
 
 /**
  * "Site ID: 1234567" from a card description, as Anthony's "New Lead" Trello
- * card template asks for it. SolarEdge site ids are 6-7 digits. The label is
- * required: a bare 7-digit number is as likely a phone fragment or a case id.
+ * card template asks for it. SolarEdge site ids are 5-7 digits (246 live
+ * customers: shortest 5, longest 7). The label is required: a bare number of
+ * that length is as likely a zip, a phone fragment or a case id.
  * Kept out of parseLeadDesc because ParsedLead is the vision model's shape
  * (parse-lead-image.ts), and a site id is a job field, not a contact field.
  */
 export function parseSiteId(desc: string): string | undefined {
-  return /^\s*(?:solaredge\s+)?site\s*(?:id|#|number)\s*:\s*(\d{6,7})\s*$/im.exec(desc || '')?.[1];
+  return /^\s*(?:solaredge\s+)?site\s*(?:id|#|number)\s*:\s*(\d{5,7})\s*$/im.exec(desc || '')?.[1];
 }
 
 export function parseLeadDesc(desc: string): Partial<ParsedLead> {
@@ -1035,6 +1036,8 @@ async function handleLeadImportWebhook(req: VercelRequest, res: VercelResponse) 
 
     const cardLabels = toJobLabels(card.labels);
     const { fields, vision, nameIsFile } = await extractCardFields(cardId, card);
+    // A typed "Site ID:" line wins; otherwise the screenshot's "SITE ID:".
+    const siteId = parseSiteId(card.desc) ?? validSiteId(vision.siteId);
     const { firstName, lastName, phone, email, address, city, state, zip } = fields;
     // Still no name (vision failed, plain image)? Fall back to the phone so the
     // team can see who to call, never "image.jpeg".
@@ -1089,7 +1092,7 @@ async function handleLeadImportWebhook(req: VercelRequest, res: VercelResponse) 
         notes: fullNotes,
         description: cardNote,
         stage: trustedStage(movedTo, card.idList),
-        siteId: parseSiteId(card.desc),
+        siteId,
         corrections: parseLeadDesc(card.desc) as Record<string, string>,
       }, now);
       console.info(`[trello-webhook] backfill ${action.type}: job ${jobId} (${displayName})${movedTo ? ` moved to ${trustedStage(movedTo, card.idList) ?? 'unverified list'}` : ''}`);
@@ -1127,7 +1130,7 @@ async function handleLeadImportWebhook(req: VercelRequest, res: VercelResponse) 
       laborHours: 0, laborRate: 0, partsCost: 0, totalAmount: 0,
       urgency: 'medium',
       isPowercare: false,
-      ...(parseSiteId(card.desc) ? { solarEdgeSiteId: parseSiteId(card.desc) } : {}),
+      ...(siteId ? { solarEdgeSiteId: siteId } : {}),
       createdAt: now,
       // Required: syncEngine's remoteWins treats an updatedAt-less record as
       // always losing, so an unstamped row would be dropped on first merge.
@@ -1151,7 +1154,7 @@ async function handleLeadImportWebhook(req: VercelRequest, res: VercelResponse) 
         // reason as the untracked branch above; trustedStage refuses a list
         // id Trello does not confirm, now that any list can be a target.
         stage: trustedStage(target.listId, card.idList),
-        siteId: parseSiteId(card.desc),
+        siteId,
         corrections: parseLeadDesc(card.desc) as Record<string, string>,
       }, now);
     }

@@ -128,6 +128,28 @@
       "detail": "Jobs viewMode 'tryout'. Columns are drawn from the Conexsol Florida Services Trello board itself (GET /api/trello-card?lists=1): Trello's order, Trello's names, and any list added on Trello appears as a column. An archived list keeps its column only while it holds cards; cards whose column is gone land in a trailing 'Not on the Trello board' bucket. Only funnel cards (pipelineStage, no woNumber) appear; real service orders live on the main board. Cards show Trello label chips and the lead's import date. Clicking a customerless card opens LeadPanel."
     },
     {
+      "id": "ll-lead-panel",
+      "group": "admin",
+      "title": "LL LeadPanel (Trello lead)",
+      "view": "jobs",
+      "pre": [
+        {
+          "click": "button[title=\"LL (Lead Lobby) - multi-state pipeline\"]"
+        },
+        {
+          "wait": 900
+        },
+        {
+          "clickText": "Shunacee Hicks"
+        },
+        {
+          "wait": 3000
+        }
+      ],
+      "macro": "Working one Trello lead: labels, the source screenshot, contact fields, log actions, Move to Client.",
+      "detail": "Opened by clicking a customerless card on the LL board. The 'Source screenshot from Trello' block streams the card's first image through GET /api/trello-card?image= (signed-in, nothing stored, since customer-files is public). Targets the Trello lead 'Shunacee Hicks' because a lead migrated from the old Lead Lobby has no card and shows no screenshot; if Hicks is converted, point clickText at another Trello lead."
+    },
+    {
       "id": "routes",
       "group": "admin",
       "title": "Dispatch Map",

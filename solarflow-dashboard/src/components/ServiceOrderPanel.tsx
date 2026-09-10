@@ -24,7 +24,7 @@ import { buildSiteTransferMailto, SITE_ID_GUIDE_URL } from '../lib/siteTransferE
 import { supabase } from '../lib/supabase';
 import { formatMoney, formatCost } from '../lib/money';
 import { printServiceReport } from '../lib/printServiceReport';
-import { serviceOrderNo, workOrderNo, generateServiceOrderNumber, photoUrlStem, findPowercareCaseNo, needsFormalQuote } from '../lib/woHelpers';
+import { serviceOrderNo, workOrderNo, generateServiceOrderNumber, photoUrlStem, findPowercareCaseNo, needsFormalQuote, realSiteId } from '../lib/woHelpers';
 import { SowDistributionModal, SOW_DISTRIBUTION_NAMES } from './SowDistributionModal';
 import { ImageLightbox } from './ImageLightbox';
 import { ActivityFeed, type FeedUser } from './ui/ActivityFeed';
@@ -365,8 +365,9 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
   }, [siteAddress]);
 
   // SolarEdge site id for the header "Monitoring" link (customer record first,
-  // then the job's stored id). Absent → no monitoring badge.
-  const seSiteId = customer?.solarEdgeSiteId || job?.solarEdgeSiteId || '';
+  // then the job's stored id). Absent → no monitoring badge. realSiteId skips a
+  // `cust-...` value, which used to produce a monitoring link to a customer id.
+  const seSiteId = realSiteId(customer?.solarEdgeSiteId, job?.solarEdgeSiteId) ?? '';
 
   // Core form state
   const [woStatus, setWoStatus] = useState<WOStatus>(job?.woStatus ?? 'draft');
@@ -1544,7 +1545,9 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
       quoteAmount: effectiveQuote,
       isRecurringClient: applyRecurringDiscount,
       discountType: discountType || undefined,
-      solarEdgeSiteId: siteId,
+      // NOT the `siteId` prop verbatim: it is usually the customer's id. See
+      // realSiteId for the 175 orders that wrote `cust-...` here.
+      solarEdgeSiteId: realSiteId(siteId, customer?.solarEdgeSiteId, job?.solarEdgeSiteId),
       solarEdgeClientId: clientId,
       clientName: siteName,
       contractorId: assignedContractorId || undefined,

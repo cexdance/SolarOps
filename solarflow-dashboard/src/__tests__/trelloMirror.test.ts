@@ -14,6 +14,7 @@
 import { describe, it, expect } from 'vitest';
 import { matchTargetList, stageForList, listForStage, trustedStage, sameLabelSet, labelKey, stampMirroredFields, parseLeadDesc, parseSiteId, newerSide, acceptTrelloCorrections } from '../../../api/trello-card';
 import { mergeJobFields } from '../lib/syncEngine';
+import { validSiteId } from '../../../api/parse-lead-image';
 import { labelKey as clientLabelKey, LABEL_CATALOG } from '../lib/labelCatalog';
 import { trelloCardIdOf, cardPatchFor, boardColumns, type TrelloList } from '../lib/trelloSync';
 import { PIPELINE_STAGES, type Job } from '../types';
@@ -141,9 +142,20 @@ describe("Anthony's New Lead card template parses", () => {
     expect(parseLeadDesc(blank)).toEqual({});
   });
 
+  it("the screenshot reader's site id is kept only if it is shaped like one", () => {
+    // The Shunacee Hicks email: SITE ID 2803501, HS_ID 61257674162.
+    expect(validSiteId('2803501')).toBe('2803501');
+    expect(validSiteId(' 2803501 ')).toBe('2803501');
+    expect(validSiteId('61257674162')).toBeUndefined(); // an HS_ID misread as the site id
+    expect(validSiteId('')).toBeUndefined();
+    expect(validSiteId(undefined)).toBeUndefined();
+  });
+
   it('refuses an unlabelled or wrong-length number, which is a phone or case id', () => {
     expect(parseSiteId('call 3612595 tomorrow')).toBeUndefined();
-    expect(parseSiteId('Site ID: 12345')).toBeUndefined();
+    expect(parseSiteId('Site ID: 1234')).toBeUndefined();
+    // 5 digits IS a real site id: 246 live customers range from 5 to 7 digits.
+    expect(parseSiteId('Site ID: 12345')).toBe('12345');
     expect(parseSiteId('SolarEdge Site ID: 451846')).toBe('451846');
   });
 });
