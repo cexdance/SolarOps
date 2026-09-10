@@ -395,6 +395,43 @@ export function stampMirroredFields<T extends { fieldTimes?: Record<string, stri
   return job;
 }
 
+/** Contact fields a Trello correction may overwrite. Names are excluded: the
+ *  card title is also the display name, and a rename is handled separately. */
+const CORRECTABLE = ['phone', 'email', 'address', 'city', 'state', 'zip'] as const;
+
+/**
+ * Which of Anthony's description values may OVERWRITE the lead's contact info.
+ *
+ * He edits the card description after creating it (23 description edits in 14
+ * days as of 2026-09-10). The backfill used to fill only EMPTY fields, so if
+ * the first parse misread a phone and he fixed it, LL kept the wrong number.
+ * Now Trello may correct a field, but only when all of these hold:
+ *   - the lead is not converted (`customerId` empty): after Move to Client the
+ *     customer record owns the contact data, and leadInfo is history;
+ *   - nobody edited the contact info in LL since the webhook last wrote it:
+ *     `fieldTimes.leadInfo` is absent, or no later than `trelloLeadInfoAt`
+ *     (the webhook's own stamp), so an office correction is never undone;
+ *   - the value came from a LABELLED description line (the caller passes
+ *     parseLeadDesc output only, never vision, which can answer differently on
+ *     every run and would make LL flip between readings of the same image);
+ *   - it is non-empty and actually different, so blanking a line in Trello
+ *     never erases data in LL.
+ */
+export function acceptTrelloCorrections(
+  job: { customerId?: string; leadInfo?: Record<string, string>; fieldTimes?: Record<string, string>; trelloLeadInfoAt?: string },
+  fromDesc: Record<string, string>,
+): Record<string, string> {
+  if (String(job.customerId ?? '').trim()) return {};
+  const officeAt = job.fieldTimes?.leadInfo;
+  if (officeAt && (!job.trelloLeadInfoAt || officeAt > job.trelloLeadInfoAt)) return {};
+  const out: Record<string, string> = {};
+  for (const k of CORRECTABLE) {
+    const v = String(fromDesc[k] ?? '').trim();
+    if (v && v !== String(job.leadInfo?.[k] ?? '').trim()) out[k] = v;
+  }
+  return out;
+}
+
 /** Set equality by normalized name. Order and colour are not part of identity. */
 export function sameLabelSet(
   a: { name: string }[],
@@ -567,6 +604,8 @@ async function backfillLeadJob(
     stage?: string;
     /** From a "Site ID:" line. Filled only into an EMPTY solarEdgeSiteId. */
     siteId?: string;
+    /** Contact fields from the card's LABELLED description lines only. */
+    corrections?: Record<string, string>;
   },
   now: string,
 ): Promise<void> {
@@ -588,6 +627,12 @@ async function backfillLeadJob(
   let infoChanged = false;
   for (const [k, v] of Object.entries(leadFields)) {
     if (!info[k]) { info[k] = v; infoChanged = true; }
+  }
+  // Anthony's CORRECTIONS: a contact line he changed in the description after
+  // the first parse. Empty-only would keep a misread phone forever. See
+  // acceptTrelloCorrections for exactly when Trello may overwrite.
+  for (const [k, v] of Object.entries(acceptTrelloCorrections(job, card.corrections ?? {}))) {
+    info[k] = v; infoChanged = true;
   }
 
   // Labels: WHOLE-SET mirror of the card (2026-08-31, was union-add-at-intake).
@@ -622,7 +667,13 @@ async function backfillLeadJob(
   const changed: string[] = [];
   if (isPlaceholder(job.clientName)) { job.clientName = displayName; changed.push('clientName'); }
   if (isPlaceholder(job.title)) { job.title = displayName; changed.push('title'); }
-  if (infoChanged) { job.leadInfo = info; changed.push('leadInfo'); }
+  if (infoChanged) {
+    job.leadInfo = info;
+    changed.push('leadInfo');
+    // Provenance for acceptTrelloCorrections: the webhook's own leadInfo write
+    // time. An office edit later stamps fieldTimes.leadInfo past it.
+    job.trelloLeadInfoAt = now;
+  }
   if (labelsChanged) { job.labels = mirrored; changed.push('labels'); }
   if (stageChanged) { job.pipelineStage = card.stage; changed.push('pipelineStage'); }
   if (siteChanged) { job.solarEdgeSiteId = card.siteId; changed.push('solarEdgeSiteId'); }
@@ -1039,6 +1090,7 @@ async function handleLeadImportWebhook(req: VercelRequest, res: VercelResponse) 
         description: cardNote,
         stage: trustedStage(movedTo, card.idList),
         siteId: parseSiteId(card.desc),
+        corrections: parseLeadDesc(card.desc) as Record<string, string>,
       }, now);
       console.info(`[trello-webhook] backfill ${action.type}: job ${jobId} (${displayName})${movedTo ? ` moved to ${trustedStage(movedTo, card.idList) ?? 'unverified list'}` : ''}`);
       return res.status(200).json({ job: { id: jobId, result: 'backfilled' } });
@@ -1100,6 +1152,7 @@ async function handleLeadImportWebhook(req: VercelRequest, res: VercelResponse) 
         // id Trello does not confirm, now that any list can be a target.
         stage: trustedStage(target.listId, card.idList),
         siteId: parseSiteId(card.desc),
+        corrections: parseLeadDesc(card.desc) as Record<string, string>,
       }, now);
     }
 
@@ -1605,6 +1658,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         mimeType: contentType,
         size: bytes.byteLength,
       });
+    }
+
+    // GET ?image=<cardId> : the lead's screenshot (the card's first image),
+    // streamed from Trello on demand for the LeadPanel. Deliberately NOT
+    // copied into our storage: the customer-files bucket is public (open item
+    // since 2026-08-23) and these screenshots are lead emails, i.e. names,
+    // phones and addresses. Streaming keeps them behind the signed-in check
+    // above and stores nothing. Trello attachment URLs do not open without a
+    // Trello login, which is why LL could not show the source at all before.
+    if (req.query.image !== undefined) {
+      const imgCard = String(Array.isArray(req.query.image) ? req.query.image[0] : req.query.image);
+      if (!/^[0-9a-f]{24}$/i.test(imgCard)) return res.status(400).json({ error: 'Malformed card id' });
+      if (!API_KEY || !API_TOKEN) return res.status(500).json({ error: 'Trello credentials not configured' });
+      // Same board guard as every other path: our token can read cards on
+      // boards that are not ours, and this must not become a way to use it so.
+      const c = await fetch(`${TRELLO_BASE}/cards/${imgCard}?fields=idBoard&key=${API_KEY}&token=${API_TOKEN}`);
+      if (c.status === 404) return res.status(404).json({ error: 'No such card' });
+      const { idBoard } = c.ok ? await c.json() as { idBoard?: string } : {};
+      if (!isAllowedBoard(idBoard)) return res.status(403).json({ error: 'Card is not on an allowed board' });
+      const img = await fetchFirstImageAttachment(imgCard);
+      if (!img) return res.status(404).json({ error: 'No image on this card' });
+      const bytes = Buffer.from(img.base64, 'base64');
+      // Vercel caps a function response at 4.5 MB.
+      if (bytes.byteLength > 4_000_000) return res.status(413).json({ error: 'Image too large to preview' });
+      res.setHeader('Content-Type', img.mimeType);
+      res.setHeader('Cache-Control', 'private, max-age=3600');
+      return res.status(200).send(bytes);
     }
 
     // GET ?lists=1 : the board's lists, in Trello's order, each with the LL

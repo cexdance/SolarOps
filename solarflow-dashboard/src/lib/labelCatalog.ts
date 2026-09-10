@@ -27,6 +27,9 @@ export const LABEL_CATALOG: JobLabel[] = [
   // by mirror yet never be picked or re-applied from the app.
   { name: 'Lost to competition',            color: 'red' },
   { name: 'Vm+txt',                         color: 'purple' },
+  // On the board since ~2026-09 (audit 09-10); could arrive by mirror but not
+  // be picked in LL. Colour taken from the board, not guessed.
+  { name: 'NEEDS RMA',                      color: 'yellow_dark' },
   { name: 'Completed/Did not proceed.',     color: '' },
 ];
 

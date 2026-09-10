@@ -12,7 +12,7 @@
 //     live in separate files by necessity (api/ cannot import from src/), which
 //     is exactly the setup where one gets fixed and the other does not.
 import { describe, it, expect } from 'vitest';
-import { matchTargetList, stageForList, listForStage, trustedStage, sameLabelSet, labelKey, stampMirroredFields, parseLeadDesc, parseSiteId, newerSide } from '../../../api/trello-card';
+import { matchTargetList, stageForList, listForStage, trustedStage, sameLabelSet, labelKey, stampMirroredFields, parseLeadDesc, parseSiteId, newerSide, acceptTrelloCorrections } from '../../../api/trello-card';
 import { mergeJobFields } from '../lib/syncEngine';
 import { labelKey as clientLabelKey, LABEL_CATALOG } from '../lib/labelCatalog';
 import { trelloCardIdOf, cardPatchFor, boardColumns, type TrelloList } from '../lib/trelloSync';
@@ -145,6 +145,35 @@ describe("Anthony's New Lead card template parses", () => {
     expect(parseSiteId('call 3612595 tomorrow')).toBeUndefined();
     expect(parseSiteId('Site ID: 12345')).toBeUndefined();
     expect(parseSiteId('SolarEdge Site ID: 451846')).toBe('451846');
+  });
+});
+
+describe("acceptTrelloCorrections: Anthony's description fixes reach LL, office edits are never undone", () => {
+  const misread = { leadInfo: { phone: '8634955963', email: 'jane@example.com' } };
+
+  it('corrects a misread phone on an untouched lead', () => {
+    expect(acceptTrelloCorrections(misread, { phone: '8634955936' })).toEqual({ phone: '8634955936' });
+  });
+
+  it('still corrects after the WEBHOOK itself wrote leadInfo (its own stamp is not an office edit)', () => {
+    const t = '2026-09-10T20:00:00.000Z';
+    expect(acceptTrelloCorrections({ ...misread, fieldTimes: { leadInfo: t }, trelloLeadInfoAt: t }, { phone: '8634955936' }))
+      .toEqual({ phone: '8634955936' });
+  });
+
+  it('NEVER overwrites once the office edited contact info in LL', () => {
+    const edited = { ...misread, fieldTimes: { leadInfo: '2026-09-10T21:00:00.000Z' }, trelloLeadInfoAt: '2026-09-10T20:00:00.000Z' };
+    expect(acceptTrelloCorrections(edited, { phone: '8634955936' })).toEqual({});
+    // An office edit with no webhook provenance at all is locked too.
+    expect(acceptTrelloCorrections({ ...misread, fieldTimes: { leadInfo: 'x' } }, { phone: '8634955936' })).toEqual({});
+  });
+
+  it('never touches a converted lead: the customer record owns the contact data now', () => {
+    expect(acceptTrelloCorrections({ ...misread, customerId: 'cust-1' }, { phone: '8634955936' })).toEqual({});
+  });
+
+  it('a blanked or unchanged line erases nothing, and names are not correctable here', () => {
+    expect(acceptTrelloCorrections(misread, { phone: '', email: 'jane@example.com', firstName: 'Janet' })).toEqual({});
   });
 });
 

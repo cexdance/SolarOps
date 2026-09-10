@@ -3,12 +3,64 @@
 // team add contact info and log call/email/note actions on the lead, then convert
 // it to a client. Everything is stored on the job (leadInfo + activityHistory)
 // until "Move to Client" creates the real Customer.
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Phone, Mail, FileText, X, UserCheck, PhoneCall, MessageSquare } from 'lucide-react';
 import type { Job, LeadInfo, Activity } from '../types';
 import { seedLeadInfo, leadDisplayName, formatImportedAt } from '../lib/leadConvert';
 import { rcCall, rcSMS } from '../lib/ringcentral';
+import { authedFetch } from '../lib/supabase';
+import { trelloCardIdOf } from '../lib/trelloSync';
 import { LabelPicker } from './LabelPicker';
+
+/**
+ * The screenshot Anthony attached to the Trello card: the lead email itself.
+ * Every field below was parsed from it, so this is how the office checks a
+ * misread phone or address without opening Trello (whose attachment links do
+ * not open without a Trello login).
+ *
+ * Streamed through GET /api/trello-card?image= behind sign-in, not stored: the
+ * customer-files bucket is public and these images are full of contact data.
+ * Renders nothing for a lead with no image, and nothing under `vite dev`, where
+ * /api returns index.html (the image/* type check is what catches that).
+ */
+const LeadScreenshot: React.FC<{ jobId: string }> = ({ jobId }) => {
+  const cardId = trelloCardIdOf({ id: jobId });
+  const [url, setUrl] = useState<string | null>(null);
+  const [state, setState] = useState<'loading' | 'none' | 'ok'>(cardId ? 'loading' : 'none');
+
+  useEffect(() => {
+    if (!cardId) return undefined;
+    let live = true;
+    let objectUrl: string | null = null;
+    authedFetch(`/api/trello-card?image=${cardId}`)
+      .then(r => (r.ok ? r.blob() : null))
+      .then(b => {
+        if (!live) return;
+        if (!b || !b.type.startsWith('image/')) { setState('none'); return; }
+        objectUrl = URL.createObjectURL(b);
+        setUrl(objectUrl);
+        setState('ok');
+      })
+      .catch(() => { if (live) setState('none'); });
+    return () => { live = false; if (objectUrl) URL.revokeObjectURL(objectUrl); };
+  }, [cardId]);
+
+  if (state === 'none') return null;
+  return (
+    <figure className="rounded-lg border border-slate-200 bg-slate-50 overflow-hidden">
+      {state === 'loading' || !url
+        ? <div className="h-24 flex items-center justify-center text-xs text-slate-400">Loading screenshot...</div>
+        : (
+          <a href={url} target="_blank" rel="noreferrer" title="Open full size">
+            <img src={url} alt="Lead screenshot from Trello" className="w-full max-h-64 object-contain bg-white" />
+          </a>
+        )}
+      <figcaption className="px-3 py-1.5 text-[11px] text-slate-500 border-t border-slate-200">
+        Source screenshot from Trello. Click to open full size.
+      </figcaption>
+    </figure>
+  );
+};
 
 interface LeadPanelProps {
   job: Job;
@@ -99,6 +151,9 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({ job, currentUserName, onSa
           {/* The Trello push happens in App.handleUpdateJob, on the save this
               triggers, so every path that edits a job mirrors, not just this one. */}
           <LabelPicker value={job.labels ?? []} onChange={labels => onSave({ labels })} />
+
+          {/* Anthony's source screenshot, above the fields parsed from it. */}
+          <LeadScreenshot jobId={job.id} />
 
           {/* Contact info */}
           <div className="space-y-3">
