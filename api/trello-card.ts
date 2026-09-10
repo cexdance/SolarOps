@@ -322,6 +322,35 @@ export function labelKey(name: string): string {
   return name.toLowerCase().replace(/[‒-―]/g, '-').replace(/\s+/g, ' ').trim();
 }
 
+/**
+ * Record that the server changed these fields NOW, in the job's own per-field
+ * clock, so a browser merge treats the change as the newest edit.
+ *
+ * Without this the webhook's changes were silently reverted. The client merge
+ * (mergeJobFields in solarflow-dashboard/src/lib/syncEngine.ts) picks every
+ * field by `fieldTimes[field]`, falling back to the record time only when the
+ * field has no entry. The webhook set the new column and bumped `updatedAt`
+ * but left `fieldTimes.pipelineStage` at the OLD edit's time, so any browser
+ * holding the previous version saw a tie, kept its own stale column, and pushed
+ * it back. Proven live 2026-09-10: 13 cards moved in Trello sat in their old LL
+ * column, each with a `fieldTimes.pipelineStage` older than the Trello move,
+ * while the one job with no entry (so record time decided) kept its move.
+ *
+ * Mutates and returns `job` so the callers stay one line.
+ */
+export function stampMirroredFields<T extends { fieldTimes?: Record<string, string>; updatedAt?: string }>(
+  job: T,
+  fields: string[],
+  now: string,
+): T {
+  if (fields.length > 0) {
+    job.fieldTimes = { ...(job.fieldTimes ?? {}) };
+    for (const f of fields) job.fieldTimes[f] = now;
+  }
+  job.updatedAt = now;
+  return job;
+}
+
 /** Set equality by normalized name. Order and colour are not part of identity. */
 export function sameLabelSet(
   a: { name: string }[],
@@ -539,13 +568,14 @@ async function backfillLeadJob(
 
   if (!nameChanged && !infoChanged && !labelsChanged && !notesChanged && !stageChanged) return;
 
-  if (isPlaceholder(job.clientName)) job.clientName = displayName;
-  if (isPlaceholder(job.title)) job.title = displayName;
-  if (infoChanged) job.leadInfo = info;
-  if (labelsChanged) job.labels = mirrored;
-  if (stageChanged) job.pipelineStage = card.stage;
-  if (notesChanged) { job.notes = card.notes; job.description = card.description; }
-  job.updatedAt = now;
+  const changed: string[] = [];
+  if (isPlaceholder(job.clientName)) { job.clientName = displayName; changed.push('clientName'); }
+  if (isPlaceholder(job.title)) { job.title = displayName; changed.push('title'); }
+  if (infoChanged) { job.leadInfo = info; changed.push('leadInfo'); }
+  if (labelsChanged) { job.labels = mirrored; changed.push('labels'); }
+  if (stageChanged) { job.pipelineStage = card.stage; changed.push('pipelineStage'); }
+  if (notesChanged) { job.notes = card.notes; job.description = card.description; changed.push('notes', 'description'); }
+  stampMirroredFields(job, changed, now);
 
   await fetch(`${SUPABASE_URL}/rest/v1/app_data?on_conflict=key`, {
     method: 'POST',

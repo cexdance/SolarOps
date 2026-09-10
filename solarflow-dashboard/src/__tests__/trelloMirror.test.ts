@@ -12,7 +12,8 @@
 //     live in separate files by necessity (api/ cannot import from src/), which
 //     is exactly the setup where one gets fixed and the other does not.
 import { describe, it, expect } from 'vitest';
-import { matchTargetList, stageForList, listForStage, sameLabelSet, labelKey } from '../../../api/trello-card';
+import { matchTargetList, stageForList, listForStage, sameLabelSet, labelKey, stampMirroredFields } from '../../../api/trello-card';
+import { mergeJobFields } from '../lib/syncEngine';
 import { labelKey as clientLabelKey, LABEL_CATALOG } from '../lib/labelCatalog';
 import { trelloCardIdOf, cardPatchFor } from '../lib/trelloSync';
 import { PIPELINE_STAGES, type Job } from '../types';
@@ -81,6 +82,49 @@ describe('trelloCardIdOf', () => {
   it('returns undefined for a job that was never a Trello card, so nothing is pushed', () => {
     expect(trelloCardIdOf({ id: 'job-1788191664892' })).toBeUndefined();
     expect(trelloCardIdOf({ id: 'job-trello-nothex' })).toBeUndefined();
+  });
+});
+
+describe('a webhook-mirrored change survives the next browser merge', () => {
+  // The live Zach Ross record, 2026-09-10: the office last dragged him in LL on
+  // 08-28, then he was moved to Done in Trello on 09-08. The browser that synced
+  // next still held needs_first_quote.
+  const stale = {
+    id: 'job-trello-' + 'a'.repeat(24),
+    pipelineStage: 'needs_first_quote',
+    labels: [{ name: 'First Contact - Call Completed', color: 'lime_dark' }],
+    fieldTimes: { pipelineStage: '2026-08-28T22:55:34.161Z', labels: '2026-08-28T22:55:34.161Z' },
+    updatedAt: '2026-09-08T20:00:00.000Z',
+  } as unknown as Job;
+
+  const webhookWrite = (stamp: boolean) => {
+    const j = JSON.parse(JSON.stringify(stale));
+    j.pipelineStage = 'done';
+    j.labels = [{ name: 'Initial Call Required', color: 'red' }];
+    if (stamp) stampMirroredFields(j, ['pipelineStage', 'labels'], '2026-09-08T22:55:40.000Z');
+    else j.updatedAt = '2026-09-08T22:55:40.000Z'; // what the webhook did before the fix
+    return j as Job;
+  };
+
+  it('REPRODUCES the bug: without the stamp the stale browser wins, in both merge orders', () => {
+    // Pins the diagnosis, so a future refactor of mergeJobFields cannot make
+    // the fix below pass for the wrong reason.
+    expect(mergeJobFields(stale, webhookWrite(false)).pipelineStage).toBe('needs_first_quote');
+    expect(mergeJobFields(webhookWrite(false), stale).pipelineStage).toBe('done');
+  });
+
+  it('with the stamp, the Trello move wins whichever side the merge treats as local', () => {
+    for (const merged of [mergeJobFields(stale, webhookWrite(true)), mergeJobFields(webhookWrite(true), stale)]) {
+      expect(merged.pipelineStage).toBe('done');
+      expect(merged.labels?.map(l => l.name)).toEqual(['Initial Call Required']);
+    }
+  });
+
+  it('stamps only the fields it is told changed, and leaves other edit times alone', () => {
+    const j = { fieldTimes: { notes: '2026-01-01T00:00:00.000Z' } } as { fieldTimes?: Record<string, string>; updatedAt?: string };
+    stampMirroredFields(j, ['pipelineStage'], 'T');
+    expect(j.fieldTimes).toEqual({ notes: '2026-01-01T00:00:00.000Z', pipelineStage: 'T' });
+    expect(j.updatedAt).toBe('T');
   });
 });
 
