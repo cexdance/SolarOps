@@ -12,6 +12,15 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import webPush from 'web-push';
 import { escapeHtml, singleLine, isUuid } from './_notifyGuards';
+// Static, like _notifyGuards above, because Vercel's Node builder only
+// bundles what it can STATICALLY trace. A dynamic `await import()` of this
+// module deployed fine and then failed at runtime with
+// "Cannot find module '/var/task/api/_dailyReport'": the file was never
+// emitted into the lambda. The same tracing gap, reaching a path outside
+// api/, is what killed every branch of this endpoint earlier.
+// Safe to load at module scope only because _dailyReport and everything it
+// imports live under api/ and do nothing but declare consts and functions.
+import { runDailyReport } from './_dailyReport';
 import { timingSafeEqual } from 'node:crypto';
 
 /** Constant-time compare that does not leak length via early return. */
@@ -88,12 +97,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
     try {
-      // Imported HERE, not at module scope. A module-scope import of this graph
-      // is what took EVERY branch of this endpoint down (@mentions included)
-      // with FUNCTION_INVOCATION_FAILED while the build stayed green. Loading
-      // it inside the branch means the worst case is a broken nightly report,
-      // never a broken notification endpoint.
-      const { runDailyReport } = await import('./_dailyReport');
       const result = await runDailyReport({
         serviceRoleKey: SERVICE_ROLE_KEY,
         resendApiKey: RESEND_API_KEY,
