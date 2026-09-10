@@ -184,7 +184,8 @@ export function renderReport(rows: RawEvent[], w: ReportWindow): Report {
         `${p.sessions} sessions, ${hhmm(p.first)} to ${hhmm(p.last)}, top: ${p.topOps[0]?.op ?? 'n/a'})`,
       );
     }
-    textLines.push('', `Total: ${formatMinutes(totalMinutes)} across ${people.length} people, ${totalEvents} edits.`);
+    const who = people.length === 1 ? 'person' : 'people';
+    textLines.push('', `Total: ${formatMinutes(totalMinutes)} across ${people.length} ${who}, ${totalEvents} edits.`);
   }
   textLines.push('', CAVEAT);
 
@@ -246,19 +247,29 @@ export interface DeliveryResult {
   detail: string;
 }
 
-/** One email to the whole list. Resend takes an array for `to`. */
+/** The default sender. Requires conexsol.us to be verified in Resend. */
+export const DEFAULT_FROM = 'SolarOps <solar.ops@conexsol.us>';
+
+/**
+ * One email to the whole list. Resend takes an array for `to`.
+ *
+ * `from` is overridable (REPORT_FROM) so the report can be smoke-tested through
+ * Resend's onboarding@resend.dev sender before a domain is verified. Leave it
+ * unset in normal operation.
+ */
 export async function sendEmail(
   apiKey: string,
   to: string[],
   r: Report,
   fetchImpl: typeof fetch = fetch,
+  from: string = DEFAULT_FROM,
 ): Promise<DeliveryResult> {
   try {
     const res = await fetchImpl('https://api.resend.com/emails', {
       method: 'POST',
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        from: 'SolarOps <solar.ops@conexsol.us>',
+        from,
         reply_to: 'solar.ops@conexsol.us',
         to,
         subject: r.subject,
@@ -322,6 +333,8 @@ export interface RunEnv {
   serviceRoleKey: string;
   resendApiKey?: string;
   telegramBotToken?: string;
+  /** Overrides the From address. Only for testing before domain verification. */
+  from?: string;
 }
 
 export interface RunResult {
@@ -359,7 +372,7 @@ export async function runDailyReport(
 
   if (cfg.emails.length) {
     if (env.resendApiKey) {
-      deliveries.push(await sendEmail(env.resendApiKey, cfg.emails, report, fetchImpl));
+      deliveries.push(await sendEmail(env.resendApiKey, cfg.emails, report, fetchImpl, env.from || DEFAULT_FROM));
     } else {
       deliveries.push({ channel: 'email', ok: false, detail: 'RESEND_API_KEY not set' });
     }

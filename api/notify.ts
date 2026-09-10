@@ -42,6 +42,9 @@ const OFFICE_CC = 'cesar.jurado@conexsol.us';
 const CRON_SECRET      = (process.env.CRON_SECRET ?? '').trim();
 /** Optional. Absent means the Telegram leg stays inert instead of failing. */
 const TELEGRAM_BOT_TOKEN = (process.env.TELEGRAM_BOT_TOKEN ?? '').trim() || undefined;
+/** Optional From override for the daily report, used to smoke-test before a
+ *  sending domain is verified. Unset in normal operation. */
+const REPORT_FROM      = (process.env.REPORT_FROM ?? '').trim() || undefined;
 const VAPID_PUBLIC_KEY = (process.env.VAPID_PUBLIC_KEY ?? '').trim();
 const VAPID_PRIVATE_KEY = (process.env.VAPID_PRIVATE_KEY ?? '').trim();
 
@@ -101,6 +104,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         serviceRoleKey: SERVICE_ROLE_KEY,
         resendApiKey: RESEND_API_KEY,
         telegramBotToken: TELEGRAM_BOT_TOKEN,
+        from: REPORT_FROM,
       });
       console.log('[daily-report]', JSON.stringify(result));
       return res.status(result.status === 'error' ? 500 : 200).json(result);

@@ -318,3 +318,50 @@ describe('runDailyReport orchestration', () => {
     expect(r.deliveries?.find(d => d.channel === 'telegram')?.ok).toBe(false);
   });
 });
+
+describe('sender override', () => {
+  const NOW = new Date('2026-09-09T03:10:00Z');
+
+  function harness(cfg: unknown) {
+    const calls: Array<{ url: string; body?: Record<string, unknown> }> = [];
+    const fake = (async (url: string, init?: RequestInit) => {
+      const u = String(url);
+      calls.push({ url: u, body: init?.body ? JSON.parse(String(init.body)) : undefined });
+      if (u.includes('app_data')) return { ok: true, json: async () => [{ value: cfg }] } as unknown as Response;
+      if (u.includes('change_log')) return { ok: true, json: async () => [] } as unknown as Response;
+      return { ok: true, status: 200, text: async () => '', json: async () => ({}) } as unknown as Response;
+    }) as unknown as typeof fetch;
+    return { fake, calls };
+  }
+
+  it('sends from the conexsol address by default', async () => {
+    const { fake, calls } = harness({ enabled: true, emails: ['a@b.com'] });
+    await runDailyReport({ serviceRoleKey: 'k', resendApiKey: 'r' }, NOW, fake);
+    const mail = calls.find(c => c.url.includes('resend'))!.body!;
+    expect(mail.from).toBe('SolarOps <solar.ops@conexsol.us>');
+  });
+
+  it('honours an override, so it can be tested before the domain verifies', async () => {
+    const { fake, calls } = harness({ enabled: true, emails: ['a@b.com'] });
+    await runDailyReport(
+      { serviceRoleKey: 'k', resendApiKey: 'r', from: 'X <onboarding@resend.dev>' }, NOW, fake,
+    );
+    const mail = calls.find(c => c.url.includes('resend'))!.body!;
+    expect(mail.from).toBe('X <onboarding@resend.dev>');
+    // reply_to stays on the real address regardless
+    expect(mail.reply_to).toBe('solar.ops@conexsol.us');
+  });
+});
+
+describe('text body grammar', () => {
+  const w = reportWindow(new Date('2026-09-09T03:10:00Z'));
+  it('says person for one and people for many', () => {
+    const one = renderReport([ev('a@x.com', '2026-09-08T14:00:00Z')], w);
+    expect(one.text).toContain('across 1 person,');
+    const two = renderReport([
+      ev('a@x.com', '2026-09-08T14:00:00Z'),
+      ev('b@x.com', '2026-09-08T14:00:00Z'),
+    ], w);
+    expect(two.text).toContain('across 2 people,');
+  });
+});
