@@ -60,3 +60,30 @@ export async function notifyAdminForInvoice(
     message: `${serviceOrderNo(woNumber)} is ready for invoicing. Customer: ${customerName}. Total: ${formatMoney(totalAmount)}. Please send the invoice and mark as paid when received.`,
   }).catch(err => console.error('[quoteService] notify failed:', err));
 }
+
+/** The client approved on the phone, so the order jumped straight to scheduled
+ *  and no quote was ever raised. Tell Daniel, because nothing else will: the
+ *  normal quote step was skipped, not deferred. Fire-and-forget, same shape as
+ *  notifyAdminForInvoice. */
+export async function notifyAdminForVerbalApproval(
+  jobId: string,
+  woNumber: string,
+  customerName: string,
+  approverName: string,
+  users: { id: string; name: string }[],
+): Promise<void> {
+  const daniel = users.find(u => u.name.toLowerCase().includes('daniel'));
+  if (!daniel) {
+    console.warn('[quoteService] Daniel Matos not found in users list');
+    return;
+  }
+
+  await fireMentionNotifications({
+    mentionedUserIds: [daniel.id],
+    notifierName: approverName,
+    context: `${serviceOrderNo(woNumber)} ${customerName}`,
+    contextId: jobId,
+    contextType: 'workOrder',
+    message: `${serviceOrderNo(woNumber)} was approved VERBALLY by ${approverName} (${customerName}). No quote was sent. It is waiting in Create Quote, please raise and send the formal quote.`,
+  }).catch(err => console.error('[quoteService] verbal approval notify failed:', err));
+}

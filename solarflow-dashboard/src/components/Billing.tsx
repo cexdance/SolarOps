@@ -18,7 +18,7 @@ import {
 import { Job, Customer, User as UserType } from '../types';
 import type { Contractor } from '../types/contractor';
 import { sortJobsBy, JOB_SORT_OPTIONS, type JobSortOption } from '../lib/jobSort';
-import { serviceOrderNo, isSiteTransferJob } from '../lib/woHelpers';
+import { serviceOrderNo, isSiteTransferJob, needsFormalQuote } from '../lib/woHelpers';
 import { notifyAdminForInvoice } from '../lib/quoteService';
 import { formatMoney, formatCost } from '../lib/money';
 import { WorkOrderCalendar } from './WorkOrderCalendar';
@@ -71,6 +71,13 @@ export const getBillingColumn = (job: Job): BillingCol => {
   if (job.status === 'paid') return job.costsCoveredAt ? 'costs_covered' : 'paid';
   if (job.status === 'invoiced') return 'invoiced';
   if (job.status === 'completed') return 'to_invoice';
+  // Approved on the phone with no quote ever sent. The crew can work it, the
+  // dispatch board is unaffected, but the card stays in Daniel's intake column
+  // until the formal quote goes out. Otherwise it lands in Pending Completion,
+  // which asks nothing of anyone, and the client never gets paperwork.
+  // Deliberately BELOW the money columns: once the order is completed,
+  // invoiced or paid, the invoice supersedes the quote.
+  if (needsFormalQuote(job)) return 'new';
   // No woStatus at all means the service call was created but never worked,
   // same place as an explicit draft.
   if (!job.woStatus) return 'new';
@@ -93,6 +100,10 @@ export const getBillingColumn = (job: Job): BillingCol => {
 // age is worse than one aged approximately. So fall back to the last touch,
 // then to creation, and mark the result inexact so the card can say so.
 export const AGE_ANCHORS: Partial<Record<BillingCol, (keyof Job)[]>> = {
+  // ponytail: verbally approved cards re-routed into New age from creation like
+  // any other intake card, not from the approval. Older still means more
+  // urgent, and a second anchor here would demote createdAt to a fallback and
+  // mark every normal New card's age inexact.
   new:        ['createdAt'],
   quote_sent: ['quoteSentAt', 'updatedAt', 'createdAt'],
   // Approved and handed to dispatch: how long the contractor has had it.
@@ -742,6 +753,17 @@ export const Billing: React.FC<BillingProps> = ({
                           ) : job.isPowercare && (
                             <span className="text-[9px] font-bold uppercase tracking-wide bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded-full">PowerCare</span>
                           )}
+                          {/* Why this card is back in the intake column: the
+                              client already said yes, so it is not a normal
+                              new order and must not be re-quoted from scratch. */}
+                          {needsFormalQuote(job) && (
+                            <span
+                              title={`Approved verbally${job.verbalApprovalBy ? ` by ${job.verbalApprovalBy}` : ''}${job.verbalApprovalAt ? ` on ${new Date(job.verbalApprovalAt).toLocaleDateString()}` : ''}. No quote has been sent.`}
+                              className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800"
+                            >
+                              Verbal OK
+                            </span>
+                          )}
                           {/* Site transfers all sit in Invoiced, so the column
                               no longer says whether the transfer itself has
                               been run. The badge does. */}
@@ -808,7 +830,7 @@ export const Billing: React.FC<BillingProps> = ({
                               onClick={() => onJobClick?.(job.id)}
                               className="flex-1 flex items-center justify-center gap-1 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700 cursor-pointer"
                             >
-                              <FileText className="w-3 h-3" /> {ORDER_KIND_META[orderKind(job)].action}
+                              <FileText className="w-3 h-3" /> {needsFormalQuote(job) ? 'Send Formal Quote' : ORDER_KIND_META[orderKind(job)].action}
                             </button>
                           )}
                           {col.key === 'quote_sent' && (

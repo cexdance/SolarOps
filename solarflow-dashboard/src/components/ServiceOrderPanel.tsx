@@ -24,7 +24,7 @@ import { buildSiteTransferMailto, SITE_ID_GUIDE_URL } from '../lib/siteTransferE
 import { supabase } from '../lib/supabase';
 import { formatMoney, formatCost } from '../lib/money';
 import { printServiceReport } from '../lib/printServiceReport';
-import { serviceOrderNo, workOrderNo, generateServiceOrderNumber, photoUrlStem, findPowercareCaseNo } from '../lib/woHelpers';
+import { serviceOrderNo, workOrderNo, generateServiceOrderNumber, photoUrlStem, findPowercareCaseNo, needsFormalQuote } from '../lib/woHelpers';
 import { SowDistributionModal, SOW_DISTRIBUTION_NAMES } from './SowDistributionModal';
 import { ImageLightbox } from './ImageLightbox';
 import { ActivityFeed, type FeedUser } from './ui/ActivityFeed';
@@ -569,7 +569,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
   // CURRENT version of handleSave (with up-to-date woPhotos/lineItems state)
   // instead of the stale version captured when the callback was last created.
   // Assigned below (after handleSave is defined); declared here so it's in scope.
-  const handleSaveRef = useRef<(statusOverride?: WOStatus, keepOpen?: boolean) => void>(() => {});
+  const handleSaveRef = useRef<(statusOverride?: WOStatus, keepOpen?: boolean, patch?: Partial<Job>) => void>(() => {});
 
   // Photos. Some entries may be migrated to the local photoStore (no inline
   // dataUrl, only a photoStoreId). Hydrate those in the background so <img>
@@ -1484,7 +1484,9 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
   };
 
   // Save, optionally override woStatus (used when auto-saving after stage advance)
-  const handleSave = (statusOverride?: WOStatus, keepOpen?: boolean) => {
+  // and optionally merge a patch of fields the panel does not hold in state
+  // (quoteSentAt). The patch is applied LAST so it wins over the built payload.
+  const handleSave = (statusOverride?: WOStatus, keepOpen?: boolean, patch?: Partial<Job>) => {
     const effectiveWoStatus = statusOverride ?? woStatus;
     const { parts, total } = sumLineItems(lineItems);
     const fallbackTotal = laborHours * contractorPayRate + partsCostDirect;
@@ -1583,6 +1585,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
         ? (job?.snSyncCompletedAt ? job.snSyncScheduledAt : new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString())
         : job?.snSyncScheduledAt,
       auditLog: nextAuditLog,
+      ...patch,
     };
     onSave(partialJob, !keepOpen);
 
@@ -1639,6 +1642,24 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
   // This is the fix for the stale-closure bug: useCallback closures (handlePhotoFiles,
   // handleNotesPaste) captured handleSave from an old render and read stale woPhotos.
   handleSaveRef.current = handleSave;
+
+  // The client approved by phone and the paperwork was never raised. The order
+  // is already past the quote stage, so the panel offers the quote as a
+  // catch-up rather than as the next step in the pipeline.
+  const owedFormalQuote = !!job && needsFormalQuote(job);
+
+  /** Persist "the quote has now gone out". Stamps quoteSentAt (nothing did
+   *  before, which is why the field is empty across the backlog and why
+   *  needsFormalQuote could never clear), and advances a stage only when the
+   *  order is actually sitting at the quote step. A catch-up quote on an order
+   *  already scheduled must not be advanced: NEXT_STATUS would push it to
+   *  In Progress on the strength of an email. */
+  const commitQuoteSent = () => {
+    const patch: Partial<Job> = { quoteSentAt: job?.quoteSentAt ?? new Date().toISOString() };
+    const next = owedFormalQuote ? null : NEXT_STATUS[woStatus];
+    if (next) setWoStatus(next);
+    setTimeout(() => handleSaveRef.current(next ?? undefined, true, patch), 0);
+  };
 
   // Computed
   const stageIdx = STAGE_INDEX[woStatus];
@@ -1987,6 +2008,27 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
             })}
           </div>
         </div>
+
+        {/* ── Verbal approval: the quote still has to go out ──────────────
+            The order is already past Quote Sent, so the normal workflow button
+            offers the NEXT stage and never the quote. Without its own control
+            there is no way to raise the paperwork the client is owed. */}
+        {owedFormalQuote && (
+          <div className="border-b border-amber-200 bg-amber-50 px-4 md:px-6 py-2 flex items-center justify-between gap-3 shrink-0">
+            <div className="min-w-0 text-sm text-amber-800">
+              <strong>Approved verbally</strong>
+              {job?.verbalApprovalBy ? ` by ${job.verbalApprovalBy}` : ''}
+              {job?.verbalApprovalAt ? ` on ${new Date(job.verbalApprovalAt).toLocaleDateString()}` : ''}
+              . No quote has been sent to the client yet.
+            </div>
+            <button
+              onClick={() => setShowQuotePreview(true)}
+              className="shrink-0 px-3 py-1.5 bg-amber-600 text-white rounded-lg text-xs font-semibold hover:bg-amber-700 cursor-pointer"
+            >
+              Send Formal Quote
+            </button>
+          </div>
+        )}
 
         {/* ── Workflow Action Bar ─────────────────────────────────────── */}
         {action && (
@@ -4442,25 +4484,21 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
 
             // 3. Advance the WO to Quote Sent and persist (uses the fresh ref so
             //    the edited line items committed above are included in the save).
-            updateClientStatus(siteId, 'quote_approval');
-            onUpdateSiteStatus?.(siteId, 'quote_approval');
-            const next = NEXT_STATUS[woStatus];
-            if (next) {
-              setWoStatus(next);
-              setTimeout(() => handleSaveRef.current(next, true), 0);
+            if (!owedFormalQuote) {
+              updateClientStatus(siteId, 'quote_approval');
+              onUpdateSiteStatus?.(siteId, 'quote_approval');
             }
+            commitQuoteSent();
           }}
           onSent={() => {
             // Fallback path: customer email was sent directly from the modal.
             setShowQuotePreview(false);
             setQuoteResult({ ok: true, msg: 'Quote emailed to customer' });
-            updateClientStatus(siteId, 'quote_approval');
-            onUpdateSiteStatus?.(siteId, 'quote_approval');
-            const next = NEXT_STATUS[woStatus];
-            if (next) {
-              setWoStatus(next);
-              setTimeout(() => handleSaveRef.current(next, true), 0);
+            if (!owedFormalQuote) {
+              updateClientStatus(siteId, 'quote_approval');
+              onUpdateSiteStatus?.(siteId, 'quote_approval');
             }
+            commitQuoteSent();
           }}
         />
       )}

@@ -44,7 +44,8 @@ import { syncFromDB } from './lib/db';
 import { loadData, saveData, hydrateData } from './lib/dataStore';
 import { pushJobToTrello } from './lib/trelloSync';
 import { migrateWoPhotos, purgeUploadedBlobs } from './lib/photoStore';
-import { pickupJobsForContractor, toContractorJobView, serviceOrderNo, photoUrlStem, bareOrderNo, dedupeWoPhotos, mergeRmaEntries, applyRmaCaseNumber, findJobByWoNumber, mirrorContractorNote } from './lib/woHelpers';
+import { pickupJobsForContractor, toContractorJobView, serviceOrderNo, photoUrlStem, bareOrderNo, dedupeWoPhotos, mergeRmaEntries, applyRmaCaseNumber, findJobByWoNumber, mirrorContractorNote, isApprovedWoStage, isSiteTransferJob } from './lib/woHelpers';
+import { notifyAdminForVerbalApproval } from './lib/quoteService';
 import { fireMentionNotifications, sendCustomerAppointmentEmail } from './components/ui/MentionTextarea';
 import { formatCost } from './lib/money';
 import { logChange, logJobChange, flushChangeLog } from './lib/changeLog';
@@ -2164,10 +2165,31 @@ function App() {
     const baseJob0: Job = (newlyAssigned && isPreDispatch && role === 'admin')
       ? { ...incomingJob, woStatus: 'scheduled' as WOStatus, status: 'assigned' as JobStatus, contractorSentAt: incomingJob.contractorSentAt ?? new Date().toISOString() }
       : incomingJob;
-    // Self-heal duplicate woPhotos on every save (root cause of the 581-photo WO).
-    const baseJob: Job = baseJob0.woPhotos && baseJob0.woPhotos.length > 0
-      ? { ...baseJob0, woPhotos: dedupeWoPhotos(baseJob0.woPhotos) }
+    // Verbal approval: the client said yes on the phone, so the order jumps
+    // straight past Quote Sent and Daniel never gets asked for the paperwork.
+    // Stamp it HERE, at the save choke point, so the kanban drag, the SO panel
+    // and the auto-dispatch branch above are all covered by one check instead
+    // of three widgets someone has to remember to wire.
+    //
+    // Only on the TRANSITION into an approved stage. Firing on any save of an
+    // already-approved order would flag the whole historic backlog, which has
+    // no quoteSentAt either. PowerCare (the plan covers the work) and site
+    // transfers (flat fee, invoiced directly) have no quote step at all.
+    const enteredApproval = isApprovedWoStage(baseJob0.woStatus) && !isApprovedWoStage(prevForAssign?.woStatus);
+    const verballyApproved = enteredApproval
+      && role === 'admin'
+      && !baseJob0.quoteSentAt
+      && !baseJob0.verbalApprovalAt
+      && !baseJob0.isPowercare
+      && !baseJob0.isServiceAccountExpense
+      && !isSiteTransferJob(baseJob0);
+    const baseJobV: Job = verballyApproved
+      ? { ...baseJob0, verbalApprovalAt: new Date().toISOString(), verbalApprovalBy: currentUser?.name ?? data.currentUser?.email ?? 'Staff' }
       : baseJob0;
+    // Self-heal duplicate woPhotos on every save (root cause of the 581-photo WO).
+    const baseJob: Job = baseJobV.woPhotos && baseJobV.woPhotos.length > 0
+      ? { ...baseJobV, woPhotos: dedupeWoPhotos(baseJobV.woPhotos) }
+      : baseJobV;
     // Stamp the LWW key (updatedAt) AND per-field edit times against the previous
     // record, so this change wins the merge and, once field-level merge ships
     // (Phase 2), only the fields that actually changed here can win.
@@ -2219,6 +2241,18 @@ function App() {
     // Self-guards to a no-op for non-Trello jobs and for saves that changed
     // nothing a card can represent. Fire-and-forget: see pushJobToTrello.
     pushJobToTrello(prevForAssign, updatedJob);
+
+    // Told Daniel the quote is owed. Guarded on the stamp having just been set,
+    // so re-saving or dragging the card around cannot re-send it.
+    if (verballyApproved) {
+      notifyAdminForVerbalApproval(
+        updatedJob.id,
+        updatedJob.woNumber ?? `WO-${updatedJob.id.slice(-6)}`,
+        updatedJob.clientName ?? data.customers.find(c => c.id === updatedJob.customerId)?.name ?? 'Unknown client',
+        updatedJob.verbalApprovalBy ?? 'Staff',
+        data.users.map(u => ({ id: u.id, name: u.name })),
+      );
+    }
 
     // Auto-mirror to contractor side: if a contractor is assigned and no
     // ContractorJob exists yet for this admin Job, create one. Previously the

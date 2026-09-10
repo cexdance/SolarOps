@@ -333,6 +333,13 @@ export interface Job {
   quoteAmount?: number;
   quoteSentAt?: string;
   quoteApprovedAt?: string;
+  /** The client said yes on the phone before any paperwork went out, so the
+   *  order was advanced past the quote stage without a quote ever being sent.
+   *  Stamped once, at the moment of that jump, and kept as history. Paired with
+   *  an empty quoteSentAt it means Daniel still owes the client a formal quote:
+   *  see needsFormalQuote() in lib/woHelpers. */
+  verbalApprovalAt?: string;
+  verbalApprovalBy?: string;
   // Contractor queue
   contractorPayRate?: number;
   contractorPayUnit?: 'hour' | 'flat';

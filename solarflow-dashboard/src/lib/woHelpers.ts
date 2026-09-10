@@ -461,6 +461,21 @@ export function findJobByWoNumber<J extends { woNumber?: string }>(
 export const isSiteTransferJob = (job: { serviceCode?: string; serviceType?: string }): boolean =>
   job.serviceCode === 'SITE-TRX' || job.serviceType === 'Site Transfer';
 
+/** Stages that mean the client has said yes and the work is on. Advancing into
+ *  one of these is the moment a missing quote stops being "not yet" and starts
+ *  being a debt. */
+const APPROVED_WO_STAGES = new Set(['quote_approved', 'scheduled', 'in_progress']);
+export const isApprovedWoStage = (s?: string): boolean => !!s && APPROVED_WO_STAGES.has(s);
+
+/** The order was approved verbally and the formal quote has still not gone out.
+ *  Keyed on the explicit verbal stamp, NOT on a bare missing quoteSentAt: most
+ *  of the historic backlog has no quoteSentAt either (0 of 13 Quote Sent cards
+ *  as of 2026-07-28), and dragging all of those into Daniel's intake column
+ *  would bury the ones that actually need work. Self-clears the moment a quote
+ *  is sent, so nothing has to remember to unset a flag. */
+export const needsFormalQuote = (job: { verbalApprovalAt?: string; quoteSentAt?: string }): boolean =>
+  !!job.verbalApprovalAt && !job.quoteSentAt;
+
 /** PowerCare case # for the SO header. Nobody fills the structured fields in
  *  practice, so the number is wherever the last person typed it: the RMA entry,
  *  the customer record, or the client story (the comments/activity on the order
