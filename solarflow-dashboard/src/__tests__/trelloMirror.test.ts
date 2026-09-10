@@ -12,7 +12,7 @@
 //     live in separate files by necessity (api/ cannot import from src/), which
 //     is exactly the setup where one gets fixed and the other does not.
 import { describe, it, expect } from 'vitest';
-import { matchTargetList, stageForList, listForStage, trustedStage, sameLabelSet, labelKey, stampMirroredFields } from '../../../api/trello-card';
+import { matchTargetList, stageForList, listForStage, trustedStage, sameLabelSet, labelKey, stampMirroredFields, parseLeadDesc, parseSiteId } from '../../../api/trello-card';
 import { mergeJobFields } from '../lib/syncEngine';
 import { labelKey as clientLabelKey, LABEL_CATALOG } from '../lib/labelCatalog';
 import { trelloCardIdOf, cardPatchFor, boardColumns, type TrelloList } from '../lib/trelloSync';
@@ -94,6 +94,12 @@ describe('boardColumns: LL columns follow the Trello board', () => {
     expect(withCard.find(c => c.stage === 'lost_to_competition')?.closed).toBe(true);
   });
 
+  it('puts an archived list after the working columns, even when Trello has it first', () => {
+    const archivedFirst = [{ ...lists[3] }, lists[0], lists[1]];
+    const cols = boardColumns(archivedFirst, [{ pipelineStage: 'lost_to_competition' }]);
+    expect(cols.map(c => c.stage)).toEqual(['leads', 'done', 'lost_to_competition']);
+  });
+
   it('NEVER hides a card: a stage with no column gets a trailing bucket', () => {
     const cols = boardColumns(lists, [{ pipelineStage: 'needs_follow_up' }]); // not on this board
     expect(cols[cols.length - 1]).toEqual({ stage: 'not_on_board', title: 'Not on the Trello board' });
@@ -103,6 +109,42 @@ describe('boardColumns: LL columns follow the Trello board', () => {
   it('falls back to the built-in columns before Trello has ever answered', () => {
     const cols = boardColumns(null, []);
     expect(cols.map(c => c.stage)).toEqual([...PIPELINE_STAGES]);
+  });
+});
+
+describe("Anthony's New Lead card template parses", () => {
+  // The description the Trello template carries, as Anthony fills it in. If the
+  // template on the board is ever edited, its labels must stay ones
+  // parseLeadDesc knows (LABEL_TO_FIELD) or the fields silently stop arriving.
+  const filled = [
+    'Phone: (863) 495-5963',
+    'Email: jane@example.com',
+    'Address: 10401 SW 53rd St',
+    'City: Cooper City',
+    'State: FL',
+    'Zip: 33328',
+    'Site ID: 3612595',
+    'Notes: inverter showing error 18xB',
+  ].join('\n');
+
+  it('every contact line lands in its field', () => {
+    expect(parseLeadDesc(filled)).toMatchObject({
+      phone: '8634955963', email: 'jane@example.com', address: '10401 SW 53rd St',
+      city: 'Cooper City', state: 'FL', zip: '33328', notes: 'inverter showing error 18xB',
+    });
+  });
+
+  it('the Site ID line lands in the site id, and an EMPTY template line yields nothing', () => {
+    expect(parseSiteId(filled)).toBe('3612595');
+    const blank = 'Phone:\nEmail:\nSite ID:\n';
+    expect(parseSiteId(blank)).toBeUndefined();
+    expect(parseLeadDesc(blank)).toEqual({});
+  });
+
+  it('refuses an unlabelled or wrong-length number, which is a phone or case id', () => {
+    expect(parseSiteId('call 3612595 tomorrow')).toBeUndefined();
+    expect(parseSiteId('Site ID: 12345')).toBeUndefined();
+    expect(parseSiteId('SolarEdge Site ID: 451846')).toBe('451846');
   });
 });
 

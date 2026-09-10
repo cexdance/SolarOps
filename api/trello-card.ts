@@ -286,6 +286,17 @@ const LABEL_TO_FIELD: Record<string, keyof ParsedLead> = {
   notes: 'notes', hs_id: 'hsId', 'contract name': 'contractName',
 };
 
+/**
+ * "Site ID: 1234567" from a card description, as Anthony's "New Lead" Trello
+ * card template asks for it. SolarEdge site ids are 6-7 digits. The label is
+ * required: a bare 7-digit number is as likely a phone fragment or a case id.
+ * Kept out of parseLeadDesc because ParsedLead is the vision model's shape
+ * (parse-lead-image.ts), and a site id is a job field, not a contact field.
+ */
+export function parseSiteId(desc: string): string | undefined {
+  return /^\s*(?:solaredge\s+)?site\s*(?:id|#|number)\s*:\s*(\d{6,7})\s*$/im.exec(desc || '')?.[1];
+}
+
 export function parseLeadDesc(desc: string): Partial<ParsedLead> {
   const out: Partial<ParsedLead> = {};
   for (const line of (desc || '').split('\n')) {
@@ -554,6 +565,8 @@ async function backfillLeadJob(
     description: string;
     /** Set ONLY when this event was a real list move, see mirrorStage below. */
     stage?: string;
+    /** From a "Site ID:" line. Filled only into an EMPTY solarEdgeSiteId. */
+    siteId?: string;
   },
   now: string,
 ): Promise<void> {
@@ -591,6 +604,11 @@ async function backfillLeadJob(
   // column", not "move it to the default", so it never writes.
   const stageChanged = !!card.stage && card.stage !== job.pipelineStage;
 
+  // Empty-only, like leadInfo: Anthony types the site id into the template a
+  // beat after creating the card, so this is where it usually arrives. A value
+  // the office already set is never replaced from Trello.
+  const siteChanged = !!card.siteId && !String(job.solarEdgeSiteId ?? '').trim();
+
   // Repair the create-time placeholder note, which loses the real lead text, the
   // contact block, the Contract Name and the HS_ID when the desc lands after
   // createCard. Only ever replaces that exact placeholder shape, so a note the
@@ -599,7 +617,7 @@ async function backfillLeadJob(
   const notesChanged = notePlaceholder && card.notes.trim() !== String(job.notes ?? '').trim()
     && !/^Auto-imported from Trello card "[^"]*"/.test(card.notes.trim());
 
-  if (!nameChanged && !infoChanged && !labelsChanged && !notesChanged && !stageChanged) return;
+  if (!nameChanged && !infoChanged && !labelsChanged && !notesChanged && !stageChanged && !siteChanged) return;
 
   const changed: string[] = [];
   if (isPlaceholder(job.clientName)) { job.clientName = displayName; changed.push('clientName'); }
@@ -607,6 +625,7 @@ async function backfillLeadJob(
   if (infoChanged) { job.leadInfo = info; changed.push('leadInfo'); }
   if (labelsChanged) { job.labels = mirrored; changed.push('labels'); }
   if (stageChanged) { job.pipelineStage = card.stage; changed.push('pipelineStage'); }
+  if (siteChanged) { job.solarEdgeSiteId = card.siteId; changed.push('solarEdgeSiteId'); }
   if (notesChanged) { job.notes = card.notes; job.description = card.description; changed.push('notes', 'description'); }
   stampMirroredFields(job, changed, now);
 
@@ -1019,6 +1038,7 @@ async function handleLeadImportWebhook(req: VercelRequest, res: VercelResponse) 
         notes: fullNotes,
         description: cardNote,
         stage: trustedStage(movedTo, card.idList),
+        siteId: parseSiteId(card.desc),
       }, now);
       console.info(`[trello-webhook] backfill ${action.type}: job ${jobId} (${displayName})${movedTo ? ` moved to ${trustedStage(movedTo, card.idList) ?? 'unverified list'}` : ''}`);
       return res.status(200).json({ job: { id: jobId, result: 'backfilled' } });
@@ -1055,6 +1075,7 @@ async function handleLeadImportWebhook(req: VercelRequest, res: VercelResponse) 
       laborHours: 0, laborRate: 0, partsCost: 0, totalAmount: 0,
       urgency: 'medium',
       isPowercare: false,
+      ...(parseSiteId(card.desc) ? { solarEdgeSiteId: parseSiteId(card.desc) } : {}),
       createdAt: now,
       // Required: syncEngine's remoteWins treats an updatedAt-less record as
       // always losing, so an unstamped row would be dropped on first merge.
@@ -1078,6 +1099,7 @@ async function handleLeadImportWebhook(req: VercelRequest, res: VercelResponse) 
         // reason as the untracked branch above; trustedStage refuses a list
         // id Trello does not confirm, now that any list can be a target.
         stage: trustedStage(target.listId, card.idList),
+        siteId: parseSiteId(card.desc),
       }, now);
     }
 

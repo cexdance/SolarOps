@@ -35,8 +35,12 @@ const CACHE_KEY = 'solarops_trello_lists';
  */
 export function boardColumns(lists: TrelloList[] | null, jobs: Pick<Job, 'pipelineStage'>[]): BoardColumn[] {
   const used = new Set(jobs.map(j => j.pipelineStage).filter(Boolean) as string[]);
-  const cols: BoardColumn[] = lists
-    ? lists
+  // Archived lists go AFTER the open ones, not in their old Trello position.
+  // Trello hides them entirely; left in place, LOST TO COMPETITION (still pos 0)
+  // headed the LL board and its "(archived)" note was cut off by the header.
+  const ordered = lists ? [...lists.filter(l => !l.closed), ...lists.filter(l => l.closed)] : null;
+  const cols: BoardColumn[] = ordered
+    ? ordered
         .filter(l => l.stage && (!l.closed || used.has(l.stage)))
         .map(l => ({ stage: l.stage as PipelineStage, title: l.name, ...(l.closed ? { closed: true } : {}) }))
     : PIPELINE_STAGES.map(s => ({ stage: s, title: PIPELINE_STAGE_LABEL[s] }));

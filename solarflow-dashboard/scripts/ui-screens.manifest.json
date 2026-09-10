@@ -125,7 +125,7 @@
         }
       ],
       "macro": "The Trello lead funnel: every lead from intake to closed.",
-      "detail": "Jobs viewMode 'tryout'. 13 columns mirroring the Conexsol Florida Services Trello board 1:1, first column Leads Services SolarEdge where the webhook drops new leads. Only funnel cards (pipelineStage, no woNumber) appear; real service orders live on the main board. Cards show Trello label chips and the lead's import date. Clicking a customerless card opens LeadPanel."
+      "detail": "Jobs viewMode 'tryout'. Columns are drawn from the Conexsol Florida Services Trello board itself (GET /api/trello-card?lists=1): Trello's order, Trello's names, and any list added on Trello appears as a column. An archived list keeps its column only while it holds cards; cards whose column is gone land in a trailing 'Not on the Trello board' bucket. Only funnel cards (pipelineStage, no woNumber) appear; real service orders live on the main board. Cards show Trello label chips and the lead's import date. Clicking a customerless card opens LeadPanel."
     },
     {
       "id": "routes",
