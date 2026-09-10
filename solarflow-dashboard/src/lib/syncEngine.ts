@@ -125,6 +125,11 @@ export const KV_SYNC_KEYS = [
   // the key was localStorage-only, which meant an office-written notification
   // could never reach the contractor at all.
   'solarflow_contractor_notifications',
+  // End-of-day report config (recipients, on/off). Single-writer: an admin
+  // edits it in Settings, so the default blind-overwrite pull is correct and it
+  // needs no KV_MERGERS entry. It MUST sync, because the nightly cron reads it
+  // server-side from app_data; left local it would be invisible to the sender.
+  'solarops_daily_report',
 ] as const;
 type KVSyncKey = typeof KV_SYNC_KEYS[number];
 
