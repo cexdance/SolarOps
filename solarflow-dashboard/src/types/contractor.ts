@@ -2,7 +2,7 @@
 
 // Type-only, so this is erased at compile time and creates no runtime cycle even
 // though index.ts re-exports this module.
-import type { RMAEntry } from './index';
+import type { RMAEntry, WOVisit } from './index';
 
 export type ContractorStatus = 'pending' | 'approved' | 'rejected' | 'suspended';
 export type BusinessType = 'sole_proprietor' | 'llc' | 'c_corp' | 's_corp' | 'partnership';
@@ -362,6 +362,9 @@ export interface ContractorJob {
   // Synced on the JOB (unioned in mergeContractorJobs) for the same reason as
   // expenses, so an office save cannot drop a field-logged addition.
   additionalItems?: ContractorLineItem[];
+
+  // Earlier site visits on the order (see Job.visits). Merged by id both ways.
+  visits?: WOVisit[];
 
   // Invoice tracking
   invoiceId?: string;

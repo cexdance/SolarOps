@@ -456,6 +456,45 @@ export interface Job {
    *  Reroofing tab in the Service Order panel. Optional so every other job is
    *  unaffected. */
   reroof?: ReroofWorkflow;
+  /** Earlier site visits on this order, oldest first. The top-level fields
+   *  (scheduledDate, serviceReport, quote, invoice, ...) are always the CURRENT
+   *  visit; a visit lands here when the contractor finishes it with a return
+   *  trip needed. Absent on single-visit orders. See lib/visits.ts. */
+  visits?: WOVisit[];
+}
+
+/** Quote + invoice of one billing cycle, archived onto the visit it covered
+ *  when Daniel starts a new cycle for the next visit. */
+export interface WOVisitBilling {
+  quoteAmount?: number;
+  quoteSentAt?: string;
+  quoteApprovedAt?: string;
+  verbalApprovalAt?: string;
+  lineItems?: WOLineItem[];
+  xeroInvoiceId?: string;
+  invoicedAt?: string;
+  clientPaidAt?: string;
+  archivedAt: string;
+}
+
+/** One finished trip to site inside a service order. */
+export interface WOVisit {
+  id: string;
+  number: number;          // 1-based, in visit order
+  date: string;            // the visit's scheduled date (YYYY-MM-DD)
+  contractorId?: string;
+  startedAt?: string;
+  finishedAt: string;
+  workDone: string;
+  serviceStatus?: string;
+  nextSteps?: string;
+  /** Photo URLs taken during this visit (the job's photo arrays stay cumulative). */
+  photoUrls: string[];
+  /** Parts first logged during this visit. */
+  parts?: JobPart[];
+  billing?: WOVisitBilling;
+  /** Drives the per-visit merge: newest edit wins per visit id. */
+  updatedAt: string;
 }
 
 /** One reinstallation part in a reroofing job. Feeds Daniel's quote and Cesar's

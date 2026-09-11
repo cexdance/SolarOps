@@ -44,13 +44,13 @@ export function applyRmaCaseNumber<T extends { id: string; rmaEntries?: RMAEntry
   };
 }
 
-export function mergeRmaEntries(
-  a: RMAEntry[] | undefined,
-  b: RMAEntry[] | undefined,
-): RMAEntry[] | undefined {
+export function mergeRmaEntries<T extends { id: string; updatedAt?: string } = RMAEntry>(
+  a: T[] | undefined,
+  b: T[] | undefined,
+): T[] | undefined {
   if (!a?.length) return b?.length ? b : a;
   if (!b?.length) return a;
-  const byId = new Map<string, RMAEntry>();
+  const byId = new Map<string, T>();
   for (const e of a) if (e?.id) byId.set(e.id, e);
   for (const e of b) {
     if (!e?.id) continue;
@@ -61,6 +61,9 @@ export function mergeRmaEntries(
   }
   return Array.from(byId.values());
 }
+
+/** Same union for any id + updatedAt list (service order visits use it). */
+export const mergeById = mergeRmaEntries;
 
 /**
  * Patch produced by dropping a card on the Tryout (multi-state pipeline) board.
@@ -321,6 +324,8 @@ export function toContractorJobView(job: Job, existingCj?: ContractorJob, custom
     // they don't duplicate a case number, and anything they add here merges back
     // into the admin job. Union so a stale contractor copy never drops an entry.
     rmaEntries: mergeRmaEntries(job.rmaEntries, existingCj?.rmaEntries),
+    // Visit history flows both ways too, merged per visit.
+    visits: mergeById(job.visits, existingCj?.visits),
     contractorId: job.contractorId ?? '',
     customerId: job.customerId,
     customerName: job.clientName || customer?.name || '',

@@ -30,9 +30,9 @@ import { supabase, authedFetch } from './supabase';
 import { isContractorAccount } from './authRouting';
 import { markPushPending, clearPendingPush, isRowPoisoned, incRowFailure, clearRowPoison } from './outbox';
 import { isAllowedCustomer } from './solarEdgeSiteFilter';
-import { dedupeWoPhotos } from './woHelpers';
+import { dedupeWoPhotos, mergeById } from './woHelpers';
 import { idbSetState, getKVMirror, setKVMirror } from './stateStore';
-import type { AppState, Customer, Job, WOPhoto } from '../types';
+import type { AppState, Customer, Job, WOPhoto, WOVisit } from '../types';
 import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 
 // Resolve a live auth session, refreshing once if the cached access token has
@@ -387,6 +387,10 @@ type CJobLike = {
   [k: string]: unknown;
 };
 
+// Site visits on a contractor job, unioned per visit like expenses.
+const unionVisits = (a: unknown, b: unknown) =>
+  mergeById(a as WOVisit[] | undefined, b as WOVisit[] | undefined);
+
 function cjTime(j: CJobLike): string {
   return j.updatedAt ?? j.assignedAt ?? '';
 }
@@ -424,6 +428,7 @@ export function collapseBySourceJob(jobs: CJobLike[]): CJobLike[] {
         photos: unionPhotos(existing.photos, j.photos),
         expenses: unionExpenses(existing.expenses, j.expenses),
         additionalItems: unionAdditionalItems(existing.additionalItems, j.additionalItems),
+        visits: unionVisits(existing['visits'], j['visits']),
       };
     }
   }
@@ -457,6 +462,7 @@ export function mergeContractorJobs(localArr: unknown, remoteArr: unknown): CJob
       photos: unionPhotos(lj.photos, rj.photos),
       expenses: unionExpenses(lj.expenses, rj.expenses),
       additionalItems: unionAdditionalItems(lj.additionalItems, rj.additionalItems),
+      visits: unionVisits(lj['visits'], rj['visits']),
     });
   }
 
@@ -1511,7 +1517,7 @@ const APPEND_FIELDS = new Set(['activityHistory', 'auditLog']);
 /** Tombstone lists: union-only, a shorter side must never resurrect a deletion. */
 const TOMBSTONE_FIELDS = new Set(['deletedPhotoStems']);
 /** Resolved by their own dedicated merge below, not by the field loop. */
-const CUSTOM_FIELDS = new Set(['fieldTimes', 'updatedAt', 'woPhotos']);
+const CUSTOM_FIELDS = new Set(['fieldTimes', 'updatedAt', 'woPhotos', 'visits']);
 
 /** Last-edit time for one field, falling back to the record time for legacy rows. */
 function fieldTime(j: Job, k: string): string {
@@ -1560,6 +1566,10 @@ export function mergeJobFields(a: Job, b: Job): Job {
   merged.woPhotos = fieldTime(b, 'woPhotos') > fieldTime(a, 'woPhotos')
     ? mergeWoPhotos(b.woPhotos ?? [], a.woPhotos ?? [])
     : mergeWoPhotos(a.woPhotos ?? [], b.woPhotos ?? []);
+
+  // Site visits are added by the field app and edited by the office (billing
+  // archived onto them), so union by visit id, newest edit wins per visit.
+  if (a.visits || b.visits) merged.visits = mergeById(a.visits, b.visits);
 
   merged.fieldTimes = mergeFieldTimes(a.fieldTimes, b.fieldTimes);
   merged.updatedAt = recordTime(a) > recordTime(b) ? a.updatedAt : b.updatedAt;

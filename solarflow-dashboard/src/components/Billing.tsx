@@ -19,6 +19,7 @@ import { Job, Customer, User as UserType } from '../types';
 import type { Contractor } from '../types/contractor';
 import { sortJobsBy, JOB_SORT_OPTIONS, type JobSortOption } from '../lib/jobSort';
 import { serviceOrderNo, isSiteTransferJob, needsFormalQuote } from '../lib/woHelpers';
+import { startNewBillingCycle } from '../lib/visits';
 import { notifyAdminForInvoice } from '../lib/quoteService';
 import { formatMoney, formatCost } from '../lib/money';
 import { WorkOrderCalendar } from './WorkOrderCalendar';
@@ -448,35 +449,48 @@ export const Billing: React.FC<BillingProps> = ({
     // it rather than silently patching a status nobody sees.
     if (isSiteTransferJob(job) && col !== 'invoiced' && col !== 'paid' && col !== 'costs_covered') return;
     const now = new Date().toISOString();
+    // Multi-visit order moved BACK for its next visit: offer a fresh quote and
+    // invoice cycle, archiving the current one onto the visit it covered. A
+    // plain move stays possible (Cancel) for a mis-drop or a visit that rolls
+    // into the same invoice.
+    const colIdx = (c: BillingCol) => BILLING_COLUMNS.findIndex(x => x.key === c);
+    const cycle = colIdx(col) < colIdx(getBillingColumn(job)) && colIdx(col) <= colIdx('pending')
+      ? startNewBillingCycle(job, now) : null;
+    const nVisits = job.visits?.length ?? 0;
+    const src: Job = cycle && window.confirm(
+      `Start a new quote and invoice for visit ${nVisits + 1}?\n\n` +
+      `OK: visit ${nVisits}'s quote and invoice are saved in its visit history and cleared here.\n` +
+      `Cancel: just move the card, keeping the current quote and invoice.`,
+    ) ? { ...job, ...cycle } : job;
     // Close-out is the one stage whose date the admin sets by hand: costs are
     // often covered days after the fact, and this timestamp is what the
     // contractor sees as their paid date.
-    const coveredAt = coveredAtISO ?? job.costsCoveredAt ?? now;
+    const coveredAt = coveredAtISO ?? src.costsCoveredAt ?? now;
     let patch: Partial<Job>;
     switch (col) {
       case 'new':
         patch = { status: 'new', woStatus: 'draft', costsCoveredAt: undefined };
         break;
       case 'quote_sent':
-        patch = { status: 'new', woStatus: 'quote_sent', quoteSentAt: job.quoteSentAt ?? now, costsCoveredAt: undefined };
+        patch = { status: 'new', woStatus: 'quote_sent', quoteSentAt: src.quoteSentAt ?? now, costsCoveredAt: undefined };
         break;
       case 'pending':
         patch = { status: 'in_progress', woStatus: 'in_progress', costsCoveredAt: undefined };
         break;
       case 'to_invoice':
-        patch = { status: 'completed', woStatus: 'completed', completedAt: job.completedAt ?? now, costsCoveredAt: undefined };
+        patch = { status: 'completed', woStatus: 'completed', completedAt: src.completedAt ?? now, costsCoveredAt: undefined };
         break;
       case 'invoiced':
-        patch = { status: 'invoiced', woStatus: 'invoiced', invoicedAt: job.invoicedAt ?? now, costsCoveredAt: undefined };
+        patch = { status: 'invoiced', woStatus: 'invoiced', invoicedAt: src.invoicedAt ?? now, costsCoveredAt: undefined };
         break;
       case 'paid':
-        patch = { status: 'paid', woStatus: 'paid', clientPaidAt: job.clientPaidAt ?? now, costsCoveredAt: undefined };
+        patch = { status: 'paid', woStatus: 'paid', clientPaidAt: src.clientPaidAt ?? now, costsCoveredAt: undefined };
         break;
       case 'costs_covered':
-        patch = { status: 'paid', woStatus: 'paid', clientPaidAt: job.clientPaidAt ?? now, costsCoveredAt: coveredAt };
+        patch = { status: 'paid', woStatus: 'paid', clientPaidAt: src.clientPaidAt ?? now, costsCoveredAt: coveredAt };
         break;
     }
-    onUpdateJob({ ...job, ...patch });
+    onUpdateJob({ ...src, ...patch });
 
     // Covering contractor + expenses is the contractor's payday, so tell them.
     // Guarded on the order NOT already being covered: moveToColumn also runs on
@@ -789,6 +803,14 @@ export const Billing: React.FC<BillingProps> = ({
                               className={`text-[10px] px-1.5 py-0.5 rounded-full whitespace-nowrap ${TIER_STYLE[tier].pill}`}
                             >
                               {age.exact ? '' : '~'}{age.days}d
+                            </span>
+                          )}
+                          {!!job.visits?.length && (
+                            <span
+                              title={`${job.visits.length} earlier visit${job.visits.length > 1 ? 's' : ''} on this order`}
+                              className="text-[10px] px-1.5 py-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-200 whitespace-nowrap"
+                            >
+                              Visit {job.visits.length + 1}
                             </span>
                           )}
                           {job.woNumber && (

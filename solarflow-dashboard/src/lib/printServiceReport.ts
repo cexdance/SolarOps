@@ -1,4 +1,5 @@
 import type { Job, Customer } from '../types';
+import { allVisits } from './visits';
 
 // Client-facing service report: opens a print-ready window (full-color Conexsol
 // header, client details, work done, date, photos). NO financials by design,
@@ -13,6 +14,8 @@ interface ReportInput {
   siteAddress?: string;
   clientId?: string;
   serviceType?: string;
+  /** Multi-visit orders only: print just this visit number instead of all. */
+  visit?: number;
 }
 
 const esc = (s: unknown): string =>
@@ -21,10 +24,15 @@ const esc = (s: unknown): string =>
 const fmtDate = (iso?: string): string =>
   iso ? new Date(iso).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : '';
 
-export function printServiceReport({ job, customer, siteName, siteAddress, clientId, serviceType }: ReportInput): void {
+export function printServiceReport({ job, customer, siteName, siteAddress, clientId, serviceType, visit }: ReportInput): void {
   const origin = window.location.origin;
-  const completed = fmtDate(job.completedAt);
-  const scheduled = fmtDate(job.scheduledDate);
+  // Multi-visit orders print one section per visit (or only the one asked for);
+  // a single-visit order renders exactly as it always has.
+  const visits = job.visits?.length ? allVisits(job) : [];
+  const shown = visit ? visits.filter(v => v.number === visit) : visits;
+  const one = visit ? shown[0] : undefined;
+  const completed = one ? fmtDate(one.finishedAt) : fmtDate(job.completedAt);
+  const scheduled = one ? fmtDate(one.date && `${one.date}T12:00:00`) : fmtDate(job.scheduledDate);
 
   const address = siteAddress ?? customer?.address ?? '';
 
@@ -62,16 +70,37 @@ export function printServiceReport({ job, customer, siteName, siteAddress, clien
     .map(li => `<li>${esc(li.description)}${li.quantity && li.quantity > 1 ? ` <span class="qty">×${esc(li.quantity)}</span>` : ''}</li>`)
     .join('');
 
+  const isPdf = (p: { mimeType?: string; name?: string }) => p.mimeType === 'application/pdf' || /\.pdf(\?|$)/i.test(p.name || '');
+  const figure = (src: string, cap: string) =>
+    `<figure><img src="${esc(src)}" alt="${esc(cap || 'Service photo')}">${cap ? `<figcaption>${esc(cap)}</figcaption>` : ''}</figure>`;
+  const capByUrl = new Map((job.woPhotos ?? []).map(p => [p.storageUrl || p.dataUrl, p]));
+  const lastNumber = visits.length ? visits[visits.length - 1].number : 0;
+  const visitSections = shown.map(v => {
+    const final = v.number === lastNumber;
+    const st = final ? sysStatus : 'Return visit needed';
+    const color = final ? statusColor : '#d97706';
+    const pics = v.photoUrls
+      .filter(u => { const p = capByUrl.get(u); return !p || !isPdf(p); })
+      .map(u => { const p = capByUrl.get(u); return figure(u, p ? (p.name?.trim() || photoLabel[p.category] || '') : ''); })
+      .join('');
+    const when = fmtDate(v.date && `${v.date}T12:00:00`) || fmtDate(v.finishedAt);
+    return `<h2>Visit ${v.number}${when ? ` &nbsp;·&nbsp; ${esc(when)}` : ''}</h2>
+  ${st ? `<div class="status"><span class="dot" style="background:${color}"></span>System status: <strong>${esc(st)}</strong></div>` : ''}
+  ${v.workDone ? `<p>${esc(v.workDone)}</p>` : '<p style="color:#94a3b8">No work summary recorded.</p>'}
+  ${!final && v.nextSteps ? `<p><strong>Left for the next visit:</strong> ${esc(v.nextSteps)}</p>` : ''}
+  ${pics ? `<div class="photos">${pics}</div>` : ''}`;
+  }).join('');
+
   const photos = (job.woPhotos ?? [])
     // PDF attachments can't render as <img>, keep them out of the print report
-    .filter(p => p.mimeType !== 'application/pdf' && !/\.pdf(\?|$)/i.test(p.name || ''))
+    .filter(p => !isPdf(p))
     .map(p => ({ src: p.storageUrl || p.dataUrl, cap: (p.name?.trim() || photoLabel[p.category] || '') }))
     .filter(p => p.src)
-    .map(p => `<figure><img src="${esc(p.src)}" alt="${esc(p.cap || 'Service photo')}">${p.cap ? `<figcaption>${esc(p.cap)}</figcaption>` : ''}</figure>`)
+    .map(p => figure(p.src, p.cap))
     .join('');
 
   const html = `<!doctype html><html><head><meta charset="utf-8">
-<title>Service Report ${esc(job.woNumber ?? '')}</title>
+<title>Service Report ${esc(job.woNumber ?? '')}${one ? ` Visit ${one.number}` : ''}</title>
 <style>
   * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   body { font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #1e293b; margin: 0; padding: 40px; max-width: 800px; margin: 0 auto; }
@@ -106,7 +135,7 @@ export function printServiceReport({ job, customer, siteName, siteAddress, clien
     </div>
   </header>
 
-  <h1>Service Report</h1>
+  <h1>Service Report${one ? `, Visit ${one.number} of ${visits.length}` : visits.length ? ` (${visits.length} visits)` : ''}</h1>
 
   <h2>Client Details</h2>
   <div class="grid">
@@ -121,12 +150,13 @@ export function printServiceReport({ job, customer, siteName, siteAddress, clien
     </div>
   </div>
 
-  <h2>Work Performed</h2>
+  ${visits.length ? `${scopeRows ? `<h2>Scope of Work</h2><ul>${scopeRows}</ul>` : ''}
+  ${visitSections}` : `<h2>Work Performed</h2>
   ${sysStatus ? `<div class="status"><span class="dot" style="background:${statusColor}"></span>System status: <strong>${esc(sysStatus)}</strong></div>` : ''}
   ${workParas || '<p style="color:#94a3b8">No work summary recorded.</p>'}
   ${scopeRows ? `<ul>${scopeRows}</ul>` : ''}
 
-  ${photos ? `<h2>WO Details</h2><div class="photos">${photos}</div>` : ''}
+  ${photos ? `<h2>WO Details</h2><div class="photos">${photos}</div>` : ''}`}
 
   <footer>Conexsol Solar Operations &nbsp;·&nbsp; solar.ops@conexsol.us &nbsp;·&nbsp; Generated ${esc(fmtDate(new Date().toISOString()))}</footer>
 </body></html>`;

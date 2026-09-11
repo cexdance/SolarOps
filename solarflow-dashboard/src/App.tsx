@@ -62,6 +62,7 @@ import { isFloridaSite, isAllowedCustomer, deriveClientId, findCustomerForSite }
 import { getDeletedCustomerIds, markJobDeleted, findDuplicateCustomer, hasDanglingCustomerRef } from './lib/dataStore';
 import { markUndo, peekUndo, takeUndo, applyUndo, clearUndo, clearUndoTombstones } from './lib/undo';
 import { mergeCustomerPair } from './lib/syncEngine';
+import { mergeVisits } from './lib/visits';
 import { Contractor, ContractorStatus, ContractorJob, ContractorLineItem } from './types/contractor';
 import { addInteraction, loadCustomers, loadInteractions, saveInteractions } from './lib/customerStore';
 import { validateAddress, normalizeStreetOrder, sameStreetAddress } from './lib/addressValidator';
@@ -1617,8 +1618,15 @@ function App() {
         });
         reconciledWoPhotos = mergedPhotos;
 
+        // The contractor finished a visit with a return trip needed: the order
+        // goes back to scheduled for the next visit (date set by the contractor
+        // through handleContractorProposeSchedule). Stays in Pending Completion.
+        const visitFinished = (updatedJob.visits?.length ?? 0) > (adminJob.visits?.length ?? 0);
         // Build the updated admin job with all mirrored fields
-        const statusFields = ['en_route', 'in_progress', 'completed'].includes(updatedJob.status)
+        const statusFields = visitFinished
+          ? { woStatus: 'scheduled' as WOStatus, status: 'assigned' as JobStatus, startedAt: undefined, completedAt: undefined,
+              scheduledDate: updatedJob.scheduledDate, scheduledTime: updatedJob.scheduledTime }
+          : ['en_route', 'in_progress', 'completed'].includes(updatedJob.status)
           ? {
               woStatus: woStatusMap[updatedJob.status],
               status: woStatusMap[updatedJob.status],
@@ -1692,6 +1700,7 @@ function App() {
           // assigning it straight across would delete every RMA the office added.
           // Newest `updatedAt` wins per entry, same rule as everywhere else.
           rmaEntries: mergeRmaEntries(adminJob.rmaEntries, updatedJob.rmaEntries),
+          visits: mergeVisits(adminJob.visits, updatedJob.visits),
           contractorParts: updatedJob.parts ?? adminJob.contractorParts,
           contractorPartsAmount: updatedJob.partsAmount ?? adminJob.contractorPartsAmount,
           contractorLaborAmount: updatedJob.laborAmount ?? adminJob.contractorLaborAmount,
@@ -1777,9 +1786,13 @@ function App() {
     const startedNow = updatedJob.status === 'in_progress' && prevCj?.status !== 'in_progress';
     const leftSiteNow = updatedJob.status === 'documentation' && prevCj?.status !== 'documentation';
     const completedNow = updatedJob.status === 'completed' && prevCj?.status !== 'completed';
-    if (startedNow || leftSiteNow || completedNow) {
+    const finishedVisit = (updatedJob.visits?.length ?? 0) > (prevCj?.visits?.length ?? 0)
+      ? updatedJob.visits![updatedJob.visits!.length - 1] : undefined;
+    if (startedNow || leftSiteNow || completedNow || finishedVisit) {
       const adminUserIds = ['user-1', 'user-3', 'user-4'];
-      const message = completedNow
+      const message = finishedVisit
+        ? `Visit ${finishedVisit.number} finished for ${updatedJob.customerName} at ${updatedJob.address}. Return visit set for ${updatedJob.scheduledDate || 'a date TBD'}. If it needs a new quote, move the card to Create Quote in Billing.`
+        : completedNow
         ? `${updatedJob.serviceType} completed by contractor for ${updatedJob.customerName} at ${updatedJob.address}, ${updatedJob.city}`
         : leftSiteNow
           ? `Contractor left site for ${updatedJob.serviceType} at ${updatedJob.address}, ${updatedJob.city} (${updatedJob.customerName}). Service report pending.`
@@ -1790,7 +1803,7 @@ function App() {
         // 'mention' reused for the start/left-site alerts (same precedent as
         // the auto-schedule FYI) to avoid widening the AppNotification union.
         type: completedNow ? ('contractor_completed' as const) : ('mention' as const),
-        title: completedNow ? 'Work Order Completed' : leftSiteNow ? 'Contractor Left Site' : 'Work Order Started',
+        title: finishedVisit ? 'Visit Finished, Return Needed' : completedNow ? 'Work Order Completed' : leftSiteNow ? 'Contractor Left Site' : 'Work Order Started',
         message,
         relatedJobId: updatedJob.sourceJobId || updatedJob.id,
         relatedContractorId: updatedJob.contractorId,
@@ -2225,7 +2238,12 @@ function App() {
     setData(prev => {
       const next = {
         ...prev,
-        jobs: prev.jobs.map((j) => (j.id === updatedJob.id ? updatedJob : j)),
+        // Visits are only ever added or edited, never removed, so a save from
+        // a panel holding a stale copy must not drop a visit the field app just
+        // finished: union against the live record.
+        jobs: prev.jobs.map((j) => (j.id === updatedJob.id
+          ? (j.visits || updatedJob.visits ? { ...updatedJob, visits: mergeVisits(j.visits, updatedJob.visits) } : updatedJob)
+          : j)),
         customers: prev.customers.map((c) =>
           c.id === updatedJob.customerId
             ? { ...c, activityHistory: [newActivity, ...(c.activityHistory || [])] }

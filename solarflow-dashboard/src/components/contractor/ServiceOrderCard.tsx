@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { ContractorJob, JobStatusContractor } from '../../types/contractor';
 import { serviceOrderNo, dedupePhotoUrls } from '../../lib/woHelpers';
+import VisitHistory from '../VisitHistory';
 
 const STATUS_STYLE: Record<JobStatusContractor, string> = {
   assigned:      'bg-slate-100 text-slate-600',
@@ -145,6 +146,9 @@ const ServiceOrderCard: React.FC<{ job: ContractorJob }> = ({ job }) => {
             <p className="text-sm text-slate-400">No photos yet.</p>
           )}
         </div>
+
+        {/* Earlier trips on this order, so whoever returns knows what was done. */}
+        <VisitHistory visits={job.visits} />
 
         {/* Notes */}
         <div>

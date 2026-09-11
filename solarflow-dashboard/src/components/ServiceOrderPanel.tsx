@@ -27,6 +27,7 @@ import { formatMoney, formatCost } from '../lib/money';
 import { printServiceReport } from '../lib/printServiceReport';
 import { serviceOrderNo, workOrderNo, generateServiceOrderNumber, photoUrlStem, findPowercareCaseNo, needsFormalQuote, realSiteId } from '../lib/woHelpers';
 import { SowDistributionModal, SOW_DISTRIBUTION_NAMES } from './SowDistributionModal';
+import VisitHistory from './VisitHistory';
 import { ImageLightbox } from './ImageLightbox';
 import { ActivityFeed, type FeedUser } from './ui/ActivityFeed';
 import { compressImageToDataUrl, compressImageToBlob } from '../lib/photoCompress';
@@ -1880,6 +1881,24 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                   Report
                 </button>
               )}
+              {/* Multi-visit orders: print a single visit (Report prints them all). */}
+              {job?.visits?.length ? (
+                <select
+                  value=""
+                  onChange={e => {
+                    const n = Number(e.target.value);
+                    if (n) printServiceReport({ job, customer, siteName, siteAddress: normalizedSiteAddress, clientId, serviceType, visit: n });
+                  }}
+                  aria-label="Print the report for one visit"
+                  title="Print the report for one visit"
+                  className="min-h-[44px] bg-transparent text-slate-300 hover:text-orange-300 text-xs font-medium cursor-pointer focus:outline-none"
+                >
+                  <option value="">1 visit</option>
+                  {Array.from({ length: job.visits.length + 1 }, (_, i) => (
+                    <option key={i} value={i + 1} className="text-slate-900">Visit {i + 1}</option>
+                  ))}
+                </select>
+              ) : null}
               {/* min-h/w-44 for the tap target. The glyph stays 20px; only the
                   hit area grows, so nothing moves visually on desktop. */}
               <button
@@ -3736,6 +3755,14 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
           {/* Service Report */}
           {activeTab === 'report' && (
             <div className="p-6 space-y-5">
+              {job?.visits?.length ? (
+                <>
+                  <VisitHistory visits={job.visits} showBilling />
+                  <p className="text-xs font-semibold text-orange-600 uppercase tracking-wider">
+                    Current visit ({job.visits.length + 1})
+                  </p>
+                </>
+              ) : null}
               <div>
                 <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">
                   System Status After Service

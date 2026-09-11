@@ -24,6 +24,7 @@ import { uploadPhotoToStorage } from '../../lib/photoStorage';
 import { appendPhoto, flushPendingMirrors, listPhotosForJob, dataUrlToBlob, deletePhotoForJobByUrl } from '../../lib/photoStore';
 import { logChange, logJobChange, describeUrl } from '../../lib/changeLog';
 import ServiceOrderCard from './ServiceOrderCard';
+import { buildVisit } from '../../lib/visits';
 
 interface JobDetailProps {
   job: ContractorJob;
@@ -218,6 +219,11 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
     isCompleted ? 'completed' : (job.status === 'in_progress' || job.status === 'documentation') ? 'active' : 'pre_start'
   );
   const [showAfterModal, setShowAfterModal] = useState(false);
+  // Finish this visit without closing the order: a return trip is needed.
+  const [showFinishVisit, setShowFinishVisit] = useState(false);
+  const [returnDate, setReturnDate] = useState('');
+  const [returnTime, setReturnTime] = useState('');
+  const [returnRemaining, setReturnRemaining] = useState('');
 
   // Photos, initial shape always exposes every PhotoCategory key so callers can safely
   // index into `photos[category]` without an undefined check.
@@ -833,6 +839,42 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
   };
 
   const handleAfterPhotoCaptured = (dataUrl: string) => handleCompleteCall(dataUrl);
+
+  // ── Finish Visit: this trip is done, the order is not ──────────────────────
+  // Snapshots the visit (date, work done, photos, parts) into job.visits and
+  // puts the order back in the queue for the return date. The order stays one
+  // SO: pay is per SO, and the office decides whether the next visit needs a
+  // new quote.
+  const handleFinishVisit = () => {
+    if (!returnDate) return;
+    saverRef.current?.cancel();
+    let notes = serviceNotes;
+    if (safetyConcern && safetyDetails) notes += `\n\n[SAFETY CONCERN]: ${safetyDetails}`;
+    const remaining = returnRemaining.trim() || nextSteps;
+    const current: ContractorJob = { ...snapshotRef.current(), operationalNotes: notes, nextSteps: remaining };
+    const visit = buildVisit(current, new Date().toISOString());
+    const updated: ContractorJob = {
+      ...current,
+      status: 'assigned',
+      startedAt: undefined,
+      completedAt: undefined,
+      operationalNotes: '',
+      requiresFollowUp: true,
+      scheduledDate: returnDate,
+      scheduledTime: returnTime,
+      visits: [...(job.visits ?? []), visit],
+    };
+    // Book the return date FIRST: that handler writes the admin job from its
+    // own snapshot, so the visit mirror has to land after it, not under it.
+    onProposeSchedule?.(updated, returnDate, returnTime);
+    onUpdateJob(updated);
+    setServiceNotes('');
+    lastLoggedNotes.current = '';
+    setNextSteps(remaining);
+    setShowFinishVisit(false);
+    setReturnRemaining('');
+    setPhase('pre_start');
+  };
 
   const handleAddPart = () => {
     if (!newPart.name) return;
@@ -2271,6 +2313,57 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
         <input ref={addPhotoLibraryRef} type="file" accept="image/*" multiple
           onChange={handleAdditionalPhoto} className="hidden" />
 
+        {showFinishVisit && (
+          <div
+            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40"
+            onClick={() => setShowFinishVisit(false)}
+          >
+            <div
+              role="dialog" aria-modal="true" aria-labelledby="finish-visit-title"
+              className="bg-white w-full sm:max-w-sm rounded-t-2xl sm:rounded-2xl p-4 space-y-3 pb-[calc(1rem+env(safe-area-inset-bottom))]"
+              onClick={e => e.stopPropagation()}
+            >
+              <div>
+                <h2 id="finish-visit-title" className="font-bold text-slate-900">
+                  Finish visit {(job.visits?.length ?? 0) + 1}, return needed
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Your notes, photos and parts are saved to this visit. The order stays open for the return trip, and the client is notified of the new date.
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <label className="flex-1">
+                  <span className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Return date</span>
+                  <input type="date" required value={returnDate} onChange={e => setReturnDate(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
+                </label>
+                <label className="flex-1">
+                  <span className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Est. time</span>
+                  <input type="time" value={returnTime} onChange={e => setReturnTime(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
+                </label>
+              </div>
+              <label className="block">
+                <span className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1">What is left to do</span>
+                <textarea rows={3} value={returnRemaining} onChange={e => setReturnRemaining(e.target.value)}
+                  placeholder={nextSteps || 'Parts to bring, work remaining, why a return is needed'}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
+              </label>
+              <button
+                onClick={handleFinishVisit}
+                disabled={!returnDate}
+                className="w-full flex items-center justify-center gap-2 py-3 bg-orange-500 hover:bg-orange-600 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold rounded-xl text-sm transition-colors cursor-pointer"
+              >
+                <CalendarClock className="w-5 h-5" />
+                Finish visit &amp; book return
+              </button>
+              <button onClick={() => setShowFinishVisit(false)} className="w-full px-4 py-2 text-slate-500 text-sm cursor-pointer">
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
         {showPhotoSourceSheet && (
           <div
             className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40"
@@ -2332,6 +2425,21 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
           >
             <CheckCircle className="w-6 h-6" />
             Complete Work Order
+          </button>
+        )}
+        {phase === 'active' && (
+          <button
+            onClick={() => {
+              if (safetyConcern && !safetyDetails.trim()) {
+                setActiveTab('safety');
+                return;
+              }
+              setShowFinishVisit(true);
+            }}
+            className="w-full mt-2 flex items-center justify-center gap-2 py-2.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-semibold rounded-xl text-sm transition-colors cursor-pointer"
+          >
+            <CalendarClock className="w-5 h-5" />
+            Finish Visit, Return Needed
           </button>
         )}
 
