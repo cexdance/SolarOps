@@ -18,7 +18,8 @@ import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
 const XERO_API = "https://api.xero.com/api.xro/2.0";
 const PRICE = Number(Deno.env.get("XERO_SITE_TRANSFER_PRICE") ?? "120");
 const ACCOUNT_CODE = Deno.env.get("XERO_SITE_TRANSFER_ACCOUNT_CODE") ?? "";
-const TAX_TYPE = Deno.env.get("XERO_SITE_TRANSFER_TAX_TYPE") ?? "";
+// Flat fee, no tax (confirmed 2026-09-01). US Xero orgs spell that "NONE".
+const TAX_TYPE = Deno.env.get("XERO_SITE_TRANSFER_TAX_TYPE") ?? "NONE";
 
 type Json = Record<string, unknown>;
 
@@ -59,11 +60,43 @@ async function getAccess(db: SupabaseClient) {
     .eq("id", 1);
   if (saveErr) throw new Error(`Could not persist rotated refresh token: ${saveErr.message}`);
 
-  return { token: t.access_token as string, tenantId: row.tenant_id as string };
+  // A refresh can SUCCEED while the organisation is no longer connected: the grant
+  // belongs to the Xero user, the connection to the org. Xero then answers every
+  // API call with a bare 403 "AuthenticationUnsuccessful". Check the connection
+  // list up front and name what is missing and what IS connected.
+  const scopes = tokenScopes(t.access_token);
+  const connRes = await fetch("https://api.xero.com/connections", {
+    headers: { authorization: `Bearer ${t.access_token}`, accept: "application/json" },
+  });
+  const conns = connRes.ok ? await connRes.json() : [];
+  if (!Array.isArray(conns) || !conns.some((c: Json) => c.tenantId === row.tenant_id)) {
+    const list = Array.isArray(conns) && conns.length
+      ? conns.map((c: Json) => `${c.tenantName} (${String(c.tenantId).slice(0, 8)})`).join(", ")
+      : "none";
+    throw new Error(
+      `Xero connection lost: ${row.tenant_name ?? "the stored organisation"} ` +
+        `(${String(row.tenant_id).slice(0, 8)}) is not connected to this app any more. ` +
+        `Connected now: ${list}. Token scopes: ${scopes}. ` +
+        `Fix: open ${Deno.env.get("SUPABASE_URL")}/functions/v1/xero-oauth-callback?force=1 and select Conexsol.`,
+    );
+  }
+
+  return { token: t.access_token as string, tenantId: row.tenant_id as string, scopes };
+}
+
+// Xero access tokens are JWTs whose `scope` claim lists what was actually granted,
+// which is not always what was asked for.
+function tokenScopes(jwt: string): string {
+  try {
+    const c = JSON.parse(atob(jwt.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
+    return Array.isArray(c.scope) ? c.scope.join(" ") : String(c.scope ?? "unknown");
+  } catch {
+    return "unreadable";
+  }
 }
 
 async function xero(
-  auth: { token: string; tenantId: string },
+  auth: { token: string; tenantId: string; scopes?: string },
   path: string,
   init: RequestInit = {},
 ) {
@@ -78,7 +111,11 @@ async function xero(
     },
   });
   const body = await res.text();
-  if (!res.ok) throw new Error(`Xero ${init.method ?? "GET"} ${path} -> ${res.status}: ${body.slice(0, 400)}`);
+  if (!res.ok) {
+    // On 401/403 the useful fact is what the token was actually granted.
+    const extra = res.status === 401 || res.status === 403 ? ` [token scopes: ${auth.scopes ?? "unknown"}]` : "";
+    throw new Error(`Xero ${init.method ?? "GET"} ${path} -> ${res.status}: ${body.slice(0, 300)}${extra}`);
+  }
   return body ? JSON.parse(body) : {};
 }
 
@@ -171,7 +208,7 @@ Deno.serve(async (req) => {
   try {
     // A dry run stays useful before anyone has authorised Xero: fall back to
     // reporting WHICH records were selected, which is the half worth checking early.
-    let auth: { token: string; tenantId: string } | null = null;
+    let auth: { token: string; tenantId: string; scopes?: string } | null = null;
     let authNote: string | undefined;
     try {
       auth = await getAccess(db);
@@ -284,45 +321,51 @@ Deno.serve(async (req) => {
       };
 
       // ── Draft invoice ──────────────────────────────────────────────────────
-      // Stays off until Daniel supplies the revenue account and tax treatment.
-      // Guessing either would misstate his books, which is worse than not automating.
-      if (!ACCOUNT_CODE || !TAX_TYPE) {
-        row.invoice = "skipped: XERO_SITE_TRANSFER_ACCOUNT_CODE / _TAX_TYPE not set";
+      // Needs the revenue account code. Guessing it would post revenue to the
+      // wrong account, which is an accounting error, not a UI one.
+      if (!ACCOUNT_CODE) {
+        row.invoice = "skipped: XERO_SITE_TRANSFER_ACCOUNT_CODE not set (call ?accounts=1 to list them)";
         out.push(row);
         continue;
       }
 
-      const existing = auth
-        ? await xero(auth, `/Invoices?where=${encodeURIComponent(`Type=="ACCREC" AND Reference=="${wo}"`)}`)
-        : {};
-      if (existing?.Invoices?.length) {
-        row.invoice = `exists (${existing.Invoices[0].InvoiceNumber})`;
-      } else if (dry) {
-        row.invoice = `would draft $${PRICE}`;
-      } else if (!contactId) {
-        row.invoice = "skipped: no contact id";
-      } else {
-        const today = new Date().toISOString().slice(0, 10);
-        const made = await xero(auth!, "/Invoices", {
-          method: "POST",
-          body: JSON.stringify({
-            Invoices: [{
-              Type: "ACCREC",
-              Status: "DRAFT",
-              Contact: { ContactID: contactId },
-              Date: today,
-              Reference: wo,
-              LineItems: [{
-                Description: `Site transfer - ${clientId}`,
-                Quantity: 1,
-                UnitAmount: PRICE,
-                AccountCode: ACCOUNT_CODE,
-                TaxType: TAX_TYPE,
+      try {
+        const existing = auth
+          ? await xero(auth, `/Invoices?where=${encodeURIComponent(`Type=="ACCREC" AND Reference=="${wo}"`)}`)
+          : {};
+        if (existing?.Invoices?.length) {
+          row.invoice = `exists (${existing.Invoices[0].InvoiceNumber})`;
+        } else if (dry) {
+          row.invoice = `would draft $${PRICE}`;
+        } else if (!contactId) {
+          row.invoice = "skipped: no contact id";
+        } else {
+          const today = new Date().toISOString().slice(0, 10);
+          const made = await xero(auth!, "/Invoices", {
+            method: "POST",
+            body: JSON.stringify({
+              Invoices: [{
+                Type: "ACCREC",
+                Status: "DRAFT",
+                Contact: { ContactID: contactId },
+                Date: today,
+                Reference: wo,
+                LineItems: [{
+                  Description: `Site transfer - ${clientId}`,
+                  Quantity: 1,
+                  UnitAmount: PRICE,
+                  AccountCode: ACCOUNT_CODE,
+                  TaxType: TAX_TYPE,
+                }],
               }],
-            }],
-          }),
-        });
-        row.invoice = `drafted ${made?.Invoices?.[0]?.InvoiceNumber ?? ""}`;
+            }),
+          });
+          row.invoice = `drafted ${made?.Invoices?.[0]?.InvoiceNumber ?? ""}`;
+        }
+      } catch (e) {
+        // The contact half already succeeded. Report the invoice failure without
+        // throwing away that result.
+        row.invoice = `failed: ${String(e).slice(0, 180)}`;
       }
       out.push(row);
     }

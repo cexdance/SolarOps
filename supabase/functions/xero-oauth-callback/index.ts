@@ -66,10 +66,12 @@ Deno.serve(async (req) => {
 
   // --- Start of flow: send them to Xero -------------------------------------
   if (!code) {
-    // Single-use. Once connected, re-authorizing requires deleting the row on
-    // purpose, so a stray click can never swap the connection to another org.
+    // Single-use. Once connected, re-authorising means passing ?force=1 on purpose,
+    // so a stray click can never swap the connection to another organisation.
+    // A SCOPE CHANGE needs force=1: the stored token keeps the scopes it was issued with.
+    const force = url.searchParams.get("force") === "1";
     const { data: existing } = await db.from("xero_auth").select("tenant_name").maybeSingle();
-    if (existing) {
+    if (existing && !force) {
       return page(
         "Already connected",
         `This is already linked to <b>${existing.tenant_name ?? "a Xero organisation"}</b>. Nothing to do.`,
@@ -114,7 +116,25 @@ Deno.serve(async (req) => {
   if (!Array.isArray(conns) || conns.length === 0) {
     return page("No organisation", "Xero authorised the app but returned no organisation.", 502);
   }
-  const tenant = conns[0];
+  // /connections lists EVERY org this user ever connected to the app, in no
+  // promised order, so conns[0] can be a stale or different org. Xero stamps the
+  // orgs picked in THIS consent with the token's authentication_event_id: use those.
+  let authEvent = "";
+  try {
+    const c = JSON.parse(atob(tokens.access_token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
+    authEvent = String(c.authentication_event_id ?? "");
+  } catch { /* fall through to conns[0] */ }
+  const picked = conns.filter((c: Record<string, unknown>) => authEvent && c.authEventId === authEvent);
+  const orgs = picked.filter((c: Record<string, unknown>) => c.tenantType === "ORGANISATION");
+  if (orgs.length > 1) {
+    return page(
+      "Pick one organisation",
+      `You selected ${orgs.map((o: Record<string, unknown>) => `<b>${o.tenantName}</b>`).join(", ")}. ` +
+        `Run the link again and tick only Conexsol.`,
+      400,
+    );
+  }
+  const tenant = orgs[0] ?? picked[0] ?? conns[0];
 
   const { error } = await db.from("xero_auth").upsert({
     id: 1,
@@ -127,6 +147,6 @@ Deno.serve(async (req) => {
 
   return page(
     "Connected",
-    `Linked to <b>${tenant.tenantName ?? tenant.tenantId}</b>. You can close this tab. Nothing else to do.`,
+    `Linked to <b>${tenant.tenantName ?? tenant.tenantId}</b> with scopes:<br><code>${SCOPES}</code><br><br>You can close this tab.`,
   );
 });
