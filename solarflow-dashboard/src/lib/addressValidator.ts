@@ -349,16 +349,21 @@ export function stripEmbeddedCityStateZip(
 
 export interface ParsedAddress { address: string; city: string; state: string; zip: string; }
 
+// Same list as scripts/trello-ll-reconcile.mts ADDRESS_LINE.
+const STREET_SUFFIX = /^(?:st|street|ave|avenue|rd|road|dr|drive|ln|lane|blvd|boulevard|ct|court|cir|circle|way|ter|terrace|pl|place|pkwy|parkway|hwy|highway|trl|trail)$/;
+const DIRECTIONAL = /^(?:n|s|e|w|ne|nw|se|sw)\.?$/i;
+
 /**
  * Split a one-line US address into components. Anchors on a trailing
  * "<STATE> <ZIP>" so it only fires on a full address, never a bare street.
  *   "123 Main St, Miami, FL 33101"      -> { address:'123 Main St', city:'Miami', state:'FL', zip:'33101' }
  *   "Address: 330 Beulah Rd, Winter Garden, FL 34787" (label stripped, multi-word city kept)
- *   "123 Main St Miami FL 33101"        -> best-effort space split (see ceiling below)
+ *   "2632 NW 52nd Ct Fort Lauderdale, FL 33309" -> split after the last street suffix
  * Returns null when there is no state+zip tail (i.e. not a complete address).
- * ponytail: comma form is exact; the comma-less fallback takes only the last word as
- * city, so "123 Main St Winter Garden FL 34787" loses "Winter". Add a city gazetteer
- * only if comma-less multi-word cities actually show up in real Trello cards.
+ * ponytail: comma form is exact; the comma-less form splits after the last street
+ * suffix, and only falls back to "last word is the city" when there is no suffix.
+ * A street with no suffix AND a multi-word city ("100 Broadway Winter Park") still
+ * loses a word; a city gazetteer is the upgrade if that shows up in real cards.
  */
 export function parseUsAddress(raw: string): ParsedAddress | null {
   let s = (raw || '').replace(/\s+/g, ' ').trim();
@@ -380,8 +385,25 @@ export function parseUsAddress(raw: string): ParsedAddress | null {
   } else {
     const words = head.split(' ');
     if (words.length < 3) return null; // need at least "<num> <street> <city>"
-    city = words.pop()!;
-    address = words.join(' ');
+    const bare = (w?: string) => (w ?? '').toLowerCase().replace(/\.$/, '');
+    // Last suffix that has a street name before it and a city after it. An "St"
+    // right after another suffix or "Port" is Saint, part of the city:
+    // "100 Ocean Blvd St Augustine", "123 Main St Port St Lucie".
+    let cut = -1;
+    for (let i = words.length - 2; i >= 2 && cut < 0; i--) {
+      if (!STREET_SUFFIX.test(bare(words[i]))) continue;
+      if (bare(words[i]) === 'st' && (STREET_SUFFIX.test(bare(words[i - 1])) || bare(words[i - 1]) === 'port')) continue;
+      cut = i;
+    }
+    // Keep a trailing directional on the street: "123 Main St NE Miami".
+    while (cut >= 0 && cut < words.length - 2 && DIRECTIONAL.test(words[cut + 1]!)) cut++;
+    if (cut >= 0) {
+      address = words.slice(0, cut + 1).join(' ');
+      city = words.slice(cut + 1).join(' ');
+    } else {
+      city = words.pop()!;
+      address = words.join(' ');
+    }
   }
   if (!address || !city) return null;
   return { address, city, state, zip };

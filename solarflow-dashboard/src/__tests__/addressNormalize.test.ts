@@ -66,6 +66,28 @@ describe('parseUsAddress (auto-populate city/state/zip from a full address line)
     expect(parseUsAddress('123 Main St Miami FL 33101'))
       .toEqual({ address: '123 Main St', city: 'Miami', state: 'FL', zip: '33101' });
   });
+  it('splits a comma-less multi-word city after the last street suffix', () => {
+    expect(parseUsAddress('10401 SW 53rd St Cooper City, FL 33328'))
+      .toEqual({ address: '10401 SW 53rd St', city: 'Cooper City', state: 'FL', zip: '33328' });
+    expect(parseUsAddress('2632 NW 52nd Ct Fort Lauderdale, FL 33309'))
+      .toEqual({ address: '2632 NW 52nd Ct', city: 'Fort Lauderdale', state: 'FL', zip: '33309' });
+    expect(parseUsAddress('1104 emerald dunes dr sun city center, FL 33573'))
+      .toEqual({ address: '1104 emerald dunes dr', city: 'sun city center', state: 'FL', zip: '33573' });
+  });
+  it('treats St after a suffix or Port as Saint, part of the city', () => {
+    expect(parseUsAddress('123 Main St St Petersburg FL 33701'))
+      .toEqual({ address: '123 Main St', city: 'St Petersburg', state: 'FL', zip: '33701' });
+    expect(parseUsAddress('500 Ocean Blvd. Port St. Lucie, FL 34952'))
+      .toEqual({ address: '500 Ocean Blvd.', city: 'Port St. Lucie', state: 'FL', zip: '34952' });
+  });
+  it('keeps a directional after the suffix on the street', () => {
+    expect(parseUsAddress('123 Main St NE Winter Park FL 32789'))
+      .toEqual({ address: '123 Main St NE', city: 'Winter Park', state: 'FL', zip: '32789' });
+  });
+  it('falls back to the last word as city when there is no suffix', () => {
+    expect(parseUsAddress('100 Broadway Miami FL 33101'))
+      .toEqual({ address: '100 Broadway', city: 'Miami', state: 'FL', zip: '33101' });
+  });
   it('returns null without a state+zip tail (bare street)', () => {
     expect(parseUsAddress('123 Main St')).toBeNull();
     expect(parseUsAddress('Miami, FL')).toBeNull();
