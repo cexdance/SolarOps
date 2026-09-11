@@ -150,6 +150,28 @@
       "detail": "Opened by clicking a customerless card on the LL board. The 'Source screenshot from Trello' block streams the card's first image through GET /api/trello-card?image= (signed-in, nothing stored, since customer-files is public). Targets the Trello lead 'Shunacee Hicks' because a lead migrated from the old Lead Lobby has no card and shows no screenshot; if Hicks is converted, point clickText at another Trello lead."
     },
     {
+      "id": "so-send-to-trello",
+      "group": "admin",
+      "title": "Service order: Send to Trello",
+      "view": "jobs",
+      "pre": [
+        {
+          "clickText": "Wisdom Anwana"
+        },
+        {
+          "wait": 2500
+        },
+        {
+          "clickText": "Send to Trello"
+        },
+        {
+          "wait": 2500
+        }
+      ],
+      "macro": "Creating Anthony's follow-up card for a service order from inside the order.",
+      "detail": "Next to Labels on the service order panel. Opens a picker of the Florida Trello board's open columns (preselects the order's own column, else Needs follow-Up Service) and a preview of the card title. The server creates the card with a 'SolarOps ref:' last line so the webhook and nightly sweep never import it as a lead; once sent the button becomes 'Open in Trello'. Targets the order 'Wisdom Anwana'; if that order is archived, point clickText at another."
+    },
+    {
       "id": "routes",
       "group": "admin",
       "title": "Dispatch Map",

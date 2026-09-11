@@ -82,7 +82,10 @@ export const SendToTrello: React.FC<{
       </button>
 
       {open && (
-        <div className="absolute z-50 mt-1 w-80 bg-white border border-slate-200 rounded-lg shadow-xl p-3 space-y-3">
+        // right-0: the button sits at the right edge of the SO panel, so a
+        // left-anchored popover ran off the panel and was clipped (caught in
+        // the production capture).
+        <div className="absolute right-0 z-50 mt-1 w-80 max-w-[calc(100vw-2rem)] bg-white border border-slate-200 rounded-lg shadow-xl p-3 space-y-3">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Card</p>
             <p className="text-sm font-semibold text-slate-800 truncate" title={content.name}>{content.name}</p>
