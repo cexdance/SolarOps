@@ -1457,6 +1457,18 @@ export function mergeCustomerPair(winner: Customer, loser: Customer): Customer {
 }
 
 /**
+ * Order-independent customer merge: the newer side wins the scalars.
+ * Customers carry no `fieldTimes`, so this is record-level LWW, not per-field.
+ * Use this wherever the caller has a remote/local pair but no `remoteWins()`
+ * check of its own (e.g. the Realtime handler).
+ */
+export function mergeCustomerLWW(remote: Customer, local: Customer): Customer {
+  return remoteWins(remote, local)
+    ? mergeCustomerPair(remote, local)
+    : mergeCustomerPair(local, remote);
+}
+
+/**
  * Merge two woPhoto lists so DELETIONS stick without dropping IN-FLIGHT uploads.
  *
  * The LWW `winner` is authoritative for what photos exist: if a photo the loser

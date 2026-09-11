@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, type MutableRefObject } from 'react';
 import { drainOutbox, resetOutboxAttempts } from '../lib/outbox';
-import { pullAndMerge, subscribeToChanges, mergeCustomerPair, mergeJobFields, mergeWoPhotos, resetSyncCursor } from '../lib/syncEngine';
+import { pullAndMerge, subscribeToChanges, mergeCustomerLWW, mergeJobFields, mergeWoPhotos, resetSyncCursor } from '../lib/syncEngine';
 import { loadContractors, loadServiceRates, loadContractorJobs } from '../lib/contractorStore';
 import type { AppState, Customer, Job } from '../types';
 import type { Contractor, ContractorJob } from '../types/contractor';
@@ -151,7 +151,9 @@ export function useSyncEngine({
             customers: exists
               // Union activity history + files with the local copy so a remote
               // record missing entries can never wipe them from this device.
-              ? prev.customers.map(c => c.id === customer.id ? mergeCustomerPair(customer, c) : c)
+              // mergeCustomerLWW is order-independent: an older remote event
+              // can no longer revert a newer local edit's scalars.
+              ? prev.customers.map(c => c.id === customer.id ? mergeCustomerLWW(customer, c) : c)
               : [...prev.customers, customer],
           };
         });
