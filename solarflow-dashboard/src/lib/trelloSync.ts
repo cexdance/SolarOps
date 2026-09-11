@@ -5,9 +5,10 @@
 // lead card by hand in Trello from the emails that come in, and does not use
 // SolarOps. The office works those leads in the LL kanban. So LL is where the
 // record moves, and his board has to follow it without him doing anything.
-import type { Job, JobLabel, PipelineStage } from '../types';
+import type { Job, JobLabel, PipelineStage, Customer, RMAEntry } from '../types';
 import { PIPELINE_STAGES, PIPELINE_STAGE_LABEL } from '../types';
 import { authedFetch } from './supabase';
+import { realSiteId, WO_STATUS_LABEL } from './woHelpers';
 
 /** One Trello list as GET /api/trello-card?lists=1 reports it. */
 export interface TrelloList { id: string; name: string; closed: boolean; stage?: string }
@@ -47,6 +48,93 @@ export function boardColumns(lists: TrelloList[] | null, jobs: Pick<Job, 'pipeli
   const shown = new Set<string>(cols.map(c => c.stage));
   if ([...used].some(s => !shown.has(s))) cols.push({ stage: 'not_on_board', title: 'Not on the Trello board' });
   return cols;
+}
+
+// ── "Send to Trello" for an existing service order ─────────────────────────
+
+/**
+ * The card Anthony gets for a service order. He works only in Trello and
+ * follows up on the RMA and the order from this card, so it carries what he
+ * needs to do that without opening SolarOps: who, how to reach them, which
+ * SolarEdge site and inverter, where the order stands, and each RMA.
+ *
+ * The title follows the board's own convention ("US-15676 Myrna Laffossee").
+ * Contact lines use the labels parseLeadDesc knows, so the card reads the same
+ * as the ones Anthony types. Lines with no value are left out rather than
+ * printed empty. Pure, so the content is testable.
+ */
+export function soCardContent(
+  job: Pick<Job, 'woNumber' | 'serviceType' | 'woStatus' | 'clientName' | 'solarEdgeClientId' | 'solarEdgeSiteId' | 'siteTransferInverterSerial' | 'notes' | 'siteAddress'>,
+  customer: Pick<Customer, 'name' | 'clientId' | 'phone' | 'email' | 'address' | 'city' | 'state' | 'zip' | 'solarEdgeSiteId'> | undefined,
+  rmaEntries: Pick<RMAEntry, 'manufacturer' | 'partDescription' | 'rmaNumber' | 'caseNumber' | 'status' | 'rmaStatus'>[] = [],
+): { name: string; desc: string } {
+  const clientNo = customer?.clientId || job.solarEdgeClientId || '';
+  const who = customer?.name || job.clientName || '';
+  const name = `${clientNo} ${who}`.trim() || job.woNumber || 'Service order';
+
+  const line = (label: string, v: unknown) => (String(v ?? '').trim() ? `${label}: ${String(v).trim()}` : null);
+  const status = job.woStatus ? (WO_STATUS_LABEL[job.woStatus] ?? job.woStatus.replace(/_/g, ' ')) : '';
+  const head = [
+    line('Service Order', [job.woNumber, job.serviceType].filter(Boolean).join(', ')),
+    line('Status', status),
+    line('Client', clientNo),
+    line('Phone', customer?.phone),
+    line('Email', customer?.email),
+    line('Address', customer?.address || job.siteAddress),
+    line('City', customer?.city),
+    line('State', customer?.state),
+    line('Zip', customer?.zip),
+    line('Site ID', realSiteId(customer?.solarEdgeSiteId, job.solarEdgeSiteId)),
+    line('Inverter serial', job.siteTransferInverterSerial),
+  ].filter(Boolean);
+
+  const rmas = rmaEntries
+    .filter(r => r.rmaNumber || r.caseNumber || r.partDescription)
+    .map(r => {
+      const part = [r.manufacturer, r.partDescription].filter(Boolean).join(' ');
+      const refs = [r.rmaNumber && `RMA ${r.rmaNumber}`, r.caseNumber && `case ${r.caseNumber}`, (r.rmaStatus ?? r.status)].filter(Boolean).join(', ');
+      return `- ${[part, refs].filter(Boolean).join(': ')}`;
+    });
+
+  const notes = String(job.notes ?? '').trim();
+  const desc = [
+    head.join('\n'),
+    rmas.length ? `RMA\n${rmas.join('\n')}` : '',
+    // ponytail: first 1200 chars. The card is a follow-up ticket, not a copy
+    // of the order; the full record stays in SolarOps.
+    notes ? `Notes\n${notes.length > 1200 ? `${notes.slice(0, 1200)}...` : notes}` : '',
+  ].filter(Boolean).join('\n\n');
+  return { name, desc };
+}
+
+/** Which list the picker preselects: the order's own LL column if it has one,
+ *  else "Needs follow-Up Service", which is what the card is for, else the
+ *  first open list. The user can always change it before sending. */
+export function defaultListFor(lists: TrelloList[], pipelineStage: string | undefined): string | undefined {
+  const open = lists.filter(l => !l.closed);
+  return (open.find(l => pipelineStage && l.stage === pipelineStage)
+    ?? open.find(l => l.stage === 'needs_follow_up')
+    ?? open[0])?.id;
+}
+
+/**
+ * Create the card. Resolves { cardId, url }. A 409 from the server means the
+ * order already has a card (sent from another browser, or before a reload);
+ * that resolves with the EXISTING card so the button simply links to it.
+ */
+export async function sendServiceOrderToTrello(
+  jobId: string,
+  listId: string,
+  content: { name: string; desc: string },
+): Promise<{ cardId: string; url: string }> {
+  const r = await authedFetch('/api/trello-card?create=1', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ jobId, listId, ...content }),
+  });
+  const body = await r.json().catch(() => ({})) as { cardId?: string; url?: string; error?: string };
+  if ((r.ok || r.status === 409) && body.cardId && body.url) return { cardId: body.cardId, url: body.url };
+  throw new Error(body.error || `Trello card was not created (${r.status})`);
 }
 
 /** Last known Trello lists, so the board draws instantly and works offline. */

@@ -433,6 +433,46 @@ export function acceptTrelloCorrections(
   return out;
 }
 
+// ── Cards SolarOps creates for existing service orders ─────────────────────
+//
+// "Send to Trello" on a service order (2026-09-11): the office logs a new
+// customer in SolarOps, and Anthony, who works only in Trello, needs a card to
+// follow up on the RMA and the order. That card is NOT a lead. Without the
+// link below, the webhook would see an ordinary createCard on the board, import
+// it as a brand-new lead (a duplicate of the customer who already exists), and
+// ping every office phone about it; the daily sweep would do the same to any
+// card it could not match.
+
+/** The last line of every card SolarOps creates. It is written INTO the card at
+ *  creation, so it is present on the very first webhook delivery, which often
+ *  arrives before the app has saved the card id onto the order. */
+export const SOLAROPS_REF_LINE = 'SolarOps ref:';
+
+/** The service order a card was created from, read from its description. */
+export function refJobId(desc: string | undefined): string | undefined {
+  const id = /^SolarOps ref:\s*([A-Za-z0-9_-]{3,80})\s*$/m.exec(desc ?? '')?.[1];
+  // A lead's own id never appears here; refuse it so nothing can use the ref
+  // line to hide a real lead card from import.
+  return id && !id.startsWith('job-trello-') ? id : undefined;
+}
+
+/**
+ * The existing SolarOps job a card belongs to, if it is not a lead card: the
+ * ref line first, then the card id saved on an order (`trelloCardId`), which
+ * still links the card if someone deletes the ref line in Trello.
+ */
+async function linkedJobFor(cardId: string, desc: string | undefined): Promise<string | undefined> {
+  const fromRef = refJobId(desc);
+  if (fromRef) return fromRef;
+  const r = await fetch(
+    `${SUPABASE_URL}/rest/v1/app_data?key=like.job:*&value->>trelloCardId=eq.${encodeURIComponent(cardId)}&select=key&limit=1`,
+    { headers: supabaseHeaders },
+  );
+  if (!r.ok) return undefined;
+  const rows = await r.json() as { key: string }[];
+  return rows[0]?.key.slice('job:'.length);
+}
+
 /** Set equality by normalized name. Order and colour are not part of identity. */
 export function sameLabelSet(
   a: { name: string }[],
@@ -1018,6 +1058,13 @@ async function handleLeadImportWebhook(req: VercelRequest, res: VercelResponse) 
     // updateCard, and must not be backfilled or re-imported either.
     if (card.isTemplate) return res.status(200).json({ skipped: 'card is a template' });
 
+    // A card SolarOps made for an existing service order ("Send to Trello") is
+    // never a lead: no import, no backfill, no new-lead notification. This runs
+    // on EVERY event, not just createCard, because a move into another list
+    // would otherwise take the create path too (any list imports, b0e4d0d).
+    const linkedJob = await linkedJobFor(cardId, card.desc);
+    if (linkedJob) return res.status(200).json({ skipped: `card belongs to service order ${linkedJob}` });
+
     // Authoritative board check, BEFORE anything is written or anyone notified.
     // Trello reported this idBoard, the caller did not, so a forged payload
     // pointing at a card on someone else's board is rejected here even when the
@@ -1413,10 +1460,17 @@ async function handleSweep(req: VercelRequest, res: VercelResponse) {
 
   const boardId = TARGET_LISTS[0].boardId;
   const auth = `key=${API_KEY}&token=${API_TOKEN}`;
-  const cardsRes = await fetch(`${TRELLO_BASE}/boards/${boardId}/cards?fields=name,idList,labels,isTemplate&${auth}`);
+  const cardsRes = await fetch(`${TRELLO_BASE}/boards/${boardId}/cards?fields=name,idList,labels,isTemplate,desc&${auth}`);
   if (!cardsRes.ok) return res.status(502).json({ error: `Trello cards ${cardsRes.status}` });
-  const cards = (await cardsRes.json() as { id: string; name: string; idList: string; labels: TrelloLabel[]; isTemplate?: boolean }[])
-    .filter(c => !c.isTemplate);
+  // Cards SolarOps made for existing service orders ("Send to Trello") are not
+  // leads, so they are outside this sweep entirely: by their ref line, or by a
+  // card id saved on an order. Without this the sweep would find each one with
+  // no lead job and IMPORT it as a new lead, every night.
+  const linkedRes = await fetch(`${SUPABASE_URL}/rest/v1/app_data?key=like.job:*&value->>trelloCardId=not.is.null&select=value->>trelloCardId`, { headers: supabaseHeaders });
+  if (!linkedRes.ok) return res.status(502).json({ error: `Supabase linked cards ${linkedRes.status}` });
+  const linkedCards = new Set((await linkedRes.json() as { trelloCardId: string }[]).map(r => r.trelloCardId));
+  const cards = (await cardsRes.json() as { id: string; name: string; idList: string; labels: TrelloLabel[]; isTemplate?: boolean; desc?: string }[])
+    .filter(c => !c.isTemplate && !refJobId(c.desc) && !linkedCards.has(c.id));
   const listNames = new Map((await (await fetch(`${TRELLO_BASE}/boards/${boardId}/lists?fields=name&${auth}`)).json() as { id: string; name: string }[]).map(l => [l.id, l.name]));
 
   const rowsRes = await fetch(`${SUPABASE_URL}/rest/v1/app_data?key=like.job:job-trello-*&select=value`, { headers: supabaseHeaders });
@@ -1507,11 +1561,81 @@ async function handleSweep(req: VercelRequest, res: VercelResponse) {
   return res.status(200).json({ summary, ...report });
 }
 
+/**
+ * POST /api/trello-card?create=1, body { jobId, listId, name, desc }.
+ *
+ * Creates the Trello card for an existing service order so Anthony can follow
+ * up on it. Returns { cardId, url }; the CLIENT then saves `trelloCardId` onto
+ * the order through its normal save, so there is exactly one writer of the
+ * job record and no server write racing a browser's per-field merge.
+ */
+async function handleCreateCard(req: VercelRequest, res: VercelResponse) {
+  if (!(await requireUser(req, res))) return;
+  if (!API_KEY || !API_TOKEN) return res.status(500).json({ error: 'Trello credentials not configured' });
+
+  const raw = await readRawBody(req);
+  let body: { jobId?: string; listId?: string; name?: string; desc?: string };
+  try { body = raw ? JSON.parse(raw) : (req.body ?? {}); }
+  catch { return res.status(400).json({ error: 'Body is not valid JSON' }); }
+
+  const jobId = String(body.jobId ?? '').trim();
+  const listId = String(body.listId ?? '').trim();
+  const name = String(body.name ?? '').trim().slice(0, 200);
+  if (!/^[A-Za-z0-9_-]{3,80}$/.test(jobId)) return res.status(400).json({ error: 'Malformed job id' });
+  if (jobId.startsWith('job-trello-')) return res.status(409).json({ error: 'This lead already came from a Trello card' });
+  if (!/^[0-9a-f]{24}$/i.test(listId)) return res.status(400).json({ error: 'Malformed list id' });
+  if (!name) return res.status(400).json({ error: 'Card name is required' });
+
+  // One card per order. The button disables itself while a request is in
+  // flight (the Move to Client double-click family, four incidents), and this
+  // catches a second send from another browser or after a reload.
+  const existing = await fetch(
+    `${SUPABASE_URL}/rest/v1/app_data?key=eq.${encodeURIComponent(`job:${jobId}`)}&select=value->>trelloCardId,value->>trelloCardUrl`,
+    { headers: supabaseHeaders },
+  );
+  const prior = existing.ok ? (await existing.json() as { trelloCardId?: string; trelloCardUrl?: string }[])[0] : undefined;
+  if (prior?.trelloCardId) {
+    return res.status(409).json({ error: 'This order already has a Trello card', cardId: prior.trelloCardId, url: prior.trelloCardUrl });
+  }
+
+  // The list must be an open list on the import board: the token can reach
+  // other boards, and a card created there would be outside the mirror.
+  const l = await fetch(`${TRELLO_BASE}/lists/${listId}?fields=idBoard,closed&key=${API_KEY}&token=${API_TOKEN}`);
+  const info = l.ok ? await l.json() as { idBoard?: string; closed?: boolean } : {};
+  if (!isAllowedBoard(info.idBoard) || info.closed) {
+    return res.status(400).json({ error: 'That list is not an open list on the Florida board' });
+  }
+
+  // Any ref line the client sent is dropped; the server writes the only one.
+  const clientDesc = String(body.desc ?? '').split('\n').filter(line => !line.startsWith(SOLAROPS_REF_LINE)).join('\n').trim();
+  const desc = `${clientDesc}\n\n${SOLAROPS_REF_LINE} ${jobId}`.slice(-16000);
+
+  const qs = new URLSearchParams({ idList: listId, name, desc, pos: 'top', key: API_KEY, token: API_TOKEN });
+  const created = await fetch(`${TRELLO_BASE}/cards?${qs}`, { method: 'POST' });
+  if (!created.ok) {
+    const detail = await created.text().catch(() => '');
+    console.error('[trello-create] failed:', created.status, detail);
+    return res.status(502).json({ error: `Trello card create ${created.status}` });
+  }
+  const card = await created.json() as { id: string; shortUrl: string };
+  console.info(`[trello-create] card ${card.id} for ${jobId} in list ${listId}`);
+  return res.status(200).json({ cardId: card.id, url: card.shortUrl });
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Trello HEAD-verifies the callback URL synchronously when the webhook is
   // created. Must return 2xx or registration is rejected outright.
   if (req.method === 'HEAD') {
     return res.status(200).end();
+  }
+  // "Send to Trello" from a service order. Must run before the webhook branch:
+  // both are POST, and this one is authenticated while the webhook is not.
+  if (req.method === 'POST' && req.query?.create !== undefined) {
+    try { return await handleCreateCard(req, res); }
+    catch (err) {
+      console.error('[trello-create] crashed:', err);
+      return res.status(500).json({ error: err instanceof Error ? err.message : 'create crashed' });
+    }
   }
   if (req.method === 'POST') {
     return handleLeadImportWebhook(req, res);

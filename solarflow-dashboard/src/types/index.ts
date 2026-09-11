@@ -313,6 +313,12 @@ export interface Job {
   // Trello-style labels mirrored from the source card, rendered as chips on the
   // LL board so the app reads like the Trello board the team already knows.
   labels?: JobLabel[];
+  // The Trello card "Send to Trello" created for this service order, so Anthony
+  // (who works only in Trello) can follow up on it. Set once; its presence turns
+  // the button into an "Open in Trello" link. A lead card is NOT recorded here:
+  // a lead's link is its own id, `job-trello-<cardId>`.
+  trelloCardId?: string;
+  trelloCardUrl?: string;
   // Editable contact fields for a LEAD (a funnel card with no customer yet). Kept
   // on the job so the team can work the lead (add info, log calls/emails into
   // activityHistory) before deciding to convert. On "Move to Client" these seed

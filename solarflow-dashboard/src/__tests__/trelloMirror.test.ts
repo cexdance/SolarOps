@@ -16,8 +16,9 @@ import { matchTargetList, stageForList, listForStage, trustedStage, sameLabelSet
 import { mergeJobFields } from '../lib/syncEngine';
 import { validSiteId } from '../../../api/parse-lead-image';
 import { labelKey as clientLabelKey, LABEL_CATALOG } from '../lib/labelCatalog';
-import { trelloCardIdOf, cardPatchFor, boardColumns, type TrelloList } from '../lib/trelloSync';
-import { PIPELINE_STAGES, type Job } from '../types';
+import { trelloCardIdOf, cardPatchFor, boardColumns, soCardContent, defaultListFor, type TrelloList } from '../lib/trelloSync';
+import { refJobId } from '../../../api/trello-card';
+import { PIPELINE_STAGES, type Job, type Customer } from '../types';
 
 const BOARD = '6a5a58e06fbf97144b5d96c9';
 const LEADS = '6a5a58e06fbf97144b5d96be';
@@ -71,6 +72,68 @@ describe('LOST TO COMPETITION is an import source', () => {
     expect(stageForList('not-an-id')).toBeUndefined();
     expect(listForStage('list:nope')).toBeUndefined();
     expect(listForStage('made_up_stage')).toBeUndefined();
+  });
+});
+
+describe('Send to Trello: the card Anthony gets for a service order', () => {
+  const job = {
+    woNumber: 'SO-2609-78916', serviceType: 'Inverter Replacement', woStatus: 'quote_sent',
+    clientName: 'Taylor Williams', solarEdgeClientId: 'US-15700',
+    solarEdgeSiteId: 'cust-1788456509644-2x8s20', // the old panel bug: a customer id
+    siteTransferInverterSerial: 'SJ2622-074071183-0F', notes: 'Inverter dead, error 18xB.',
+  } as unknown as Job;
+  const customer = {
+    name: 'Taylor Williams', clientId: 'US-15700', phone: '8632867519', email: 't@example.com',
+    address: '10401 SW 53rd St', city: 'Cooper City', state: 'FL', zip: '33328', solarEdgeSiteId: '2803501',
+  } as unknown as Customer;
+
+  it("titles the card the way the board already does", () => {
+    expect(soCardContent(job, customer).name).toBe('US-15700 Taylor Williams');
+  });
+
+  it('carries what a follow-up needs, and the REAL site id, never the customer id', () => {
+    const { desc } = soCardContent(job, customer);
+    for (const s of ['Service Order: SO-2609-78916, Inverter Replacement', 'Phone: 8632867519', 'City: Cooper City',
+      'Site ID: 2803501', 'Inverter serial: SJ2622-074071183-0F', 'Notes\nInverter dead, error 18xB.']) {
+      expect(desc).toContain(s);
+    }
+    expect(desc).not.toContain('cust-');
+  });
+
+  it('lists each RMA, and leaves out empty lines instead of printing "Email:"', () => {
+    const { desc } = soCardContent(job, { ...customer, email: '' }, [
+      { manufacturer: 'SolarEdge', partDescription: 'SE7600H', rmaNumber: 'R-88', caseNumber: '7021404', status: 'pending', rmaStatus: 'shipped' },
+    ]);
+    expect(desc).toContain('RMA\n- SolarEdge SE7600H: RMA R-88, case 7021404, shipped');
+    expect(desc).not.toMatch(/^Email:/m);
+  });
+
+  it('the contact lines still parse, so the card reads like one Anthony typed', () => {
+    expect(parseLeadDesc(soCardContent(job, customer).desc)).toMatchObject({ phone: '8632867519', city: 'Cooper City', zip: '33328' });
+  });
+
+  it('preselects "Needs follow-Up Service", or the order\'s own column when it has one', () => {
+    const lists: TrelloList[] = [
+      { id: 'a'.repeat(24), name: 'Leads Services SolarEdge', closed: false, stage: 'leads' },
+      { id: 'b'.repeat(24), name: 'Needs follow-Up Service', closed: false, stage: 'needs_follow_up' },
+      { id: 'c'.repeat(24), name: 'Done', closed: false, stage: 'done' },
+    ];
+    expect(defaultListFor(lists, undefined)).toBe('b'.repeat(24));
+    expect(defaultListFor(lists, 'done')).toBe('c'.repeat(24));
+    expect(defaultListFor([lists[0]], undefined)).toBe('a'.repeat(24));
+  });
+});
+
+describe("refJobId: a SolarOps-made card is never imported as a lead", () => {
+  it('reads the ref line the server writes as the last line of the card', () => {
+    expect(refJobId('Phone: 863\n\nSolarOps ref: job-1788191664892')).toBe('job-1788191664892');
+  });
+  it('ignores a ref naming a LEAD id, so the line cannot hide a real lead card', () => {
+    expect(refJobId('SolarOps ref: job-trello-6a95f5edabd9190e325da4f9')).toBeUndefined();
+  });
+  it('an ordinary lead card has no ref', () => {
+    expect(refJobId('Phone: 8632867519\nSite ID: 2803501')).toBeUndefined();
+    expect(refJobId(undefined)).toBeUndefined();
   });
 });
 
