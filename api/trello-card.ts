@@ -1739,7 +1739,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(att.status).json({ error: `Trello attachment download failed (${att.status}).` });
       }
 
-      const contentType = att.headers.get('content-type') ?? 'application/octet-stream';
+      const rawFileName = decodeURIComponent(parsed.pathname.split('/').pop() || 'trello-file');
+      // Trello serves most attachment downloads as application/octet-stream, so
+      // taking its content-type verbatim throws away the real type and a PDF
+      // reaches every viewer labelled as a binary blob. Fall back to extension.
+      const EXT_TYPES: Record<string, string> = {
+        pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg',
+        webp: 'image/webp', gif: 'image/gif', heic: 'image/heic', svg: 'image/svg+xml',
+        xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        csv: 'text/csv', txt: 'text/plain', zip: 'application/zip', dwg: 'image/vnd.dwg',
+      };
+      const headerType = att.headers.get('content-type');
+      const contentType =
+        headerType && headerType !== 'application/octet-stream'
+          ? headerType
+          : EXT_TYPES[rawFileName.toLowerCase().split('.').pop() ?? ''] ?? 'application/octet-stream';
       // A login/interstitial page comes back as 200 text/html. Storing that would
       // silently replace the file with a web page, which is worse than failing.
       if (/^text\/html/i.test(contentType)) {
@@ -1755,8 +1770,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(502).json({ error: 'Trello returned an empty file.' });
       }
 
-      const rawName = decodeURIComponent(parsed.pathname.split('/').pop() || 'trello-file');
-      const safeName = rawName.replace(/[^a-zA-Z0-9.-]/g, '_').slice(-120);
+      const safeName = rawFileName.replace(/[^a-zA-Z0-9.-]/g, '_').slice(-120);
       const month = new Date().toISOString().slice(0, 7);
       const path = `${customerId}/${month}/${Date.now()}-${safeName}`;
 
@@ -1781,7 +1795,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       return res.status(200).json({
         url: `${SUPABASE_URL}/storage/v1/object/public/customer-files/${encodeURI(path)}`,
-        name: rawName,
+        name: rawFileName,
         mimeType: contentType,
         size: bytes.byteLength,
       });

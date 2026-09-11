@@ -52,6 +52,9 @@ function loadEnvFile(path) {
 }
 loadEnvFile(resolve(HERE, '../.env.local'));
 loadEnvFile(resolve(HERE, '../../.env.local'));
+// Separate file so `vercel env pull` cannot clobber the .env.local that already
+// holds the Trello keys. Gitignored by the root .env.* rule.
+loadEnvFile(resolve(HERE, '../../.env.backfill.local'));
 
 const SERVICE_ROLE = (process.env.SUPABASE_SERVICE_ROLE_KEY ?? '').trim().replace(/^["']|["']$/g, '');
 const TRELLO_KEY = (process.env.TRELLO_API_KEY || process.env.VITE_TRELLO_API_KEY || '').trim().replace(/^["']|["']$/g, '');
@@ -96,13 +99,30 @@ async function fetchCustomerRows() {
   return rows;
 }
 
+// Trello serves most attachment downloads as application/octet-stream, so taking
+// its content-type verbatim threw away the real type: a PDF landed in Storage
+// labelled octet-stream and came back that way to every viewer. Fall back to the
+// extension whenever the response type is the generic one.
+const EXT_TYPES = {
+  pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg',
+  webp: 'image/webp', gif: 'image/gif', heic: 'image/heic', svg: 'image/svg+xml',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  csv: 'text/csv', txt: 'text/plain', zip: 'application/zip', dwg: 'image/vnd.dwg',
+};
+function resolveType(headerType, fileName) {
+  if (headerType && headerType !== 'application/octet-stream') return headerType;
+  const ext = String(fileName || '').toLowerCase().split('.').pop();
+  return EXT_TYPES[ext] ?? 'application/octet-stream';
+}
+
 async function mirrorOne(url, customerId, fileName) {
   const att = await fetch(url, {
     headers: { Authorization: `OAuth oauth_consumer_key="${TRELLO_KEY}", oauth_token="${TRELLO_TOKEN}"` },
   });
   if (!att.ok) throw new Error(`Trello download ${att.status}`);
 
-  const contentType = att.headers.get('content-type') ?? 'application/octet-stream';
+  const contentType = resolveType(att.headers.get('content-type'), fileName);
   // Trello answers an unauthorized download with a 200 HTML login page. Storing
   // that would swap the file for a web page, which is worse than failing loudly.
   if (/^text\/html/i.test(contentType)) throw new Error('Trello returned an HTML page, not the file');
