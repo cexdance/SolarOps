@@ -144,8 +144,9 @@ const LAST_SYNC_KEY = 'solarops_last_record_sync';
 // device. Devices that ran the old client-clock cursor may hold a stale FUTURE
 // `since` that incrementally skips records forever (a contractor never receiving a
 // just-assigned job); resetting the cursor once makes the next pull full and
-// recovers all missed rows. After that, the server-time cursor keeps it correct.
-const SYNC_CURSOR_VERSION = '3';
+// recovers all missed rows. Version 4 also recovers rows skipped by partial pulls.
+// After that, only complete pulls advance the server-time cursor.
+const SYNC_CURSOR_VERSION = '4';
 const SYNC_CURSOR_VERSION_KEY = 'solarops_sync_cursor_v';
 
 function ensureCursorVersion(): void {
@@ -1147,10 +1148,9 @@ export async function pullPrefix<T>(
 
       const { data, error } = await q;
       if (error || !data) {
-        // Keep the pages already in hand. A partial reconcile is strictly better
-        // than none: mergeRemote is additive, so the next pull fills the rest.
-        console.warn(`[SyncEngine] pullPrefix failed for prefix ${prefix} at offset ${from}:`, error?.message || 'No data returned');
-        break;
+        // A partial prefix must not advance the shared cursor past unseen rows
+        // or unlock startup pushes. Retry the complete pull from the old cursor.
+        throw new Error(`pullPrefix failed for ${prefix} at offset ${from}: ${error?.message || 'No data returned'}`);
       }
       rows.push(...data);
       if (data.length < PULL_PAGE_SIZE) break; // short page means last page
@@ -1167,7 +1167,7 @@ export async function pullPrefix<T>(
     });
   } catch (err) {
     console.warn(`[SyncEngine] pullPrefix error for prefix ${prefix}:`, err);
-    return [];
+    throw err;
   }
 }
 
@@ -1178,24 +1178,21 @@ export async function pullPrefix<T>(
  * GET /api/contractor-jobs. The endpoint takes identity from the verified token
  * and has no contractorId parameter, so there is nothing to scope here.
  *
- * FAILS TO EMPTY, NEVER TO A FULL PULL. Falling back to pullPrefix on error
- * would silently reopen the exact boundary this exists to close, and it would
- * do it precisely when something is already wrong. Empty is safe: mergeRemote
- * keeps local-only records, so the portal renders its last known list instead
- * of going blank.
+ * Fails closed, never falls back to a full pull. A failed scoped fetch aborts
+ * hydration so the startup push gate stays closed and the portal keeps its
+ * last known state. Falling back to pullPrefix would reopen the data boundary.
  */
 async function pullContractorScope(): Promise<[Customer[], Job[]]> {
   try {
     const r = await authedFetch('/api/contractor-jobs');
     if (!r.ok) {
-      console.warn(`[SyncEngine] contractor scope pull failed: ${r.status}`);
-      return [[], []];
+      throw new Error(`contractor scope pull failed: ${r.status}`);
     }
     const body = await r.json() as { customers?: Customer[]; jobs?: Job[] };
     return [body.customers ?? [], body.jobs ?? []];
   } catch (err) {
     console.warn('[SyncEngine] contractor scope pull error:', err);
-    return [[], []];
+    throw err;
   }
 }
 
@@ -1232,21 +1229,23 @@ export async function pullFromSupabase(): Promise<Partial<AppState> | null> {
     // key has NO merger on purpose (single-writer, whole-blob overwrite), so a
     // client that stopped pulling it would push a stale blob over every staff lead.
     const contractorSession = isContractorAccount(session.user?.user_metadata);
-    const [customers, jobs] = contractorSession
-      ? await pullContractorScope()
-      : await Promise.all([
-          pullPrefix<Customer>(PREFIX.customer, since),
-          pullPrefix<Job>(PREFIX.job, since),
-        ]);
+    // These independent reads share one completion boundary: adopt nothing until
+    // every required fetch succeeds, without adding a serial KV round trip.
+    const [[customers, jobs], { data: kvData, error: kvError }] = await Promise.all([
+      contractorSession
+        ? pullContractorScope()
+        : Promise.all([
+            pullPrefix<Customer>(PREFIX.customer, since),
+            pullPrefix<Job>(PREFIX.job, since),
+          ]),
+      supabase
+        .from('app_data')
+        .select('key, value')
+        .in('key', ['deleted_customer_ids', 'deleted_job_ids', 'solarEdgeConfig', 'standaloneRmas', ...KV_SYNC_KEYS]),
+    ]);
 
-    // ── Tombstones + standalone KV keys + solarEdgeConfig ───────────────────
-    const { data: kvData, error: kvError } = await supabase
-      .from('app_data')
-      .select('key, value')
-      .in('key', ['deleted_customer_ids', 'deleted_job_ids', 'solarEdgeConfig', 'standaloneRmas', ...KV_SYNC_KEYS]);
-
-    if (kvError) {
-      console.warn('[SyncEngine] pullFromSupabase KV data fetch error:', kvError.message);
+    if (kvError || !kvData) {
+      throw new Error(`KV pull failed: ${kvError?.message || 'No data returned'}`);
     }
 
     const changedKVKeys: string[] = [];

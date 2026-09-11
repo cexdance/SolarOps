@@ -244,9 +244,9 @@ export async function drainOutbox(): Promise<boolean> {
     }
 
     await pushToSupabase(state);
-    // clearPendingPush() is called inside pushToSupabase on success,
-    // but call it here defensively too.
-    clearPendingPush();
+    // Only the writer can acknowledge completion. A resolved push can also
+    // mean it deferred because the session expired or initial pull is pending.
+    if (hasPendingPush()) return false;
     console.info('[Outbox] Drained, state is now in sync with Supabase');
     return true;
   } catch (e) {

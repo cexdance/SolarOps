@@ -22,7 +22,7 @@ vi.mock('../lib/db', () => ({
 }));
 
 vi.mock('../lib/syncEngine', () => ({
-  pushToSupabase:   vi.fn().mockResolvedValue(undefined),
+  pushToSupabase:   vi.fn(async () => clearPendingPush()),
   pushKeyValue:     vi.fn().mockResolvedValue(undefined),
   pullFromSupabase: vi.fn().mockResolvedValue(null),
   mergeRemote:      vi.fn((local: any) => local),
@@ -494,13 +494,14 @@ describe('Fault: outbox drain under repeated Supabase failures', () => {
     // User action: reset attempts
     resetOutboxAttempts();
     expect(getPendingAttempts()).toBe(0);
-    // Should now attempt drain (will succeed because pushToSupabase is mocked to resolve)
+    // The writer mock acknowledges persisted work, as the real successful push does.
     // Mock the lazy import inside drainOutbox
     vi.doMock('../lib/syncEngine', () => ({
-      pushToSupabase: vi.fn().mockResolvedValue(undefined),
+      pushToSupabase: vi.fn(async () => clearPendingPush()),
     }));
-    // After reset, attempts = 0, so drain is attempted
-    expect(getPendingAttempts()).toBe(0);
+    // After reset the backoff no longer prevents the writer from running.
+    expect(await drainOutbox()).toBe(true);
+    expect(hasPendingPush()).toBe(false);
   });
 
   it('ST-4 FIXED: outbox auto-recovers, once backoff elapses, drain retries with no user action', async () => {
@@ -518,7 +519,7 @@ describe('Fault: outbox drain under repeated Supabase failures', () => {
     raw.lastAttemptAt = new Date(Date.now() - 60 * 60_000).toISOString(); // 1h ago
     localStorage.setItem('solarops_outbox_v1', JSON.stringify(raw));
 
-    // pushToSupabase is mocked to resolve, so the auto-retry now succeeds and
+    // pushToSupabase acknowledges completion, so the auto-retry succeeds and
     // clears the outbox, no resetOutboxAttempts() call required.
     const result = await drainOutbox();
     expect(result).toBe(true);

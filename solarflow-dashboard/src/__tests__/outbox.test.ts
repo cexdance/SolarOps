@@ -249,35 +249,43 @@ describe('drainOutbox', () => {
     expect(result).toBe(false);
   });
 
-  it('calls pushToSupabase and clears outbox on success', async () => {
-    const mockPush = vi.fn().mockResolvedValue(undefined);
-    const mockLoad = vi.fn().mockReturnValue({ customers: [], jobs: [] });
-
+  it('acknowledges only a push that clears its pending work', async () => {
+    const mockPush = vi.fn(async () => clearPendingPush());
     vi.doMock('../lib/syncEngine', () => ({ pushToSupabase: mockPush }));
-    vi.doMock('../lib/dataStore',  () => ({ loadData: mockLoad }));
+    vi.doMock('../lib/dataStore', () => ({ loadData: () => ({ customers: [], jobs: [] }) }));
+    markPushPending('offline');
+    resetOutboxAttempts();
 
-    markPushPending('err');
-
-    // Re-import to pick up mocks (drainOutbox uses dynamic import internally)
-    // We call the real drainOutbox, it resolves the mock via dynamic import
-    const result = await drainOutbox();
-    // If mocks aren't picked up by the lazy import inside drainOutbox,
-    // the call will fail and return false. Either outcome documents behavior.
-    // The important check: outbox was either cleared (true) or error incremented.
-    expect(typeof result).toBe('boolean');
+    expect(await drainOutbox()).toBe(true);
+    expect(mockPush).toHaveBeenCalledOnce();
+    expect(hasPendingPush()).toBe(false);
   });
 
-  it('calls markPushPending again on drain failure', async () => {
-    markPushPending('initial');
-    const attemptsBefore = getPendingAttempts();
+  it.each(['session-expired', 'initial-pull-pending'])(
+    'retains pending changes when push defers for %s', async reason => {
+      const mockPush = vi.fn(async () => markPushPending(reason));
+      vi.doMock('../lib/syncEngine', () => ({ pushToSupabase: mockPush }));
+      vi.doMock('../lib/dataStore', () => ({ loadData: () => ({ customers: [], jobs: [] }) }));
+      markPushPending('offline');
+      resetOutboxAttempts();
 
-    // Make push fail by having no local data at all (localStorage was cleared)
-    // drainOutbox will catch the error and call markPushPending internally
-    const result = await drainOutbox();
+      expect(await drainOutbox()).toBe(false);
+      expect(mockPush).toHaveBeenCalledOnce();
+      expect(hasPendingPush()).toBe(true);
+      expect(JSON.parse(localStorage.getItem(OUTBOX_KEY)!).lastError).toBe(reason);
+    },
+  );
 
-    if (!result) {
-      // Either offline path or error path, attempts should be same or incremented
-      expect(getPendingAttempts()).toBeGreaterThanOrEqual(attemptsBefore);
-    }
+  it('preserves pending work after a rejected push', async () => {
+    const mockPush = vi.fn().mockRejectedValue(new Error('network unavailable'));
+    vi.doMock('../lib/syncEngine', () => ({ pushToSupabase: mockPush }));
+    vi.doMock('../lib/dataStore', () => ({ loadData: () => ({ customers: [], jobs: [] }) }));
+    markPushPending('offline');
+    resetOutboxAttempts();
+
+    expect(await drainOutbox()).toBe(false);
+    expect(mockPush).toHaveBeenCalledOnce();
+    expect(hasPendingPush()).toBe(true);
+    expect(getPendingAttempts()).toBe(1);
   });
 });

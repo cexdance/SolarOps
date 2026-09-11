@@ -1,4 +1,4 @@
-import { useCallback, useEffect, type MutableRefObject } from 'react';
+import { useCallback, useEffect, useRef, type MutableRefObject } from 'react';
 import { drainOutbox, resetOutboxAttempts } from '../lib/outbox';
 import { pullAndMerge, subscribeToChanges, mergeCustomerPair, mergeJobFields, mergeWoPhotos, resetSyncCursor } from '../lib/syncEngine';
 import { loadContractors, loadServiceRates, loadContractorJobs } from '../lib/contractorStore';
@@ -61,7 +61,10 @@ export function useSyncEngine({
   // Drain the outbox then pull + merge remote. Exposed as `syncNow` so a manual
   // "Sync / update" control (e.g. the contractor header button) can refresh the
   // data in place without a full page reload.
-  const syncNow = useCallback(async () => {
+  const syncInFlight = useRef<Promise<void> | null>(null);
+  const syncNow = useCallback(() => {
+    if (syncInFlight.current) return syncInFlight.current;
+    const run = (async () => {
       await drainOutbox();
       const merged = await pullAndMerge();
       if (!merged) return;
@@ -94,6 +97,12 @@ export function useSyncEngine({
           : prev.jobs;
         return { ...prev, ...merged, jobs: safeMergedJobs };
       });
+    })();
+    const tracked = run.finally(() => {
+      if (syncInFlight.current === tracked) syncInFlight.current = null;
+    });
+    syncInFlight.current = tracked;
+    return tracked;
   }, [setData]);
 
   // ── Sync poll: drain outbox then pull remote ─────────────────────────────
@@ -124,12 +133,15 @@ export function useSyncEngine({
   useEffect(() => {
     let unsubscribe: (() => void) | null = null;
     let cancelled = false;
+    let activeUserId: string | null = null;
+    let authRevision = 0;
+    let authUnsubscribe: (() => void) | null = null;
+    const pending = new Set<ReturnType<typeof setTimeout>>();
 
     (async () => {
       const { supabase } = await import('../lib/supabase');
-      const { data: { session } } = await supabase.auth.getSession();
-      if (cancelled || !session) return;
-      unsubscribe = subscribeToChanges({
+      if (cancelled) return;
+      const connectRealtime = () => subscribeToChanges({
       onCustomer: (customer, event) => {
         setData(prev => {
           if (event === 'DELETE') return { ...prev, customers: prev.customers.filter(c => c.id !== customer.id) };
@@ -187,13 +199,45 @@ export function useSyncEngine({
         window.dispatchEvent(new CustomEvent('solarops-solar-site-update', { detail: site }));
       },
     });
-    })();
+      const applySession = (userId: string | null, refresh: boolean) => {
+        if (cancelled || userId === activeUserId) return;
+        unsubscribe?.();
+        unsubscribe = null;
+        activeUserId = userId;
+        if (!userId) return;
+        unsubscribe = connectRealtime();
+        // A fresh login happens after the unauthenticated mount pull. Populate
+        // the app immediately instead of waiting for focus or the five-minute poll.
+        if (refresh) void (async () => {
+          // The mount pull may have captured an unauthenticated session. A new
+          // login needs its own pull after that work, even when triggers coalesce.
+          if (syncInFlight.current) await syncInFlight.current.catch(() => {});
+          if (!cancelled && activeUserId === userId) await syncNow();
+        })().catch(err => console.warn('[SyncEngine] sign-in sync failed', err));
+      };
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+        if (event !== 'SIGNED_IN' && event !== 'SIGNED_OUT' && event !== 'INITIAL_SESSION') return;
+        ++authRevision;
+        // Supabase invokes this callback while holding its auth lock. Run sync
+        // in a later task because the pull itself asks Supabase for a session.
+        const timer = setTimeout(() => {
+          pending.delete(timer);
+          applySession(session?.user.id ?? null, event === 'SIGNED_IN');
+        }, 0);
+        pending.add(timer);
+      });
+      authUnsubscribe = () => subscription.unsubscribe();
+      const revision = authRevision;
+      const { data: { session } } = await supabase.auth.getSession();
+      if (revision === authRevision) applySession(session?.user.id ?? null, false);
+    })().catch(err => console.warn('[SyncEngine] session subscription failed', err));
     return () => {
       cancelled = true;
-      if (unsubscribe) unsubscribe();
+      for (const timer of pending) clearTimeout(timer);
+      authUnsubscribe?.();
+      unsubscribe?.();
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [syncNow, setData, setContractorJobs, setContractors, setServiceRates, skipContractorPersist]);
 
   // ── Remote-update event: re-hydrate contractor state ─────────────────────
   useEffect(() => {
@@ -221,6 +265,9 @@ export function useSyncEngine({
   // FULL reconcile and a user missing data can always force convergence on demand.
   const deepSync = useCallback(async () => {
     incrementDeepSyncMetric();
+    // A full reconcile must begin after an existing incremental pull finishes:
+    // that pull may have already captured its cursor and can advance it again.
+    if (syncInFlight.current) await syncInFlight.current.catch(() => {});
     resetSyncCursor();
     await syncNow();
   }, [syncNow]);

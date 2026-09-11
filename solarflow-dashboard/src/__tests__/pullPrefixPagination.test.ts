@@ -68,13 +68,14 @@ describe('pullPrefix pagination', () => {
     expect(ranges).toEqual([[0, 199], [200, 399]]);
   });
 
-  it('keeps the pages it already fetched when a later page errors', async () => {
-    // A partial reconcile beats none: the merge is additive, so the next pull
-    // fills the rest. Returning [] here would look like "no records exist".
+  it('rejects incomplete pagination so the caller cannot advance its cursor', async () => {
+    // Treating the first page as a completed pull could skip older rows on
+    // later pages forever once a newer timestamp advances the shared cursor.
     rows = makeRows(328);
     failAtOffset = 200;
-    const out = await pullPrefix<{ id: string }>('customer:', null);
-    expect(out).toHaveLength(200);
+    await expect(pullPrefix<{ id: string }>('customer:', null))
+      .rejects.toThrow('pullPrefix failed for customer: at offset 200: boom');
+    expect(ranges).toEqual([[0, 199], [200, 399]]);
   });
 
   it('stamps the server updated_at onto each value for the merge to compare', async () => {
