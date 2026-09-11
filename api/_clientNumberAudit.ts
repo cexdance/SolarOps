@@ -12,8 +12,10 @@
  *      imports any name typed into the sheet by hand, and binds unbound claims,
  *   3. writes allocated names into blank sheet rows (the mirror catching up
  *      after a failed write), a capped number per night,
- *   4. reports what needs a human: two clients on one number, and the registry
- *      disagreeing with a customer or with the sheet about who owns a number.
+ *   4. rings admins only for what can cause a collision: a number that reached
+ *      a customer without the allocator, a name typed into the sheet by hand,
+ *      and an order whose number disagrees with its customer's. Sheet spelling
+ *      differences and the legacy shared pairs are logged every night.
  *
  * Module scope only declares constants and functions: Vercel bundles what it can
  * statically trace, and this file is imported statically by notify.ts.
@@ -45,7 +47,11 @@ export interface AuditSummary {
 }
 
 /** Kinds that mean a human should look. Healed and routine kinds are excluded. */
-const NEEDS_ATTENTION = new Set(['tracked-from-customer', 'imported-from-sheet', 'mismatch-customer', 'mismatch-sheet']);
+// Only events that can cause a collision ring the bell. Sheet spelling
+// differences (mismatch-sheet) are logged, not rung: Postgres owns the numbers,
+// so a misspelled name in the mirror cannot hand a number out twice, and the
+// first run found 44 of them, mostly typos. A bell that always rings is ignored.
+const NEEDS_ATTENTION = new Set(['tracked-from-customer', 'imported-from-sheet', 'mismatch-job']);
 
 /**
  * The sheet as [[clientId, name], ...]. gviz quotes every cell; column B is the

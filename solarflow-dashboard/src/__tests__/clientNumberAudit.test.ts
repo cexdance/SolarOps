@@ -54,25 +54,29 @@ describe('summarize / attentionMessage', () => {
     const s = summarize([
       { kind: 'shared', client: 'US-15655', detail: 'a | b' },  // 13 known legacy pairs: logged, no bell
       { kind: 'bound', client: 'US-15704', detail: 'cust-1' },
+      { kind: 'renamed', client: 'US-15704', detail: 'Arlyn Pabon' },
       { kind: 'unmirrored', client: 'US-15704', detail: 'Arlyn Pabon' },
+      // Sheet spelling differences are logged, never rung: the first run found
+      // 44, mostly typos, and a bell that always rings gets ignored.
+      { kind: 'mismatch-sheet', client: 'US-15213', detail: 'registry: Fred Walumbwa / sheet: Fred Walumba' },
     ], 1);
     expect(s.status).toBe('ok');
     expect(attentionMessage(s)).toBeNull();
-    expect(s.counts).toEqual({ shared: 1, bound: 1, unmirrored: 1 });
+    expect(s.counts).toEqual({ shared: 1, bound: 1, renamed: 1, unmirrored: 1, 'mismatch-sheet': 1 });
   });
 
-  it('rings for a leak, a hand-typed sheet name, and an ownership disagreement', () => {
+  it('rings for a leak, a hand-typed sheet name, and an order off its customer', () => {
     const s = summarize([
       { kind: 'tracked-from-customer', client: 'US-15706', detail: 'Leaky Customer' },
       { kind: 'imported-from-sheet', client: 'US-15707', detail: 'Joe Manual' },
-      { kind: 'mismatch-sheet', client: 'US-15682', detail: 'registry: Travis Fullenkamp / sheet: Carlos Bernal' },
+      { kind: 'mismatch-job', client: 'US-15701', detail: 'Taylor Williams order is on US-15701 but its customer is US-15700' },
     ], 0);
     expect(s.status).toBe('issues');
     const m = attentionMessage(s)!;
     expect(m.title).toBe('Client numbers: 3 to review');
     expect(m.message).toContain('never issued by SolarOps');
     expect(m.message).toContain('typed into the sheet by hand');
-    expect(m.message).toContain('Carlos Bernal');
+    expect(m.message).toContain('Taylor Williams order is on US-15701');
   });
 });
 
@@ -121,7 +125,7 @@ describe('runClientNumberAudit', () => {
 describe('alertAdmins', () => {
   it('writes one bell per admin when something needs a human', async () => {
     const f = fakeFetch([]);
-    const n = await alertAdmins(env, summarize([{ kind: 'mismatch-sheet', client: 'US-15682', detail: 'x' }], 0), f.impl);
+    const n = await alertAdmins(env, summarize([{ kind: 'mismatch-job', client: 'US-15701', detail: 'x' }], 0), f.impl);
     expect(n).toBe(2);
     const body = JSON.parse(f.calls.find(c => c.url.includes('/notifications'))!.body!);
     expect(body.map((r: { user_id: string }) => r.user_id)).toEqual(['admin-1', 'admin-2']);

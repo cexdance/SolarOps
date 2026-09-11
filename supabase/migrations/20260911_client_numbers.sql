@@ -245,8 +245,9 @@ end $$;
 --   imported-from-sheet    a name typed into the sheet by hand
 --   bound                  an unbound claim tied to the customer carrying it
 --   shared                 two customers carry one number            (report)
---   mismatch-customer      registry and customer name different people (report)
+--   renamed                registry name updated to its customer's current name
 --   mismatch-sheet         registry and sheet name different people   (report)
+--   mismatch-job           an order's number disagrees with its customer's (report)
 --   unmirrored             registry number blank in the sheet (caller writes it)
 -- Customers are recorded BEFORE the sheet is imported: SolarOps is the system of
 -- record, so where the two disagree the customer wins and the sheet is reported.
@@ -318,12 +319,20 @@ begin
    group by x.cid
   having count(*) > 1;
 
+  -- A bound number belongs to its customer, so its registry name follows the
+  -- customer's (a lead converted as "image.jpeg" and renamed later). Healed,
+  -- not reported: a rename is not a numbering problem.
   return query
-  select 'mismatch-customer'::text, t.client_id,
-         'registry: ' || t.name || ' / customer: ' || coalesce(a.value->>'name', '')
-    from public.client_numbers t
-    join public.app_data a on a.key = 'customer:' || t.customer_id
-   where t.name <> '' and not public.same_client_name(t.name, coalesce(a.value->>'name', ''));
+  with upd as (
+    update public.client_numbers t
+       set name = coalesce(a.value->>'name', '')
+      from public.app_data a
+     where a.key = 'customer:' || t.customer_id
+       and coalesce(a.value->>'name', '') <> ''
+       and t.name is distinct from coalesce(a.value->>'name', '')
+    returning t.client_id as cl, t.name as nm
+  )
+  select 'renamed'::text, upd.cl, upd.nm from upd;
 
   return query
   with s as (
@@ -333,6 +342,21 @@ begin
   select 'mismatch-sheet'::text, t.client_id, 'registry: ' || t.name || ' / sheet: ' || s.nm
     from public.client_numbers t join s on s.cid = t.client_id
    where s.nm <> '' and t.name <> '' and not public.same_client_name(t.name, s.nm);
+
+  -- A service order whose number disagrees with its own customer's. Seen
+  -- 2026-09-11 on three orders: a direct repair changed the job but did not
+  -- stamp fieldTimes, so the first stale tab re-pushed the old number. Report
+  -- only: the fix is a per-field job write, which belongs to a person.
+  return query
+  select 'mismatch-job'::text, upper(btrim(j.value->>'clientId')),
+         coalesce(j.value->>'clientName', j.key) || ' order is on ' || upper(btrim(j.value->>'clientId'))
+           || ' but its customer is ' || upper(btrim(c.value->>'clientId'))
+    from public.app_data j
+    join public.app_data c on c.key = 'customer:' || (j.value->>'customerId')
+   where j.key like 'job:%'
+     and upper(btrim(coalesce(c.value->>'clientId', ''))) ~ '^US-[0-9]{5}$'
+     and upper(btrim(coalesce(j.value->>'clientId', ''))) ~ '^US-[0-9]{5}$'
+     and upper(btrim(j.value->>'clientId')) <> upper(btrim(c.value->>'clientId'));
 
   return query
   with s as (
