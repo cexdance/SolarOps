@@ -1,17 +1,20 @@
-// SolarOps — SolarEdge Polling Edge Function (Deno runtime)
+// SolarOps — SolarEdge Polling Edge Function (Deno runtime, Monitoring API v2)
 //
-// Runs 2×/day at 9am and 1pm ET. For each SolarEdge site:
-//   1. Fetches the live `overview` from SolarEdge's monitoring API
-//   2. Computes derived alert flags (offline, no production, comm loss)
-//   3. Compares alerts with stored alerts to detect closures in SolarEdge web
+// Runs 2×/day at 9am and 1pm ET. Per run:
+//   1. Pulls every site (/v2/sites) and every open SolarEdge alert (/v2/alerts)
+//   2. Builds each site's alert list from SolarEdge's own alerts, plus a
+//      "site not active" flag
+//   3. Detects alerts that closed since the last run (by SolarEdge alertId)
 //   4. Upserts a `solar:{siteId}` row in the `app_data` table
-//   5. Subabase Realtime fans the change out to every connected client (<200ms)
+//   5. Supabase Realtime fans the change out to every connected client
 //
-// On-demand detailed data (production charts, equipment details) are fetched via
-// user-triggered "Sync Now" button in SolarEdgeMonitoring component.
+// Why fleet-wide: v1 fetched one overview per site (~360 calls/run). v2 allows
+// 25 calls/minute, so that would take ~15 minutes. Two paged endpoints cover the
+// whole fleet in ~21 calls. SolarEdge's alerts replace the old homemade
+// heuristics (stale data >24h, zero power in daylight).
 //
-// Required Supabase secrets (set via `supabase secrets set KEY=value`):
-//   - SOLAREDGE_API_KEY
+// Required Supabase secrets (set in the dashboard, Edge Functions → Secrets):
+//   - SOLAREDGE_API_KEY            (v2 Developer Platform key)
 //   - SUPABASE_URL                 (auto-provided in Edge Function env)
 //   - SUPABASE_SERVICE_ROLE_KEY    (auto-provided)
 //
@@ -28,25 +31,26 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const SOLAREDGE_BASE = "https://monitoringapi.solaredge.com";
-const SITES_PER_PAGE = 100;
-// 300 calls/day ÷ 2 runs/day = 150 calls/run. Covers all sites in 2 cycles/day.
-const MAX_OVERVIEW_CALLS_PER_RUN = 150;
+const V2 = "https://monitoringapi.solaredge.com/v2";
+const PAGE = 50; // v2 page size is fixed
 
-interface SolarEdgeSite {
-  id: number;
+interface V2Site {
+  siteId: number;
   name: string;
-  status: string;
-  peakPower: number;
-  installationDate: string;
+  activationStatus: string;
 }
 
-interface SiteOverview {
-  lastUpdateTime: string;
-  currentPower: { power: number };
-  lifeTimeData: { energy: number };
-  measuredBy: string;
+interface V2Alert {
+  alertId: number;
+  siteId: number;
+  category: string;
+  type: string;
+  impact: number;
+  status: string;
+  component?: { name?: string };
 }
+
+type Alert = { alertId?: number; type: string; severity: 'info' | 'warning' | 'critical'; message: string };
 
 interface AppDataValue {
   siteId: number;
@@ -55,70 +59,52 @@ interface AppDataValue {
   currentPower: number;
   lastUpdateTime: string;
   lastPolled: string;
-  alerts: Array<{ type: string; severity: 'info' | 'warning' | 'critical'; message: string }>;
+  alerts: Alert[];
 }
 
-async function fetchSiteList(apiKey: string, startIndex: number): Promise<SolarEdgeSite[]> {
-  const url = `${SOLAREDGE_BASE}/sites/list?api_key=${apiKey}&size=${SITES_PER_PAGE}&startIndex=${startIndex}`;
-  const res = await fetch(url, { headers: { Accept: 'application/json' } });
-  if (!res.ok) throw new Error(`SolarEdge /sites/list ${res.status}`);
-  const json = await res.json() as { sites: { site: SolarEdgeSite[] } };
-  return json.sites?.site ?? [];
+async function v2<T>(apiKey: string, path: string): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch(`${V2}${path}`, { headers: { 'X-API-Key': apiKey, Accept: 'application/json' } });
+    // One retry on the per-minute limit; a second 429 fails the run loudly.
+    if (res.status === 429 && attempt === 0) {
+      await new Promise(r => setTimeout(r, 30_000));
+      continue;
+    }
+    if (!res.ok) throw new Error(`SolarEdge ${path} ${res.status}`);
+    return await res.json() as T;
+  }
 }
 
-async function fetchOverview(apiKey: string, siteId: number): Promise<SiteOverview | null> {
-  const url = `${SOLAREDGE_BASE}/site/${siteId}/overview?api_key=${apiKey}`;
-  const res = await fetch(url, { headers: { Accept: 'application/json' } });
-  if (!res.ok) return null;
-  const json = await res.json() as { overview: SiteOverview };
-  return json.overview ?? null;
+async function allPages<T>(fetchPage: (page: number) => Promise<T[]>): Promise<T[]> {
+  const out: T[] = [];
+  for (let page = 1; page < 100; page++) {
+    const rows = await fetchPage(page);
+    out.push(...rows);
+    if (rows.length < PAGE) break;
+  }
+  return out;
 }
 
-function deriveAlerts(site: SolarEdgeSite, overview: SiteOverview | null): AppDataValue['alerts'] {
-  const alerts: AppDataValue['alerts'] = [];
+// ponytail: SolarEdge impact runs 1-9; these cut points are a first guess.
+// Tune once someone has watched real alerts come through.
+const severity = (impact: number): Alert['severity'] => (impact >= 7 ? 'critical' : impact >= 4 ? 'warning' : 'info');
 
-  if (!overview) {
-    alerts.push({ type: 'communication_loss', severity: 'critical', message: 'No overview data returned' });
-    return alerts;
+function siteAlerts(site: V2Site, open: V2Alert[]): Alert[] {
+  const alerts: Alert[] = open.map(a => ({
+    alertId: a.alertId,
+    type: a.type.toLowerCase(),
+    severity: severity(a.impact),
+    message: `${a.category}: ${a.type}${a.component?.name ? ` on ${a.component.name}` : ''}`,
+  }));
+  if (site.activationStatus && site.activationStatus !== 'ACTIVE') {
+    alerts.push({ type: 'inverter_offline', severity: 'warning', message: `Site status: ${site.activationStatus}` });
   }
-
-  // Stale data — last update more than 24h ago
-  const lastUpdate = new Date(overview.lastUpdateTime).getTime();
-  const hoursSince = (Date.now() - lastUpdate) / 3_600_000;
-  if (Number.isFinite(hoursSince) && hoursSince > 24) {
-    alerts.push({
-      type: 'communication_loss',
-      severity: 'critical',
-      message: `No data for ${Math.round(hoursSince)}h`,
-    });
-  }
-
-  // Zero production during daylight (rough heuristic: 9am-5pm site-local approx via UTC offset)
-  const hour = new Date().getUTCHours();
-  const daylightUtc = hour >= 13 && hour <= 22; // ~9am-6pm ET
-  if (daylightUtc && overview.currentPower?.power === 0) {
-    alerts.push({
-      type: 'production_drop',
-      severity: 'warning',
-      message: 'Zero production during daylight hours',
-    });
-  }
-
-  // Site status reported as not active
-  if (site.status && site.status.toLowerCase() !== 'active') {
-    alerts.push({
-      type: 'inverter_offline',
-      severity: 'warning',
-      message: `Site status: ${site.status}`,
-    });
-  }
-
   return alerts;
 }
 
-Deno.serve(async (req: Request) => {
+Deno.serve(async (_req: Request) => {
   const startedAt = Date.now();
-  const apiKey = Deno.env.get('SOLAREDGE_API_KEY');
+  const apiKey = Deno.env.get('SOLAREDGE_API_KEY')?.trim();
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 
@@ -132,92 +118,79 @@ Deno.serve(async (req: Request) => {
   const supabase = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
 
   try {
-    // 1. Pull the site list (single page is usually enough for SolarOps' ~150 sites)
-    const sites = await fetchSiteList(apiKey, 0);
+    const sites = await allPages(async p =>
+      (await v2<{ sites?: { site?: V2Site[] } }>(apiKey, `/sites?page=${p}`)).sites?.site ?? []);
+    const alerts = await allPages(async p => {
+      const rows = await v2<V2Alert[]>(apiKey, `/alerts?page=${p}`);
+      return Array.isArray(rows) ? rows : [];
+    });
 
-    // 2. Pick the N stalest sites (longest time since lastPolled) to poll this run.
-    //    This rotates through all sites over time without burning the per-day quota.
-    const { data: existing } = await supabase
-      .from('app_data')
-      .select('key, value')
-      .like('key', 'solar:%');
-
-    const lastPolledById = new Map<number, number>();
-    for (const row of existing ?? []) {
-      const v = row.value as AppDataValue | null;
-      if (v?.siteId && v?.lastPolled) {
-        lastPolledById.set(v.siteId, new Date(v.lastPolled).getTime());
-      }
+    const openBySite = new Map<number, V2Alert[]>();
+    for (const a of alerts) {
+      if (a.status !== 'OPEN') continue;
+      openBySite.set(a.siteId, [...(openBySite.get(a.siteId) ?? []), a]);
     }
 
-    const ranked = sites
-      .map(s => ({ site: s, lastPolled: lastPolledById.get(s.id) ?? 0 }))
-      .sort((a, b) => a.lastPolled - b.lastPolled)
-      .slice(0, MAX_OVERVIEW_CALLS_PER_RUN);
+    const { data: existing } = await supabase.from('app_data').select('key, value').like('key', 'solar:%');
+    const prevById = new Map<number, AppDataValue>();
+    for (const row of existing ?? []) {
+      const v = row.value as AppDataValue | null;
+      if (v?.siteId) prevById.set(v.siteId, v);
+    }
 
-    // 3. Fetch overview for each, build the row, upsert, detect closed alerts
-    const upserts = await Promise.all(ranked.map(async ({ site }) => {
-      const overview = await fetchOverview(apiKey, site.id).catch(() => null);
-      const newAlerts = deriveAlerts(site, overview);
+    const now = new Date().toISOString();
+    const rows = [];
+    const notifications = [];
+    for (const site of sites) {
+      const newAlerts = siteAlerts(site, openBySite.get(site.siteId) ?? []);
+      const prev = prevById.get(site.siteId);
 
-      // Fetch previous alerts to detect closures in SolarEdge web
-      const { data: prevRow } = await supabase
-        .from('app_data')
-        .select('value')
-        .eq('key', `solar:${site.id}`)
-        .single();
-      const prevAlerts = (prevRow?.value as AppDataValue | null)?.alerts ?? [];
-
-      // Detect closed alerts (were in previous, not in current)
-      const closedAlerts = prevAlerts.filter(pa =>
-        !newAlerts.some(na => na.type === pa.type)
-      );
-
-      // Emit closure notifications to the customer
-      for (const closedAlert of closedAlerts) {
-        await supabase.from('notifications').insert({
-          user_id: site.id.toString(), // Site ID as proxy for customer notification
+      // Only alerts carrying a SolarEdge alertId can "close". Rows written by the
+      // v1 poller have none, so the first v2 run doesn't fire a resolved
+      // notification for every legacy heuristic alert.
+      const closed = (prev?.alerts ?? []).filter(pa =>
+        pa.alertId != null && !newAlerts.some(na => na.alertId === pa.alertId));
+      for (const c of closed) {
+        notifications.push({
+          user_id: site.siteId.toString(), // Site ID as proxy for customer notification
           type: 'alert_resolved',
           title: `Alert Resolved: ${site.name}`,
-          message: `${closedAlert.message} - Closed in SolarEdge portal`,
+          message: `${c.message} - Closed in SolarEdge portal`,
           related_job_id: null,
           related_contractor_id: null,
           related_customer_id: null,
           read: false,
-          created_at: new Date().toISOString(),
-        }).catch(() => null); // Don't fail the entire run if notification fails
+          created_at: now,
+        });
       }
 
       const value: AppDataValue = {
-        siteId: site.id,
+        siteId: site.siteId,
         siteName: site.name,
-        status: site.status,
-        currentPower: overview?.currentPower?.power ?? 0,
-        lastUpdateTime: overview?.lastUpdateTime ?? '',
-        lastPolled: new Date().toISOString(),
+        status: site.activationStatus,
+        // Fleet endpoints carry no live power or last-update time; keep the last
+        // known values rather than overwrite them with zeros.
+        currentPower: prev?.currentPower ?? 0,
+        lastUpdateTime: prev?.lastUpdateTime ?? '',
+        lastPolled: now,
         alerts: newAlerts,
       };
+      rows.push({ key: `solar:${site.siteId}`, value, updated_at: now });
+    }
 
-      const { error } = await supabase
-        .from('app_data')
-        .upsert({
-          key: `solar:${site.id}`,
-          value,
-          updated_at: new Date().toISOString(),
-        }, { onConflict: 'key' });
-
-      return { siteId: site.id, ok: !error, error: error?.message, closedAlerts: closedAlerts.length };
-    }));
-
-    const successes = upserts.filter(u => u.ok).length;
-    const failures = upserts.filter(u => !u.ok);
+    const { error } = await supabase.from('app_data').upsert(rows, { onConflict: 'key' });
+    if (error) throw new Error(`app_data upsert: ${error.message}`);
+    if (notifications.length) {
+      const { error: nErr } = await supabase.from('notifications').insert(notifications);
+      if (nErr) console.error('[solaredge-poller] notifications insert:', nErr.message); // don't fail the run
+    }
 
     return new Response(JSON.stringify({
       status: 'ok',
       sitesTotal: sites.length,
-      sitesPolled: ranked.length,
-      successes,
-      failures,
+      openAlerts: alerts.filter(a => a.status === 'OPEN').length,
+      sitesWithAlerts: openBySite.size,
+      resolvedNotifications: notifications.length,
       elapsedMs: Date.now() - startedAt,
     }), { status: 200, headers: { 'Content-Type': 'application/json' } });
 
