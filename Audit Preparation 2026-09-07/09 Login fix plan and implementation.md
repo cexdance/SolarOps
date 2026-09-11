@@ -33,7 +33,7 @@ The original browser assertions now pass 79/79, up from 48 passes and 31 failure
 
 - Auth-routing/password-state unit checks: 15 passed.
 - Transport unit/integration checks: 8 passed, including real request cancellation, stalled-body cancellation, caller abort forwarding, late-success rejection and SDK no-session-persistence after timeout.
-- Required `pnpm run build` passed its environment check, TypeScript project build and Vite bundle. Existing font-import ordering and chunk-size warnings remain; they did not fail the build.
+- Required `pnpm run build` passed its environment check, TypeScript project build and Vite bundle. The build ran under Node 22.22.3 and warned that the manifest requests Node 24.x. Existing font-import ordering and chunk-size warnings remain; they did not fail the build.
 - New mobile contractor screenshot visually inspected; no clipping introduced by larger controls.
 - Root causes covered by session scenarios: no-auth cached flags, identity mismatch, suspended-account denial, approved restoration, logout plus reload, both portals' forced-password reload gates, rejected updates, and successful auth-only updates with no password in application APIs/localStorage.
 - No app deployment or live account/data change was performed.
@@ -45,3 +45,5 @@ The original browser assertions now pass 79/79, up from 48 passes and 31 failure
 The transport fix cancels actual auth network requests at 12 seconds rather than only stopping UI waiting. The SDK retains its own bounded refresh retry policy. Aborting a request cannot undo a server operation that already completed; uncertain password-update delivery should be retried/reconciled with the provider rather than treated as rollback.
 
 These results establish the covered local client behavior. A staging pass with designated test accounts is still needed for actual successful sign-in, provider reset-email delivery, protected role/RLS enforcement, and invalid/expired reset links. Physical iOS/Android passkey, keyboard and password-manager checks remain. Mandatory password-change state currently resides in user metadata with legacy contractor fallback; it is a client workflow requirement, not server-enforced password-rotation policy. No claim is made that this change closes that separate backend-policy question.
+
+Final independent source review found no additional actionable regression in the scoped restore, logout and forced-password changes.
