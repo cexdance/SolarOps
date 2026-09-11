@@ -21,6 +21,8 @@ import { escapeHtml, singleLine, isUuid } from './_notifyGuards';
 // Safe to load at module scope only because _dailyReport and everything it
 // imports live under api/ and do nothing but declare consts and functions.
 import { runDailyReport } from './_dailyReport';
+// Static for the same reason as _dailyReport above.
+import { runClientNumberAudit, alertAdmins } from './_clientNumberAudit';
 import { timingSafeEqual } from 'node:crypto';
 
 /** Constant-time compare that does not leak length via early return. */
@@ -45,6 +47,8 @@ const TELEGRAM_BOT_TOKEN = (process.env.TELEGRAM_BOT_TOKEN ?? '').trim() || unde
 /** Optional From override for the daily report, used to smoke-test before a
  *  sending domain is verified. Unset in normal operation. */
 const REPORT_FROM      = (process.env.REPORT_FROM ?? '').trim() || undefined;
+/** The registry sheet's Apps Script /exec URL; the nightly audit mirrors into it. */
+const REGISTRY_URL     = (process.env.VITE_CLIENT_REGISTRY_URL ?? '').trim() || undefined;
 const VAPID_PUBLIC_KEY = (process.env.VAPID_PUBLIC_KEY ?? '').trim();
 const VAPID_PRIVATE_KEY = (process.env.VAPID_PRIVATE_KEY ?? '').trim();
 
@@ -99,6 +103,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!safeEqual(presented, CRON_SECRET)) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
+    // The client-number audit runs first and on its own. The report below can
+    // be switched off in Settings; this must not be switched off with it, and a
+    // crash here must not cost the report either.
+    let numberAudit: unknown;
+    try {
+      const env = { supabaseUrl: SUPABASE_URL, serviceRoleKey: SERVICE_ROLE_KEY, registryUrl: REGISTRY_URL };
+      const summary = await runClientNumberAudit(env);
+      const alerted = await alertAdmins(env, summary);
+      numberAudit = { ...summary, alerted };
+    } catch (err) {
+      numberAudit = { status: 'error', reason: (err as Error).message };
+      console.error('[client-number-audit] failed:', (err as Error).message);
+    }
+    console.log('[client-number-audit]', JSON.stringify(numberAudit));
     try {
       const result = await runDailyReport({
         serviceRoleKey: SERVICE_ROLE_KEY,
@@ -107,12 +125,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         from: REPORT_FROM,
       });
       console.log('[daily-report]', JSON.stringify(result));
-      return res.status(result.status === 'error' ? 500 : 200).json(result);
+      return res.status(result.status === 'error' ? 500 : 200).json({ ...result, numberAudit });
     } catch (err) {
       // A thrown job is a silent failure at 11pm, so make it loud in the logs
       // and in the response the cron records.
       console.error('[daily-report] failed:', (err as Error).message);
-      return res.status(500).json({ status: 'error', reason: (err as Error).message });
+      return res.status(500).json({ status: 'error', reason: (err as Error).message, numberAudit });
     }
   }
 

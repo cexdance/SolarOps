@@ -4,7 +4,7 @@ import { serviceOrderNo, generateServiceOrderNumber } from '../lib/woHelpers';
 import { rowToPowerCareRecords, mapRowToContact, matchExistingCustomer, findOrderForCase, enrichCustomerFromRow } from '../lib/leadImport';
 import { loadData } from '../lib/dataStore';
 import { authedFetch } from '../lib/supabase';
-import { claimClientNumber } from '../lib/clientRegistry';
+import { assignClientNumber, bindClientNumber, releaseAssignedNumber, type Assigned } from '../lib/clientNumbers';
 import { compressImageToDataUrl } from '../lib/photoCompress';
 import {
   Plus,
@@ -1161,15 +1161,6 @@ export const Customers: React.FC<CustomersProps> = ({
           onUpdateCustomer={onUpdateCustomer}
           existingCustomers={customers}
           existingJobs={jobs}
-          nextClientId={(() => {
-            // Find highest US-XXXXX number across all customers
-            let max = 15565;
-            customers.forEach(c => {
-              const m = c.clientId?.match(/^US-(\d+)$/);
-              if (m) max = Math.max(max, parseInt(m[1], 10));
-            });
-            return `US-${max + 1}`;
-          })()}
         />
       )}
 
@@ -3459,20 +3450,33 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
   const [editForm, setEditForm] = useState<Customer>(customer);
   const [claimingClientId, setClaimingClientId] = useState(false);
 
-  // Clicking an EMPTY client-number field claims the next number from the
-  // registry sheet and writes this customer's name onto that row. Typing is
-  // still possible: a field that already has a number never calls out.
+  // A number claimed in this edit session but not saved yet. Closing the form
+  // without saving gives it back, so abandoning an edit never burns a number.
+  const unsavedClaim = useRef<Assigned | null>(null);
+  const abandonUnsavedClaim = () => {
+    const a = unsavedClaim.current;
+    unsavedClaim.current = null;
+    if (a) void releaseAssignedNumber(a);
+  };
+
+  // Clicking an EMPTY client-number field assigns the next number, through the
+  // same allocator as every other path. Typing is still possible: a typed
+  // number is checked when the form is saved.
   const handleClaimClientId = async () => {
     if (claimingClientId || editForm.clientId) return;
-    const name = (editForm.name || '').trim();
-    if (!name) { window.alert('Enter the customer name first: the sheet needs a name for the row.'); return; }
     setClaimingClientId(true);
     try {
-      const reg = await claimClientNumber(name);
-      if (!reg) { window.alert('The client registry is not configured (VITE_CLIENT_REGISTRY_URL is unset).'); return; }
-      setEditForm(prev => ({ ...prev, clientId: reg.clientId, solarEdgeClientId: reg.clientId }));
+      const a = await assignClientNumber({
+        name: editForm.name || '',
+        customers: allCustomers,
+        selfCustomerId: customer.id,
+        source: 'edit',
+      });
+      unsavedClaim.current = a;
+      setEditForm(prev => ({ ...prev, clientId: a.clientId, solarEdgeClientId: a.clientId }));
+      if (a.warning) window.alert(a.warning);
     } catch (err) {
-      window.alert(`Could not claim a client number:\n\n${(err as Error).message}`);
+      window.alert(`Could not assign a client number:\n\n${(err as Error).message}`);
     } finally {
       setClaimingClientId(false);
     }
@@ -3692,7 +3696,38 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
     }
   };
 
-  const handleSaveEdit = () => {
+  const [savingEdit, setSavingEdit] = useState(false);
+  const savingEditRef = useRef(false);
+
+  const handleSaveEdit = async () => {
+    if (savingEditRef.current) return;
+    // A client number typed by hand goes through the allocator before anything
+    // is saved: refused if another client holds it, or if the registry sheet
+    // lists someone else on it. A number claimed by the button above has
+    // already been through it.
+    const typed = (editForm.clientId ?? '').trim().toUpperCase();
+    const before = (customer.clientId ?? '').trim().toUpperCase();
+    let reserved: Assigned | null = null;
+    if (typed && typed !== before && typed !== unsavedClaim.current?.clientId) {
+      savingEditRef.current = true;
+      setSavingEdit(true);
+      try {
+        reserved = await assignClientNumber({
+          name: editForm.name || '',
+          requested: typed,
+          customers: allCustomers,
+          selfCustomerId: customer.id,
+          source: 'edit',
+        });
+      } catch (err) {
+        window.alert(`${(err as Error).message}\n\nNothing was saved.`);
+        return;
+      } finally {
+        savingEditRef.current = false;
+        setSavingEdit(false);
+      }
+    }
+
     const changes: string[] = [];
 
     const fieldLabel: Record<string, string> = {
@@ -3745,6 +3780,22 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
       ...editForm,
       activityHistory: newEntries.length > 0 ? [...newEntries, ...activityHistory] : activityHistory,
     });
+    // The save landed: tie the number to this customer. A claim from the button
+    // that the user then replaced by typing another number goes back.
+    const saved = (editForm.clientId ?? '').trim().toUpperCase();
+    const claimed = unsavedClaim.current;
+    unsavedClaim.current = null;
+    if (claimed && claimed.clientId !== saved) void releaseAssignedNumber(claimed);
+    if (saved && (claimed?.clientId === saved || reserved?.clientId === saved)) {
+      void bindClientNumber(saved, customer.id);
+    }
+    if (reserved?.warning) window.alert(reserved.warning);
+    onCloseEdit();
+  };
+
+  /** Leave the edit form without saving: a number claimed in it goes back. */
+  const closeEditWithoutSaving = () => {
+    abandonUnsavedClaim();
     onCloseEdit();
   };
 
@@ -4710,7 +4761,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
             <div className="p-4 border-b border-slate-200">
               <div className="flex items-center justify-between mb-3">
                 <h2 className="text-lg font-bold text-slate-900">Edit Customer</h2>
-                <button onClick={onCloseEdit} className="p-2 hover:bg-slate-100 rounded-lg cursor-pointer">
+                <button onClick={closeEditWithoutSaving} className="p-2 hover:bg-slate-100 rounded-lg cursor-pointer">
                   <X className="w-5 h-5 text-slate-500" />
                 </button>
               </div>
@@ -4852,16 +4903,17 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
               </div>
               <div className="flex gap-3 pt-4">
                 <button
-                  onClick={onCloseEdit}
+                  onClick={closeEditWithoutSaving}
                   className="flex-1 py-2.5 border border-slate-200 text-slate-600 rounded-lg font-medium hover:bg-slate-50"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleSaveEdit}
-                  className="flex-1 py-2.5 bg-orange-500 text-white rounded-lg font-medium hover:bg-orange-600"
+                  disabled={savingEdit || claimingClientId}
+                  className="flex-1 py-2.5 bg-orange-500 text-white rounded-lg font-medium hover:bg-orange-600 disabled:opacity-60 disabled:cursor-wait"
                 >
-                  Save Changes
+                  {savingEdit ? 'Checking number...' : 'Save Changes'}
                 </button>
               </div>
               {/* Danger zone, golden ratio split: merge (61.8%) | delete (38.2%) */}
@@ -4869,7 +4921,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                 <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-2 text-center">Danger Zone</p>
                 <div className="flex gap-2" style={{ '--phi': '1.618' } as React.CSSProperties}>
                   <button
-                    onClick={() => { onCloseEdit(); setTimeout(() => setShowMergeModal(true), 150); }}
+                    onClick={() => { closeEditWithoutSaving(); setTimeout(() => setShowMergeModal(true), 150); }}
                     className="flex items-center justify-center gap-1.5 py-2.5 text-amber-700 bg-amber-50 border border-amber-200 rounded-lg text-sm font-medium hover:bg-amber-100 transition-colors cursor-pointer"
                     style={{ flex: '1.618' }}
                   >
@@ -4889,7 +4941,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                     <div className="flex items-center gap-1.5 px-2 py-1.5 bg-red-50 border border-red-300 rounded-lg" style={{ flex: '1' }}>
                       <span className="text-xs text-red-700 font-medium flex-1">Sure?</span>
                       <button
-                        onClick={() => { onDeleteCustomer(customer.id); onCloseEdit(); }}
+                        onClick={() => { abandonUnsavedClaim(); onDeleteCustomer(customer.id); onCloseEdit(); }}
                         className="px-2 py-1 bg-red-600 text-white text-xs font-semibold rounded cursor-pointer hover:bg-red-700"
                       >Yes</button>
                       <button
@@ -5408,14 +5460,18 @@ interface CreateCustomerModalProps {
   onUpdateCustomer: (customer: Customer) => void;
   existingCustomers: Customer[];
   existingJobs: Job[];
-  nextClientId: string;
 }
 
 const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({
-  onClose, onCreate, onCreateJob, onUpdateCustomer, existingCustomers, existingJobs, nextClientId,
+  onClose, onCreate, onCreateJob, onUpdateCustomer, existingCustomers, existingJobs,
 }) => {
+  // The client number is NOT pre-filled. It used to be "the highest number this
+  // app knows + 1", a second allocator the registry never heard about: that is
+  // how Cherrington took US-15703 while the sheet kept offering it to every lead
+  // conversion (2026-09-11). Empty means "assign the next one on save", through
+  // the same allocator as everything else; a typed number is checked on save.
   const [formData, setFormData] = useState({
-    clientId: nextClientId,
+    clientId: '',
     firstName: '',
     lastName: '',
     name: '',
@@ -5655,20 +5711,56 @@ const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({
     return summary;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // Assigning the number is a network round trip. Without an in-flight guard a
+  // second click during it would assign a second number and create a second
+  // customer: the exact shape of the Daniel Torres double-click (2026-09-08).
+  const savingRef = useRef(false);
+  const [saving, setSaving] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onCreate({
-      ...formData,
-      clientId: formData.clientId || undefined,
-      category: formData.category || undefined,
-      systemType: formData.systemType || undefined,
-      clientStatus: formData.clientStatus || undefined,
-      ...(pendingActivities.length ? { activityHistory: pendingActivities } : {}),
-      ...(pendingFiles.length      ? { files: pendingFiles }               : {}),
-      ...(pendingTrelloUrl         ? { trelloBackupUrl: pendingTrelloUrl } : {}),
-      createdAt: new Date().toISOString(),
-    });
-    onClose();
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
+    const name = (formData.name || `${formData.firstName} ${formData.lastName}`).trim();
+    let assigned: Assigned | undefined;
+    try {
+      assigned = await assignClientNumber({
+        name,
+        requested: formData.clientId,
+        customers: existingCustomers,
+        source: 'create',
+      });
+      const createdId = onCreate({
+        ...formData,
+        clientId: assigned.clientId,
+        category: formData.category || undefined,
+        systemType: formData.systemType || undefined,
+        clientStatus: formData.clientStatus || undefined,
+        ...(pendingActivities.length ? { activityHistory: pendingActivities } : {}),
+        ...(pendingFiles.length      ? { files: pendingFiles }               : {}),
+        ...(pendingTrelloUrl         ? { trelloBackupUrl: pendingTrelloUrl } : {}),
+        createdAt: new Date().toISOString(),
+      });
+      // onCreate can open an EXISTING customer instead of creating one (its
+      // duplicate guard). That customer keeps its own number, so the one just
+      // taken would be stranded: give it back instead of binding it.
+      const existing = existingCustomers.find(c => c.id === createdId);
+      if (existing && (existing.clientId ?? '').trim().toUpperCase() !== assigned.clientId) {
+        void releaseAssignedNumber(assigned);
+      } else {
+        void bindClientNumber(assigned.clientId, createdId);
+        if (assigned.warning) alert(assigned.warning);
+      }
+      onClose();
+    } catch (err) {
+      // Nothing was created. A number taken before the failure goes back.
+      if (assigned) void releaseAssignedNumber(assigned);
+      alert(`${(err as Error).message}\n\nThe customer was not created.`);
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
   };
 
   return (
@@ -5822,8 +5914,10 @@ const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({
                 value={formData.clientId}
                 onChange={(e) => setFormData({ ...formData, clientId: e.target.value })}
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg"
-                placeholder="US-10001"
+                placeholder="Assigned on save"
+                aria-describedby="clientid-help"
               />
+              <p id="clientid-help" className="mt-1 text-xs text-slate-500">Leave empty for the next number.</p>
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Customer Name *</label>
@@ -6030,9 +6124,10 @@ const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({
             </button>
             <button
               type="submit"
-              className="flex-1 py-2.5 bg-orange-500 text-white rounded-lg font-medium hover:bg-orange-600"
+              disabled={saving}
+              className="flex-1 py-2.5 bg-orange-500 text-white rounded-lg font-medium hover:bg-orange-600 disabled:opacity-60 disabled:cursor-wait"
             >
-              Create Customer
+              {saving ? 'Assigning number...' : 'Create Customer'}
             </button>
           </div>
         </form>

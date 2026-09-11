@@ -67,7 +67,7 @@ function badgeLabel(job: Job): string {
 import { ServiceOrderPanel } from './ServiceOrderPanel';
 import { LeadPanel } from './LeadPanel';
 import { leadToCustomer, formatImportedAt, clientNumberOwner } from '../lib/leadConvert';
-import { claimClientNumber, releaseClientNumber } from '../lib/clientRegistry';
+import { assignClientNumber, bindClientNumber, releaseAssignedNumber, type Assigned } from '../lib/clientNumbers';
 
 // Contractor workload buckets for the per-contractor filter summary. Uses the raw
 // `contractorJobStatus` (mirrored from the contractor portal) so "on route"
@@ -798,59 +798,58 @@ export const Jobs: React.FC<JobsProps> = ({
 
   const convertLead = async (lead: Job) => {
     const payload = leadToCustomer(lead);
-    let clientId = lead.clientId;
-    // Set only when this call MINTED a number, so an abort below can hand it
-    // back. A number the lead already carried is not ours to release: it stays
-    // with this lead either way.
-    let mintedClientId: string | undefined;
+    // The number comes from the one allocator (Postgres), which already refuses
+    // any number a customer carries and records hand-typed sheet names instead
+    // of overwriting them. A number the lead already carries is reserved
+    // rather than minted; if the registry or the sheet says it belongs to
+    // someone else, the conversion is BLOCKED (the old "convert anyway, leave
+    // the sheet unchanged" override created exactly the drift this replaces).
+    let assigned: Assigned;
     try {
-      const reg = await claimClientNumber(payload.name ?? '', lead.clientId);
-      if (reg?.taken) {
-        const ok = window.confirm(
-          `${reg.clientId} is already assigned to "${reg.name}" in the client registry sheet.\n\n` +
-          `Convert this lead anyway, leaving the sheet unchanged?`
-        );
-        if (!ok) return;
-      } else if (reg) {
-        clientId = reg.clientId;
-        if (!lead.clientId) mintedClientId = reg.clientId;
-      }
+      assigned = await assignClientNumber({
+        name: payload.name ?? '',
+        requested: lead.clientId,
+        customers,
+        source: 'convert',
+      });
     } catch (err) {
-      window.alert(`Could not update the client registry sheet:\n\n${(err as Error).message}\n\nNothing was converted. Try again.`);
+      window.alert(`${(err as Error).message}\n\nNothing was converted.`);
       return;
     }
-    // The number we just claimed must not already be on a client. If it is, the
-    // sheet and the CRM have drifted, and onCreateCustomer's duplicate guard
-    // would file this lead under that stranger instead of creating it. See
-    // clientNumberOwner for the Danielle Ferrari / Andres Jimenez incident.
+    const clientId = assigned.clientId;
+    // Belt and braces. The allocator checked this browser's customers too, so
+    // this should never fire; if it does, onCreateCustomer's duplicate guard
+    // would file this lead under that stranger instead of creating it (see
+    // clientNumberOwner for the Danielle Ferrari / Andres Jimenez incident).
     const owner = clientNumberOwner(customers, clientId, lead.customerId);
     if (owner) {
-      // Hand the number back before telling the operator, or this abort burns it
-      // and their retry claims a second row for the same lead.
-      const gaveBack = mintedClientId ? await releaseClientNumber(mintedClientId, payload.name ?? '') : false;
+      const gaveBack = await releaseAssignedNumber(assigned);
       window.alert(
-        `Client number ${clientId} is already on "${owner.name}" in this app.\n\n` +
-        `Converting would file this lead under that client instead of creating a new one, ` +
-        `so nothing was converted.\n\n` +
-        (mintedClientId
-          ? gaveBack
-            ? `${mintedClientId} was released back to the registry sheet, so nothing was wasted.\n\n`
-            : `WARNING: ${mintedClientId} could NOT be released and is still holding "${payload.name}" in the sheet. Clear that row by hand.\n\n`
-          : '') +
-        `Fix ${owner.name}'s client number (or the registry sheet) first, then try again.`
+        `Client number ${clientId} is already on "${owner.name}" in this app, so nothing was converted.\n\n` +
+        (gaveBack ? '' : `WARNING: ${clientId} could not be released and is still held for "${assigned.name}". Tell an admin.\n\n`) +
+        `Fix ${owner.name}'s client number first, then try again.`
       );
       return;
     }
-    const customerId = onCreateCustomer({ ...payload, clientId });
+    const createdId = onCreateCustomer({ ...payload, clientId });
+    // onCreateCustomer can MERGE instead of create (same SolarEdge site as an
+    // existing client) and hand back that client's id. That client keeps its own
+    // number, so the one just taken for this lead would be stranded: give it
+    // back, and file the order under the client's real number.
+    const mergedInto = customers.find(c => c.id === createdId && (c.clientId ?? '').trim() && (c.clientId ?? '').trim().toUpperCase() !== clientId);
+    const finalClientId = mergedInto ? (mergedInto.clientId ?? '').trim() : clientId;
+    if (mergedInto) void releaseAssignedNumber(assigned);
+    else void bindClientNumber(clientId, createdId);
+    const customerId = createdId;
     // A converted lead starts as a site transfer: the SolarEdge ownership move is
     // the first thing we do for a new client. Flat $120, no field work.
     // ponytail: the rate lives in contractorStore (sr-20); duplicated here so the
     // conversion doesn't need the catalog loaded. Read the catalog if it ever moves.
     onUpdateJob({
       ...lead,
-      clientId,
+      clientId: finalClientId,
       customerId,
-      solarEdgeClientId: clientId,
+      solarEdgeClientId: finalClientId,
       leadInfo: undefined,
       pipelineStage: 'needs_first_quote',
       serviceCode: 'SITE-TRX',
@@ -869,6 +868,8 @@ export const Jobs: React.FC<JobsProps> = ({
       updatedAt: new Date().toISOString(),
     });
     setLeadPanelJobId(null);
+    // The number is valid either way; the sheet just could not be written yet.
+    if (assigned.warning && !mergedInto) window.alert(assigned.warning);
   };
 
   // Calendar drag-to-reschedule: stamp the new scheduled date (yyyy-MM-dd) plus

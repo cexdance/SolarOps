@@ -120,3 +120,24 @@ export function clientNumberOwner<C extends { id: string; name: string; clientId
   if (!want) return undefined;
   return customers.find(c => (c.clientId ?? '').trim() === want && c.id !== leadCustomerId);
 }
+
+/**
+ * The last line of defence at the customer save choke point: an update that
+ * CHANGES a customer's client number onto one another customer already carries.
+ * Every UI path checks with the allocator first; this catches any path that
+ * does not, including ones written later.
+ *
+ * Only a change counts. Thirteen legacy pairs already share a number (SolarEdge
+ * import duplicates); refusing every save of those would lose their edits, so a
+ * record keeping the number it already had passes.
+ */
+export function clientIdChangeConflict<C extends { id: string; name: string; clientId?: string }>(
+  customers: C[],
+  prev: { clientId?: string } | undefined,
+  next: { id: string; clientId?: string },
+): C | undefined {
+  const norm = (s?: string) => (s ?? '').trim().toUpperCase();
+  const want = norm(next.clientId);
+  if (!want || want === norm(prev?.clientId)) return undefined;
+  return customers.find(c => c.id !== next.id && norm(c.clientId) === want);
+}

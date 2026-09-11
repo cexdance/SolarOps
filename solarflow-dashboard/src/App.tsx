@@ -60,6 +60,7 @@ import { AppState, Job, Customer, User, AppNotification, SolarEdgeExtraSite, RMA
 import { FL_SITES } from './lib/solarEdgeSites';
 import { isFloridaSite, isAllowedCustomer, deriveClientId, findCustomerForSite } from './lib/solarEdgeSiteFilter';
 import { getDeletedCustomerIds, markJobDeleted, findDuplicateCustomer, hasDanglingCustomerRef } from './lib/dataStore';
+import { clientIdChangeConflict } from './lib/leadConvert';
 import { markUndo, peekUndo, takeUndo, applyUndo, clearUndo, clearUndoTombstones } from './lib/undo';
 import { mergeCustomerPair } from './lib/syncEngine';
 import { mergeVisits } from './lib/visits';
@@ -2473,6 +2474,18 @@ function App() {
       address: normalizeStreetOrder(rawCustomer.address || ''),
       updatedAt: new Date().toISOString(),
     };
+    // Failsafe: a save may never move a customer onto a client number another
+    // customer already carries. Every UI path asks the allocator first
+    // (lib/clientNumbers.ts); this catches any path that does not, including
+    // ones written later. The number stays as it was and the rest of the edit
+    // still saves, so a refused number never costs the user their other changes.
+    const prevForNumber = data.customers.find(c => c.id === rawCustomer.id);
+    const numberHolder = clientIdChangeConflict(data.customers, prevForNumber, updatedCustomer);
+    if (numberHolder) {
+      const refused = (updatedCustomer.clientId ?? '').trim();
+      updatedCustomer.clientId = prevForNumber?.clientId;
+      alert(`Client number not changed: ${refused} already belongs to "${numberHolder.name}".\n\nThe rest of the edit was saved.`);
+    }
     logChange('customer.update', 'customer', updatedCustomer.id, updatedCustomer,
       data.currentUser?.email ?? 'unknown');
 

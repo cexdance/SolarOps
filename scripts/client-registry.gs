@@ -1,25 +1,24 @@
 /**
- * Client number registry - Google Apps Script web app.
+ * Client number registry sheet - Google Apps Script web app (a MIRROR).
  *
- * Backs "Move to Client" in SolarOps. The sheet is the source of truth for the
- * consecutive US-1XXXX numbers; this endpoint either (a) stamps a name onto the
- * number a lead already carries, or (b) claims the first pre-allocated number
- * whose Name cell is still blank and returns it.
+ * Since 2026-09-11 SolarOps allocates client numbers in Postgres
+ * (public.client_numbers). This endpoint no longer picks numbers. SolarOps calls
+ * it to (a) stamp a name onto the row for a number it assigned, (b) clear a row
+ * it wrote when the save never happened (op:"release"), and the nightly audit
+ * calls it to fill rows the app could not write at the time.
  *
- * Sheet layout (first tab, row 1 is the header):
+ * A row holding a DIFFERENT name is never overwritten; it comes back `taken`,
+ * and SolarOps records that name as the number's owner.
+ *
+ * Sheet layout (tab "MAIN LIST ", row 1 is the header):
  *   A = row counter   B = Accounts (US-1XXXX)   C = Name   D = Description   E = Status
  *
- * SETUP
- *   1. Open the sheet > Extensions > Apps Script, paste this file, Save.
- *   2. Run `demo` once: it self-checks the pick logic and grants the sheet scope.
- *   3. Deploy > New deployment > Web app.
- *        Execute as: Me.   Who has access: Anyone.
- *      Copy the /exec URL.
- *   4. Put it in the dashboard's .env / Vercel env as VITE_CLIENT_REGISTRY_URL
- *      and redeploy (VITE_* vars are baked in at build time).
+ * DEPLOY: editing this file does NOT change what /exec serves. Deploy > Manage
+ * deployments > pencil > Version: New version > Deploy. Same URL, new code.
  *
- * Requests are POST with a JSON body: { name: "Jane Doe", clientId: "US-15683" }
- * clientId is optional - omit it to claim the next free number.
+ * Requests are POST with a JSON body:
+ *   { name, clientId }                     stamp (clientId REQUIRED)
+ *   { op: "release", clientId, name }      clear, only if the row still holds `name`
  */
 
 var SHEET_ID = '169naSCBMVcWNU15Z-UUfKo-Ss48kPEC0AvBCPDjQcKY';
@@ -42,29 +41,34 @@ function accountNum_(s) {
 }
 
 /**
+ * How far past the last row SolarOps may extend the sheet in one write. A typo
+ * like US-99999 must not create eighty thousand rows.
+ */
+var MAX_APPEND_GAP = 50;
+
+/**
  * Decide which row to write to. Pure, so `demo` can check it without the sheet.
  * `rows` is [[account, name], ...] in sheet order.
- * Returns { index } (0-based into rows), { append, clientId } when the
- * pre-allocated numbers are used up, or { error }.
+ * Returns { index } (0-based into rows), { appendTo, from } when SolarOps
+ * assigned a number past the last pre-made row, or { error }.
  */
 function pickRow_(rows, clientId) {
   var i, target, max = 0;
-  if (clientId) {
-    target = norm_(clientId);
-    for (i = 0; i < rows.length; i++) {
-      if (norm_(rows[i][0]) === target) return { index: i };
-    }
-    return { error: 'Client number ' + clientId + ' is not in the registry sheet.' };
+  if (!clientId) {
+    // Since 2026-09-11 SolarOps allocates client numbers (Postgres) and this
+    // sheet only mirrors them. Refusing to pick one here makes a stale tab still
+    // running the old code fail loudly, instead of handing out a number the
+    // database never heard of (which is how Cherrington and US-15703 happened).
+    return { error: 'Client numbers are assigned by SolarOps now. Refresh the page and try again.' };
   }
+  target = norm_(clientId);
   for (i = 0; i < rows.length; i++) {
-    if (!norm_(rows[i][0])) continue;
-    if (!String(rows[i][1]).trim()) return { index: i };
+    if (norm_(rows[i][0]) === target) return { index: i };
     if (accountNum_(rows[i][0]) > max) max = accountNum_(rows[i][0]);
   }
-  // Every pre-allocated number is taken: extend the run by one. Numbering stays
-  // consecutive because max is the highest account in the sheet, not a count.
-  if (!max) return { error: 'Registry sheet has no US-1XXXX numbers to continue from.' };
-  return { append: true, clientId: 'US-' + (max + 1) };
+  var want = accountNum_(clientId);
+  if (max && want > max && want - max <= MAX_APPEND_GAP) return { appendTo: want, from: max + 1 };
+  return { error: 'Client number ' + clientId + ' is not in the registry sheet.' };
 }
 
 function json_(obj) {
@@ -129,12 +133,17 @@ function doPost(e) {
     var pick = pickRow_(rows, req.clientId);
     if (pick.error) return json_({ error: pick.error });
 
-    if (pick.append) {
-      // Column A is the sheet's own row counter; keep it running so the new row
-      // looks like every other one.
+    if (pick.appendTo) {
+      // SolarOps assigned a number past the last pre-made row. Extend the run up
+      // to it, keeping column A's counter going, so the row exists to be named.
       var counter = Number(sh.getRange(last, 1).getValue()) || (last - FIRST_DATA_ROW + 1);
-      sh.getRange(last + 1, 1, 1, 3).setValues([[counter + 1, pick.clientId, name]]);
-      return json_({ clientId: pick.clientId, name: name, appended: true });
+      var add = [];
+      for (var n = pick.from; n <= pick.appendTo; n++) {
+        counter++;
+        add.push([counter, 'US-' + n, n === pick.appendTo ? name : '']);
+      }
+      sh.getRange(last + 1, 1, add.length, 3).setValues(add);
+      return json_({ clientId: 'US-' + pick.appendTo, name: name, appended: true });
     }
 
     var account = String(rows[pick.index][0]).trim();
@@ -159,10 +168,11 @@ function doPost(e) {
 function demo() {
   var rows = [['US-15015', 'Daniel Matos'], ['US-15016', ''], ['US-15017', '']];
   if (pickRow_(rows, 'us-15015 ').index !== 0) throw new Error('lookup should be trim/case insensitive');
-  if (pickRow_(rows, null).index !== 1) throw new Error('should claim the first blank name');
-  if (!pickRow_(rows, 'US-99999').error) throw new Error('unknown number must error, not fall through');
-  var full = pickRow_([['US-15686', 'a'], ['US-15687', 'b']], null);
-  if (full.clientId !== 'US-15688') throw new Error('exhausted registry must append the next number, got ' + full.clientId);
-  if (pickRow_([['', '']], null).clientId) throw new Error('empty registry must not invent a number');
+  if (pickRow_(rows, 'US-15016').index !== 1) throw new Error('should find a blank row by number');
+  if (!pickRow_(rows, null).error) throw new Error('the sheet must refuse to pick a number itself');
+  var ext = pickRow_([['US-15686', 'a'], ['US-15687', 'b']], 'US-15689');
+  if (ext.appendTo !== 15689 || ext.from !== 15688) throw new Error('should extend the run up to a number SolarOps assigned');
+  if (!pickRow_([['US-15687', 'b']], 'US-99999').error) throw new Error('a far-off typo must not append thousands of rows');
+  if (!pickRow_([['', '']], 'US-15015').error) throw new Error('an empty sheet must not invent rows');
   Logger.log('ok');
 }
