@@ -786,15 +786,22 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
     // Upload the after photo to Storage inline so we have the URL in scope
     let resolvedAfterUrl = afterPhoto ?? null;
     if (afterPhoto) {
-      const photoId = `ph-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-      pendingUploads.current.add(photoId);
+      let photoId = '';
+      photoOwners.current[afterPhoto] = activeVisitId;
       try {
         // Never fetch() a data: URL - iOS WKWebView blocks it and throws. Decode
         // data: URLs locally; only fetch genuine remote/blob URLs.
         const blob = dataUrlToBlob(afterPhoto)
           ?? (afterPhoto.startsWith('data:') ? null : await (await fetch(afterPhoto)).blob());
         if (!blob) throw new Error('after photo unreadable');
+        const row = await appendPhoto({ jobId: job.id, category: 'after', blob, visitId: activeVisitId });
+        photoId = row.id;
+        pendingUploads.current.add(photoId);
         const result = await uploadPhotoToStorage(blob, job.id, photoId);
+        if (result.url) {
+          photoOwners.current[result.url] = activeVisitId;
+          window.dispatchEvent(new CustomEvent('solarops-visit-photo', { detail: { jobId: job.sourceJobId || job.id, visitId: activeVisitId, url: result.url, category: 'after' } }));
+        }
         pendingUploads.current.delete(photoId);
         resolvedAfterUrl = result.url ?? afterPhoto; // fall back to dataUrl on failure
         if (!result.url) {

@@ -5330,6 +5330,8 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
       {/* Create Service Order, full ServiceOrderPanel */}
       {showCreateWorkOrder && (
         <ServiceOrderPanel
+          currentUserName={currentUser?.name}
+          currentUserRole={currentUser?.role}
           siteId={customer.id}
           siteName={customer.name}
           siteAddress={`${customer.address}, ${customer.city}, ${customer.state} ${customer.zip}`}
@@ -5351,15 +5353,18 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
       {/* Edit Service Order, full ServiceOrderPanel */}
       {editingJob && (
         <ServiceOrderPanel
+          currentUserName={currentUser?.name}
+          currentUserRole={currentUser?.role}
           siteId={customer.id}
           siteName={customer.name}
           siteAddress={`${customer.address}, ${customer.city}, ${customer.state} ${customer.zip}`}
           clientId={customer.clientId}
-          job={editingJob}
+          job={allJobs.find(j => j.id === editingJob.id) ?? editingJob}
           onClose={() => setEditingJob(null)}
           onSave={(jobData, shouldClose) => {
             if (onUpdateJob) onUpdateJob({ ...editingJob, ...jobData } as Job);
             if (shouldClose) setEditingJob(null);
+            else setEditingJob(prev => prev ? { ...prev, ...jobData } as Job : prev);
           }}
           onDeleteJob={(jobId) => {
             onDeleteJob?.(jobId);

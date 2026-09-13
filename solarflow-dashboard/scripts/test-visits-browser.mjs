@@ -42,7 +42,9 @@ for (const width of [1440, 390]) {
   assert.equal(await page.getByRole('button', { name: 'Awaiting quote / admin approval' }).isDisabled(), true);
   assert.equal(await page.evaluate(() => window.__scheduleCalls || 0), 0);
   assert.equal(requests[0].serviceType, 'Optimizer replacement');
-  await page.evaluate(() => window.__setRole('admin'));
+  await page.evaluate(() => window.__setRole('customer-admin'));
+  await page.getByRole('button', { name: 'Service Orders (1)', exact: true }).click();
+  await page.getByTitle('Open service order', { exact: true }).click();
   await page.getByLabel('Approval or coverage reference').fill('Original agreement includes the return');
   await page.screenshot({ path: `${out}/${width}-quote-review.png`, fullPage: true });
   await page.getByRole('button', { name: 'Included, no additional charge', exact: true }).click();
@@ -74,6 +76,18 @@ for (const width of [1440, 390]) {
   await page.getByText('Approval record: Customer accepted quote Q3 by email').waitFor();
   await page.screenshot({ path: `${out}/${width}-quote-approved.png`, fullPage: true });
   assert.equal(await page.evaluate(() => window.__visitJob.currentVisit.number), 3);
+  // Completion photo must remain durable even when its upload fails.
+  await page.evaluate(() => window.__setRole('contractor'));
+  await page.getByRole('button', { name: 'Start Work Order', exact: true }).click();
+  await page.getByRole('button', { name: 'Complete Work Order', exact: true }).click();
+  await page.locator('input[type=file]').first().setInputFiles({ name: 'after.png', mimeType: 'image/png', buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jNioAAAAASUVORK5CYII=', 'base64') });
+  await page.getByRole('button', { name: 'Save & Complete', exact: true }).click();
+  await page.waitForFunction(() => !!window.__visitJob.completedAt);
+  const rows = await page.evaluate(async () => {
+    const store = await import('/src/lib/photoStore.ts');
+    return (await store.listPhotosForJob('cj-view-visit-fixture')).map(r => ({ visitId: r.visitId, category: r.category, durable: !!r.blob || !!r.supabaseUrl }));
+  });
+  assert.ok(rows.some(r => r.visitId === 'visit-fixture:visit:3' && r.category === 'after' && r.durable), 'Completion photo lost its visit ID or durable bytes');
   assert.deepEqual(errors, []);
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'Horizontal overflow');
   results.push({ width, passed: true, actions: requests.map(r => r.action), errors });
