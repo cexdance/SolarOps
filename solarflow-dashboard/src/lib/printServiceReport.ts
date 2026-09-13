@@ -77,7 +77,7 @@ export function printServiceReport({ job, customer, siteName, siteAddress, clien
   const lastNumber = visits.length ? visits[visits.length - 1].number : 0;
   const visitSections = shown.map(v => {
     const final = v.number === lastNumber;
-    const st = final ? sysStatus : 'Return visit needed';
+    const st = v.plan && !['approved', 'included'].includes(v.plan.approval) ? 'Awaiting quote review' : !v.finishedAt ? 'Visit pending completion' : final ? sysStatus : 'Return visit needed';
     const color = final ? statusColor : '#d97706';
     const pics = v.photoUrls
       .filter(u => { const p = capByUrl.get(u); return !p || !isPdf(p); })
@@ -86,6 +86,9 @@ export function printServiceReport({ job, customer, siteName, siteAddress, clien
     const when = fmtDate(v.date && `${v.date}T12:00:00`) || fmtDate(v.finishedAt);
     return `<h2>Visit ${v.number}${when ? ` &nbsp;·&nbsp; ${esc(when)}` : ''}</h2>
   ${st ? `<div class="status"><span class="dot" style="background:${color}"></span>System status: <strong>${esc(st)}</strong></div>` : ''}
+  ${v.serviceType ? `<p><strong>Service:</strong> ${esc(v.serviceType)}</p>` : ''}
+  ${v.parts?.length ? `<p><strong>Parts:</strong> ${v.parts.map(p => `${esc(p.name)} x ${p.quantity}`).join(', ')}</p>` : ''}
+  ${v.labor?.length ? `<p><strong>Labor:</strong> ${v.labor.map(l => `${esc(l.description)}: ${l.hours} hours`).join('; ')}</p>` : ''}
   ${v.workDone ? `<p>${esc(v.workDone)}</p>` : '<p style="color:#94a3b8">No work summary recorded.</p>'}
   ${!final && v.nextSteps ? `<p><strong>Left for the next visit:</strong> ${esc(v.nextSteps)}</p>` : ''}
   ${pics ? `<div class="photos">${pics}</div>` : ''}`;

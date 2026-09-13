@@ -28,6 +28,8 @@ import { printServiceReport } from '../lib/printServiceReport';
 import { serviceOrderNo, workOrderNo, generateServiceOrderNumber, photoUrlStem, findPowercareCaseNo, needsFormalQuote, realSiteId } from '../lib/woHelpers';
 import { SowDistributionModal, SOW_DISTRIBUTION_NAMES } from './SowDistributionModal';
 import VisitHistory from './VisitHistory';
+import VisitWorkspace from './VisitWorkspace';
+import { currentVisitId, visitNeedsApproval } from '../lib/visits';
 import { ImageLightbox } from './ImageLightbox';
 import { ActivityFeed, type FeedUser } from './ui/ActivityFeed';
 import { compressImageToDataUrl, compressImageToBlob } from '../lib/photoCompress';
@@ -577,7 +579,8 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
   // Photos. Some entries may be migrated to the local photoStore (no inline
   // dataUrl, only a photoStoreId). Hydrate those in the background so <img>
   // can render. Already-inlined photos pass through untouched.
-  const [woPhotos, setWoPhotos]     = useState<WOPhoto[]>(job?.woPhotos ?? []);
+  const photosForCurrent = (j: Job) => (j.woPhotos ?? []).filter(p => p.visitId || j.visitPhotoOwners?.[p.storageUrl || p.dataUrl] ? (p.visitId || j.visitPhotoOwners?.[p.storageUrl || p.dataUrl]) === currentVisitId(j) : !j.visits?.some(v => v.photoUrls.includes(p.storageUrl || p.dataUrl)));
+  const [woPhotos, setWoPhotos] = useState<WOPhoto[]>(job ? photosForCurrent(job) : []);
   useEffect(() => {
     let revoked = false;
     const created: string[] = [];
@@ -590,7 +593,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
       hydrated.forEach((p, i) => {
         if (p.dataUrl && !job!.woPhotos![i].dataUrl) created.push(p.dataUrl);
       });
-      setWoPhotos(hydrated);
+      setWoPhotos(photosForCurrent({ ...job!, woPhotos: hydrated }));
     })();
     return () => {
       revoked = true;
@@ -835,6 +838,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
   const applyRecurringDiscount = discountType !== ''; // kept for legacy compat
 
   // Active tab
+  const [viewingHistory, setViewingHistory] = useState(false);
   const [activeTab, setActiveTab] = useState<'overview' | 'parts' | 'reroof' | 'photos' | 'report' | 'history' | 'map'>('overview');
   // WO audit trail (Phase B), loaded lazily when the History tab is opened.
   const [historyEntries, setHistoryEntries] = useState<ChangeEntry[] | null>(null);
@@ -919,6 +923,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
 
   // Workflow action: advance status
   const handleWorkflowAction = async () => {
+    if (job && visitNeedsApproval(job) && woStatus !== 'draft') { alert('Record quote approval or mark the follow-up included in Visits first.'); return; }
     // Block advance while any photo is still uploading to Storage
     if (pendingUploads.current.size > 0) return;
 
@@ -940,7 +945,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
       if (woStatus === 'draft') {
         // PowerCare service orders skip the quote flow entirely, the plan covers
         // the work, so no quote is emailed. Advance straight past the preview.
-        if (skipQuoteForPowerCare) {
+        if (skipQuoteForPowerCare && !job?.currentVisit) {
           updateClientStatus(siteId, 'quote_approval');
           onUpdateSiteStatus?.(siteId, 'quote_approval');
         } else {
@@ -970,6 +975,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
     // being billed is on screen when the call is made, same gate Billing's
     // "Generate Invoice" uses. Nothing advances here: the confirm inside the
     // report calls commitWorkflowAdvance().
+    if (woStatus === 'completed' && job?.currentVisit?.approval === 'included') { commitWorkflowAdvance('paid'); return; }
     if (woStatus === 'completed') {
       pendingAdvance.current = next;
       setInvoiceReview(true);
@@ -1494,7 +1500,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
     const { parts, total } = sumLineItems(lineItems);
     const fallbackTotal = laborHours * contractorPayRate + partsCostDirect;
     const baseQuote = quoteAmount > 0 ? quoteAmount : (total > 0 ? total : fallbackTotal);
-    const effectiveQuote = applyRecurringDiscount ? baseQuote * 0.9 : baseQuote;
+    const effectiveQuote = job?.currentVisit?.approval === 'included' ? 0 : applyRecurringDiscount ? baseQuote * 0.9 : baseQuote;
     // Build the audit entry for this save (created / completed / field diff) and
     // append it to the live trail so the bottom Activity Timeline updates at once.
     const stageNowCompleted = effectiveWoStatus === 'completed' && job?.woStatus !== 'completed';
@@ -1558,7 +1564,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
       contractorPayUnit,
       contractorSentAt: effectiveWoStatus === 'scheduled' ? (job?.contractorSentAt ?? new Date().toISOString()) : job?.contractorSentAt,
       lineItems,
-      woPhotos,
+      woPhotos: [...(job?.woPhotos ?? []).filter(p => !photosForCurrent(job!).some(c => c.id === p.id)), ...woPhotos.map(p => p.visitId || job?.visits?.some(v => v.photoUrls.includes(p.storageUrl || p.dataUrl)) ? p : { ...p, visitId: job ? currentVisitId(job) : undefined })],
       // Union of previously ledgered + this-session deleted stems, capped so the
       // list can't grow unbounded on photo-heavy jobs.
       deletedPhotoStems: Array.from(new Set([...(job?.deletedPhotoStems ?? []), ...deletedStems])).slice(-500),
@@ -1592,6 +1598,8 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
       auditLog: nextAuditLog,
       ...patch,
     };
+    if (job && visitNeedsApproval(job) && !['draft', 'quote_sent'].includes(partialJob.woStatus || '')) { alert('Approve the follow-up in Visits before advancing.'); return; }
+    if (partialJob.woStatus === 'completed' && partialJob.requiresFollowUp) { alert('Add the follow-up visit before closing this order.'); return; }
     onSave(partialJob, !keepOpen);
 
     // Fire @mention notifications from all text fields (non-blocking)
@@ -1647,6 +1655,17 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
   // This is the fix for the stale-closure bug: useCallback closures (handlePhotoFiles,
   // handleNotesPaste) captured handleSave from an old render and read stale woPhotos.
   handleSaveRef.current = handleSave;
+  const renderedVisit = useRef(job?.currentVisit?.id);
+  useEffect(() => {
+    if (!job?.currentVisit) return;
+    setWoStatus(job.woStatus ?? 'draft');
+    if (renderedVisit.current !== job.currentVisit.id) {
+      renderedVisit.current = job.currentVisit.id; setViewingHistory(false);
+      setServiceType(job.serviceType); setServiceCode(job.serviceCode ?? ''); setScheduledDate(job.scheduledDate); setScheduledTime(job.scheduledTime);
+      setLineItems(job.lineItems ?? []); setQuoteAmount(job.quoteAmount ?? 0); setServiceReport(job.serviceReport ?? '');
+      setRequiresFollowUp(false); setNextSteps(job.nextSteps ?? ''); setWoPhotos(photosForCurrent(job));
+    }
+  }, [job?.currentVisit?.id, job?.currentVisit?.approval]);
 
   // The client approved by phone and the paperwork was never raised. The order
   // is already past the quote stage, so the panel offers the quote as a
@@ -1670,9 +1689,9 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
   const stageIdx = STAGE_INDEX[woStatus];
   const baseAction = isSiteTransfer ? SITE_TRANSFER_ACTIONS[woStatus] : isServiceAccountExpense ? SERVICE_ACCOUNT_ACTIONS[woStatus] : ACTION_CONFIG[woStatus];
   // PowerCare draft WOs skip the quote, relabel the button so it's not "Send Quote".
-  const action = baseAction && skipQuoteForPowerCare && woStatus === 'draft' && !isSiteTransfer && !isServiceAccountExpense
+  const action = baseAction && skipQuoteForPowerCare && !job?.currentVisit && woStatus === 'draft' && !isSiteTransfer && !isServiceAccountExpense
     ? { ...baseAction, label: 'Advance (No Quote)' }
-    : baseAction;
+    : woStatus === 'completed' && job?.currentVisit?.approval === 'included' && baseAction ? { ...baseAction, label: 'Close included visit' } : baseAction;
   const actionAdminOnly = isServiceAccountExpense && SERVICE_ACCOUNT_ACTIONS[woStatus]?.adminOnly;
   const { labor, parts, total } = sumLineItems(lineItems);
 
@@ -2078,7 +2097,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                   {quoteResult.msg}
                 </span>
               )}
-              {!isSiteTransfer && skipQuoteForPowerCare && woStatus === 'draft' && !quoteResult && (
+              {!isSiteTransfer && skipQuoteForPowerCare && !job?.currentVisit && woStatus === 'draft' && !quoteResult && (
                 <span className="text-xs text-emerald-600">PowerCare plan · No quote sent</span>
               )}
               {/* Desktop only. This wrapped to two lines on a phone and cost a
@@ -2137,9 +2156,13 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
 
         {/* ── Tab Content ────────────────────────────────────────────── */}
         <div className="flex-1 overflow-y-auto">
+          {job && <div className="p-4"><VisitWorkspace key={job.currentVisit?.id ?? job.id} job={job} isAdmin={isAdmin} onSelectionChange={setViewingHistory} snapshot={{ operationalNotes: serviceReport, serviceStatus, visitLabor: job.visitLabor, photos: { process: woPhotos.map(p => p.storageUrl || p.dataUrl) } }} onSave={saved => {
+            if (saved.currentVisit?.id === job.currentVisit?.id && saved.currentVisit?.approval === job.currentVisit?.approval && JSON.stringify(saved.visits) === JSON.stringify(job.visits)) handleSave(undefined, true, { visitLabor: saved.visitLabor });
+            else onSave(saved, false);
+          }} /></div>}
 
           {/* Overview */}
-          {activeTab === 'overview' && (
+          {!viewingHistory && activeTab === 'overview' && (
             <>
             {/* Labels: pick as many as needed; render as chips on the kanban card. */}
             <div className="px-6 pt-4 flex items-start gap-2 flex-wrap">
@@ -2890,7 +2913,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
           )}
 
           {/* Parts & Labor */}
-          {activeTab === 'parts' && (
+          {!viewingHistory && activeTab === 'parts' && (
             <div className="p-6 space-y-4">
 
               {/* ── Optimizer Pricing Calculator (optimizer-service WOs only) ─── */}
@@ -3436,14 +3459,14 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
           )}
 
           {/* Reroofing workflow */}
-          {activeTab === 'reroof' && (
+          {!viewingHistory && activeTab === 'reroof' && (
             <div className="p-6">
               <ReroofTab value={reroof} onChange={setReroof} />
             </div>
           )}
 
           {/* Photos */}
-          {activeTab === 'photos' && (
+          {!viewingHistory && activeTab === 'photos' && (
             <div className="p-4 space-y-4">
 
               {/* ── Upload status / error banner ───────────────────────────── */}
@@ -3753,7 +3776,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
           )}
 
           {/* Service Report */}
-          {activeTab === 'report' && (
+          {!viewingHistory && activeTab === 'report' && (
             <div className="p-6 space-y-5">
               {job?.visits?.length ? (
                 <>
@@ -3892,7 +3915,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
             </div>
           )}
 
-          {activeTab === 'history' && (
+          {!viewingHistory && activeTab === 'history' && (
             <div className="p-6 space-y-3">
               {/* ── Activity Timeline (audit trail: created/modified/completed
                   summary + narrative trail of stage changes, photos, pricing) ── */}
@@ -4002,7 +4025,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
           )}
 
           {/* Map */}
-          {activeTab === 'map' && (
+          {!viewingHistory && activeTab === 'map' && (
             <div className="flex flex-col" style={{ minHeight: 400 }}>
               <SiteMapView
                 address={customer?.address || normalizedSiteAddress}

@@ -63,7 +63,8 @@ import { getDeletedCustomerIds, markJobDeleted, findDuplicateCustomer, hasDangli
 import { clientIdChangeConflict } from './lib/leadConvert';
 import { markUndo, peekUndo, takeUndo, applyUndo, clearUndo, clearUndoTombstones } from './lib/undo';
 import { mergeCustomerPair } from './lib/syncEngine';
-import { mergeVisits } from './lib/visits';
+import { mergeVisits, visitNeedsApproval, currentVisitId } from './lib/visits';
+import { mergeById } from './lib/woHelpers';
 import { Contractor, ContractorStatus, ContractorJob, ContractorLineItem } from './types/contractor';
 import { addInteraction, loadCustomers, loadInteractions, saveInteractions } from './lib/customerStore';
 import { validateAddress, normalizeStreetOrder, sameStreetAddress } from './lib/addressValidator';
@@ -1019,6 +1020,36 @@ function App() {
     void deepSync().catch(() => { /* the next boot tries once more */ });
   }, [dbReady, data.jobs, data.customers, deepSync]);
 
+  useEffect(() => {
+    const accept = (event: Event) => {
+      const job = (event as CustomEvent<Job>).detail;
+      setData(prev => { const next = { ...prev, jobs: prev.jobs.some(j => j.id === job.id) ? prev.jobs.map(j => j.id === job.id ? job : j) : [...prev.jobs, job] }; saveData(next); return next; });
+      setContractorJobs(prev => {
+        const old = prev.find(c => c.sourceJobId === job.id);
+        const cj = { ...toContractorJobView(job, old), updatedAt: job.updatedAt };
+        const next = old ? prev.map(c => c === old ? cj : c) : [...prev, cj];
+        saveContractorJobs(next); return next;
+      });
+    };
+    const photo = (event: Event) => {
+      const d = (event as CustomEvent<{ jobId: string; visitId: string; url: string; category: import('./types').WOPhoto['category'] }>).detail;
+      const now = new Date().toISOString();
+      setContractorJobs(prev => {
+        const next = prev.map(c => {
+          if (c.sourceJobId !== d.jobId || c.visitPhotoOwners?.[d.url] === d.visitId) return c;
+          return { ...c, updatedAt: now, visitPhotoOwners: { ...c.visitPhotoOwners, [d.url]: d.visitId }, visits: c.visits?.map(v => v.id === d.visitId ? { ...v, photoUrls: [...new Set([...v.photoUrls, d.url])], updatedAt: now } : v) };
+        }); saveContractorJobs(next); return next;
+      });
+      setData(prev => {
+        const next = { ...prev, jobs: prev.jobs.map(j => j.id !== d.jobId || j.woPhotos?.some(p => p.storageUrl === d.url) ? j : stampJobFields(j, { ...j, visitPhotoOwners: { ...j.visitPhotoOwners, [d.url]: d.visitId }, woPhotos: [...(j.woPhotos ?? []), { id: d.url, category: d.category, storageUrl: d.url, dataUrl: '', name: 'Visit photo', visitId: d.visitId, createdAt: now }] })) };
+        saveData(next); return next;
+      });
+    };
+    window.addEventListener('solarops-visit-transition', accept);
+    window.addEventListener('solarops-visit-photo', photo);
+    return () => { window.removeEventListener('solarops-visit-transition', accept); window.removeEventListener('solarops-visit-photo', photo); };
+  }, []);
+
   // ── Contractor → admin reconciliation (sync-side) ──────────────────────────
   // handleContractorJobUpdate mirrors contractor work into the admin Job, but it
   // only runs on the CONTRACTOR's device, where data.jobs usually has no admin
@@ -1045,6 +1076,7 @@ function App() {
       if (!cj.sourceJobId) continue;
       const adminJob = jobsById.get(cj.sourceJobId);
       if (!adminJob) continue;
+      if (adminJob.currentVisit && cj.currentVisit?.id !== adminJob.currentVisit.id) continue;
 
       // New contractor photos (Storage URLs only; base64 lives in IDB and is
       // mirrored once it has an https URL). Dedupe by URL stem against existing,
@@ -1063,7 +1095,7 @@ function App() {
           newPhotos.push({
             id: `cp-${cat}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
             category: (VALID.has(cat) ? cat : 'process') as import('./types').WOPhoto['category'],
-            name: `${cat} photo`, dataUrl: '', storageUrl: url, createdAt: new Date().toISOString(),
+            name: `${cat} photo`, dataUrl: '', storageUrl: url, visitId: cj.visitPhotoOwners?.[url], createdAt: new Date().toISOString(),
           });
         }
       }
@@ -1075,16 +1107,20 @@ function App() {
       const isCompleted = cj.status === 'completed' || !!cj.completedAt;
       const liveStatus: (WOStatus & JobStatus) | null = isCompleted ? 'completed'
         : (cj.status === 'en_route' || cj.status === 'in_progress') ? 'in_progress' : null;
-      const advance = !!liveStatus && STALE_ADMIN.has(adminJob.status) && liveStatus !== adminJob.status;
+      const advance = !visitNeedsApproval(adminJob) && !!liveStatus && STALE_ADMIN.has(adminJob.status) && liveStatus !== adminJob.status;
       const note = (cj.operationalNotes ?? cj.completionNotes ?? '').trim();
       const needReport = !!note && note !== (adminJob.serviceReport ?? '').trim();
       // NOTE: On Hold is admin-owned (orthogonal parking flag). We deliberately do
       // NOT mirror a contractor's on_hold here, a completed WO shouldn't be force-
       // parked on the staff board, and the office controls hold state.
 
-      if (newPhotos.length === 0 && !advance && !needReport) continue;
+      const visits = mergeVisits(adminJob.visits, cj.visits);
+      const visitLabor = mergeById(adminJob.visitLabor, cj.visitLabor);
+      const visitPhotoOwners = { ...adminJob.visitPhotoOwners, ...cj.visitPhotoOwners };
+      const visitsChanged = JSON.stringify(visits) !== JSON.stringify(adminJob.visits) || JSON.stringify(visitLabor) !== JSON.stringify(adminJob.visitLabor) || JSON.stringify(visitPhotoOwners) !== JSON.stringify(adminJob.visitPhotoOwners ?? {});
+      if (newPhotos.length === 0 && !advance && !needReport && !visitsChanged) continue;
 
-      const updated: Job = { ...adminJob, updatedAt: new Date().toISOString() };
+      const updated: Job = { ...adminJob, visits, visitLabor, visitPhotoOwners, updatedAt: new Date().toISOString() };
       if (newPhotos.length) updated.woPhotos = [...existing, ...newPhotos];
       if (advance && liveStatus) {
         updated.status = liveStatus;
@@ -1502,6 +1538,9 @@ function App() {
   // silently re-applies itself is worse than no undo. Same for
   // handleContractorProposeSchedule and handleContractorReportAdditionalItem.
   const handleContractorJobUpdate = (incomingJob: ContractorJob) => {
+    const canonical = data.jobs.find(j => j.id === incomingJob.sourceJobId);
+    if (canonical?.currentVisit && currentVisitId(incomingJob) !== canonical.currentVisit.id) return;
+    if (canonical && visitNeedsApproval(canonical) && ['en_route', 'in_progress', 'completed'].includes(incomingJob.status)) return;
     // Stamp every contractor-side edit so cross-device merges resolve by
     // last-writer-wins instead of whole-blob clobber (CB-3).
     const updatedJob: ContractorJob = { ...incomingJob, updatedAt: new Date().toISOString() };
@@ -1599,11 +1638,12 @@ function App() {
           Object.values(updatedJob.photos ?? {}).flat()
             .filter((u): u is string => !!u && !u.startsWith('data:')),
         );
-        const keptExisting = existingWoPhotos.filter(p => contractorUrlSet.has(effectiveUrl(p)));
+        const keptExisting = existingWoPhotos.filter(p => contractorUrlSet.has(effectiveUrl(p)) || (p.visitId && p.visitId !== currentVisitId(adminJob)) || adminJob.visits?.some(v => v.photoUrls.includes(effectiveUrl(p))));
         const keptUrls = new Set(keptExisting.map(effectiveUrl).filter(Boolean));
         // Never re-import a stem the admin explicitly deleted (see deletedPhotoStems).
         const removedStems = new Set(adminJob.deletedPhotoStems ?? []);
         const newPhotos = contractorPhotosToWoPhotos(updatedJob.photos)
+          .map(p => ({ ...p, visitId: updatedJob.visitPhotoOwners?.[p.storageUrl || p.dataUrl] || currentVisitId(adminJob) }))
           .filter(p => {
             const url = effectiveUrl(p);
             return url && !keptUrls.has(url) && !removedStems.has(photoUrlStem(url));
@@ -1702,6 +1742,9 @@ function App() {
           // Newest `updatedAt` wins per entry, same rule as everywhere else.
           rmaEntries: mergeRmaEntries(adminJob.rmaEntries, updatedJob.rmaEntries),
           visits: mergeVisits(adminJob.visits, updatedJob.visits),
+          currentVisit: adminJob.currentVisit,
+          visitLabor: mergeById(adminJob.visitLabor, updatedJob.visitLabor),
+          visitPhotoOwners: { ...adminJob.visitPhotoOwners, ...updatedJob.visitPhotoOwners },
           contractorParts: updatedJob.parts ?? adminJob.contractorParts,
           contractorPartsAmount: updatedJob.partsAmount ?? adminJob.contractorPartsAmount,
           contractorLaborAmount: updatedJob.laborAmount ?? adminJob.contractorLaborAmount,
@@ -1833,7 +1876,7 @@ function App() {
   // the client to confirm. (Client contact is manual for now; to be automated.)
   const handleContractorProposeSchedule = (cjob: ContractorJob, dateISO: string, time: string) => {
     const adminJob = data.jobs.find(j => j.id === (cjob.sourceJobId ?? cjob.id));
-    if (!adminJob || !dateISO) return;
+    if (!adminJob || !dateISO || visitNeedsApproval(adminJob)) return;
 
     // Office recipients = Cesar + Cruz (cruxfernndez). A real contractor session
     // cannot load the staff user list (/api/users is staff-only), so resolve from
@@ -2178,9 +2221,11 @@ function App() {
     // NEW assignment (contractor changed) so it never re-advances an intentional edit.
     const PRE_DISPATCH_WO = new Set(['draft', 'quote_sent', 'contact_client', 'quote_approved']);
     const prevForAssign = data.jobs.find(j => j.id === incomingJob.id);
+    if (prevForAssign?.currentVisit && incomingJob.currentVisit?.id !== prevForAssign.currentVisit.id) { alert('This order has a newer visit. Reopen it before saving.'); return; }
+    if (visitNeedsApproval(incomingJob) && !['draft', 'quote_sent'].includes(incomingJob.woStatus || '')) { alert('Approve the follow-up in Visits before advancing.'); return; }
     const newlyAssigned = !!incomingJob.contractorId && incomingJob.contractorId !== prevForAssign?.contractorId;
     const isPreDispatch = !incomingJob.woStatus || PRE_DISPATCH_WO.has(incomingJob.woStatus) || incomingJob.status === 'new';
-    const baseJob0: Job = (newlyAssigned && isPreDispatch && role === 'admin')
+    const baseJob0: Job = (newlyAssigned && isPreDispatch && role === 'admin' && !visitNeedsApproval(incomingJob))
       ? { ...incomingJob, woStatus: 'scheduled' as WOStatus, status: 'assigned' as JobStatus, contractorSentAt: incomingJob.contractorSentAt ?? new Date().toISOString() }
       : incomingJob;
     // Verbal approval: the client said yes on the phone, so the order jumps

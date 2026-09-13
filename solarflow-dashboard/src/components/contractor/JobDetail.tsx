@@ -24,7 +24,10 @@ import { uploadPhotoToStorage } from '../../lib/photoStorage';
 import { appendPhoto, flushPendingMirrors, listPhotosForJob, dataUrlToBlob, deletePhotoForJobByUrl } from '../../lib/photoStore';
 import { logChange, logJobChange, describeUrl } from '../../lib/changeLog';
 import ServiceOrderCard from './ServiceOrderCard';
-import { buildVisit } from '../../lib/visits';
+import { currentVisitId, visitNeedsApproval } from '../../lib/visits';
+import { changeVisit } from '../../lib/visitApi';
+import { loadServiceRates } from '../../lib/contractorStore';
+import VisitLaborEditor from '../VisitLaborEditor';
 
 interface JobDetailProps {
   job: ContractorJob;
@@ -224,6 +227,13 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
   const [returnDate, setReturnDate] = useState('');
   const [returnTime, setReturnTime] = useState('');
   const [returnRemaining, setReturnRemaining] = useState('');
+  const [returnService, setReturnService] = useState('');
+  const [visitBusy, setVisitBusy] = useState(false);
+  const [visitError, setVisitError] = useState('');
+  const [visitLabor, setVisitLabor] = useState(job.visitLabor ?? []);
+  const photoOwners = useRef({ ...job.visitPhotoOwners });
+  const approvalPending = visitNeedsApproval(job);
+  const activeVisitId = currentVisitId(job);
 
   // Photos, initial shape always exposes every PhotoCategory key so callers can safely
   // index into `photos[category]` without an undefined check.
@@ -373,6 +383,7 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
     const now = new Date().toISOString();
     const cost = Number(newAddItem.unitCost);
     const item: ContractorLineItem = {
+      visitId: activeVisitId,
       id: `cli-${job.id}-${Date.now()}`,
       type: newAddItem.type,
       description,
@@ -463,6 +474,8 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
   // was on screen 700ms ago.
   const buildSnapshot = () => ({
     ...job,
+    visitLabor,
+    visitPhotoOwners: Object.fromEntries(Object.entries(photoOwners.current).filter(([url]) => url.startsWith('https://'))),
     photos,
     operationalNotes: serviceNotes,
     serviceStatus,
@@ -517,7 +530,7 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
   // next photo/notes edit. `job` is intentionally excluded to avoid a save loop
   // (onUpdateJob updates job → re-fires); the write already spreads latest job.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [photos, serviceNotes, serviceStatus, nextSteps, requireFollowUp, parts, partsReimbursement, upsellFlagged, upsellNotes, optimizerCount]);
+  }, [photos, serviceNotes, serviceStatus, nextSteps, requireFollowUp, parts, partsReimbursement, upsellFlagged, upsellNotes, optimizerCount, visitLabor]);
 
   // Audit identity for this work order. Keyed to the admin Job id when linked so
   // photo/comment events surface in that work order's history. Actor = contractor.
@@ -542,6 +555,8 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
 
   const addPhoto = async (category: PhotoCategory, dataUrl: string) => {
     setUploadError(null);
+    const capturedVisitId = activeVisitId;
+    photoOwners.current[dataUrl] = capturedVisitId;
     // Audit the upload (100% auditable: who added a photo to which WO category).
     try { logChange('photo.add', 'job', auditEntity, { category, contractorId }, contractorId); }
     catch { /* logging must never block the UI */ }
@@ -557,7 +572,7 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
 
       // IDB-FIRST: persist blob in IndexedDB for offline durability BEFORE upload.
       // This guarantees the photo survives app close, quota events, or a network drop.
-      const row = await appendPhoto({ jobId: job.id, category, blob });
+      const row = await appendPhoto({ jobId: job.id, category, blob, visitId: capturedVisitId });
       pendingId = row.id;
       pendingUploads.current.add(row.id);
 
@@ -568,6 +583,8 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
       pendingUploads.current.delete(row.id);
 
       if (result.url) {
+        photoOwners.current[result.url] = capturedVisitId;
+        window.dispatchEvent(new CustomEvent('solarops-visit-photo', { detail: { jobId: job.sourceJobId || job.id, visitId: capturedVisitId, url: result.url, category } }));
         // Swap base64 preview → permanent Storage URL in state.
         // The auto-save effect fires and mirrors this https:// URL to the admin side.
         setPhotos(prev => ({
@@ -624,6 +641,11 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
       const rows = await listPhotosForJob(job.id);
       for (const row of rows.filter(r => r.supabaseUrl)) {
         const url = row.supabaseUrl!;
+        if (row.visitId) {
+          photoOwners.current[url] = row.visitId;
+          window.dispatchEvent(new CustomEvent('solarops-visit-photo', { detail: { jobId: job.sourceJobId || job.id, visitId: row.visitId, url, category: row.category } }));
+          if (row.visitId !== currentVisitId(job)) continue;
+        }
         setPhotos(prev => {
           const cat = row.category as PhotoCategory;
           if (!(cat in prev)) return prev;
@@ -663,6 +685,8 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
         setPhotos(prev => {
           const next = { ...prev };
           for (const row of uploaded) {
+            if (row.visitId) photoOwners.current[row.supabaseUrl!] = row.visitId;
+            if (row.visitId && row.visitId !== currentVisitId(job)) continue;
             const cat = row.category as PhotoCategory;
             if (!(cat in next)) continue;
             if (!next[cat].includes(row.supabaseUrl!)) {
@@ -746,6 +770,7 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
 
   // ── Start Call: immediately start clock, photo is optional ────────────────
   const handleStartCall = () => {
+    if (approvalPending) return;
     const now = new Date().toISOString();
     const updated: ContractorJob = { ...job, status: 'in_progress', startedAt: now, photos };
     onUpdateJob(updated);
@@ -754,6 +779,8 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
 
   // ── Complete Call: finish immediately, after photo optional ────────────────
   const handleCompleteCall = async (afterPhoto?: string) => {
+    if (approvalPending) return;
+    if (requireFollowUp) { setShowAfterModal(false); setShowFinishVisit(true); return; }
     setShowAfterModal(false);
 
     // Upload the after photo to Storage inline so we have the URL in scope
@@ -801,6 +828,8 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
     const updated: ContractorJob = {
       ...job,
       status: 'completed',
+      visitLabor,
+      visitPhotoOwners: Object.fromEntries(Object.entries(photoOwners.current).filter(([url]) => url.startsWith('https://'))),
       completedAt: now,
       photos: updatedPhotos,
       serviceStatus,
@@ -845,40 +874,22 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
   // puts the order back in the queue for the return date. The order stays one
   // SO: pay is per SO, and the office decides whether the next visit needs a
   // new quote.
-  const handleFinishVisit = () => {
-    if (!returnDate) return;
-    saverRef.current?.cancel();
-    let notes = serviceNotes;
-    if (safetyConcern && safetyDetails) notes += `\n\n[SAFETY CONCERN]: ${safetyDetails}`;
-    const remaining = returnRemaining.trim() || nextSteps;
-    const current: ContractorJob = { ...snapshotRef.current(), operationalNotes: notes, nextSteps: remaining };
-    const visit = buildVisit(current, new Date().toISOString());
-    const updated: ContractorJob = {
-      ...current,
-      status: 'assigned',
-      startedAt: undefined,
-      completedAt: undefined,
-      operationalNotes: '',
-      requiresFollowUp: true,
-      scheduledDate: returnDate,
-      scheduledTime: returnTime,
-      visits: [...(job.visits ?? []), visit],
-    };
-    // Book the return date FIRST: that handler writes the admin job from its
-    // own snapshot, so the visit mirror has to land after it, not under it.
-    onProposeSchedule?.(updated, returnDate, returnTime);
-    onUpdateJob(updated);
-    setServiceNotes('');
-    lastLoggedNotes.current = '';
-    setNextSteps(remaining);
-    setShowFinishVisit(false);
-    setReturnRemaining('');
-    setPhase('pre_start');
+  const handleFinishVisit = async () => {
+    if (visitBusy || approvalPending) return;
+    setVisitBusy(true); setVisitError(''); saverRef.current?.cancel();
+    try {
+      await changeVisit(job.sourceJobId || job.id, { action: 'request', expectedVisitId: activeVisitId,
+        date: returnDate, time: returnTime, serviceType: returnService, serviceCode: loadServiceRates().find(r => r.serviceName === returnService)?.serviceCode, reason: returnRemaining,
+        snapshot: snapshotRef.current() });
+      setShowFinishVisit(false);
+    } catch (e) { setVisitError(e instanceof Error ? e.message : 'Could not request follow-up'); }
+    finally { setVisitBusy(false); }
   };
 
   const handleAddPart = () => {
     if (!newPart.name) return;
     const part: JobPart = {
+      visitId: activeVisitId,
       id: `p-${Date.now()}`,
       ...newPart,
       totalPrice: newPart.quantity * newPart.unitPrice,
@@ -1033,7 +1044,7 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
         <ServiceOrderCard job={job} />
 
         {/* ── Schedule service date/time (auto-confirms the appointment) ── */}
-        {onProposeSchedule && !isCompleted && (
+        {onProposeSchedule && !isCompleted && !approvalPending && (
           <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-3">
             <div className="flex items-center gap-2">
               <CalendarClock className="w-4 h-4 text-orange-500" />
@@ -2328,9 +2339,14 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
                   Finish visit {(job.visits?.length ?? 0) + 1}, return needed
                 </h2>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Your notes, photos and parts are saved to this visit. The order stays open for the return trip, and the client is notified of the new date.
+                  Your work is saved to this visit. The return goes to Daniel for a quote or admin approval as included. The date is proposed until approved.
                 </p>
               </div>
+              <label className="block text-xs text-slate-600">Follow-up service type
+                <select aria-label="Follow-up service type" value={returnService} onChange={e => setReturnService(e.target.value)} className="block w-full rounded-lg border p-2 text-sm">
+                  <option value="">Select service</option>{loadServiceRates().filter(r => r.active).map(r => <option key={r.id} value={r.serviceName}>{r.serviceName}</option>)}
+                </select>
+              </label>
               <div className="flex gap-2">
                 <label className="flex-1">
                   <span className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Return date</span>
@@ -2351,12 +2367,13 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
               </label>
               <button
                 onClick={handleFinishVisit}
-                disabled={!returnDate}
+                disabled={visitBusy || !returnDate || !returnService || !returnRemaining.trim() || (job.visits?.length ?? 0) >= 10}
                 className="w-full flex items-center justify-center gap-2 py-3 bg-orange-500 hover:bg-orange-600 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold rounded-xl text-sm transition-colors cursor-pointer"
               >
                 <CalendarClock className="w-5 h-5" />
-                Finish visit &amp; book return
+                {visitBusy ? 'Saving…' : 'Send follow-up to quote review'}
               </button>
+              {visitError && <p role="alert" className="text-sm text-red-700">{visitError}</p>}
               <button onClick={() => setShowFinishVisit(false)} className="w-full px-4 py-2 text-slate-500 text-sm cursor-pointer">
                 Cancel
               </button>
@@ -2399,21 +2416,24 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
         )}
       </div>
 
+      <div className="px-4 pb-36"><VisitLaborEditor visitId={activeVisitId} entries={visitLabor} onChange={setVisitLabor} /></div>
       {/* ── Fixed bottom CTAs ──────────────────────────────────────────────── */}
       <div className="fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-slate-200 px-4 py-3 pb-safe">
         {phase === 'pre_start' && (
           <button
+            disabled={approvalPending}
             onClick={handleStartCall}
             className="w-full flex items-center justify-center gap-2 py-4 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-xl text-base transition-colors cursor-pointer"
           >
             <Play className="w-6 h-6" />
-            Start Work Order
+            {approvalPending ? 'Awaiting quote / admin approval' : 'Start Work Order'}
           </button>
         )}
 
         {phase === 'active' && (
           <button
             onClick={() => {
+              if (requireFollowUp) { setShowFinishVisit(true); return; }
               // Safety validation
               if (safetyConcern && !safetyDetails.trim()) {
                 setActiveTab('safety');
@@ -2439,7 +2459,7 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
             className="w-full mt-2 flex items-center justify-center gap-2 py-2.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-semibold rounded-xl text-sm transition-colors cursor-pointer"
           >
             <CalendarClock className="w-5 h-5" />
-            Finish Visit, Return Needed
+            {(job.visits?.length ?? 0) >= 10 ? 'Visit limit reached. Contact the office.' : 'Finish Visit, Return Needed'}
           </button>
         )}
 

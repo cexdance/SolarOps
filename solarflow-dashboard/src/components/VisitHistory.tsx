@@ -24,10 +24,13 @@ const VisitHistory: React.FC<{ visits?: WOVisit[]; showBilling?: boolean }> = ({
               <span className="text-sm font-semibold text-slate-800">Visit {v.number}</span>
               <span className="text-xs text-slate-500">{fmt(v.date)}</span>
             </div>
+            {v.serviceType && <p className="text-sm font-semibold text-slate-800">{v.serviceType}</p>}
+            {v.labor?.map(l => <p key={l.id} className="text-xs text-slate-600">Labor: {l.description}, {l.hours} hours{showBilling && l.rate !== undefined ? ` at $${l.rate}/hr` : ''}</p>)}
             <p className="text-sm text-slate-700 whitespace-pre-wrap">{v.workDone || 'No work notes recorded.'}</p>
             {v.nextSteps && (
               <p className="text-xs text-slate-500 whitespace-pre-wrap"><span className="font-semibold">Left to do:</span> {v.nextSteps}</p>
             )}
+            {v.additionalItems?.map(i => <p key={i.id} className="text-xs text-slate-600">Additional {i.type}: {i.description}, {i.quantity}{i.type === 'labor' ? ' hours' : ' units'}</p>)}
             {v.parts && v.parts.length > 0 && (
               <p className="text-xs text-slate-500">
                 <span className="font-semibold">Parts:</span> {v.parts.map(p => `${p.name}${p.quantity > 1 ? ` x${p.quantity}` : ''}`).join(', ')}

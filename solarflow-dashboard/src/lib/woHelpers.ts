@@ -5,7 +5,7 @@
  * source of truth. Today they are used as read-side helpers; in Phase 2
  * they will replace the separate `contractorJobs` array entirely.
  */
-import type { Job, Customer, PipelineStage, RMAEntry } from '../types';
+import type { Job, Customer, PipelineStage, RMAEntry, WOVisit } from '../types';
 import type { ContractorJob, JobStatusContractor, PhotoCategory } from '../types/contractor';
 
 /**
@@ -242,7 +242,7 @@ export function pickupJobsForContractor(contractorId: string, jobs: Job[]): Job[
     // visible-status test reads woStatus FIRST, so an archived job carrying
     // woStatus 'paid' would otherwise reappear in the portal.
     j.status !== 'archived' &&
-    CONTRACTOR_VISIBLE_STATUSES.has(j.woStatus ?? j.status)
+    (!!j.currentVisit || CONTRACTOR_VISIBLE_STATUSES.has(j.woStatus ?? j.status))
   );
 }
 
@@ -271,6 +271,11 @@ const STATUS_RANK: Record<JobStatusContractor, number> = {
  * This is a read-only projection, mutations should go through handleUpdateJob.
  */
 export function toContractorJobView(job: Job, existingCj?: ContractorJob, customer?: Customer): ContractorJob {
+  const activeId = job.currentVisit?.id ?? `${job.id}:visit:${(job.visits?.length ?? 0) + 1}`;
+  const differentVisit = !!job.currentVisit && existingCj?.currentVisit?.id !== activeId;
+  const priorCj = existingCj;
+  if (differentVisit && existingCj) existingCj = { ...existingCj, status: 'assigned', startedAt: undefined, completedAt: undefined, operationalNotes: '', completionNotes: '', serviceStatus: undefined, signature: undefined, clientSignature: undefined };
+  const owners = { ...priorCj?.visitPhotoOwners, ...job.visitPhotoOwners };
   const emptyPhotos: ContractorJob['photos'] = {
     before: [], serial: [], parts: [], process: [], after: [],
     progress: [], ppe: [], voltage: [],
@@ -325,7 +330,10 @@ export function toContractorJobView(job: Job, existingCj?: ContractorJob, custom
     // into the admin job. Union so a stale contractor copy never drops an entry.
     rmaEntries: mergeRmaEntries(job.rmaEntries, existingCj?.rmaEntries),
     // Visit history flows both ways too, merged per visit.
-    visits: mergeById(job.visits, existingCj?.visits),
+    visits: mergeVisitRecords(job.visits, existingCj?.visits),
+    currentVisit: job.currentVisit,
+    visitPhotoOwners: owners,
+    visitLabor: mergeById(job.visitLabor, existingCj?.visitLabor),
     contractorId: job.contractorId ?? '',
     customerId: job.customerId,
     customerName: job.clientName || customer?.name || '',
@@ -349,7 +357,7 @@ export function toContractorJobView(job: Job, existingCj?: ContractorJob, custom
     // contractor's own `existingCj` write succeeds. Without this, a reload on
     // the contractor's device re-hydrates the stale admin status and a
     // completed call reverts to "in progress" even though it was saved.
-    status: job.onHold ? 'on_hold' : (() => {
+    status: job.currentVisit && !['approved', 'included'].includes(job.currentVisit.approval) ? 'on_hold' : job.onHold ? 'on_hold' : (() => {
       // The admin `paid` stage means the CLIENT paid. That is NOT the same as
       // the contractor being paid, which happens later when the office covers
       // contractor + expenses and stamps costsCoveredAt. Mapping woStatus
@@ -390,8 +398,8 @@ export function toContractorJobView(job: Job, existingCj?: ContractorJob, custom
     paidAt: job.costsCoveredAt ?? existingCj?.paidAt,
     notes: job.notes,
     completionNotes: job.completionNotes ?? existingCj?.completionNotes,
-    photos,
-    parts: existingCj?.parts ?? [],
+    photos: Object.fromEntries(Object.entries(photos).map(([cat, urls]) => [cat, urls.filter(u => owners[u] ? owners[u] === activeId : !(job.visits ?? []).some(v => v.photoUrls.includes(u)))])) as ContractorJob['photos'],
+    parts: (existingCj?.parts ?? job.contractorParts ?? []).filter(p => p.visitId ? p.visitId === activeId : !(job.visits ?? []).some(v => v.parts?.some(q => q.id === p.id))),
     laborAmount: existingCj?.laborAmount ?? 0,
     partsAmount: existingCj?.partsAmount ?? 0,
     markupPercent: existingCj?.markupPercent ?? 0,
@@ -418,10 +426,10 @@ export function toContractorJobView(job: Job, existingCj?: ContractorJob, custom
     invoiceSentAt: existingCj?.invoiceSentAt,
     invoicePaidAt: existingCj?.invoicePaidAt,
     contractorInvoiceNumber: existingCj?.contractorInvoiceNumber,
-    operationalNotes: existingCj?.operationalNotes,
+    operationalNotes: existingCj?.operationalNotes ?? job.serviceReport,
     optimizerCount: existingCj?.optimizerCount,
     partsReimbursementRequested: existingCj?.partsReimbursementRequested,
-    additionalItems: existingCj?.additionalItems,
+    additionalItems: existingCj?.additionalItems?.filter(p => p.visitId ? p.visitId === activeId : !job.visits?.some(v => v.additionalItems?.some(i => i.id === p.id))),
     upsellFlagged: existingCj?.upsellFlagged,
     upsellNotes: existingCj?.upsellNotes,
     upsellLeadCreated: existingCj?.upsellLeadCreated,
@@ -585,4 +593,19 @@ export function mirrorContractorNote<A extends {
   return had.some(a => a.id === id)
     ? had.map(a => (a.id === id ? entry : a))
     : [entry, ...had];
+}
+
+/** Finished work and billing survive late photo uploads from an older phone. */
+export function mergeVisitRecords(a?: WOVisit[], b?: WOVisit[]): WOVisit[] | undefined {
+  if (!a && !b) return undefined;
+  const byId = new Map((a ?? []).map(v => [v.id, v]));
+  for (const v of b ?? []) {
+    const old = byId.get(v.id);
+    if (!old) { byId.set(v.id, v); continue; }
+    const newer = (v.updatedAt ?? '') > (old.updatedAt ?? '') ? v : old;
+    const other = newer === v ? old : v;
+    byId.set(v.id, { ...newer, billing: old.billing?.clientPaidAt && !v.billing?.clientPaidAt ? old.billing : v.billing?.clientPaidAt && !old.billing?.clientPaidAt ? v.billing : newer.billing ?? other.billing, plan: newer.plan ?? other.plan,
+      photoUrls: [...new Set([...old.photoUrls, ...v.photoUrls])], labor: mergeById(old.labor, v.labor) });
+  }
+  return [...byId.values()].sort((x, y) => x.number - y.number);
 }

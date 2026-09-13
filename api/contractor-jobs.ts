@@ -61,7 +61,7 @@ interface ContractorRecord {
   status?: string;
 }
 
-interface JobRow { id: string; contractorId?: string; supportContractorIds?: string[]; customerId?: string; status?: string; woStatus?: string }
+interface JobRow { currentVisit?: unknown; id: string; contractorId?: string; supportContractorIds?: string[]; customerId?: string; status?: string; woStatus?: string }
 
 /** Read one KV blob row from app_data. Returns null on any failure. */
 async function readKV<T>(key: string): Promise<T | null> {
@@ -129,7 +129,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     readRows<JobRow>(`key=like.job:*&value->supportContractorIds=cs.${encodeURIComponent(JSON.stringify([me.id]))}&select=value`),
   ]);
   const allMine = [...new Map([...primary, ...support].map(j => [j.id, j])).values()];
-  const jobs = allMine.filter(j => CONTRACTOR_VISIBLE_STATUSES.has(j.woStatus ?? j.status ?? ''));
+  const jobs = allMine.filter(j => j.status !== 'archived' && (!!j.currentVisit || CONTRACTOR_VISIBLE_STATUSES.has(j.woStatus ?? j.status ?? '')));
 
   // ── Their contractor-job records ──────────────────────────────────────────
   // Keyed off the jobs above, NOT off contractorId on the row. Rows are keyed

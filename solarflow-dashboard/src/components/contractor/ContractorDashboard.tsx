@@ -207,7 +207,7 @@ export const ContractorDashboard: React.FC<ContractorDashboardProps> = ({
     const live = jobs.find(j => j.id === openJob.id) ?? openJob;
     return (
       <JobDetail
-        key={live.id}
+        key={`${live.id}:${live.currentVisit?.id ?? 'original'}`}
         job={live}
         contractorId={contractorId}
         onBack={() => setOpenJob(null)}

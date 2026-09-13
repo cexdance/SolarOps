@@ -4,17 +4,21 @@
 // the CURRENT visit (date, report, quote, invoice), so single-visit orders and
 // every legacy record need no migration. When the contractor finishes a visit
 // with a return trip needed, a snapshot of it is appended to `job.visits`.
-// When Daniel starts a new quote/invoice cycle for the next visit, the current
-// cycle's billing is archived onto the latest visit and cleared on the job.
+// New follow-ups archive billing atomically through /api/service-visits. The
+// billing-cycle helper below remains for older orders without currentVisit.
 //
 // `visits` is written by both the field app and the office, so it is merged
 // by visit id, newest `updatedAt` wins (mergeById), never replaced wholesale.
 import type { Job, WOVisit, WOVisitBilling } from '../types';
 import type { ContractorJob } from '../types/contractor';
-import { mergeById } from './woHelpers';
+import { mergeVisitRecords } from './woHelpers';
+
+export const MAX_VISITS = 11;
+export const currentVisitId = (j: { id: string; sourceJobId?: string; currentVisit?: { id: string }; visits?: WOVisit[] }) => j.currentVisit?.id ?? `${j.sourceJobId || j.id}:visit:${(j.visits?.length ?? 0) + 1}`;
+export const visitNeedsApproval = (j: { currentVisit?: { approval: string } }) => !!j.currentVisit && !['approved', 'included'].includes(j.currentVisit.approval);
 
 export const mergeVisits = (a?: WOVisit[], b?: WOVisit[]): WOVisit[] | undefined =>
-  mergeById(a, b)?.slice().sort((x, y) => x.number - y.number);
+  mergeVisitRecords(a, b);
 
 /** Snapshot the contractor's current visit so it can be appended to `visits`. */
 export function buildVisit(cj: ContractorJob, finishedAt: string): WOVisit {
@@ -22,7 +26,10 @@ export function buildVisit(cj: ContractorJob, finishedAt: string): WOVisit {
   const seenPhotos = new Set(prior.flatMap(v => v.photoUrls));
   const seenParts = new Set(prior.flatMap(v => (v.parts ?? []).map(p => p.id)));
   return {
-    id: `visit-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    id: currentVisitId(cj),
+    serviceType: cj.serviceType,
+    plan: cj.currentVisit,
+    labor: cj.visitLabor?.filter(l => l.visitId === currentVisitId(cj)),
     number: prior.length + 1,
     date: cj.scheduledDate || finishedAt.slice(0, 10),
     contractorId: cj.contractorId || undefined,
@@ -32,11 +39,10 @@ export function buildVisit(cj: ContractorJob, finishedAt: string): WOVisit {
     serviceStatus: cj.serviceStatus,
     nextSteps: cj.nextSteps,
     // Photos stay cumulative on the job, so this visit owns only what it added.
-    // ponytail: base64 captures still mid-upload are skipped here; they land in
-    // the next visit's set once uploaded. Tag photos at capture if that matters.
+    // Pending captures are attached later using their persisted visitId.
     photoUrls: Object.values(cj.photos ?? {}).flat()
-      .filter((u): u is string => !!u && !u.startsWith('data:') && !seenPhotos.has(u)),
-    parts: (cj.parts ?? []).filter(p => !seenParts.has(p.id)),
+      .filter((u): u is string => !!u && !u.startsWith('data:') && !seenPhotos.has(u) && (!cj.visitPhotoOwners?.[u] || cj.visitPhotoOwners[u] === currentVisitId(cj))),
+    parts: (cj.parts ?? []).filter(p => p.visitId ? p.visitId === currentVisitId(cj) : !seenParts.has(p.id)),
     updatedAt: finishedAt,
   };
 }
@@ -76,10 +82,14 @@ export function startNewBillingCycle(job: Job, now = new Date().toISOString()): 
 /** Every visit for reports: the finished ones plus the current one, when it has
  *  anything on it. Single-visit orders yield exactly one entry. */
 export function allVisits(job: Job): WOVisit[] {
-  const done = job.visits ?? [];
+  const done = (job.visits ?? []).map(v => ({ ...v, photoUrls: [...new Set([...v.photoUrls, ...(job.woPhotos ?? []).filter(p => (p.visitId || job.visitPhotoOwners?.[p.storageUrl || p.dataUrl]) === v.id).map(p => p.storageUrl || p.dataUrl)])] }));
   const seen = new Set(done.flatMap(v => v.photoUrls));
   const current: WOVisit = {
-    id: 'current',
+    id: currentVisitId(job),
+    serviceType: job.serviceType,
+    plan: job.currentVisit,
+    parts: job.contractorParts?.filter(p => p.visitId ? p.visitId === currentVisitId(job) : !done.some(v => v.parts?.some(q => q.id === p.id))),
+    labor: job.visitLabor?.filter(l => l.visitId === currentVisitId(job)),
     number: done.length + 1,
     date: job.scheduledDate,
     contractorId: job.contractorId,
@@ -88,9 +98,9 @@ export function allVisits(job: Job): WOVisit[] {
     workDone: (job.serviceReport ?? job.completionNotes ?? '').trim(),
     serviceStatus: job.serviceStatus,
     nextSteps: job.nextSteps,
-    photoUrls: (job.woPhotos ?? []).map(p => p.storageUrl || p.dataUrl).filter(u => u && !seen.has(u)),
+    photoUrls: (job.woPhotos ?? []).map(p => p.storageUrl || p.dataUrl).filter(u => u && !seen.has(u) && (!job.visitPhotoOwners?.[u] || job.visitPhotoOwners[u] === currentVisitId(job))),
     updatedAt: job.updatedAt ?? '',
   };
-  const hasCurrent = done.length === 0 || current.workDone || current.startedAt || current.finishedAt || current.photoUrls.length;
+  const hasCurrent = !!job.currentVisit || done.length === 0 || current.workDone || current.startedAt || current.finishedAt || current.photoUrls.length;
   return hasCurrent ? [...done, current] : done;
 }

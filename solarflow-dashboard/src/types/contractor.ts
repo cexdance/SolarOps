@@ -2,7 +2,7 @@
 
 // Type-only, so this is erased at compile time and creates no runtime cycle even
 // though index.ts re-exports this module.
-import type { RMAEntry, WOVisit } from './index';
+import type { RMAEntry, WOVisit, VisitPlan, VisitLabor } from './index';
 
 export type ContractorStatus = 'pending' | 'approved' | 'rejected' | 'suspended';
 export type BusinessType = 'sole_proprietor' | 'llc' | 'c_corp' | 's_corp' | 'partnership';
@@ -36,6 +36,7 @@ export interface Notification {
 
 // Parts information
 export interface JobPart {
+  visitId?: string;
   id: string;
   name: string;
   partNumber: string;
@@ -150,6 +151,7 @@ export interface ContractorInvite {
 }
 
 export interface ContractorLineItem {
+  visitId?: string;
   id: string;
   type: 'labor' | 'part';
   description: string;
@@ -365,6 +367,9 @@ export interface ContractorJob {
 
   // Earlier site visits on the order (see Job.visits). Merged by id both ways.
   visits?: WOVisit[];
+  currentVisit?: VisitPlan;
+  visitPhotoOwners?: Record<string, string>;
+  visitLabor?: VisitLabor[];
 
   // Invoice tracking
   invoiceId?: string;

@@ -1,3 +1,4 @@
+import { mergeVisitRecords } from './woHelpers';
 /**
  * SolarOps, Sync Engine (Phase 2)
  *
@@ -389,8 +390,17 @@ type CJobLike = {
 
 // Site visits on a contractor job, unioned per visit like expenses.
 const unionVisits = (a: unknown, b: unknown) =>
-  mergeById(a as WOVisit[] | undefined, b as WOVisit[] | undefined);
+  mergeVisitRecords(a as WOVisit[] | undefined, b as WOVisit[] | undefined);
 
+function cjWinner(a: CJobLike, b: CJobLike): CJobLike {
+  const an = (a['currentVisit'] as { number?: number } | undefined)?.number ?? 1;
+  const bn = (b['currentVisit'] as { number?: number } | undefined)?.number ?? 1;
+  return an !== bn ? (an > bn ? a : b) : (cjTime(a) > cjTime(b) ? a : b);
+}
+function visitDetails(a: CJobLike, b: CJobLike) {
+  return { visitPhotoOwners: { ...(a['visitPhotoOwners'] as Record<string, string> ?? {}), ...(b['visitPhotoOwners'] as Record<string, string> ?? {}) },
+    visitLabor: mergeById(a['visitLabor'] as import('../types').VisitLabor[] | undefined, b['visitLabor'] as import('../types').VisitLabor[] | undefined) };
+}
 function cjTime(j: CJobLike): string {
   return j.updatedAt ?? j.assignedAt ?? '';
 }
@@ -422,13 +432,14 @@ export function collapseBySourceJob(jobs: CJobLike[]): CJobLike[] {
       result.push(j);
     } else {
       const existing = result[existingIdx];
-      const winner = cjTime(j) >= cjTime(existing) ? j : existing;
+      const winner = cjWinner(existing, j);
       result[existingIdx] = {
         ...winner,
         photos: unionPhotos(existing.photos, j.photos),
         expenses: unionExpenses(existing.expenses, j.expenses),
         additionalItems: unionAdditionalItems(existing.additionalItems, j.additionalItems),
         visits: unionVisits(existing['visits'], j['visits']),
+        ...visitDetails(existing, j),
       };
     }
   }
@@ -456,13 +467,14 @@ export function mergeContractorJobs(localArr: unknown, remoteArr: unknown): CJob
     if (!rj?.id) continue;
     const lj = byId.get(rj.id);
     if (!lj) { byId.set(rj.id, rj); continue; }
-    const winner = cjTime(rj) >= cjTime(lj) ? rj : lj;
+    const winner = cjWinner(lj, rj);
     byId.set(rj.id, {
       ...winner,
       photos: unionPhotos(lj.photos, rj.photos),
       expenses: unionExpenses(lj.expenses, rj.expenses),
       additionalItems: unionAdditionalItems(lj.additionalItems, rj.additionalItems),
       visits: unionVisits(lj['visits'], rj['visits']),
+      ...visitDetails(lj, rj),
     });
   }
 
@@ -1569,8 +1581,23 @@ export function mergeJobFields(a: Job, b: Job): Job {
 
   // Site visits are added by the field app and edited by the office (billing
   // archived onto them), so union by visit id, newest edit wins per visit.
-  if (a.visits || b.visits) merged.visits = mergeById(a.visits, b.visits);
+  if (a.visits || b.visits) merged.visits = mergeVisitRecords(a.visits, b.visits);
 
+  if (a.currentVisit || b.currentVisit) {
+    const newerVisit = (b.currentVisit?.number ?? 1) > (a.currentVisit?.number ?? 1) ? b : a;
+    const olderVisit = newerVisit === a ? b : a;
+    if ((newerVisit.currentVisit?.number ?? 1) > (olderVisit.currentVisit?.number ?? 1)) {
+      for (const k of ['currentVisit', 'status', 'woStatus', 'scheduledDate', 'scheduledTime', 'serviceType', 'serviceReport', 'completionNotes', 'requiresFollowUp', 'startedAt', 'completedAt', 'quoteAmount', 'quoteSentAt', 'quoteApprovedAt', 'verbalApprovalAt', 'lineItems', 'xeroInvoiceId', 'invoicedAt', 'clientPaidAt', 'costsCoveredAt', 'totalAmount']) {
+        (merged as unknown as Record<string, unknown>)[k] = (newerVisit as unknown as Record<string, unknown>)[k];
+      }
+    } else {
+      const at = a.currentVisit?.decidedAt ?? a.currentVisit?.requestedAt ?? '';
+      const bt = b.currentVisit?.decidedAt ?? b.currentVisit?.requestedAt ?? '';
+      merged.currentVisit = bt > at ? b.currentVisit : a.currentVisit;
+    }
+    merged.visitPhotoOwners = { ...a.visitPhotoOwners, ...b.visitPhotoOwners };
+    merged.visitLabor = mergeById(a.visitLabor, b.visitLabor);
+  }
   merged.fieldTimes = mergeFieldTimes(a.fieldTimes, b.fieldTimes);
   merged.updatedAt = recordTime(a) > recordTime(b) ? a.updatedAt : b.updatedAt;
   return merged;

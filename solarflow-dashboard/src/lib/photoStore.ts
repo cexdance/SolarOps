@@ -26,6 +26,7 @@ const STORE      = 'rows';
 export interface PhotoRow {
   id:           string;
   jobId:        string;
+  visitId?:     string;
   category:     string;
   /**
    * The local bytes. Absent once `purgeUploadedBlobs()` has reclaimed them,
@@ -81,12 +82,14 @@ function reqToPromise<T>(req: IDBRequest<T>): Promise<T> {
  */
 export async function appendPhoto(args: {
   jobId:    string;
+  visitId?: string;
   category: string;
   blob:     Blob;
 }): Promise<PhotoRow> {
   const row: PhotoRow = {
     id:           `ph-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     jobId:        args.jobId,
+    visitId:      args.visitId,
     category:     args.category,
     blob:         args.blob,
     contentType:  args.blob.type || 'image/jpeg',

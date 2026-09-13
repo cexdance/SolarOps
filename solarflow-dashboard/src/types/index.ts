@@ -248,6 +248,7 @@ export type WOServiceStatus =
   | 'could_not_complete';
 
 export interface WOPhoto {
+  visitId?: string;
   id: string;
   category:
     | 'before' | 'after' | 'serial' | 'process' | 'parts'
@@ -461,11 +462,43 @@ export interface Job {
    *  visit; a visit lands here when the contractor finishes it with a return
    *  trip needed. Absent on single-visit orders. See lib/visits.ts. */
   visits?: WOVisit[];
+  currentVisit?: VisitPlan;
+  visitPhotoOwners?: Record<string, string>;
+  visitLabor?: VisitLabor[];
 }
 
 /** Quote + invoice of one billing cycle, archived onto the visit it covered
  *  when Daniel starts a new cycle for the next visit. */
+export interface VisitPlan {
+  id: string;
+  number: number;
+  serviceType: string;
+  proposedDate: string;
+  proposedTime: string;
+  reason: string;
+  approval: 'pending' | 'quoted' | 'approved' | 'included';
+  requestedAt: string;
+  requestedBy: string;
+  decidedAt?: string;
+  decidedBy?: string;
+  decisionReason?: string;
+}
+
+export interface VisitLabor {
+  id: string;
+  visitId: string;
+  description: string;
+  hours: number;
+  rate?: number;
+  updatedAt: string;
+}
+
 export interface WOVisitBilling {
+  totalAmount?: number;
+  clientPaymentDueAt?: string;
+  costsCoveredAt?: string;
+  paymentRecordedBy?: string;
+  paymentReference?: string;
   quoteAmount?: number;
   quoteSentAt?: string;
   quoteApprovedAt?: string;
@@ -486,6 +519,10 @@ export interface WOVisit {
   startedAt?: string;
   finishedAt: string;
   workDone: string;
+  serviceType?: string;
+  labor?: VisitLabor[];
+  additionalItems?: import('./contractor').ContractorLineItem[];
+  plan?: VisitPlan;
   serviceStatus?: string;
   nextSteps?: string;
   /** Photo URLs taken during this visit (the job's photo arrays stay cumulative). */
