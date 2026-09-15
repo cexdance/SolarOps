@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { serviceOrderNo } from '../lib/woHelpers';
 import {
   RotateCcw, Users, CheckCircle, Plus, Package, LayoutGrid, List, Calendar, ChevronLeft, ChevronRight,
-  AlertTriangle, Link2,
+  AlertTriangle, Link2, Search,
 } from 'lucide-react';
 import { Job, Customer, User, RMAEntry, RMAStatus } from '../types';
 import { formatMoney } from '../lib/money';
@@ -61,6 +61,7 @@ export function RMADashboard({
   const [viewMode, setViewMode] = useState<'kanban' | 'list' | 'calendar'>('kanban');
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showCreateRma, setShowCreateRma] = useState(false);
+  const [search, setSearch] = useState('');
   const getCustomer = (id: string) => customers.find(c => c.id === id);
   const jobById = (id?: string) => (id ? jobs.find(j => j.id === id) : undefined);
 
@@ -99,10 +100,23 @@ export function RMADashboard({
     }
   }
 
+  // ── Search filter (rma #, case #, manufacturer, part, customer, SO #) ──────
+  const q = search.trim().toLowerCase();
+  const entryMatches = (e: RMAEntry, job?: Job, cust?: Customer) =>
+    !q || [
+      e.rmaNumber, e.caseNumber, e.manufacturer, e.partDescription,
+      cust?.name, job?.woNumber ? serviceOrderNo(job.woNumber) : '',
+    ].some(v => (v ?? '').toLowerCase().includes(q));
+  const visibleRows = rmaRows.filter(r => entryMatches(r.entry, r.job, r.customer));
+  const visibleStandalone = standaloneRmas.filter(e => {
+    const lj = jobById(e.linkedJobId);
+    return entryMatches(e, lj, lj ? getCustomer(lj.customerId) : undefined);
+  });
+
   // ── Build column map ──────────────────────────────────────────────────────
   const columnMap = new Map<RMAStatus, RMARow[]>();
   for (const col of COLUMNS) columnMap.set(col.id, []);
-  for (const row of rmaRows) columnMap.get(resolveStatus(row.entry))?.push(row);
+  for (const row of visibleRows) columnMap.get(resolveStatus(row.entry))?.push(row);
   for (const rows of columnMap.values()) {
     rows.sort((a, b) => new Date(b.entry.createdAt).getTime() - new Date(a.entry.createdAt).getTime());
   }
@@ -195,6 +209,18 @@ export function RMADashboard({
               )}
             </div>
 
+            {/* Search */}
+            <div className="relative">
+              <Search className="w-4 h-4 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Search RMA #, case, part, customer, SO…"
+                className="w-56 pl-8 pr-2 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500/30 focus:border-orange-400"
+              />
+            </div>
+
             {/* View toggle */}
             <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1">
               <button
@@ -278,11 +304,11 @@ export function RMADashboard({
                   <span className="text-xs font-semibold text-red-700">Standalone RMA</span>
                 </div>
                 <span className="text-[10px] bg-white text-slate-500 font-semibold px-1.5 py-0.5 rounded-full shadow-sm border border-slate-100">
-                  {standaloneRmas.length}
+                  {visibleStandalone.length}
                 </span>
               </div>
               <div className="p-2 flex flex-col gap-2 overflow-y-auto flex-1" style={{ maxHeight: 'calc(100vh - 200px)' }}>
-                {standaloneRmas.map(e => {
+                {visibleStandalone.map(e => {
                   const linkedJob = jobById(e.linkedJobId);
                   return (
                     <div key={e.id} className="bg-white rounded-lg border border-slate-100 p-3 shadow-sm">
@@ -467,7 +493,7 @@ export function RMADashboard({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
-                {rmaRows.map((row) => {
+                {visibleRows.map((row) => {
                   const status = resolveStatus(row.entry);
                   const col = COLUMNS.find(c => c.id === status);
                   return (
@@ -564,7 +590,7 @@ export function RMADashboard({
                 const dayNum = i - firstDayOfMonth + 1;
                 const isCurrentMonth = dayNum > 0;
                 const date = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), dayNum);
-                const entriesForDate = isCurrentMonth ? rmaRows.filter(r =>
+                const entriesForDate = isCurrentMonth ? visibleRows.filter(r =>
                   new Date(r.entry.createdAt).toDateString() === date.toDateString()
                 ) : [];
 
