@@ -95,6 +95,32 @@ describe('mergeJobFields', () => {
     expect(ids).toEqual(['p-new', 'p1']); // p2 stays deleted, in-flight survives
   });
 
+  it('preserves backfilled RMA timestamps against stale whole-job saves', () => {
+    const legacyRma = {
+      id: 'rma-1', manufacturer: 'SolarEdge', partDescription: 'Inverter',
+      rmaNumber: 'R-100', status: 'pending' as const,
+      createdAt: T1, createdBy: 'office',
+    };
+    const stampedRma = { ...legacyRma, updatedAt: T1 };
+    const local = makeJob({ updatedAt: T2, rmaEntries: [legacyRma] });
+    const remote = makeJob({ updatedAt: T1, rmaEntries: [stampedRma] });
+
+    expect(mergeJobFields(local, remote).rmaEntries).toEqual([stampedRma]);
+    expect(mergeJobFields(remote, local).rmaEntries).toEqual([stampedRma]);
+  });
+
+  it('unions RMAs added independently by office and field clients', () => {
+    const entry = (id: string) => ({
+      id, manufacturer: 'SolarEdge', partDescription: id,
+      rmaNumber: '', status: 'pending' as const,
+      createdAt: T1, createdBy: 'test', updatedAt: T1,
+    });
+    const office = makeJob({ rmaEntries: [entry('office')] });
+    const field = makeJob({ rmaEntries: [entry('field')] });
+
+    expect(mergeJobFields(office, field).rmaEntries?.map(e => e.id).sort()).toEqual(['field', 'office']);
+  });
+
   it('takes the record updatedAt of the newer side', () => {
     const merged = mergeJobFields(makeJob({ updatedAt: T1 }), makeJob({ updatedAt: T2 }));
     expect(merged.updatedAt).toBe(T2);

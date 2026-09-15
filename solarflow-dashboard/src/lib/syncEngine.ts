@@ -31,7 +31,7 @@ import { supabase, authedFetch } from './supabase';
 import { isContractorAccount } from './authRouting';
 import { markPushPending, clearPendingPush, isRowPoisoned, incRowFailure, clearRowPoison } from './outbox';
 import { isAllowedCustomer } from './solarEdgeSiteFilter';
-import { dedupeWoPhotos, mergeById } from './woHelpers';
+import { dedupeWoPhotos, mergeById, mergeRmaEntries } from './woHelpers';
 import { idbSetState, getKVMirror, setKVMirror } from './stateStore';
 import type { AppState, Customer, Job, WOPhoto, WOVisit } from '../types';
 import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
@@ -1529,7 +1529,7 @@ const APPEND_FIELDS = new Set(['activityHistory', 'auditLog']);
 /** Tombstone lists: union-only, a shorter side must never resurrect a deletion. */
 const TOMBSTONE_FIELDS = new Set(['deletedPhotoStems']);
 /** Resolved by their own dedicated merge below, not by the field loop. */
-const CUSTOM_FIELDS = new Set(['fieldTimes', 'updatedAt', 'woPhotos', 'visits']);
+const CUSTOM_FIELDS = new Set(['fieldTimes', 'updatedAt', 'woPhotos', 'visits', 'rmaEntries']);
 
 /** Last-edit time for one field, falling back to the record time for legacy rows. */
 function fieldTime(j: Job, k: string): string {
@@ -1582,6 +1582,12 @@ export function mergeJobFields(a: Job, b: Job): Job {
   // Site visits are added by the field app and edited by the office (billing
   // archived onto them), so union by visit id, newest edit wins per visit.
   if (a.visits || b.visits) merged.visits = mergeVisitRecords(a.visits, b.visits);
+
+  // Office and field clients can each add or edit RMAs. Merge individual
+  // entries so a stale whole-job save cannot erase a backfill or another RMA.
+  if (a.rmaEntries || b.rmaEntries) {
+    merged.rmaEntries = mergeRmaEntries(a.rmaEntries, b.rmaEntries);
+  }
 
   if (a.currentVisit || b.currentVisit) {
     const newerVisit = (b.currentVisit?.number ?? 1) > (a.currentVisit?.number ?? 1) ? b : a;
