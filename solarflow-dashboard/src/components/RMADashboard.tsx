@@ -105,13 +105,16 @@ export function RMADashboard({
   const entryMatches = (e: RMAEntry, job?: Job, cust?: Customer) =>
     !q || [
       e.rmaNumber, e.caseNumber, e.manufacturer, e.partDescription,
-      cust?.name, job?.woNumber ? serviceOrderNo(job.woNumber) : '',
+      cust?.name, cust?.address, job?.woNumber ? serviceOrderNo(job.woNumber) : '',
     ].some(v => (v ?? '').toLowerCase().includes(q));
   const visibleRows = rmaRows.filter(r => entryMatches(r.entry, r.job, r.customer));
-  const visibleStandalone = standaloneRmas.filter(e => {
+  // Standalone RMA customer: the linked job's customer wins, else the RMA's own customerId.
+  const standaloneCustomer = (e: RMAEntry) => {
     const lj = jobById(e.linkedJobId);
-    return entryMatches(e, lj, lj ? getCustomer(lj.customerId) : undefined);
-  });
+    return getCustomer(lj?.customerId ?? e.customerId ?? '');
+  };
+  const visibleStandalone = standaloneRmas.filter(e =>
+    entryMatches(e, jobById(e.linkedJobId), standaloneCustomer(e)));
 
   // ── Build column map ──────────────────────────────────────────────────────
   const columnMap = new Map<RMAStatus, RMARow[]>();
@@ -310,11 +313,31 @@ export function RMADashboard({
               <div className="p-2 flex flex-col gap-2 overflow-y-auto flex-1" style={{ maxHeight: 'calc(100vh - 200px)' }}>
                 {visibleStandalone.map(e => {
                   const linkedJob = jobById(e.linkedJobId);
+                  const cust = standaloneCustomer(e);
                   return (
                     <div key={e.id} className="bg-white rounded-lg border border-slate-100 p-3 shadow-sm">
                       <span className="text-xs font-bold leading-tight text-slate-900">
                         #{e.rmaNumber || e.caseNumber || '-'}
                       </span>
+                      {cust ? (
+                        <button
+                          onClick={() => onViewCustomer?.(cust.id)}
+                          className="mt-1 flex items-center gap-1 text-[11px] font-medium text-slate-700 hover:text-orange-600 max-w-full"
+                        >
+                          <Users className="w-3 h-3 shrink-0" />
+                          <span className="truncate">{cust.name}</span>
+                        </button>
+                      ) : !linkedJob && (
+                        <select
+                          value=""
+                          onChange={ev => ev.target.value && onUpdateStandaloneRma?.({ ...e, customerId: ev.target.value })}
+                          className="mt-2 w-full text-[10px] border border-red-200 rounded-lg px-1.5 py-1 bg-white text-red-600"
+                          title="Assign a customer to this RMA"
+                        >
+                          <option value="">Assign customer…</option>
+                          {[...customers].sort((a, b) => a.name.localeCompare(b.name)).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        </select>
+                      )}
                       <p className="text-[10px] text-slate-500 mt-1 leading-tight line-clamp-2">
                         {e.partDescription}
                         {e.manufacturer && ` · ${e.manufacturer}`}
@@ -632,6 +655,7 @@ export function RMADashboard({
       {showCreateRma && onCreateStandaloneRma && (
         <RmaCreateModal
           jobs={jobs}
+          customers={customers}
           currentUserName={currentUser?.name ?? currentUser?.email}
           onClose={() => setShowCreateRma(false)}
           onCreate={onCreateStandaloneRma}
