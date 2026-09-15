@@ -1142,11 +1142,27 @@ export const Billing: React.FC<BillingProps> = ({
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="text-lg font-bold text-slate-900">{formatMoney(job.totalAmount)}</p>
-                    <p className="text-xs text-slate-500">
-                      {job.laborHours} hrs @ {formatMoney(job.laborRate, { decimals: 0 })}/hr
-                      {job.partsCost > 0 && ` + ${formatMoney(job.partsCost, { decimals: 0 })} parts`}
-                    </p>
+                    {isSiteTransferJob(job) ? (
+                      // Flat $120 fee, not a commercial figure like a custom
+                      // quote: it's the same fixed rate on every site transfer,
+                      // already named openly in the creation flow, so formatCost
+                      // (not the SHOW_MONEY-gated formatMoney) is fine to show it.
+                      // The labor-hours/parts line below is for hourly jobs; a
+                      // site transfer has neither, so it rendered as the
+                      // meaningless "1 hrs @ -/hr + - parts" instead.
+                      <>
+                        <p className="text-lg font-bold text-slate-900">{formatCost(job.quoteAmount ?? 120)}</p>
+                        <p className="text-xs text-slate-500">Site Transfer, flat fee</p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-lg font-bold text-slate-900">{formatMoney(job.totalAmount)}</p>
+                        <p className="text-xs text-slate-500">
+                          {job.laborHours} hrs @ {formatMoney(job.laborRate, { decimals: 0 })}/hr
+                          {job.partsCost > 0 && ` + ${formatMoney(job.partsCost, { decimals: 0 })} parts`}
+                        </p>
+                      </>
+                    )}
                     <div className="mt-2 flex justify-end">{cardLinks(job, customer)}</div>
                   </div>
                 </div>
