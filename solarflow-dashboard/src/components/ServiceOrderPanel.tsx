@@ -2156,7 +2156,15 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
 
         {/* ── Tab Content ────────────────────────────────────────────── */}
         <div className="flex-1 overflow-y-auto">
-          {job && <div className="p-4"><VisitWorkspace key={job.currentVisit?.id ?? job.id} job={job} isAdmin={isAdmin} onSelectionChange={setViewingHistory} snapshot={{ operationalNotes: serviceReport, serviceStatus, visitLabor: job.visitLabor, photos: { process: woPhotos.map(p => p.storageUrl || p.dataUrl) } }} onSave={saved => {
+          {/* Visits control: on the Overview tab it renders further down, right
+              after Scope of Work, so the "what to do" reading order comes
+              before the "which visit" control. Everywhere else (other tabs,
+              or while viewingHistory has hidden Overview's own content) it
+              stays pinned here, since that is the only place left able to
+              toggle back to the current visit. The two render sites are
+              mutually exclusive: never both, so only one VisitWorkspace is
+              ever mounted at a time. */}
+          {job && !(activeTab === 'overview' && !viewingHistory) && <div className="p-4"><VisitWorkspace key={job.currentVisit?.id ?? job.id} job={job} isAdmin={isAdmin} onSelectionChange={setViewingHistory} snapshot={{ operationalNotes: serviceReport, serviceStatus, visitLabor: job.visitLabor, photos: { process: woPhotos.map(p => p.storageUrl || p.dataUrl) } }} onSave={saved => {
             if (saved.currentVisit?.id === job.currentVisit?.id && saved.currentVisit?.approval === job.currentVisit?.approval && JSON.stringify(saved.visits) === JSON.stringify(job.visits)) handleSave(undefined, true, { visitLabor: saved.visitLabor });
             else onSave(saved, false);
           }} /></div>}
@@ -2469,6 +2477,14 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                   <p className="mt-1 text-xs text-red-600 font-medium">{pasteError}</p>
                 )}
               </div>
+
+              {/* Visits control, moved here below Scope of Work: read the scope
+                  first, then decide which visit you're looking at. See the
+                  other render site above for why this one exists twice. */}
+              {job && <div className="p-4 -mx-4"><VisitWorkspace key={job.currentVisit?.id ?? job.id} job={job} isAdmin={isAdmin} onSelectionChange={setViewingHistory} snapshot={{ operationalNotes: serviceReport, serviceStatus, visitLabor: job.visitLabor, photos: { process: woPhotos.map(p => p.storageUrl || p.dataUrl) } }} onSave={saved => {
+                if (saved.currentVisit?.id === job.currentVisit?.id && saved.currentVisit?.approval === job.currentVisit?.approval && JSON.stringify(saved.visits) === JSON.stringify(job.visits)) handleSave(undefined, true, { visitLabor: saved.visitLabor });
+                else onSave(saved, false);
+              }} /></div>}
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
