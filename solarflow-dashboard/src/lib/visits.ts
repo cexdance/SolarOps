@@ -16,6 +16,10 @@ import { mergeVisitRecords } from './woHelpers';
 export const MAX_VISITS = 11;
 export const currentVisitId = (j: { id: string; sourceJobId?: string; currentVisit?: { id: string }; visits?: WOVisit[] }) => j.currentVisit?.id ?? `${j.sourceJobId || j.id}:visit:${(j.visits?.length ?? 0) + 1}`;
 export const visitNeedsApproval = (j: { currentVisit?: { approval: string } }) => !!j.currentVisit && !['approved', 'included'].includes(j.currentVisit.approval);
+/** Office gates: a follow-up still waiting on its quote. Once the quote exists it
+ *  IS the approval (App.handleUpdateJob writes that onto currentVisit on the next
+ *  save), so the UI must not block the very save that records it. */
+export const visitAwaitingQuote = (j: { currentVisit?: { approval: string }; quoteSentAt?: string }) => visitNeedsApproval(j) && !j.quoteSentAt;
 
 export const mergeVisits = (a?: WOVisit[], b?: WOVisit[]): WOVisit[] | undefined =>
   mergeVisitRecords(a, b);

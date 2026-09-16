@@ -2222,7 +2222,16 @@ function App() {
     const PRE_DISPATCH_WO = new Set(['draft', 'quote_sent', 'contact_client', 'quote_approved']);
     const prevForAssign = data.jobs.find(j => j.id === incomingJob.id);
     if (prevForAssign?.currentVisit && incomingJob.currentVisit?.id !== prevForAssign.currentVisit.id) { alert('This order has a newer visit. Reopen it before saving.'); return; }
-    if (visitNeedsApproval(incomingJob) && !['draft', 'quote_sent'].includes(incomingJob.woStatus || '')) { alert('Approve the follow-up in Visits before advancing.'); return; }
+    // Daniel creating the follow-up quote IS the office approval of that visit.
+    // A separate "Record quote approval" step made him approve his own quote.
+    // Written onto currentVisit (not inferred from quoteSentAt) so the contractor
+    // view, which copies currentVisit but has no quoteSentAt, and the server's
+    // pendingVisit() both see it. Each new visit starts with quoteSentAt cleared
+    // by requestVisit, so this cannot approve a visit off the previous quote.
+    if (role === 'admin' && visitNeedsApproval(incomingJob) && incomingJob.quoteSentAt) {
+      incomingJob = { ...incomingJob, currentVisit: { ...incomingJob.currentVisit!, approval: 'approved', decidedAt: new Date().toISOString(), decidedBy: currentUser?.name ?? data.currentUser?.email ?? 'Staff', decisionReason: 'Quote created' } };
+    }
+    if (visitNeedsApproval(incomingJob) && !['draft', 'quote_sent'].includes(incomingJob.woStatus || '')) { alert('Create the quote for this follow-up, or mark it included in Visits.'); return; }
     const newlyAssigned = !!incomingJob.contractorId && incomingJob.contractorId !== prevForAssign?.contractorId;
     const isPreDispatch = !incomingJob.woStatus || PRE_DISPATCH_WO.has(incomingJob.woStatus) || incomingJob.status === 'new';
     const baseJob0: Job = (newlyAssigned && isPreDispatch && role === 'admin' && !visitNeedsApproval(incomingJob))

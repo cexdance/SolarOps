@@ -29,7 +29,7 @@ import { serviceOrderNo, workOrderNo, generateServiceOrderNumber, photoUrlStem, 
 import { SowDistributionModal, SOW_DISTRIBUTION_NAMES } from './SowDistributionModal';
 import VisitHistory from './VisitHistory';
 import VisitWorkspace from './VisitWorkspace';
-import { currentVisitId, visitNeedsApproval } from '../lib/visits';
+import { currentVisitId, visitAwaitingQuote } from '../lib/visits';
 import { ImageLightbox } from './ImageLightbox';
 import { ActivityFeed, type FeedUser } from './ui/ActivityFeed';
 import { compressImageToDataUrl, compressImageToBlob } from '../lib/photoCompress';
@@ -923,7 +923,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
 
   // Workflow action: advance status
   const handleWorkflowAction = async () => {
-    if (job && visitNeedsApproval(job) && woStatus !== 'draft') { alert('Record quote approval or mark the follow-up included in Visits first.'); return; }
+    if (job && visitAwaitingQuote(job) && woStatus !== 'draft') { alert('Create the quote for this follow-up, or mark it included in Visits.'); return; }
     // Block advance while any photo is still uploading to Storage
     if (pendingUploads.current.size > 0) return;
 
@@ -1598,7 +1598,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
       auditLog: nextAuditLog,
       ...patch,
     };
-    if (job && visitNeedsApproval(job) && !['draft', 'quote_sent'].includes(partialJob.woStatus || '')) { alert('Approve the follow-up in Visits before advancing.'); return; }
+    if (job && visitAwaitingQuote({ ...job, ...partialJob }) && !['draft', 'quote_sent'].includes(partialJob.woStatus || '')) { alert('Create the quote for this follow-up, or mark it included in Visits.'); return; }
     if (partialJob.woStatus === 'completed' && partialJob.requiresFollowUp) { alert('Add the follow-up visit before closing this order.'); return; }
     onSave(partialJob, !keepOpen);
 
@@ -1671,6 +1671,11 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
   // is already past the quote stage, so the panel offers the quote as a
   // catch-up rather than as the next step in the pipeline.
   const owedFormalQuote = !!job && needsFormalQuote(job);
+  // A follow-up visit waiting on its quote. The quote is its approval, but the
+  // order can sit at any stage (a finished first visit leaves it Completed), so
+  // the normal workflow button often offers the wrong step. Same catch-up
+  // control as a verbal approval, landing the order at Quote Sent.
+  const visitQuoteOwed = !!job && visitAwaitingQuote(job);
 
   /** Persist "the quote has now gone out". Stamps quoteSentAt (nothing did
    *  before, which is why the field is empty across the backlog and why
@@ -1680,7 +1685,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
    *  In Progress on the strength of an email. */
   const commitQuoteSent = () => {
     const patch: Partial<Job> = { quoteSentAt: job?.quoteSentAt ?? new Date().toISOString() };
-    const next = owedFormalQuote ? null : NEXT_STATUS[woStatus];
+    const next: WOStatus | null = visitQuoteOwed ? 'quote_sent' : owedFormalQuote ? null : NEXT_STATUS[woStatus];
     if (next) setWoStatus(next);
     setTimeout(() => handleSaveRef.current(next ?? undefined, true, patch), 0);
   };
@@ -2048,19 +2053,25 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
             The order is already past Quote Sent, so the normal workflow button
             offers the NEXT stage and never the quote. Without its own control
             there is no way to raise the paperwork the client is owed. */}
-        {owedFormalQuote && (
+        {(owedFormalQuote || visitQuoteOwed) && (
           <div className="border-b border-amber-200 bg-amber-50 px-4 md:px-6 py-2 flex items-center justify-between gap-3 shrink-0">
+            {visitQuoteOwed ? (
+              <div className="min-w-0 text-sm text-amber-800">
+                <strong>Visit {job?.currentVisit?.number} needs a quote.</strong> Creating it approves the visit.
+              </div>
+            ) : (
             <div className="min-w-0 text-sm text-amber-800">
               <strong>Approved verbally</strong>
               {job?.verbalApprovalBy ? ` by ${job.verbalApprovalBy}` : ''}
               {job?.verbalApprovalAt ? ` on ${new Date(job.verbalApprovalAt).toLocaleDateString()}` : ''}
               . No quote has been sent to the client yet.
             </div>
+            )}
             <button
               onClick={() => setShowQuotePreview(true)}
               className="shrink-0 px-3 py-1.5 bg-amber-600 text-white rounded-lg text-xs font-semibold hover:bg-amber-700 cursor-pointer"
             >
-              Send Formal Quote
+              {visitQuoteOwed ? 'Create Quote' : 'Send Formal Quote'}
             </button>
           </div>
         )}

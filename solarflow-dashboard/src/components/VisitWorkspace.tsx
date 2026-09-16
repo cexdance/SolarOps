@@ -37,14 +37,15 @@ export default function VisitWorkspace({ job, isAdmin, onSave, onSelectionChange
         <p className="font-semibold">{job.currentVisit.serviceType}</p>
         <p>Proposed: {job.scheduledDate} {job.scheduledTime}</p>
         <p>{job.currentVisit.reason}</p>
-        <p className="font-semibold text-orange-700">{visitNeedsApproval(job) ? 'Awaiting Daniel’s quote review / admin approval' : job.currentVisit.approval === 'included' ? 'Included, no additional charge' : 'Quote approved'}</p>
+        <p className="font-semibold text-orange-700">{visitNeedsApproval(job) ? (job.quoteSentAt ? 'Quote created, approving on save' : 'Waiting on Daniel’s quote') : job.currentVisit.approval === 'included' ? 'Included, no additional charge' : 'Approved by quote'}</p>
         {job.currentVisit.decisionReason && <p>Approval record: {job.currentVisit.decisionReason}</p>}
         {isAdmin && visitNeedsApproval(job) && <div className="space-y-2">
-          <p className="text-xs">Prepare the quote using the Quote action. Record approval here, or mark this visit included.</p>
-          <label className="block text-xs">Approval or coverage reference<textarea aria-label="Approval or coverage reference" value={approvalReason} onChange={e => setApprovalReason(e.target.value)} className="block w-full rounded-lg border p-2 text-sm" /></label>
+          {/* Creating the quote IS the approval (App.handleUpdateJob records it).
+              The only decision left here is the no-charge case, which has no quote. */}
+          <p className="text-xs">Create the quote with the Quote action and this visit is approved. If it is not billed, mark it included instead.</p>
+          <label className="block text-xs">Coverage reference (included visits only)<textarea aria-label="Coverage reference" value={approvalReason} onChange={e => setApprovalReason(e.target.value)} className="block w-full rounded-lg border p-2 text-sm" /></label>
           <div className="flex flex-wrap gap-2">
             <button type="button" disabled={busy || !approvalReason.trim()} onClick={() => void perform('included')} className="rounded-lg bg-teal-700 px-3 py-2 text-sm text-white disabled:opacity-40">Included, no additional charge</button>
-            <button type="button" disabled={busy || !approvalReason.trim() || !job.quoteSentAt} onClick={() => void perform('approved')} className="rounded-lg bg-orange-600 px-3 py-2 text-sm text-white disabled:opacity-40">Record quote approval</button>
           </div>
         </div>}
       </div>}

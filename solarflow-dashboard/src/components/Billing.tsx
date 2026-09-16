@@ -19,7 +19,7 @@ import { Job, Customer, User as UserType } from '../types';
 import type { Contractor } from '../types/contractor';
 import { sortJobsBy, JOB_SORT_OPTIONS, type JobSortOption } from '../lib/jobSort';
 import { serviceOrderNo, isSiteTransferJob, needsFormalQuote } from '../lib/woHelpers';
-import { startNewBillingCycle, visitNeedsApproval } from '../lib/visits';
+import { startNewBillingCycle, visitNeedsApproval, visitAwaitingQuote } from '../lib/visits';
 import { notifyAdminForInvoice } from '../lib/quoteService';
 import { formatMoney, formatCost } from '../lib/money';
 import { WorkOrderCalendar } from './WorkOrderCalendar';
@@ -449,7 +449,7 @@ export const Billing: React.FC<BillingProps> = ({
     // stage the board immediately renders back as Ready to Invoice, so ignore
     // it rather than silently patching a status nobody sees.
     if (isSiteTransferJob(job) && col !== 'invoiced' && col !== 'paid' && col !== 'costs_covered') return;
-    if (visitNeedsApproval(job) && !['new', 'quote_sent'].includes(col)) { alert('Open the order and record quote approval or mark the follow-up included in Visits.'); return; }
+    if (visitAwaitingQuote(job) && !['new', 'quote_sent'].includes(col)) { alert('Create the quote for this follow-up first, or mark it included in Visits.'); return; }
     const now = new Date().toISOString();
     // Multi-visit order moved BACK for its next visit: offer a fresh quote and
     // invoice cycle, archiving the current one onto the visit it covered. A
@@ -506,7 +506,7 @@ export const Billing: React.FC<BillingProps> = ({
   // Client accepted the quote. The order leaves billing's hands and goes back
   // to dispatch/scheduling, so it lands in Pending Completion and returns on
   // its own once the contractor completes it.
-  const approveQuote = (job: Job) => visitNeedsApproval(job) ? onJobClick?.(job.id) :
+  const approveQuote = (job: Job) => visitAwaitingQuote(job) ? onJobClick?.(job.id) :
     onUpdateJob({
       ...job,
       status: 'assigned',
