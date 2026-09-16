@@ -2077,7 +2077,11 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
         )}
 
         {/* ── Workflow Action Bar ─────────────────────────────────────── */}
-        {action && (
+        {/* Hidden while a follow-up visit waits on its quote: the order still
+            carries the previous visit's stage, so "Next" would offer Generate
+            Invoice for work that has not happened. The quote banner above is
+            the only real next step. */}
+        {action && !visitQuoteOwed && (
           <div className={`border-b px-4 md:px-6 py-2 flex items-center justify-between gap-2 md:gap-4 shrink-0 ${
             isServiceAccountExpense ? 'bg-blue-50 border-blue-200' : 'bg-slate-50 border-slate-200'
           }`}>
