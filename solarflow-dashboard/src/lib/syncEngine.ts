@@ -1261,7 +1261,7 @@ export async function pullFromSupabase(): Promise<Partial<AppState> | null> {
       supabase
         .from('app_data')
         .select('key, value')
-        .in('key', ['deleted_customer_ids', 'deleted_job_ids', 'solarEdgeConfig', 'standaloneRmas', ...KV_SYNC_KEYS]),
+        .in('key', ['deleted_customer_ids', 'deleted_job_ids', 'solarEdgeConfig', 'standaloneRmas', 'solarEdgeExtraSites', ...KV_SYNC_KEYS]),
     ]);
 
     if (kvError || !kvData) {
@@ -1391,12 +1391,18 @@ export async function pullFromSupabase(): Promise<Partial<AppState> | null> {
     // Extract solarEdgeConfig from kvData if present
     const remoteSEConfig = kvData?.find(r => r.key === 'solarEdgeConfig')?.value as AppState['solarEdgeConfig'] | undefined;
     const remoteStandaloneRmas = kvData?.find(r => r.key === 'standaloneRmas')?.value as AppState['standaloneRmas'] | undefined;
+    // Pulled as well as pushed since 2026-09-15: the RMA board's site-transfer
+    // lane reads these site names, and a browser that has never run a SolarEdge
+    // sync itself used to hold an empty list.
+    const remoteExtraSites = kvData?.find(r => r.key === 'solarEdgeExtraSites')?.value as AppState['solarEdgeExtraSites'] | undefined;
 
     const result: Partial<AppState> = {};
     if (customers.length > 0)  result.customers       = customers;
     if (jobs.length > 0)       result.jobs            = jobs;
     if (remoteSEConfig?.apiKey) result.solarEdgeConfig = remoteSEConfig;
     if (Array.isArray(remoteStandaloneRmas)) result.standaloneRmas = remoteStandaloneRmas;
+    // Empty never travels: it would wipe the local list on a browser that has one.
+    if (Array.isArray(remoteExtraSites) && remoteExtraSites.length > 0) result.solarEdgeExtraSites = remoteExtraSites;
 
     // Pull succeeded: this session is now allowed to push (see session push gate).
     markSessionPulled();
@@ -1663,8 +1669,23 @@ export function mergeRemote(local: AppState, remote: Partial<AppState>): AppStat
       .filter(j => !deletedJobIds.has(j.id));
   }
 
-  // ── SolarEdge extra sites (still blob, low volume, no Realtime needed) ───
-  let solarEdgeExtraSites = local.solarEdgeExtraSites ?? [];
+  // ── SolarEdge extra sites: union by siteId, newest lastUpdate wins ───────
+  // Still a blob, low volume, no Realtime needed. Union rather than local-only
+  // because the RMA board reads these names to advance site transfers, so a
+  // browser that never ran the SolarEdge sync would otherwise report every
+  // transfer as "waiting on SolarEdge".
+  const solarEdgeExtraSites = (() => {
+    const localList = local.solarEdgeExtraSites ?? [];
+    const remoteList = remote.solarEdgeExtraSites ?? [];
+    if (remoteList.length === 0) return localList;
+    if (localList.length === 0) return remoteList;
+    const bySite = new Map(localList.map(s => [s.siteId, s]));
+    for (const s of remoteList) {
+      const cur = bySite.get(s.siteId);
+      if (!cur || (s.lastUpdate ?? '') > (cur.lastUpdate ?? '')) bySite.set(s.siteId, s);
+    }
+    return Array.from(bySite.values());
+  })();
 
   // ── SolarEdge config, sync API key across devices ────────────────────────
   // Remote wins if it has a key and local is empty; otherwise keep local.
