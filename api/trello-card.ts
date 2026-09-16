@@ -42,12 +42,14 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { requireUser } from './_auth';
+import { makeCustomerSync, linkedCardId } from './_trelloCustomerSync';
 import { extractLeadFromImage, validSiteId, type ParsedLead } from './parse-lead-image';
 
 // Trello signs rawBody + callbackURL, so the bytes must be the ones on the wire.
 // Vercel's body parser would re-serialize them and break every signature, hence
 // the manual read in readRawBody below.
 export const config = { api: { bodyParser: false } };
+export const maxDuration = 300;
 
 const TRELLO_BASE = 'https://api.trello.com/1';
 // Support both server-side (TRELLO_*) and client-side legacy (VITE_TRELLO_*) names.
@@ -1325,13 +1327,30 @@ async function putCard(cardId: string, params: Record<string, string>): Promise<
  * Signed-in callers only: this writes to the shared company board.
  */
 async function handleCardPush(req: VercelRequest, res: VercelResponse) {
-  if (!(await requireUser(req, res))) return;
+  const user = await requireUser(req, res);
+  if (!user) return;
   if (!API_KEY || !API_TOKEN) return res.status(500).json({ error: 'Trello credentials not configured' });
 
   const raw = await readRawBody(req);
-  let body: { cardId?: string; stage?: string; name?: string; labels?: { name?: string; color?: string }[] };
+  let body: { syncRecord?: boolean; jobId?: string; customerId?: string; cardId?: string; stage?: string; name?: string; labels?: { name?: string; color?: string }[] };
   try { body = raw ? JSON.parse(raw) : (req.body ?? {}); }
   catch { return res.status(400).json({ error: 'Body is not valid JSON' }); }
+
+  if (body.syncRecord) {
+    if (!OFFICE_ROLES.has(String(user.user_metadata?.role || ''))) return res.status(403).json({ error: 'Office access required' });
+    if (!SERVICE_ROLE_KEY) return res.status(503).json({ error: 'Customer sync is not configured' });
+    if ((!body.jobId && !body.customerId) || (body.jobId && body.customerId)) return res.status(400).json({ error: 'Provide one jobId or customerId' });
+    try {
+      const sync = customerSync();
+      const ids = body.jobId ? [String(body.jobId)] : await sync.customerJobs(String(body.customerId));
+      const results = [];
+      for (const id of ids) results.push(await sync.sync(id));
+      return res.status(results.some(r => 'retry' in r && r.retry) ? 409 : 200).json({ results });
+    } catch (err) {
+      console.error('[trello-customer-sync]', err);
+      return res.status(502).json({ error: err instanceof Error ? err.message : 'Customer sync failed' });
+    }
+  }
 
   const cardId = String(body.cardId ?? '').trim();
   if (!/^[0-9a-fA-F]{24}$/.test(cardId)) return res.status(400).json({ error: 'Malformed card id' });
@@ -1434,6 +1453,10 @@ const CRON_SECRET = (process.env.CRON_SECRET ?? '').trim();
  *  (a dead webhook, a bad deploy). Repair this many and report the rest,
  *  rather than let a sweep mass-rewrite the board on a bad day. */
 const SWEEP_MAX_FIXES = 30;
+
+function customerSync() {
+  return makeCustomerSync({ databaseUrl: SUPABASE_URL, serviceKey: SERVICE_ROLE_KEY, apiKey: API_KEY, token: API_TOKEN, allowedBoard: isAllowedBoard });
+}
 
 /**
  * Converge the Trello board and LL once a day.
@@ -1558,7 +1581,24 @@ async function handleSweep(req: VercelRequest, res: VercelResponse) {
   const summary = `imported ${report.imported.length}, stage->LL ${report.stageToLL.length}, stage->Trello ${report.stageToTrello.length}, labels->LL ${report.labelsToLL.length}, labels->Trello ${report.labelsToTrello.length}, deferred ${report.deferred}, errors ${report.errors.length}`;
   if (report.deferred > 0) console.error(`[trello-sweep] ${report.deferred} differences DEFERRED past the ${SWEEP_MAX_FIXES}-fix cap: something systemic is wrong`);
   console.info(`[trello-sweep] ${summary}`);
-  return res.status(200).json({ summary, ...report });
+  // Reconcile customer details even if the original browser closed before its
+  // post-save request. A failed run never records a successful fingerprint.
+  const customerResults = [];
+  const sync = customerSync();
+  let changed = 0;
+  for (let offset = 0; changed < SWEEP_MAX_FIXES; offset += 1000) {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/app_data?key=like.job:*&select=value&order=key.asc&limit=1000&offset=${offset}`, { headers: supabaseHeaders });
+    if (!r.ok) { report.errors.push(`customer sweep: ${r.status}`); break; }
+    const page = await r.json() as { value: any }[];
+    for (const { value: job } of page) {
+      if (!job?.customerId || !linkedCardId(job)) continue;
+      try { const result = await sync.sync(job.id); customerResults.push({ jobId: job.id, ...result }); if ('posted' in result) changed++; }
+      catch (e) { report.errors.push(`customer ${job.id}: ${e instanceof Error ? e.message : String(e)}`); }
+      if (changed >= SWEEP_MAX_FIXES) break;
+    }
+    if (page.length < 1000) break;
+  }
+  return res.status(200).json({ summary, ...report, customerResults });
 }
 
 /**

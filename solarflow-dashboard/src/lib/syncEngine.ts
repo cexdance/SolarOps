@@ -1,4 +1,5 @@
 import { mergeVisitRecords } from './woHelpers';
+import { queueTrelloCustomerRows } from './trelloCustomerQueue';
 /**
  * SolarOps, Sync Engine (Phase 2)
  *
@@ -226,6 +227,7 @@ async function pushRows(
       { onConflict: 'key' },
     );
   if (error) throw error;
+  queueTrelloCustomerRows(rows);
 }
 
 /**
