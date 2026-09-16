@@ -1337,10 +1337,15 @@ async function handleCardPush(req: VercelRequest, res: VercelResponse) {
   catch { return res.status(400).json({ error: 'Body is not valid JSON' }); }
 
   if (body.syncRecord) {
-    if (!OFFICE_ROLES.has(String(user.user_metadata?.role || ''))) return res.status(403).json({ error: 'Office access required' });
     if (!SERVICE_ROLE_KEY) return res.status(503).json({ error: 'Customer sync is not configured' });
     if ((!body.jobId && !body.customerId) || (body.jobId && body.customerId)) return res.status(400).json({ error: 'Provide one jobId or customerId' });
     try {
+      // Roles in user_metadata are user-editable; use the same trusted role
+      // store as app_data RLS before exporting customer records.
+      const roles = await fetch(`${SUPABASE_URL}/rest/v1/user_roles?user_id=eq.${encodeURIComponent(user.id)}&select=role&limit=1`, { headers: supabaseHeaders });
+      if (!roles.ok) return res.status(503).json({ error: 'Role verification unavailable' });
+      const role = (await roles.json() as { role: string }[])[0]?.role;
+      if (!OFFICE_ROLES.has(role)) return res.status(403).json({ error: 'Office access required' });
       const sync = customerSync();
       const ids = body.jobId ? [String(body.jobId)] : await sync.customerJobs(String(body.customerId));
       const results = [];
