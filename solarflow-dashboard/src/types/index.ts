@@ -596,6 +596,8 @@ export interface RMAEntry {
   createdBy: string;
   /** Work order this RMA links to. Absent on standalone RMAs (shown with a red "No work order" flag). */
   linkedJobId?: string;
+  /** Customer for standalone RMAs. Linked RMAs resolve the customer through the job. */
+  customerId?: string;
   /** Last edit time, used to resolve sync merges of standalone RMAs. */
   updatedAt?: string;
 }

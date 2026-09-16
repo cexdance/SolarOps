@@ -2,10 +2,12 @@
 import React, { useState } from 'react';
 import { serviceOrderNo } from '../lib/woHelpers';
 import { X, AlertTriangle, FileText } from 'lucide-react';
-import { Job, RMAEntry } from '../types';
+import { Customer, Job, RMAEntry } from '../types';
 
 interface RmaCreateModalProps {
   jobs?: Job[];
+  /** When given, a customer picker is shown. Linking a service order uses that order's customer. */
+  customers?: Customer[];
   currentUserName?: string;
   /** Pre-select a service order to link to (e.g. when opened from a WO context). */
   defaultJobId?: string;
@@ -16,7 +18,7 @@ interface RmaCreateModalProps {
 const STATUS_OPTS: RMAEntry['status'][] = ['pending', 'submitted', 'approved', 'received'];
 
 export const RmaCreateModal: React.FC<RmaCreateModalProps> = ({
-  jobs = [], currentUserName, defaultJobId, onClose, onCreate,
+  jobs = [], customers, currentUserName, defaultJobId, onClose, onCreate,
 }) => {
   const [manufacturer, setManufacturer] = useState('');
   const [partDescription, setPartDescription] = useState('');
@@ -24,6 +26,7 @@ export const RmaCreateModal: React.FC<RmaCreateModalProps> = ({
   const [caseNumber, setCaseNumber] = useState('');
   const [status, setStatus] = useState<RMAEntry['status']>('pending');
   const [linkedJobId, setLinkedJobId] = useState(defaultJobId ?? '');
+  const [customerId, setCustomerId] = useState('');
   const [err, setErr] = useState<string | null>(null);
 
   const jobLabel = (j: Job) =>
@@ -47,6 +50,7 @@ export const RmaCreateModal: React.FC<RmaCreateModalProps> = ({
       updatedAt: now,
       createdBy: currentUserName || 'unknown',
       linkedJobId: linkedJobId || undefined,
+      customerId: (jobs.find(j => j.id === linkedJobId)?.customerId ?? customerId) || undefined,
     });
     onClose();
   };
@@ -101,6 +105,16 @@ export const RmaCreateModal: React.FC<RmaCreateModalProps> = ({
               {jobs.map(j => <option key={j.id} value={j.id}>{jobLabel(j)}</option>)}
             </select>
           </label>
+
+          {customers && !linkedJobId && (
+            <label className="block">
+              <span className="text-sm font-medium text-slate-700">Customer</span>
+              <select value={customerId} onChange={e => setCustomerId(e.target.value)} className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white">
+                <option value="">Select a customer</option>
+                {[...customers].sort((a, b) => a.name.localeCompare(b.name)).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </label>
+          )}
 
           {!linkedJobId && (
             <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-red-700 text-xs">
