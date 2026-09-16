@@ -7,7 +7,7 @@ import { Send, ExternalLink, ChevronDown } from 'lucide-react';
 import type { Job, Customer, RMAEntry } from '../types';
 import {
   cachedTrelloLists, fetchTrelloLists, defaultListFor, soCardContent,
-  sendServiceOrderToTrello, type TrelloList,
+  sendServiceOrderToTrello, trelloCardIdOf, type TrelloList,
 } from '../lib/trelloSync';
 
 const BTN = 'inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700';
@@ -42,12 +42,18 @@ export const SendToTrello: React.FC<{
     if (!listId && lists.length) setListId(defaultListFor(lists, job.pipelineStage));
   }, [lists, listId, job.pipelineStage]);
 
-  // A lead is already a Trello card; its link is its own id.
-  if (job.id.startsWith('job-trello-')) return null;
+  // An order converted from a Trello lead ALREADY has its card: the one Anthony
+  // created, whose id is in the job id. It used to render nothing here, which
+  // hid Trello entirely on those orders (SO-2609-23039, 17 orders on
+  // 2026-09-16). Link to that card; never offer to create a second one, which
+  // would split the order's history across two cards. trello.com/c/<full id>
+  // opens the card (verified live).
+  const leadCardId = trelloCardIdOf(job);
+  const cardUrl = job.trelloCardUrl ?? (leadCardId ? `https://trello.com/c/${leadCardId}` : undefined);
 
-  if (job.trelloCardUrl) {
+  if (cardUrl) {
     return (
-      <a href={job.trelloCardUrl} target="_blank" rel="noreferrer" className={BTN} title="This order's card on the Florida Trello board">
+      <a href={cardUrl} target="_blank" rel="noreferrer" className={BTN} title="This order's card on the Florida Trello board">
         <ExternalLink className="w-3.5 h-3.5 text-slate-500" />
         Open in Trello
       </a>
