@@ -600,6 +600,13 @@ export function serviceCallCostBreakdown(job: Partial<Job>, expenses: { amount: 
   const rate = job.contractorPayRate ?? job.laborRate ?? 0;
   const baseLabor = (job.contractorPayUnit ?? 'flat') === 'flat' ? rate : rate * (job.laborHours || 0);
   const extraLabor = items.filter(i => i.type === 'labor').reduce((s, i) => s + (i.totalCost || 0), 0);
+  // Labor entered in the per-visit workspace is an actual field cost. It is
+  // separate from both the order's baseline contractor pay and additional
+  // Parts & Labor line items, so include every priced visit exactly once.
+  const visitLabor = (job.visitLabor ?? []).reduce(
+    (sum, entry) => sum + (entry.hours || 0) * (entry.rate ?? 0),
+    0,
+  );
   const partItems = items.filter(i => i.type !== 'labor');
   const parts = partItems.length ? partItems.reduce((s, i) => s + (i.totalCost || 0), 0) : (job.partsCost ?? 0);
   const reroofParts = /re-?roof/i.test(job.serviceType ?? '')
@@ -607,8 +614,8 @@ export function serviceCallCostBreakdown(job: Partial<Job>, expenses: { amount: 
   const mileage = job.isPowercare ? +((job.travelMiles || 0) * 0.54).toFixed(2) : 0;
   const expenseTotal = expenses.filter(e => e.status !== 'rejected' && e.status !== 'draft')
     .reduce((s, e) => s + (e.amount || 0), 0);
-  const total = +(baseLabor + extraLabor + parts + reroofParts + mileage + expenseTotal).toFixed(2);
-  return { baseLabor, extraLabor, parts, reroofParts, mileage, expenseTotal, total };
+  const total = +(baseLabor + extraLabor + visitLabor + parts + reroofParts + mileage + expenseTotal).toFixed(2);
+  return { baseLabor, extraLabor, visitLabor, parts, reroofParts, mileage, expenseTotal, total };
 }
 
 export function actualServiceCallCost(job: Partial<Job>, expenses: { amount: number; status?: string }[] = []): number {

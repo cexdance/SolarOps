@@ -29,6 +29,14 @@ describe('service call cost', () => {
       { amount: 30, status: 'approved' }, { amount: 500, status: 'rejected' }, { amount: 500, status: 'draft' },
     ])).toBe(135.4);
   });
+  it('adds priced labor recorded across visits without counting unpriced hours', () => {
+    const visitLabor = [
+      { id: 'remove', visitId: 'visit-1', description: 'Panel and railing removal', hours: 46, rate: 45, updatedAt: '2026-09-16T00:00:00Z' },
+      { id: 'reinstall', visitId: 'visit-1', description: 'Reinstallation', hours: 46, rate: 65, updatedAt: '2026-09-16T00:00:00Z' },
+      { id: 'unpriced', visitId: 'visit-2', description: 'Inspection', hours: 2, updatedAt: '2026-09-16T00:00:00Z' },
+    ];
+    expect(serviceCallCostBreakdown({ visitLabor })).toMatchObject({ visitLabor: 5060, total: 5060 });
+  });
   it('defaults missing pay units to the panel flat rate and ignores inactive reroof data', () => {
     expect(actualServiceCallCost({ ...reroof, contractorPayUnit: undefined, serviceType: 'Repair' })).toBe(700);
   });

@@ -1696,8 +1696,9 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
   const costs = serviceCallCostBreakdown({
     serviceType, reroof, lineItems, contractorPayRate, contractorPayUnit,
     laborHours, partsCost: partsCostDirect, isPowercare, travelMiles,
+    visitLabor: job?.visitLabor,
   }, [{ amount: contractorExpenseTotal }]);
-  const { baseLabor: baseLaborCost, extraLabor: labor, parts, reroofParts } = costs;
+  const { baseLabor: baseLaborCost, extraLabor: labor, visitLabor, parts, reroofParts } = costs;
   const mileageMiles = isPowercare ? (travelMiles || 0) : 0;
   const mileageCostLive = costs.mileage;
   const actualCallCost = isSiteTransfer ? SITE_TRANSFER_COST : costs.total;
@@ -3389,7 +3390,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                 const milesValue = mileageMiles;
                 const mileageCost = mileageCostLive;
                 const mileageCharge = +(milesValue * 0.89).toFixed(2);
-                const totalLabor = baseLabor + labor;
+                const totalLabor = baseLabor + labor + visitLabor;
                 const baseRevenue = quoteAmount > 0 ? quoteAmount : (sumLineItems(lineItems).total + baseLabor);
                 const revenue    = (applyRecurringDiscount ? baseRevenue * 0.9 : baseRevenue) + mileageCharge;
                 const totalCost  = actualCallCost;
@@ -3402,7 +3403,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                     <div className="flex justify-between text-sm">
                       <span className="text-slate-500">
                         Labor cost
-                        {labor > 0 && <span className="ml-1 text-xs text-slate-400">(base {formatCost(baseLabor)} + extra {formatCost(labor)})</span>}
+                        {(labor > 0 || visitLabor > 0) && <span className="ml-1 text-xs text-slate-400">(base {formatCost(baseLabor)}{labor > 0 ? ` + extra ${formatCost(labor)}` : ''}{visitLabor > 0 ? ` + visits ${formatCost(visitLabor)}` : ''})</span>}
                       </span>
                       <span className="font-medium text-slate-700">{formatCost(totalLabor)}</span>
                     </div>
