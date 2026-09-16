@@ -2248,8 +2248,13 @@ function App() {
     // no quoteSentAt either. PowerCare (the plan covers the work) and site
     // transfers (flat fee, invoiced directly) have no quote step at all.
     const enteredApproval = isApprovedWoStage(baseJob0.woStatus) && !isApprovedWoStage(prevForAssign?.woStatus);
+    // Leaving Quote Sent means a quote WAS sent, stamped or not. quoteSentAt
+    // was never written before 2026-09-10, so every older order approved out of
+    // Quote Sent looked unquoted and was wrongly flagged (SO-2608-69488 and
+    // SO-2608-73352, both sent back to Create Quote on 09-16).
     const verballyApproved = enteredApproval
       && role === 'admin'
+      && prevForAssign?.woStatus !== 'quote_sent'
       && !baseJob0.quoteSentAt
       && !baseJob0.verbalApprovalAt
       && !baseJob0.isPowercare
