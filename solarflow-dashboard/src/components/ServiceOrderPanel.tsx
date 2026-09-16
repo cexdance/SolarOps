@@ -17,6 +17,7 @@ import { SendToTrello } from './SendToTrello';
 import { updateClientStatus } from '../lib/siteProfileStore';
 import { normalizeStreetOrder } from '../lib/addressValidator';
 import { QuotePreviewModal } from './QuotePreviewModal';
+import { declineQuote, restoreJob } from '../lib/jobService';
 import { Contractor, ContractorJob, JobPriority, ServiceRate } from '../types/contractor';
 import { loadServiceRates, loadContractorJobs } from '../lib/contractorStore';
 import { searchParts, CatalogPart } from '../lib/partsCatalog';
@@ -1537,7 +1538,10 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
       title: title || `WO, ${siteName}`,
       serviceType: serviceType as Job['serviceType'],
       ...(isReroofJob ? { reroof } : {}),
-      status: WO_TO_JOB_STATUS[effectiveWoStatus],
+      // An archived order stays archived through ordinary saves (adding a note
+      // must not silently restore a declined quote). Restore passes status in
+      // the patch, which is applied last.
+      status: job?.status === 'archived' ? 'archived' : WO_TO_JOB_STATUS[effectiveWoStatus],
       woStatus: effectiveWoStatus,
       woNumber: stableWoNumber,
       scheduledDate,
@@ -1688,6 +1692,24 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
     const next: WOStatus | null = visitQuoteOwed ? 'quote_sent' : owedFormalQuote ? null : NEXT_STATUS[woStatus];
     if (next) setWoStatus(next);
     setTimeout(() => handleSaveRef.current(next ?? undefined, true, patch), 0);
+  };
+
+  const isArchivedOrder = job?.status === 'archived';
+
+  /** Client declined the quote: archive with who/when, then close. Saved through
+   *  handleSave so any unsaved edits in the panel go with it. */
+  const handleDeclineQuote = () => {
+    if (!job) return;
+    if (!window.confirm(`Mark the quote for ${siteName} as declined and archive this service order? It can be restored later.`)) return;
+    const d = declineQuote(job, currentUserName || 'Staff');
+    handleSave(undefined, false, { status: d.status, archivedAt: d.archivedAt, quoteDeclinedAt: d.quoteDeclinedAt, quoteDeclinedBy: d.quoteDeclinedBy, pipelineStage: d.pipelineStage });
+  };
+
+  /** Put an archived order back in the column its stage belongs to. */
+  const handleRestore = () => {
+    if (!job) return;
+    const r = restoreJob(job, WO_TO_JOB_STATUS[woStatus]);
+    handleSave(undefined, true, { status: r.status, archivedAt: undefined });
   };
 
   // Computed
@@ -2076,12 +2098,31 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
           </div>
         )}
 
+        {/* ── Archived: say why, and offer the way back ─────────────────── */}
+        {isArchivedOrder && (
+          <div className="border-b border-slate-300 bg-slate-100 px-4 md:px-6 py-2 flex items-center justify-between gap-3 shrink-0">
+            <div className="min-w-0 text-sm text-slate-700">
+              <strong>Archived</strong>
+              {job?.quoteDeclinedAt
+                ? `: quote declined${job.quoteDeclinedBy ? `, recorded by ${job.quoteDeclinedBy}` : ''} on ${new Date(job.quoteDeclinedAt).toLocaleDateString()}.`
+                : job?.archivedAt ? ` on ${new Date(job.archivedAt).toLocaleDateString()}.` : '.'}
+            </div>
+            <button
+              type="button"
+              onClick={handleRestore}
+              className="shrink-0 px-3 py-1.5 bg-slate-700 text-white rounded-lg text-xs font-semibold hover:bg-slate-800 cursor-pointer"
+            >
+              Restore
+            </button>
+          </div>
+        )}
+
         {/* ── Workflow Action Bar ─────────────────────────────────────── */}
         {/* Hidden while a follow-up visit waits on its quote: the order still
             carries the previous visit's stage, so "Next" would offer Generate
             Invoice for work that has not happened. The quote banner above is
             the only real next step. */}
-        {action && !visitQuoteOwed && (
+        {action && !visitQuoteOwed && !isArchivedOrder && (
           <div className={`border-b px-4 md:px-6 py-2 flex items-center justify-between gap-2 md:gap-4 shrink-0 ${
             isServiceAccountExpense ? 'bg-blue-50 border-blue-200' : 'bg-slate-50 border-slate-200'
           }`}>
@@ -2117,6 +2158,17 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
               )}
               {isSiteTransfer && woStatus === 'draft' && (
                 <span className="text-xs text-teal-600">Admin agentic workflow · No quote sent · flat fee (Xero)</span>
+              )}
+              {/* The client said no. Archives the order instead of deleting it,
+                  so the quote and its history stay recoverable. */}
+              {woStatus === 'quote_sent' && !isArchivedOrder && (
+                <button
+                  type="button"
+                  onClick={handleDeclineQuote}
+                  className="px-3 py-1.5 border border-red-300 text-red-700 rounded-lg text-xs font-semibold hover:bg-red-50 cursor-pointer"
+                >
+                  Decline Quote
+                </button>
               )}
               <button
                 onClick={handleWorkflowAction}

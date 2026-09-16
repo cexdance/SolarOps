@@ -65,6 +65,7 @@ function badgeLabel(job: Job): string {
   return boardStatus(job).replace('_', ' ');
 }
 import { ServiceOrderPanel } from './ServiceOrderPanel';
+import { archiveJob } from '../lib/jobService';
 import { LeadPanel } from './LeadPanel';
 import { leadToCustomer, formatImportedAt, clientNumberOwner } from '../lib/leadConvert';
 import { assignClientNumber, bindClientNumber, releaseAssignedNumber, type Assigned } from '../lib/clientNumbers';
@@ -416,6 +417,12 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({
       if (patch) onUpdateJob({ ...job, ...patch });
       return;
     }
+    // Drop on Archived = archive, keeping woStatus so dragging it back out lands
+    // in the right column. archiveJob stamps archivedAt.
+    if (status === 'archived') {
+      if (job.status !== 'archived') onUpdateJob(archiveJob(job));
+      return;
+    }
     // Drop on the On Hold column = park the order (keep its underlying stage).
     if (status === 'on_hold') {
       if (!job.onHold) onUpdateJob({ ...job, onHold: true, onHoldAt: new Date().toISOString() });
@@ -432,7 +439,7 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({
       // Stamp completedAt when moving INTO Completed so a completed WO always carries
       // a completion date (drives the billing lifecycle); preserve an existing one.
       const completedAt = status === 'completed' ? (job.completedAt || new Date().toISOString()) : job.completedAt;
-      onUpdateJob({ ...job, status, woStatus, completedAt, onHold: false, onHoldAt: undefined });
+      onUpdateJob({ ...job, status, woStatus, completedAt, onHold: false, onHoldAt: undefined, archivedAt: undefined });
     }
   };
 
@@ -683,8 +690,10 @@ export const Jobs: React.FC<JobsProps> = ({
   // Held orders for the kanban "On Hold" column - always shown there (independent of
   // the Show On Hold toggle and status filter), matching the search/contractor/period
   // filters. Hold is an orthogonal flag, so these are pulled out of their status column.
-  const boardHeldJobs = useMemo(() => jobs.filter((job) => {
-    if (!job.onHold || job.status === 'archived') return false;
+  // Same filters for the Archived column, which is always on the kanban so a
+  // declined quote has somewhere visible to go. The Archive toggle still governs
+  // the list, map and counts.
+  const sideColumnMatches = useCallback((job: Job) => {
     const customer = customers.find((c) => c.id === job.customerId);
     const matchesSearch =
       !searchQuery ||
@@ -699,7 +708,9 @@ export const Jobs: React.FC<JobsProps> = ({
       matchesPeriod = dateStr ? (() => { const d = new Date(dateStr.split('T')[0]); return d >= periodRange.start && d <= periodRange.end; })() : false;
     }
     return matchesSearch && matchesContractor && matchesPowerCare && matchesPeriod;
-  }), [jobs, customers, searchQuery, filterContractor, powerCareOnly, periodRange]);
+  }, [customers, searchQuery, filterContractor, powerCareOnly, periodRange]);
+  const boardHeldJobs = useMemo(() => jobs.filter(job => job.onHold && job.status !== 'archived' && sideColumnMatches(job)), [jobs, sideColumnMatches]);
+  const boardArchivedJobs = useMemo(() => jobs.filter(job => job.status === 'archived' && !isPipelineOnly(job) && sideColumnMatches(job)), [jobs, sideColumnMatches]);
 
   // One board-wide sort drives the List view AND every Kanban/LL column, so
   // card order stays consistent when switching views. It used to be per-column,
@@ -1090,7 +1101,7 @@ export const Jobs: React.FC<JobsProps> = ({
           orthogonal flag, so held orders are pulled out of their status column). */}
       {viewMode === 'kanban' && (
         <div className="flex gap-3 overflow-x-auto pb-4">
-          {(['on_hold', 'new', 'assigned', 'in_progress', 'completed', 'invoiced', 'paid'] as const).map(col => (
+          {(['on_hold', 'new', 'assigned', 'in_progress', 'completed', 'invoiced', 'paid', 'archived'] as const).map(col => (
             <KanbanColumn
               key={col}
               status={col}
@@ -1099,7 +1110,7 @@ export const Jobs: React.FC<JobsProps> = ({
               // raw status is stale/undefined) so RMA/imported service orders land in
               // the right column WITHOUT needing a manual save, and none vanish. Held
               // jobs go ONLY in the On Hold column, never their status column.
-              columnJobs={col === 'on_hold' ? boardHeldJobs : boardJobs.filter(j => !j.onHold && boardStatus(j) === col)}
+              columnJobs={col === 'on_hold' ? boardHeldJobs : col === 'archived' ? boardArchivedJobs : boardJobs.filter(j => !j.onHold && boardStatus(j) === col)}
               allJobs={jobs}
               draggedJobId={draggedJobId}
               customers={customers}

@@ -21,6 +21,7 @@ import { sortJobsBy, JOB_SORT_OPTIONS, type JobSortOption } from '../lib/jobSort
 import { serviceOrderNo, isSiteTransferJob, needsFormalQuote } from '../lib/woHelpers';
 import { startNewBillingCycle, visitNeedsApproval, visitAwaitingQuote } from '../lib/visits';
 import { notifyAdminForInvoice } from '../lib/quoteService';
+import { declineQuote } from '../lib/jobService';
 import { formatMoney, formatCost } from '../lib/money';
 import { WorkOrderCalendar } from './WorkOrderCalendar';
 import { BillingReportModal } from './BillingReportModal';
@@ -514,6 +515,13 @@ export const Billing: React.FC<BillingProps> = ({
       quoteApprovedAt: job.quoteApprovedAt ?? new Date().toISOString(),
     });
 
+  // Client turned the quote down. Archived, not deleted: the card leaves the
+  // board (Billing excludes archived) and lands in Service Orders' Archived column.
+  const rejectQuote = (job: Job) => {
+    if (!window.confirm(`Mark the quote for ${displayName(job, getCustomer(job.customerId))} as declined and archive this service order?`)) return;
+    onUpdateJob(declineQuote(job, currentUserName ?? 'Staff'));
+  };
+
   const fmtDate = (d?: string) => (d ? new Date(d).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' }) : '');
 
   const getDaysSinceCompleted = (completedAt?: string) => {
@@ -863,6 +871,7 @@ export const Billing: React.FC<BillingProps> = ({
                                 <Clock className="w-3 h-3" /> Awaiting Approval
                               </span>
                               <button onClick={() => approveQuote(job)} className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 cursor-pointer">Approved</button>
+                              <button onClick={() => rejectQuote(job)} className="px-3 py-1.5 border border-red-300 text-red-700 rounded-lg text-xs font-medium hover:bg-red-50 cursor-pointer">Declined</button>
                             </>
                           )}
                           {col.key === 'pending' && (

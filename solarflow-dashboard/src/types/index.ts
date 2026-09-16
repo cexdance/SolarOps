@@ -356,6 +356,11 @@ export interface Job {
    *  see needsFormalQuote() in lib/woHelpers. */
   verbalApprovalAt?: string;
   verbalApprovalBy?: string;
+  /** The client turned the quote down. The order is archived (status
+   *  'archived', woStatus left at quote_sent so Restore puts it back exactly
+   *  where it was) and these stay as history. See declineQuote() in lib/jobService. */
+  quoteDeclinedAt?: string;
+  quoteDeclinedBy?: string;
   // Contractor queue
   contractorPayRate?: number;
   contractorPayUnit?: 'hour' | 'flat';
