@@ -37,7 +37,9 @@ export function applyRmaCaseNumber<T extends { id: string; rmaEntries?: RMAEntry
         : {
             ...j,
             rmaEntries: (j.rmaEntries ?? []).map(e =>
-              e.id === slotId ? { ...e, rmaNumber: caseNumber } : e,
+              // Stamp on write: the union merge gives ties to the incumbent, so an
+              // unstamped edit loses to whatever copy another tab pushes next.
+              e.id === slotId ? { ...e, rmaNumber: caseNumber, updatedAt: new Date().toISOString() } : e,
             ),
           },
     ),
@@ -491,6 +493,64 @@ export function findJobByWoNumber<J extends { woNumber?: string }>(
  *  the Billing board needs the same test.  */
 export const isSiteTransferJob = (job: { serviceCode?: string; serviceType?: string }): boolean =>
   job.serviceCode === 'SITE-TRX' || job.serviceType === 'Site Transfer';
+
+/* ── RMA Tracker board ──────────────────────────────────────────────────────
+ *
+ *   RMA PARTS lane                                 SITE TRANSFER lane
+ *   New | Not Eligible | Processed | Paid          New Site Transfer | Site Processed
+ *
+ * Columns are a READ-TIME mapping over the stored RMAStatus values, never a
+ * migration: a stale tab that still writes 'eligible' or 'shipped' lands in
+ * Processed instead of vanishing off the board.
+ */
+export type RmaBoardColumn = 'new' | 'not_eligible' | 'processed' | 'paid';
+
+export function rmaColumn(e: RMAEntry): RmaBoardColumn {
+  const s = e.rmaStatus ?? e.status;
+  if (s === 'paid' || e.compensationCollected) return 'paid';
+  if (s === 'not_eligible') return 'not_eligible';
+  if (s === 'submitted' || s === 'eligible' || s === 'shipped' || s === 'approved' || s === 'received') return 'processed';
+  return 'new'; // 'processes', legacy 'pending', and anything unrecognised
+}
+
+/** A site transfer files its own RMA slot (`rma-sitetransfer-<jobId>`, part
+ *  "Site Transfer"). Those belong to the transfer lane, so they leave the parts
+ *  lane; a real part RMA on the same order (an inverter, say) stays. */
+export const isSiteTransferEntry = (e: RMAEntry): boolean =>
+  e.id.startsWith('rma-sitetransfer-') || /site\s*transfer/i.test(e.partDescription ?? '');
+
+/** A processed site is renamed to lead with the client number, e.g.
+ *  "US-15631 Jakson Roche". That prefix is the only signal SolarEdge gives us:
+ *  the account id that would prove group membership comes back empty on v2. */
+export const siteRenamed = (siteName?: string, clientId?: string): boolean => {
+  const name = (siteName ?? '').trim().toLowerCase();
+  const client = (clientId ?? '').trim().toLowerCase();
+  return !!client && !!name && name.startsWith(client);
+};
+
+export const siteTransferDone = (job: { siteTransferCompletedAt?: string }): boolean =>
+  !!job.siteTransferCompletedAt;
+
+/** What the New Site Transfer card is waiting on. `needs_rename` is the
+ *  actionable one: the site is already in our account. */
+export const siteTransferBadge = (
+  job: { siteTransferCompletedAt?: string },
+  site?: { siteName?: string },
+  clientId?: string,
+): 'needs_rename' | 'waiting' | null => {
+  if (siteTransferDone(job)) return null;
+  if (!site) return 'waiting';
+  return siteRenamed(site.siteName, clientId) ? null : 'needs_rename';
+};
+
+/** Forward only, deliberately. Three of the transfers the team already marked
+ *  done carry names that predate the convention, so a two-way rule would drag
+ *  them backwards and argue with their own record. */
+export const shouldAutoCompleteSiteTransfer = (
+  job: { siteTransferCompletedAt?: string },
+  site?: { siteName?: string },
+  clientId?: string,
+): boolean => !siteTransferDone(job) && !!site && siteRenamed(site.siteName, clientId);
 
 /** Stages that mean the client has said yes and the work is on. Advancing into
  *  one of these is the moment a missing quote stops being "not yet" and starts

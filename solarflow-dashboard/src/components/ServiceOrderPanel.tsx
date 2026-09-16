@@ -2622,7 +2622,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                       className="w-4 h-4 accent-teal-600 cursor-pointer"
                     />
                     <span className="text-xs font-semibold text-slate-700">
-                      Transfer completed in SolarEdge
+                      Site processed in SolarEdge (renamed and grouped)
                       {stCompletedAt && (
                         <span className="ml-1 font-normal text-teal-700">
                           on {new Date(stCompletedAt).toLocaleDateString()}

@@ -3622,6 +3622,7 @@ function App() {
             customers={data.customers}
             currentUser={currentUser}
             standaloneRmas={data.standaloneRmas ?? []}
+            solarEdgeSites={[...FL_SITES, ...(data.solarEdgeExtraSites ?? [])]}
             onCreateStandaloneRma={handleCreateStandaloneRma}
             onUpdateStandaloneRma={handleUpdateStandaloneRma}
             onJobClick={(jobId) => handleViewChange('jobDetail', jobId)}
