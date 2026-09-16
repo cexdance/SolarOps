@@ -25,7 +25,7 @@ import { buildSiteTransferMailto, SITE_ID_GUIDE_URL } from '../lib/siteTransferE
 import { supabase } from '../lib/supabase';
 import { formatMoney, formatCost } from '../lib/money';
 import { printServiceReport } from '../lib/printServiceReport';
-import { serviceOrderNo, workOrderNo, generateServiceOrderNumber, photoUrlStem, findPowercareCaseNo, needsFormalQuote, realSiteId } from '../lib/woHelpers';
+import { serviceOrderNo, workOrderNo, generateServiceOrderNumber, photoUrlStem, findPowercareCaseNo, serviceCallCostBreakdown, needsFormalQuote, realSiteId } from '../lib/woHelpers';
 import { SowDistributionModal, SOW_DISTRIBUTION_NAMES } from './SowDistributionModal';
 import VisitHistory from './VisitHistory';
 import VisitWorkspace from './VisitWorkspace';
@@ -375,7 +375,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
 
   // Core form state
   const [woStatus, setWoStatus] = useState<WOStatus>(job?.woStatus ?? 'draft');
-  const [title, setTitle]           = useState(job?.title ?? '');
+  const [title]           = useState(job?.title ?? '');
   const [serviceType, setServiceType] = useState(job?.serviceType ?? '');
   const [reroof, setReroof] = useState<ReroofWorkflow>(job?.reroof ?? { parts: [] });
   // Initialize serviceCode - if job has serviceType but no serviceCode, try to match from rates
@@ -1497,7 +1497,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
   // (quoteSentAt). The patch is applied LAST so it wins over the built payload.
   const handleSave = (statusOverride?: WOStatus, keepOpen?: boolean, patch?: Partial<Job>) => {
     const effectiveWoStatus = statusOverride ?? woStatus;
-    const { parts, total } = sumLineItems(lineItems);
+    const { total } = sumLineItems(lineItems);
     const fallbackTotal = laborHours * contractorPayRate + partsCostDirect;
     const baseQuote = quoteAmount > 0 ? quoteAmount : (total > 0 ? total : fallbackTotal);
     const effectiveQuote = job?.currentVisit?.approval === 'included' ? 0 : applyRecurringDiscount ? baseQuote * 0.9 : baseQuote;
@@ -1548,7 +1548,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
       serviceCode: serviceCode || undefined,
       laborHours: lineItems.filter(i => i.type === 'labor').reduce((a, i) => a + i.quantity, 0) || laborHours,
       laborRate: contractorPayRate,
-      partsCost: parts || partsCostDirect,
+      partsCost: lineItems.some(item => item.type !== 'labor') ? sumLineItems(lineItems).parts : partsCostDirect,
       totalAmount: effectiveQuote,
       quoteAmount: effectiveQuote,
       isRecurringClient: applyRecurringDiscount,
@@ -1693,22 +1693,14 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
     ? { ...baseAction, label: 'Advance (No Quote)' }
     : woStatus === 'completed' && job?.currentVisit?.approval === 'included' && baseAction ? { ...baseAction, label: 'Close included visit' } : baseAction;
   const actionAdminOnly = isServiceAccountExpense && SERVICE_ACCOUNT_ACTIONS[woStatus]?.adminOnly;
-  const { labor, parts, total } = sumLineItems(lineItems);
-
-  // ── Actual Service Call Cost ────────────────────────────────────────────────
-  // What the call really cost us: base contractor pay + extra labor line items +
-  // parts + Powercare mileage + contractor-logged receipts. Computed from LIVE
-  // panel state (not the saved job) so it tracks edits before Save. Kept at
-  // component scope because both the header readout and the Cost Breakdown
-  // render it, and two copies of this arithmetic would drift.
-  const baseLaborCost   = contractorPayUnit === 'flat' ? contractorPayRate : contractorPayRate * (laborHours || 0);
-  const mileageMiles    = isPowercare ? (travelMiles || 0) : 0;
-  const mileageCostLive = +(mileageMiles * 0.54).toFixed(2);
-  // ponytail: a site transfer is a flat desk job, no contractor and no parts,
-  // so its real cost is the fixed fee, not the derived sum.
-  const actualCallCost  = isSiteTransfer
-    ? SITE_TRANSFER_COST
-    : +(baseLaborCost + labor + parts + mileageCostLive + contractorExpenseTotal).toFixed(2);
+  const costs = serviceCallCostBreakdown({
+    serviceType, reroof, lineItems, contractorPayRate, contractorPayUnit,
+    laborHours, partsCost: partsCostDirect, isPowercare, travelMiles,
+  }, [{ amount: contractorExpenseTotal }]);
+  const { baseLabor: baseLaborCost, extraLabor: labor, parts, reroofParts } = costs;
+  const mileageMiles = isPowercare ? (travelMiles || 0) : 0;
+  const mileageCostLive = costs.mileage;
+  const actualCallCost = isSiteTransfer ? SITE_TRANSFER_COST : costs.total;
 
   const photosByCategory = PHOTO_CATEGORIES.reduce((acc, cat) => {
     acc[cat] = woPhotos.filter(p => p.category === cat);
@@ -2172,11 +2164,8 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
           {/* Overview */}
           {!viewingHistory && activeTab === 'overview' && (
             <>
-            {/* Labels: pick as many as needed; render as chips on the kanban card. */}
+            {/* Link the saved order to Trello. */}
             <div className="px-6 pt-4 flex items-start gap-2 flex-wrap">
-              <div className="flex-1 min-w-0">
-                <LabelPicker value={job?.labels ?? []} onChange={labels => onSave({ labels })} />
-              </div>
               {/* Only on a saved order: the card is linked by the order's id. */}
               {job && (
                 <SendToTrello
@@ -2290,10 +2279,30 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
               {/* Fields column: everything but comments, order-1 at desktop so it
                   reads first even though comments are first in DOM (mobile order). */}
               <div className="space-y-5 lg:order-1 mt-5 lg:mt-0">
+              {/* Actual Service Call Cost, at-a-glance. Derived, read-only: the
+                  inputs live in Parts & Labor and Reroofing. */}
+              <div className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                <div className="min-w-0">
+                  <p className="text-xs font-medium text-slate-500">Actual Service Call Cost</p>
+                  <p className="text-[11px] text-slate-400 truncate">
+                    Labor{parts > 0 ? ' + parts' : ''}
+                    {reroofParts > 0 ? ' + reroofing materials' : ''}
+                    {mileageMiles > 0 ? ` + ${mileageMiles} mi × $0.54` : ''}
+                    {contractorExpenseTotal > 0 ? ' + expenses' : ''}
+                  </p>
+                </div>
+                <p className="text-base font-bold text-slate-900 shrink-0">{formatCost(actualCallCost)}</p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="min-w-0">
+                  <p className="text-xs font-medium text-slate-500 mb-1">Labels</p>
+                  <LabelPicker value={job?.labels ?? []} onChange={labels => onSave({ labels })} />
+                </div>
               {/* Priority, top of form for quick triage */}
               <div>
                 <label className="block text-xs font-medium text-slate-500 mb-1">Priority</label>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   {(['low', 'medium', 'high', 'critical'] as const).map(u => (
                     <button
                       key={u}
@@ -2312,28 +2321,6 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                   ))}
                 </div>
               </div>
-
-              <div>
-                <label className="block text-xs font-medium text-slate-500 mb-1">Job Title</label>
-                <input
-                  value={title}
-                  onChange={e => setTitle(e.target.value)}
-                  placeholder={`WO, ${siteName}`}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
-                />
-              </div>
-              {/* Actual Service Call Cost, at-a-glance. Derived, read-only: the
-                  inputs live in Parts & Labor. Full breakdown is down there. */}
-              <div className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                <div className="min-w-0">
-                  <p className="text-xs font-medium text-slate-500">Actual Service Call Cost</p>
-                  <p className="text-[11px] text-slate-400 truncate">
-                    Labor{parts > 0 ? ' + parts' : ''}
-                    {mileageMiles > 0 ? ` + ${mileageMiles} mi × $0.54` : ''}
-                    {contractorExpenseTotal > 0 ? ' + expenses' : ''}
-                  </p>
-                </div>
-                <p className="text-base font-bold text-slate-900 shrink-0">{formatCost(actualCallCost)}</p>
               </div>
 
               {/* Service, fed from Excel rate table */}
@@ -2451,7 +2438,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                   })()}
                 </div>
 
-              {/* Scope of Work, grouped with Job Title/Service (what), not money fields.
+              {/* Scope of Work, grouped with Service (what), not money fields.
                   Hidden for site transfers: the scope is fixed, the identifiers are the work. */}
               <div className={isSiteTransfer ? 'hidden' : ''}>
                 <label className="block text-xs font-medium text-slate-500 mb-1">
@@ -3394,7 +3381,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
               </div>
 
               {/* Profit Breakdown Summary */}
-              {(lineItems.length > 0 || contractorPayRate > 0 || quoteAmount > 0) && (() => {
+              {(actualCallCost > 0 || lineItems.length > 0 || quoteAmount > 0) && (() => {
                 // Default contractor labor fee, always counted as cost even without a labor line item.
                 // Labor line items are EXTRA labor on top of the baseline pay.
                 // Shared with the header readout so the two can't disagree.
@@ -3403,7 +3390,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                 const mileageCost = mileageCostLive;
                 const mileageCharge = +(milesValue * 0.89).toFixed(2);
                 const totalLabor = baseLabor + labor;
-                const baseRevenue = quoteAmount > 0 ? quoteAmount : (total + baseLabor);
+                const baseRevenue = quoteAmount > 0 ? quoteAmount : (sumLineItems(lineItems).total + baseLabor);
                 const revenue    = (applyRecurringDiscount ? baseRevenue * 0.9 : baseRevenue) + mileageCharge;
                 const totalCost  = actualCallCost;
                 const profit     = revenue - totalCost;
@@ -3415,18 +3402,24 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                     <div className="flex justify-between text-sm">
                       <span className="text-slate-500">
                         Labor cost
-                        {labor > 0 && <span className="ml-1 text-xs text-slate-400">(base {formatMoney(baseLabor)} + extra {formatMoney(labor)})</span>}
+                        {labor > 0 && <span className="ml-1 text-xs text-slate-400">(base {formatCost(baseLabor)} + extra {formatCost(labor)})</span>}
                       </span>
-                      <span className="font-medium text-slate-700">{formatMoney(totalLabor)}</span>
+                      <span className="font-medium text-slate-700">{formatCost(totalLabor)}</span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-slate-500">Parts / consumables</span>
-                      <span className="font-medium text-slate-700">{formatMoney(parts)}</span>
+                      <span className="font-medium text-slate-700">{formatCost(parts)}</span>
                     </div>
+                    {reroofParts > 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-slate-500">Reroofing materials</span>
+                        <span className="font-medium text-slate-700">{formatCost(reroofParts)}</span>
+                      </div>
+                    )}
                     {milesValue > 0 && (
                       <div className="flex justify-between text-sm">
                         <span className="text-slate-500">Mileage <span className="text-xs text-slate-400">({milesValue} mi)</span></span>
-                        <span className="font-medium text-slate-700">{formatMoney(mileageCost)}</span>
+                        <span className="font-medium text-slate-700">{formatCost(mileageCost)}</span>
                       </div>
                     )}
                     {contractorExpenseTotal > 0 && (

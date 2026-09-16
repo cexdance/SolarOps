@@ -592,34 +592,27 @@ export function findPowercareCaseNo(src: {
   return story.match(/case\s*#?\s*:?\s*(\d{5,})/i)?.[1] ?? '';
 }
 
-/**
- * ACTUAL cost of the service call: contractor labor (base pay + extra labor line
- * items) + parts/consumables + mileage + contractor-logged expenses. This is what
- * the call really cost us, as opposed to the quote/revenue.
- *
- * Derived, never stored: a stored copy drifts the moment a line item, a rate or a
- * field expense changes. Mirrors the SO panel's Cost Breakdown math so the number
- * on the SOW report and the number in the panel can never disagree.
- *
- * `expenses` is passed in rather than loaded here so this stays pure and callers
- * control where the contractor jobs come from.
+/** Shared live/saved cost breakdown. Reroof materials are additional to Parts & Labor.
+ * Direct parts cost is a fallback when there are no itemized non-labor costs.
  */
-export function actualServiceCallCost(
-  job: Partial<Job>,
-  expenses: { amount: number; status?: string }[] = [],
-): number {
-  const items      = job.lineItems ?? [];
-  const rate       = job.contractorPayRate ?? job.laborRate ?? 0;
-  const baseLabor  = job.contractorPayUnit === 'flat' ? rate : rate * (job.laborHours || 0);
+export function serviceCallCostBreakdown(job: Partial<Job>, expenses: { amount: number; status?: string }[] = []) {
+  const items = job.lineItems ?? [];
+  const rate = job.contractorPayRate ?? job.laborRate ?? 0;
+  const baseLabor = (job.contractorPayUnit ?? 'flat') === 'flat' ? rate : rate * (job.laborHours || 0);
   const extraLabor = items.filter(i => i.type === 'labor').reduce((s, i) => s + (i.totalCost || 0), 0);
-  const itemParts  = items.filter(i => i.type !== 'labor').reduce((s, i) => s + (i.totalCost || 0), 0);
-  const parts      = itemParts || (job.partsCost ?? 0);
-  // ponytail: mileage only reimbursed on Powercare, same rule as the panel.
-  const mileage    = job.isPowercare ? (job.travelMiles || 0) * 0.54 : 0;
-  const expenseSum = expenses
-    .filter(e => e.status !== 'rejected' && e.status !== 'draft')
+  const partItems = items.filter(i => i.type !== 'labor');
+  const parts = partItems.length ? partItems.reduce((s, i) => s + (i.totalCost || 0), 0) : (job.partsCost ?? 0);
+  const reroofParts = /re-?roof/i.test(job.serviceType ?? '')
+    ? (job.reroof?.parts ?? []).reduce((s, p) => s + (p.qty || 0) * (p.unitPrice ?? 0), 0) : 0;
+  const mileage = job.isPowercare ? +((job.travelMiles || 0) * 0.54).toFixed(2) : 0;
+  const expenseTotal = expenses.filter(e => e.status !== 'rejected' && e.status !== 'draft')
     .reduce((s, e) => s + (e.amount || 0), 0);
-  return +(baseLabor + extraLabor + parts + mileage + expenseSum).toFixed(2);
+  const total = +(baseLabor + extraLabor + parts + reroofParts + mileage + expenseTotal).toFixed(2);
+  return { baseLabor, extraLabor, parts, reroofParts, mileage, expenseTotal, total };
+}
+
+export function actualServiceCallCost(job: Partial<Job>, expenses: { amount: number; status?: string }[] = []): number {
+  return serviceCallCostBreakdown(job, expenses).total;
 }
 
 /**
