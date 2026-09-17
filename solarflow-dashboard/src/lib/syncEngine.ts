@@ -1003,9 +1003,11 @@ export async function pushToSupabase(state: AppState): Promise<void> {
     );
 
     const failedJobs: Array<{ key: string; error: string }> = [];
+    let skippedPoisoned = 0;
     for (const row of dirtyJobRows) {
       if (isRowPoisoned(row.key)) {
         console.warn('[SyncEngine] Skipping poisoned row:', row.key);
+        skippedPoisoned++;
         continue;
       }
       try {
@@ -1021,6 +1023,12 @@ export async function pushToSupabase(state: AppState): Promise<void> {
     if (failedJobs.length > 0) {
       console.warn('[SyncEngine] some job rows failed to push:', failedJobs);
       throw new Error(`Failed to push ${failedJobs.length} job rows: ${failedJobs[0].error}`);
+    }
+    // A skipped row is still dirty. Throwing (instead of returning success) keeps
+    // the outbox pending so it retries once the cooldown lapses, and surfaces a
+    // sync error rather than a console-only warning.
+    if (skippedPoisoned > 0) {
+      throw new Error(`${skippedPoisoned} job row(s) paused after repeated failures, retrying shortly`);
     }
 
     // ── Lightweight metadata rows (config + tombstones) ─────────────────────

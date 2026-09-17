@@ -148,6 +148,26 @@ describe('isRowPoisoned', () => {
     for (let i = 0; i < 5; i++) incRowFailure('customer:abc', 'err');
     expect(isRowPoisoned('customer:abc')).toBe(true);
   });
+
+  it('releases a poisoned row once the cooldown lapses (SO-2606-21481)', () => {
+    const old = new Date(Date.now() - 11 * 60_000).toISOString();
+    localStorage.setItem(POISON_KEY, JSON.stringify({
+      'job:stale': { failCount: 3, lastError: 'err', since: old, lastFailedAt: old },
+      // pre-cooldown entry shape, no lastFailedAt: falls back to since
+      'job:legacy': { failCount: 3, lastError: 'err', since: '2026-08-26T00:35:28.554Z' },
+    }));
+    expect(isRowPoisoned('job:stale')).toBe(false);
+    expect(isRowPoisoned('job:legacy')).toBe(false);
+  });
+
+  it('a retry that fails again re-arms the cooldown', () => {
+    const old = new Date(Date.now() - 11 * 60_000).toISOString();
+    localStorage.setItem(POISON_KEY, JSON.stringify({
+      'job:x': { failCount: 3, lastError: 'err', since: old, lastFailedAt: old },
+    }));
+    incRowFailure('job:x', 'still failing');
+    expect(isRowPoisoned('job:x')).toBe(true);
+  });
 });
 
 describe('incRowFailure', () => {

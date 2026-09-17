@@ -50,7 +50,14 @@ interface PoisonEntry {
   failCount: number;
   lastError: string;
   since: string; // ISO, first failure timestamp
+  lastFailedAt?: string; // ISO, most recent failure (absent on pre-cooldown entries)
 }
+
+// A poisoned row is skipped only for this long after its last failure, then
+// retried. Before this, the only exit was a successful push, which a skipped row
+// can never make, so one transient burst silenced a record in that browser for
+// good (SO-2606-21481: every close from one device lost, 2026-08-26..09-17).
+export const POISON_COOLDOWN_MS = 10 * 60_000;
 
 // ── Storage helpers ────────────────────────────────────────────────────────────
 
@@ -97,9 +104,12 @@ function savePoison(poison: Record<string, PoisonEntry>): void {
   }
 }
 
-/** True if the row has hit the failure threshold and should be skipped. */
+/** True if the row hit the failure threshold and its last failure is still inside the cooldown. */
 export function isRowPoisoned(key: string): boolean {
-  return (getPoison()[key]?.failCount ?? 0) >= POISON_THRESHOLD;
+  const entry = getPoison()[key];
+  if (!entry || entry.failCount < POISON_THRESHOLD) return false;
+  const last = Date.parse(entry.lastFailedAt ?? entry.since);
+  return Number.isFinite(last) && Date.now() - last < POISON_COOLDOWN_MS;
 }
 
 /**
@@ -114,6 +124,7 @@ export function incRowFailure(key: string, error: string): void {
       failCount: (existing?.failCount ?? 0) + 1,
       lastError: error,
       since:     existing?.since ?? new Date().toISOString(),
+      lastFailedAt: new Date().toISOString(),
     };
     savePoison(poison);
     if (poison[key].failCount >= POISON_THRESHOLD) {
