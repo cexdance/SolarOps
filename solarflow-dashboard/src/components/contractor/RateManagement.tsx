@@ -12,7 +12,7 @@ import {
   ChevronUp,
 } from 'lucide-react';
 import { ServiceRate } from '../../types/contractor';
-import { formatMoney } from '../../lib/money';
+import { formatCost } from '../../lib/money';
 
 interface RateManagementProps {
   rates: ServiceRate[];
@@ -155,7 +155,7 @@ export const RateManagement: React.FC<RateManagementProps> = ({ rates, onSaveRat
         <div className="bg-white rounded-xl border border-slate-200 p-4">
           <p className="text-sm text-slate-500">Avg Client Rate</p>
           <p className="text-2xl font-bold text-blue-600">
-            {formatMoney(Math.round(rates.reduce((sum, r) => sum + (r.clientRateStandard || r.rate || 0), 0) / rates.length || 0), { decimals: 0 })}
+            {formatCost(Math.round(rates.reduce((sum, r) => sum + (r.clientRateStandard || r.rate || 0), 0) / rates.length || 0), { decimals: 0 })}
           </p>
         </div>
       </div>
@@ -338,28 +338,28 @@ export const RateManagement: React.FC<RateManagementProps> = ({ rates, onSaveRat
                         </td>
                         <td className="px-2 py-3 text-right">
                           <span className="text-xs font-medium text-slate-900">
-                            {formatMoney(rate.laborCost || 0, { decimals: 0 })}
+                            {formatCost(rate.laborCost || 0, { decimals: 0 })}
                           </span>
                         </td>
                         <td className="px-2 py-3 text-right">
                           <span className="text-xs text-slate-600">
-                            {formatMoney(rate.partsCost || 0, { decimals: 0 })}
+                            {formatCost(rate.partsCost || 0, { decimals: 0 })}
                           </span>
                         </td>
                         <td className="px-2 py-3 text-right">
                           <span className="text-xs font-semibold text-slate-900">
-                            {formatMoney(rate.clientRateStandard || 0, { decimals: 0 })}
+                            {formatCost(rate.clientRateStandard || 0, { decimals: 0 })}
                           </span>
                           {rate.clientRateRecurring && rate.clientRateRecurring !== rate.clientRateStandard && (
                             <span className="text-xs text-green-600 block">
-                              Rec: {formatMoney(rate.clientRateRecurring, { decimals: 0 })}
+                              Rec: {formatCost(rate.clientRateRecurring, { decimals: 0 })}
                             </span>
                           )}
                         </td>
                         <td className="px-2 py-3 text-center">
                           {rate.isPowercareEligible ? (
                             <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
-                              {formatMoney(rate.powercareClientRate || 0, { decimals: 0 })}
+                              {formatCost(rate.powercareClientRate || 0, { decimals: 0 })}
                             </span>
                           ) : (
                             <span className="text-xs text-slate-400">-</span>
@@ -410,15 +410,15 @@ export const RateManagement: React.FC<RateManagementProps> = ({ rates, onSaveRat
                             <div className="space-y-1 text-sm">
                               <div className="flex justify-between">
                                 <span className="text-slate-500">Labor Cost:</span>
-                                <span className="font-medium">{formatMoney(rate.laborCost || 0, { decimals: 0 })}</span>
+                                <span className="font-medium">{formatCost(rate.laborCost || 0, { decimals: 0 })}</span>
                               </div>
                               <div className="flex justify-between">
                                 <span className="text-slate-500">Parts Cost:</span>
-                                <span className="font-medium">{formatMoney(rate.partsCost || 0, { decimals: 0 })}</span>
+                                <span className="font-medium">{formatCost(rate.partsCost || 0, { decimals: 0 })}</span>
                               </div>
                               <div className="flex justify-between border-t pt-1">
                                 <span className="text-slate-500">Total Cost:</span>
-                                <span className="font-semibold">{formatMoney((rate.laborCost || 0) + (rate.partsCost || 0), { decimals: 0 })}</span>
+                                <span className="font-semibold">{formatCost((rate.laborCost || 0) + (rate.partsCost || 0), { decimals: 0 })}</span>
                               </div>
                             </div>
                           </div>
@@ -427,11 +427,11 @@ export const RateManagement: React.FC<RateManagementProps> = ({ rates, onSaveRat
                             <div className="space-y-1 text-sm">
                               <div className="flex justify-between">
                                 <span className="text-slate-500">Standard:</span>
-                                <span className="font-medium">{formatMoney(rate.clientRateStandard || 0, { decimals: 0 })}</span>
+                                <span className="font-medium">{formatCost(rate.clientRateStandard || 0, { decimals: 0 })}</span>
                               </div>
                               <div className="flex justify-between">
                                 <span className="text-slate-500">Recurring:</span>
-                                <span className="font-medium text-green-600">{formatMoney(rate.clientRateRecurring || 0, { decimals: 0 })}</span>
+                                <span className="font-medium text-green-600">{formatCost(rate.clientRateRecurring || 0, { decimals: 0 })}</span>
                               </div>
                             </div>
                           </div>
@@ -448,18 +448,18 @@ export const RateManagement: React.FC<RateManagementProps> = ({ rates, onSaveRat
                                 <>
                                   <div className="flex justify-between">
                                     <span className="text-slate-500">Labor Cost:</span>
-                                    <span className="font-medium">{formatMoney(rate.powercareLaborCost || 0, { decimals: 0 })}</span>
+                                    <span className="font-medium">{formatCost(rate.powercareLaborCost || 0, { decimals: 0 })}</span>
                                   </div>
                                   <div className="flex justify-between">
                                     <span className="text-slate-500">Client Rate:</span>
-                                    <span className="font-medium">{formatMoney(rate.powercareClientRate || 0, { decimals: 0 })}</span>
+                                    <span className="font-medium">{formatCost(rate.powercareClientRate || 0, { decimals: 0 })}</span>
                                   </div>
                                 </>
                               )}
                               {rate.seCompensation ? (
                                 <div className="flex justify-between border-t pt-1">
                                   <span className="text-slate-500">SE Comp:</span>
-                                  <span className="font-medium text-blue-600">{formatMoney(rate.seCompensation, { decimals: 0 })}</span>
+                                  <span className="font-medium text-blue-600">{formatCost(rate.seCompensation, { decimals: 0 })}</span>
                                 </div>
                               ) : null}
                             </div>
