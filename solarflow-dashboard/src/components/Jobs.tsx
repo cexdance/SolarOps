@@ -19,7 +19,7 @@ import {
   Job, Customer, User as UserType, JobStatus, UrgencyLevel, WO_TO_JOB_STATUS, WOStatus,
   PipelineStage, isPipelineStageKey, WOLineItem,
 } from '../types';
-import { boardColumns, cachedTrelloLists, fetchTrelloLists, type TrelloList } from '../lib/trelloSync';
+import { boardColumns, llColumnJobs, cachedTrelloLists, fetchTrelloLists, type TrelloList } from '../lib/trelloSync';
 
 // Map UrgencyLevel onto the shared map-view priority palette.
 const MAP_PRIORITY: Record<UrgencyLevel, ViewJobPriority> = {
@@ -1141,11 +1141,7 @@ export const Jobs: React.FC<JobsProps> = ({
               key={col.stage}
               status={col.stage}
               title={col.closed ? `${col.title} (archived in Trello)` : col.title}
-              columnJobs={col.stage === 'not_on_board'
-                ? llJobs.filter(j => j.pipelineStage && !llColumnStages.has(j.pipelineStage))
-                : col.stage === 'done'
-                  ? llJobs.filter(j => j.pipelineStage === col.stage || j.status === 'completed')
-                  : llJobs.filter(j => j.pipelineStage === col.stage)}
+              columnJobs={llColumnJobs(col.stage, llJobs, llColumnStages)}
               allJobs={jobs}
               draggedJobId={draggedJobId}
               customers={customers}

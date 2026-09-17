@@ -34,6 +34,23 @@ const CACHE_KEY = 'solarops_trello_lists';
  *
  * Pure, so the "never hide a card" rule is testable without React.
  */
+/**
+ * The cards one LL column shows. A completed job counts as Done (when the board
+ * has a Done column), and ONLY there: Done used to pull completed jobs in while
+ * their own stage column kept them too, so a completed card showed twice
+ * (Martin Palmer, SO-2609-95542, Done + Needs First Time Quoting, 2026-09-17).
+ */
+export function llColumnJobs<J extends Pick<Job, 'pipelineStage' | 'status'>>(
+  stage: string, jobs: J[], columnStages: Set<string>,
+): J[] {
+  const effective = (j: J) =>
+    j.status === 'completed' && columnStages.has('done') ? 'done' : j.pipelineStage;
+  if (stage === 'not_on_board') {
+    return jobs.filter(j => { const s = effective(j); return !!s && !columnStages.has(s); });
+  }
+  return jobs.filter(j => effective(j) === stage);
+}
+
 export function boardColumns(lists: TrelloList[] | null, jobs: Pick<Job, 'pipelineStage'>[]): BoardColumn[] {
   const used = new Set(jobs.map(j => j.pipelineStage).filter(Boolean) as string[]);
   // Archived lists go AFTER the open ones, not in their old Trello position.
