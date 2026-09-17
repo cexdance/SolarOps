@@ -18,11 +18,12 @@ import {
 import { Job, Customer, User as UserType } from '../types';
 import type { Contractor } from '../types/contractor';
 import { sortJobsBy, JOB_SORT_OPTIONS, type JobSortOption } from '../lib/jobSort';
-import { serviceOrderNo, isSiteTransferJob, needsFormalQuote } from '../lib/woHelpers';
+import { serviceOrderNo, isSiteTransferJob, needsFormalQuote, serviceCallCostBreakdown } from '../lib/woHelpers';
+import { loadContractorJobs } from '../lib/contractorStore';
 import { startNewBillingCycle, visitNeedsApproval, visitAwaitingQuote } from '../lib/visits';
 import { notifyAdminForInvoice } from '../lib/quoteService';
 import { declineQuote } from '../lib/jobService';
-import { formatMoney, formatCost } from '../lib/money';
+import { formatCost } from '../lib/money';
 import { WorkOrderCalendar } from './WorkOrderCalendar';
 import { BillingReportModal } from './BillingReportModal';
 import { SowDistributionModal } from './SowDistributionModal';
@@ -351,6 +352,43 @@ export const Billing: React.FC<BillingProps> = ({
   // Billing only ever deals in service orders. Everything upstream of that,
   // the S1 sales funnel, belongs on the pipeline board.
   const serviceOrders = jobs.filter(isServiceOrder);
+  // Field receipts per order, read once per render, same source the SO panel uses.
+  const expensesByJob = React.useMemo(() => {
+    const map = new Map<string, { amount: number; status?: string }[]>();
+    try {
+      for (const cj of loadContractorJobs()) {
+        const id = cj.sourceJobId ?? cj.id;
+        map.set(id, [...(map.get(id) ?? []), ...(cj.expenses ?? [])]);
+      }
+    } catch { /* no local contractor jobs: costs show without receipts */ }
+    return map;
+  }, [jobs]);
+  // Field cost of the visit: what Daniel quotes from, then invoices from once
+  // extra parts or labor land. formatCost, not the SHOW_MONEY-gated formatMoney.
+  const costLine = (job: Job) => {
+    if (isSiteTransferJob(job)) return null;
+    const c = serviceCallCostBreakdown(job, expensesByJob.get(job.id));
+    const labor = c.baseLabor + c.extraLabor + c.visitLabor;
+    const parts = c.parts + c.reroofParts;
+    const extras = c.extraLabor + c.visitLabor + c.mileage + c.expenseTotal;
+    return (
+      <div className="text-[11px] text-slate-600 bg-slate-50 border border-slate-200 rounded-md px-2 py-1 mb-2">
+        <div className="flex justify-between gap-2">
+          <span>Labor {formatCost(labor)} · Parts {formatCost(parts)}</span>
+          <span className="font-semibold text-slate-900">{formatCost(c.total)}</span>
+        </div>
+        {extras > 0 && (
+          <div className="text-[10px] text-slate-400 truncate">
+            base {formatCost(c.baseLabor)}
+            {c.extraLabor > 0 && ` + extra labor ${formatCost(c.extraLabor)}`}
+            {c.visitLabor > 0 && ` + visit labor ${formatCost(c.visitLabor)}`}
+            {c.mileage > 0 && ` + mileage ${formatCost(c.mileage)}`}
+            {c.expenseTotal > 0 && ` + receipts ${formatCost(c.expenseTotal)}`}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   // An empty search must not filter anything. It used to: with no query the
   // predicate still ran, and a job whose customerId resolves to nothing
@@ -856,6 +894,7 @@ export const Billing: React.FC<BillingProps> = ({
                             {job.currentVisit?.reason || job.description || job.notes}
                           </p>
                         )}
+                        {costLine(job)}
                         <div className="flex gap-2">
                           {col.key === 'new' && (
                             <button
@@ -1165,11 +1204,7 @@ export const Billing: React.FC<BillingProps> = ({
                       </>
                     ) : (
                       <>
-                        <p className="text-lg font-bold text-slate-900">{formatMoney(job.totalAmount)}</p>
-                        <p className="text-xs text-slate-500">
-                          {job.laborHours} hrs @ {formatMoney(job.laborRate, { decimals: 0 })}/hr
-                          {job.partsCost > 0 && ` + ${formatMoney(job.partsCost, { decimals: 0 })} parts`}
-                        </p>
+                        <div className="min-w-[220px]">{costLine(job)}</div>
                       </>
                     )}
                     <div className="mt-2 flex justify-end">{cardLinks(job, customer)}</div>
