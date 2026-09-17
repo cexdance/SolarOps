@@ -63,7 +63,7 @@ import { getDeletedCustomerIds, markJobDeleted, findDuplicateCustomer, hasDangli
 import { clientIdChangeConflict } from './lib/leadConvert';
 import { markUndo, peekUndo, takeUndo, applyUndo, clearUndo, clearUndoTombstones } from './lib/undo';
 import { mergeCustomerPair } from './lib/syncEngine';
-import { mergeVisits, visitNeedsApproval, currentVisitId } from './lib/visits';
+import { mergeVisits, visitNeedsApproval, currentVisitId, contractorLiveStatus } from './lib/visits';
 import { mergeById } from './lib/woHelpers';
 import { Contractor, ContractorStatus, ContractorJob, ContractorLineItem } from './types/contractor';
 import { addInteraction, loadCustomers, loadInteractions, saveInteractions } from './lib/customerStore';
@@ -1104,9 +1104,7 @@ function App() {
       // parking flag (not a status), so a completed-then-parked WO still carries
       // completedAt and must read as completed on the admin side. Advance only when
       // the admin Job is still behind so we never downgrade an invoiced/paid order.
-      const isCompleted = cj.status === 'completed' || !!cj.completedAt;
-      const liveStatus: (WOStatus & JobStatus) | null = isCompleted ? 'completed'
-        : (cj.status === 'en_route' || cj.status === 'in_progress') ? 'in_progress' : null;
+      const liveStatus: (WOStatus & JobStatus) | null = contractorLiveStatus(cj, adminJob);
       const advance = !visitNeedsApproval(adminJob) && !!liveStatus && STALE_ADMIN.has(adminJob.status) && liveStatus !== adminJob.status;
       const note = (cj.operationalNotes ?? cj.completionNotes ?? '').trim();
       const needReport = !!note && note !== (adminJob.serviceReport ?? '').trim();

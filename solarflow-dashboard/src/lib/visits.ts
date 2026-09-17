@@ -21,6 +21,20 @@ export const visitNeedsApproval = (j: { currentVisit?: { approval: string } }) =
  *  save), so the UI must not block the very save that records it. */
 export const visitAwaitingQuote = (j: { currentVisit?: { approval: string }; quoteSentAt?: string }) => visitNeedsApproval(j) && !j.quoteSentAt;
 
+/** Contractor progress that belongs to the CURRENT visit. A contractor copy still
+ *  carries the previous visit's completedAt/status after a follow-up is requested,
+ *  and reading that as "done" dragged SO-2609-78916 from Scheduled back to Completed.
+ *  With a follow-up open, only a completion stamped after the request counts. */
+export function contractorLiveStatus(cj: { status?: string; completedAt?: string; startedAt?: string }, admin: { currentVisit?: { requestedAt?: string } }): 'completed' | 'in_progress' | null {
+  const since = admin.currentVisit?.requestedAt;
+  if (since) {
+    if (cj.completedAt) return cj.completedAt > since ? 'completed' : null;
+    return (cj.status === 'en_route' || cj.status === 'in_progress') && !!cj.startedAt && cj.startedAt > since ? 'in_progress' : null;
+  }
+  if (cj.status === 'completed' || cj.completedAt) return 'completed';
+  return cj.status === 'en_route' || cj.status === 'in_progress' ? 'in_progress' : null;
+}
+
 export const mergeVisits = (a?: WOVisit[], b?: WOVisit[]): WOVisit[] | undefined =>
   mergeVisitRecords(a, b);
 
