@@ -370,6 +370,8 @@ export interface ContractorJob {
   currentVisit?: VisitPlan;
   visitPhotoOwners?: Record<string, string>;
   visitLabor?: VisitLabor[];
+  /** Mirrored from the admin job so the field copy drops cancelled visits too. */
+  cancelledVisitIds?: string[];
 
   // Invoice tracking
   invoiceId?: string;

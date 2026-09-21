@@ -473,6 +473,9 @@ export interface Job {
   /** Set when an admin cancelled a follow-up visit added by mistake. */
   cancelledVisitAt?: string;
   cancelledVisitBy?: string;
+  /** Tombstones for cancelled visits. Every merge drops these ids, so a stale
+   *  copy on another device cannot bring a cancelled visit back. */
+  cancelledVisitIds?: string[];
 }
 
 /** Quote + invoice of one billing cycle, archived onto the visit it covered

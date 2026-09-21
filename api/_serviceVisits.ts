@@ -79,6 +79,11 @@ export function cancelVisit(job: Job, actor: string, now: string): Job {
     ...Object.fromEntries(billingKeys.map(k => [k, b[k as keyof typeof b]])),
     visitLabor: (job.visitLabor ?? []).filter(l => l.visitId !== id),
     contractorParts: (job.contractorParts ?? []).filter(p => p.visitId !== id),
+    // Tombstones, not just a removal: a contractor phone or another tab still
+    // holds BOTH halves of the split, the archived visit and the new plan, and a
+    // union merge would feed them straight back. `id@cutoff` keeps it safe to
+    // reuse the id later: only records touched at or before `now` are dead.
+    cancelledVisitIds: [...new Set([...(job.cancelledVisitIds ?? []), `${id}@${now}`, `${last.id}@${now}`])],
     requiresFollowUp: false, cancelledVisitAt: now, cancelledVisitBy: actor, updatedAt: now,
   } as Job;
   if (!last.plan) delete (next as unknown as Record<string, unknown>).currentVisit;

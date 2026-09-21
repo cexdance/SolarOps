@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { requestVisit, cancelVisit, visitId } from '../../../api/_serviceVisits';
 import { getBillingColumn } from '../components/Billing';
+import { mergeJobFields } from '../lib/syncEngine';
+import { mergeVisitRecords, cancelledVisits } from '../lib/woHelpers';
 import type { Job } from '../types';
 
 const now = '2026-09-12T18:00:00.000Z';
@@ -54,6 +56,11 @@ describe('cancelVisit, a follow-up added by mistake', () => {
     expect(() => cancelVisit(base(), 'admin', later)).toThrow(/no follow-up visit/);
   });
 
+  it('tombstones both halves of the split, each with the cancel cutoff', () => {
+    const back = cancelVisit(requestVisit(base(), input, 'tech', now), 'admin', later);
+    expect(back.cancelledVisitIds).toEqual([`j1:visit:2@${later}`, `j1:visit:1@${later}`]);
+  });
+
   it('round-trips a second follow-up back to the first one', () => {
     const one = requestVisit(base(), input, 'tech', now);
     const approved = { ...one, currentVisit: { ...one.currentVisit!, approval: 'approved' as const }, completedAt: '2026-09-15T20:00:00.000Z', serviceReport: 'Replaced optimizer' };
@@ -63,5 +70,45 @@ describe('cancelVisit, a follow-up added by mistake', () => {
     expect(back.visits).toHaveLength(1);
     expect(back.currentVisit?.number).toBe(2);
     expect(back.serviceReport).toBe('Replaced optimizer');
+  });
+});
+
+describe('a cancelled visit cannot be resurrected by a stale copy', () => {
+  const cancelled = () => cancelVisit(requestVisit(base(), input, 'tech', now), 'admin', later);
+  // The stale side: a phone or tab that still holds the follow-up.
+  const stale = () => requestVisit(base(), input, 'tech', now);
+
+  it('the union merge drops the tombstoned visit, whichever side it is on', () => {
+    const dead = cancelledVisits(cancelled());
+    expect(mergeVisitRecords(cancelled().visits, stale().visits, dead)).toEqual([]);
+    expect(mergeVisitRecords(stale().visits, cancelled().visits, dead)).toEqual([]);
+  });
+
+  it('mergeJobFields keeps the cancel, not the stale higher visit number', () => {
+    const fresh = { ...cancelled(), fieldTimes: { visits: later, currentVisit: later } };
+    const old = { ...stale(), fieldTimes: { visits: now, currentVisit: now } };
+    for (const merged of [mergeJobFields(fresh, old), mergeJobFields(old, fresh)]) {
+      expect(merged.currentVisit).toBeUndefined();
+      expect(merged.visits ?? []).toEqual([]);
+      expect(merged.cancelledVisitIds).toEqual([`j1:visit:2@${later}`, `j1:visit:1@${later}`]);
+      // The stale side's fresh billing cycle must not ride back in either.
+      expect(merged.woStatus).not.toBe('draft');
+    }
+  });
+
+  it('carries the tombstone so a later merge still honours it', () => {
+    const merged = mergeJobFields({ ...cancelled(), fieldTimes: { visits: later } }, { ...stale(), fieldTimes: { visits: now } });
+    const secondRound = mergeJobFields({ ...merged, fieldTimes: { visits: later } } as Job, { ...stale(), fieldTimes: { visits: '2026-09-14T00:00:00.000Z' } });
+    expect(secondRound.visits ?? []).toEqual([]);
+    expect(secondRound.currentVisit).toBeUndefined();
+  });
+
+  it('a genuine new follow-up after a cancel still merges in', () => {
+    const back = cancelled();
+    const again = requestVisit(back, { ...input, expectedVisitId: visitId(back), date: '2026-09-22', reason: 'Real return trip' }, 'tech', later);
+    expect(again.currentVisit?.id).toBe('j1:visit:2');
+    const merged = mergeJobFields({ ...again, fieldTimes: { visits: later } }, { ...back, fieldTimes: { visits: now } });
+    expect(merged.visits).toHaveLength(1);
+    expect(merged.currentVisit?.reason).toBe('Real return trip');
   });
 });

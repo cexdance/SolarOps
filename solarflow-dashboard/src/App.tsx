@@ -64,7 +64,7 @@ import { clientIdChangeConflict } from './lib/leadConvert';
 import { markUndo, peekUndo, takeUndo, applyUndo, clearUndo, clearUndoTombstones } from './lib/undo';
 import { mergeCustomerPair } from './lib/syncEngine';
 import { mergeVisits, visitNeedsApproval, currentVisitId, contractorLiveStatus } from './lib/visits';
-import { mergeById } from './lib/woHelpers';
+import { mergeById, cancelledVisits, isCancelledVisit } from './lib/woHelpers';
 import { Contractor, ContractorStatus, ContractorJob, ContractorLineItem } from './types/contractor';
 import { addInteraction, loadCustomers, loadInteractions, saveInteractions } from './lib/customerStore';
 import { validateAddress, normalizeStreetOrder, sameStreetAddress } from './lib/addressValidator';
@@ -1112,8 +1112,9 @@ function App() {
       // NOT mirror a contractor's on_hold here, a completed WO shouldn't be force-
       // parked on the staff board, and the office controls hold state.
 
-      const visits = mergeVisits(adminJob.visits, cj.visits);
-      const visitLabor = mergeById(adminJob.visitLabor, cj.visitLabor);
+      const dead = cancelledVisits(adminJob);
+      const visits = mergeVisits(adminJob.visits, cj.visits, dead);
+      const visitLabor = mergeById(adminJob.visitLabor, cj.visitLabor)?.filter(l => !isCancelledVisit(dead, l.visitId, l.updatedAt));
       const visitPhotoOwners = { ...adminJob.visitPhotoOwners, ...cj.visitPhotoOwners };
       const visitsChanged = JSON.stringify(visits) !== JSON.stringify(adminJob.visits) || JSON.stringify(visitLabor) !== JSON.stringify(adminJob.visitLabor) || JSON.stringify(visitPhotoOwners) !== JSON.stringify(adminJob.visitPhotoOwners ?? {});
       if (newPhotos.length === 0 && !advance && !needReport && !visitsChanged) continue;
@@ -1739,9 +1740,9 @@ function App() {
           // assigning it straight across would delete every RMA the office added.
           // Newest `updatedAt` wins per entry, same rule as everywhere else.
           rmaEntries: mergeRmaEntries(adminJob.rmaEntries, updatedJob.rmaEntries),
-          visits: mergeVisits(adminJob.visits, updatedJob.visits),
+          visits: mergeVisits(adminJob.visits, updatedJob.visits, cancelledVisits(adminJob)),
           currentVisit: adminJob.currentVisit,
-          visitLabor: mergeById(adminJob.visitLabor, updatedJob.visitLabor),
+          visitLabor: mergeById(adminJob.visitLabor, updatedJob.visitLabor)?.filter(l => !isCancelledVisit(cancelledVisits(adminJob), l.visitId, l.updatedAt)),
           visitPhotoOwners: { ...adminJob.visitPhotoOwners, ...updatedJob.visitPhotoOwners },
           contractorParts: updatedJob.parts ?? adminJob.contractorParts,
           contractorPartsAmount: updatedJob.partsAmount ?? adminJob.contractorPartsAmount,
@@ -2300,7 +2301,8 @@ function App() {
         // a panel holding a stale copy must not drop a visit the field app just
         // finished: union against the live record.
         jobs: prev.jobs.map((j) => (j.id === updatedJob.id
-          ? (j.visits || updatedJob.visits ? { ...updatedJob, visits: mergeVisits(j.visits, updatedJob.visits) } : updatedJob)
+          // A cancelled visit stays cancelled: the union honours both sides' tombstones.
+          ? (j.visits || updatedJob.visits ? { ...updatedJob, visits: mergeVisits(j.visits, updatedJob.visits, cancelledVisits(j, updatedJob)) } : updatedJob)
           : j)),
         customers: prev.customers.map((c) =>
           c.id === updatedJob.customerId

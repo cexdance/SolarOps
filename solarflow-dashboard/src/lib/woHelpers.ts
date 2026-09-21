@@ -332,10 +332,13 @@ export function toContractorJobView(job: Job, existingCj?: ContractorJob, custom
     // into the admin job. Union so a stale contractor copy never drops an entry.
     rmaEntries: mergeRmaEntries(job.rmaEntries, existingCj?.rmaEntries),
     // Visit history flows both ways too, merged per visit.
-    visits: mergeVisitRecords(job.visits, existingCj?.visits),
+    // Cancelled visits are dropped here too: the contractor copy is the stale
+    // side that would otherwise feed the visit straight back on the next merge.
+    visits: mergeVisitRecords(job.visits, existingCj?.visits, cancelledVisits(job)),
     currentVisit: job.currentVisit,
+    cancelledVisitIds: job.cancelledVisitIds,
     visitPhotoOwners: owners,
-    visitLabor: mergeById(job.visitLabor, existingCj?.visitLabor),
+    visitLabor: mergeById(job.visitLabor, existingCj?.visitLabor)?.filter(l => !isCancelledVisit(cancelledVisits(job), l.visitId, l.updatedAt)),
     contractorId: job.contractorId ?? '',
     customerId: job.customerId,
     customerName: job.clientName || customer?.name || '',
@@ -655,9 +658,42 @@ export function mirrorContractorNote<A extends {
     : [entry, ...had];
 }
 
+/**
+ * Cancelled visits, as `id@cutoff` tombstones read off every copy at hand.
+ * A union merge keeps any id present on either side, so a cancel only sticks if
+ * the tombstone travels with the merge (SO-2609-61705).
+ *
+ * The cutoff is what makes this safe to reuse: visit ids are positional
+ * (`job:visit:2`), so a genuine later follow-up takes the id just cancelled.
+ * Only a record last touched at or before the cancel is dead; anything newer is
+ * the real one. The map keeps the latest cutoff per id.
+ */
+export type VisitTombstones = ReadonlyMap<string, string>;
+export const cancelledVisits = (...records: ({ cancelledVisitIds?: string[] } | null | undefined)[]): VisitTombstones => {
+  const out = new Map<string, string>();
+  for (const entry of records.flatMap(r => r?.cancelledVisitIds ?? [])) {
+    const at = entry.lastIndexOf('@');
+    const [id, cutoff] = at < 0 ? [entry, '9999'] : [entry.slice(0, at), entry.slice(at + 1)];
+    if ((out.get(id) ?? '') < cutoff) out.set(id, cutoff);
+  }
+  return out;
+};
+
+/**
+ * True when this record is the cancelled one, not a later reuse of the id.
+ * Strictly before the cutoff: everything the cancel removed was created earlier,
+ * and anything stamped at or after it is new work that must survive.
+ */
+export const isCancelledVisit = (cancelled: VisitTombstones | undefined, id: string | undefined, touchedAt: string | undefined): boolean => {
+  const cutoff = id ? cancelled?.get(id) : undefined;
+  return cutoff != null && (touchedAt ?? '') < cutoff;
+};
+
 /** Finished work and billing survive late photo uploads from an older phone. */
-export function mergeVisitRecords(a?: WOVisit[], b?: WOVisit[]): WOVisit[] | undefined {
+export function mergeVisitRecords(a?: WOVisit[], b?: WOVisit[], cancelled?: VisitTombstones): WOVisit[] | undefined {
   if (!a && !b) return undefined;
+  const live = (v: WOVisit) => !isCancelledVisit(cancelled, v.id, v.finishedAt || v.updatedAt);
+  a = a?.filter(live); b = b?.filter(live);
   const byId = new Map((a ?? []).map(v => [v.id, v]));
   for (const v of b ?? []) {
     const old = byId.get(v.id);

@@ -1,4 +1,4 @@
-import { mergeVisitRecords } from './woHelpers';
+import { mergeVisitRecords, cancelledVisits, isCancelledVisit } from './woHelpers';
 import { queueTrelloCustomerRows } from './trelloCustomerQueue';
 /**
  * SolarOps, Sync Engine (Phase 2)
@@ -1597,7 +1597,11 @@ export function mergeJobFields(a: Job, b: Job): Job {
 
   // Site visits are added by the field app and edited by the office (billing
   // archived onto them), so union by visit id, newest edit wins per visit.
-  if (a.visits || b.visits) merged.visits = mergeVisitRecords(a.visits, b.visits);
+  // A cancelled visit is tombstoned on the job. Both sides' lists travel with the
+  // merge, so a stale copy that still holds the visit cannot resurrect it.
+  const deadVisits = cancelledVisits(a, b);
+  if (deadVisits.size) merged.cancelledVisitIds = [...new Set([...(a.cancelledVisitIds ?? []), ...(b.cancelledVisitIds ?? [])])];
+  if (a.visits || b.visits) merged.visits = mergeVisitRecords(a.visits, b.visits, deadVisits);
 
   // Office and field clients can each add or edit RMAs. Merge individual
   // entries so a stale whole-job save cannot erase a backfill or another RMA.
@@ -1605,21 +1609,27 @@ export function mergeJobFields(a: Job, b: Job): Job {
     merged.rmaEntries = mergeRmaEntries(a.rmaEntries, b.rmaEntries);
   }
 
-  if (a.currentVisit || b.currentVisit) {
-    const newerVisit = (b.currentVisit?.number ?? 1) > (a.currentVisit?.number ?? 1) ? b : a;
+  // A tombstoned plan counts as absent, or "higher visit number wins" below would
+  // pull the cancelled visit (and its whole billing cycle) back from a stale copy.
+  const plan = (j: Job) => (j.currentVisit && !isCancelledVisit(deadVisits, j.currentVisit.id, j.currentVisit.decidedAt ?? j.currentVisit.requestedAt) ? j.currentVisit : undefined);
+  if (plan(a) || plan(b)) {
+    const newerVisit = (plan(b)?.number ?? 1) > (plan(a)?.number ?? 1) ? b : a;
     const olderVisit = newerVisit === a ? b : a;
-    if ((newerVisit.currentVisit?.number ?? 1) > (olderVisit.currentVisit?.number ?? 1)) {
+    if ((plan(newerVisit)?.number ?? 1) > (plan(olderVisit)?.number ?? 1)) {
       for (const k of ['currentVisit', 'status', 'woStatus', 'scheduledDate', 'scheduledTime', 'serviceType', 'serviceReport', 'completionNotes', 'requiresFollowUp', 'startedAt', 'completedAt', 'quoteAmount', 'quoteSentAt', 'quoteApprovedAt', 'verbalApprovalAt', 'lineItems', 'xeroInvoiceId', 'invoicedAt', 'clientPaidAt', 'costsCoveredAt', 'totalAmount']) {
         (merged as unknown as Record<string, unknown>)[k] = (newerVisit as unknown as Record<string, unknown>)[k];
       }
     } else {
-      const at = a.currentVisit?.decidedAt ?? a.currentVisit?.requestedAt ?? '';
-      const bt = b.currentVisit?.decidedAt ?? b.currentVisit?.requestedAt ?? '';
-      merged.currentVisit = bt > at ? b.currentVisit : a.currentVisit;
+      const at = plan(a)?.decidedAt ?? plan(a)?.requestedAt ?? '';
+      const bt = plan(b)?.decidedAt ?? plan(b)?.requestedAt ?? '';
+      merged.currentVisit = bt > at ? plan(b) : plan(a);
     }
     merged.visitPhotoOwners = { ...a.visitPhotoOwners, ...b.visitPhotoOwners };
-    merged.visitLabor = mergeById(a.visitLabor, b.visitLabor);
+    merged.visitLabor = mergeById(a.visitLabor, b.visitLabor)?.filter(l => !isCancelledVisit(deadVisits, l.visitId, l.updatedAt));
   }
+  // The plan may be tombstoned on both sides: drop it rather than leave a merge
+  // that re-opens the cancelled visit.
+  if (isCancelledVisit(deadVisits, merged.currentVisit?.id, merged.currentVisit?.decidedAt ?? merged.currentVisit?.requestedAt)) delete merged.currentVisit;
   merged.fieldTimes = mergeFieldTimes(a.fieldTimes, b.fieldTimes);
   merged.updatedAt = recordTime(a) > recordTime(b) ? a.updatedAt : b.updatedAt;
   return merged;

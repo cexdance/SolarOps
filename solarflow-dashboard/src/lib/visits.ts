@@ -11,7 +11,7 @@
 // by visit id, newest `updatedAt` wins (mergeById), never replaced wholesale.
 import type { Job, WOVisit, WOVisitBilling } from '../types';
 import type { ContractorJob } from '../types/contractor';
-import { mergeVisitRecords } from './woHelpers';
+import { mergeVisitRecords, type VisitTombstones } from './woHelpers';
 
 export const MAX_VISITS = 11;
 export const currentVisitId = (j: { id: string; sourceJobId?: string; currentVisit?: { id: string }; visits?: WOVisit[] }) => j.currentVisit?.id ?? `${j.sourceJobId || j.id}:visit:${(j.visits?.length ?? 0) + 1}`;
@@ -35,8 +35,8 @@ export function contractorLiveStatus(cj: { status?: string; completedAt?: string
   return cj.status === 'en_route' || cj.status === 'in_progress' ? 'in_progress' : null;
 }
 
-export const mergeVisits = (a?: WOVisit[], b?: WOVisit[]): WOVisit[] | undefined =>
-  mergeVisitRecords(a, b);
+export const mergeVisits = (a?: WOVisit[], b?: WOVisit[], cancelled?: VisitTombstones): WOVisit[] | undefined =>
+  mergeVisitRecords(a, b, cancelled);
 
 /** Snapshot the contractor's current visit so it can be appended to `visits`. */
 export function buildVisit(cj: ContractorJob, finishedAt: string): WOVisit {
