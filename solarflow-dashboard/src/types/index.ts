@@ -470,6 +470,9 @@ export interface Job {
   currentVisit?: VisitPlan;
   visitPhotoOwners?: Record<string, string>;
   visitLabor?: VisitLabor[];
+  /** Set when an admin cancelled a follow-up visit added by mistake. */
+  cancelledVisitAt?: string;
+  cancelledVisitBy?: string;
 }
 
 /** Quote + invoice of one billing cycle, archived onto the visit it covered

@@ -39,6 +39,13 @@ export default function VisitWorkspace({ job, isAdmin, onSave, onSelectionChange
         <p>{job.currentVisit.reason}</p>
         <p className="font-semibold text-orange-700">{visitNeedsApproval(job) ? (job.quoteSentAt ? 'Quote created, approving on save' : 'Waiting on Daniel’s quote') : job.currentVisit.approval === 'included' ? 'Included, no additional charge' : 'Approved by quote'}</p>
         {job.currentVisit.decisionReason && <p>Approval record: {job.currentVisit.decisionReason}</p>}
+        {/* Added by mistake: put the previous visit back exactly as it was.
+            The server refuses once this visit has work of its own. */}
+        {isAdmin && (job.visits?.length ?? 0) > 0 && <button type="button" disabled={busy}
+          className="text-xs font-semibold text-red-700 underline disabled:text-slate-400"
+          onClick={() => { if (confirm(`Cancel visit ${job.currentVisit?.number} and restore visit ${(job.currentVisit?.number ?? 2) - 1}? Use this only if the follow-up was added by mistake.`)) void perform('cancel'); }}>
+          {busy ? 'Working…' : 'Added by mistake, cancel this visit'}
+        </button>}
         {isAdmin && visitNeedsApproval(job) && <div className="space-y-2">
           {/* Creating the quote IS the approval (App.handleUpdateJob records it).
               The only decision left here is the no-charge case, which has no quote. */}

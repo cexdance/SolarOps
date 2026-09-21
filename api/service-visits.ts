@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { requireUser } from './_auth';
-import { requestVisit, decideVisit, visitId, recordVisitPayment } from './_serviceVisits';
+import { requestVisit, decideVisit, cancelVisit, visitId, recordVisitPayment } from './_serviceVisits';
 import type { Job } from '../solarflow-dashboard/src/types';
 const url = (process.env.SUPABASE_URL || 'https://cjmhfagkkayelcsprbai.supabase.co').trim();
 const key = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
@@ -32,7 +32,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const caller = await requireUser(req, res); if (!caller) return;
   try {
     const b = req.body;
-    if (!b || typeof b.jobId !== 'string' || !['request', 'included', 'approved', 'paid'].includes(b.action)) return res.status(400).json({ error: 'Invalid visit request' });
+    if (!b || typeof b.jobId !== 'string' || !['request', 'included', 'approved', 'paid', 'cancel'].includes(b.action)) return res.status(400).json({ error: 'Invalid visit request' });
     const roles = await read(`user_roles?user_id=eq.${encodeURIComponent(caller.id)}&select=role`);
     const role = roles[0]?.role;
     const admin = ['admin', 'coo'].includes(role);
@@ -46,7 +46,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (role !== 'contractor' || !me || ![job.contractorId, ...(job.supportContractorIds ?? [])].includes(me.id)) return res.status(403).json({ error: 'This service order is not assigned to you.' });
     }
     if (job.status === 'archived') return res.status(409).json({ error: 'Restore this order before adding a visit.' });
-    if (['included', 'approved'].includes(b.action) && b.expectedVisitId !== visitId(job)) return res.status(409).json({ error: 'The visit changed. Refresh and try again.' });
+    if (['included', 'approved', 'cancel'].includes(b.action) && b.expectedVisitId !== visitId(job)) return res.status(409).json({ error: 'The visit changed. Refresh and try again.' });
     if (b.action === 'request') {
       const rates = await read('app_data?key=eq.solarflow_service_rates&select=value');
       const rate = (rates[0]?.value ?? []).find((r: { serviceName: string; active: boolean }) => r.active && r.serviceName === b.serviceType);
@@ -54,7 +54,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       b.serviceCode = rate.serviceCode || rate.id;
     }
     const now = new Date().toISOString();
-    const next = b.action === 'paid' ? recordVisitPayment(job, b.expectedVisitId, b.reason, caller.id, now) : b.action === 'request' ? requestVisit(job, b, caller.id, now) : decideVisit(job, b.action, b.reason, caller.id, now);
+    const next = b.action === 'paid' ? recordVisitPayment(job, b.expectedVisitId, b.reason, caller.id, now)
+      : b.action === 'cancel' ? cancelVisit(job, caller.id, now)
+      : b.action === 'request' ? requestVisit(job, b, caller.id, now) : decideVisit(job, b.action, b.reason, caller.id, now);
     if (next === job) { if (b.action === 'request') await notifyReviewer(job).catch(e => console.warn('[visits] review notification', e.message)); return res.status(200).json({ job }); }
     next.fieldTimes = { ...job.fieldTimes, ...Object.fromEntries(Object.keys(next).filter(k => JSON.stringify(next[k as keyof Job]) !== JSON.stringify(job[k as keyof Job])).map(k => [k, now])) };
     // Removed fields need clocks too, so stale offline approval cannot win.

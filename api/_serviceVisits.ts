@@ -50,6 +50,42 @@ export function requestVisit(job: Job, input: { expectedVisitId: string; date: s
   next.woPhotos = [...(job.woPhotos ?? []), ...urls.filter(u => !job.woPhotos?.some(p => (p.storageUrl || p.dataUrl) === u)).map((u, i) => ({ id: `${id}:photo:${i}`, category: 'process' as const, name: 'Visit photo', storageUrl: u, dataUrl: '', createdAt: now, visitId: owners[u] || id }))];
   return next;
 }
+/**
+ * Undo the last `requestVisit`: the follow-up was opened by mistake.
+ * Pops the archived visit back onto the job (its billing, dates, report and the
+ * plan it ran under) and drops the plan, labor and parts of the cancelled visit.
+ * Admin only, and only while the new visit has no work of its own.
+ */
+export function cancelVisit(job: Job, actor: string, now: string): Job {
+  const previous = job.visits ?? [];
+  const last = previous[previous.length - 1];
+  if (!job.currentVisit || !last) throw new Error('There is no follow-up visit to cancel.');
+  if (job.currentVisit.number !== last.number + 1) throw new Error('This visit changed. Refresh the order and retry.');
+  const id = job.currentVisit.id;
+  const worked = job.startedAt || job.completedAt || job.serviceReport?.trim() || job.completionNotes?.trim()
+    || (job.visitLabor ?? []).some(l => l.visitId === id) || (job.contractorParts ?? []).some(p => p.visitId === id)
+    || Object.values(job.visitPhotoOwners ?? {}).some(owner => owner === id);
+  if (worked) throw new Error('This visit already has work logged. Cancel is only for a visit added by mistake.');
+  const b = last.billing ?? {};
+  const next = { ...job,
+    visits: previous.slice(0, -1),
+    currentVisit: last.plan,
+    serviceType: last.serviceType as Job['serviceType'],
+    scheduledDate: last.date, startedAt: last.startedAt, completedAt: last.finishedAt,
+    serviceReport: last.workDone, serviceStatus: last.serviceStatus, nextSteps: last.nextSteps,
+    // The visit was finished, so its own billing decides where it sits again.
+    status: (b.clientPaidAt ? 'paid' : b.invoicedAt ? 'invoiced' : 'completed') as Job['status'],
+    woStatus: (b.clientPaidAt ? 'paid' : b.invoicedAt ? 'invoiced' : 'completed') as Job['woStatus'],
+    ...Object.fromEntries(billingKeys.map(k => [k, b[k as keyof typeof b]])),
+    visitLabor: (job.visitLabor ?? []).filter(l => l.visitId !== id),
+    contractorParts: (job.contractorParts ?? []).filter(p => p.visitId !== id),
+    requiresFollowUp: false, cancelledVisitAt: now, cancelledVisitBy: actor, updatedAt: now,
+  } as Job;
+  if (!last.plan) delete (next as unknown as Record<string, unknown>).currentVisit;
+  for (const k of billingKeys) if (next[k] == null) delete (next as unknown as Record<string, unknown>)[k];
+  return next;
+}
+
 export function decideVisit(job: Job, action: 'included' | 'approved', reason: string, actor: string, now: string): Job {
   if (!job.currentVisit) throw new Error('No follow-up visit to approve.');
   if (!reason?.trim()) throw new Error('Record the approval or included coverage reference.');
