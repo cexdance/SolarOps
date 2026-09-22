@@ -645,6 +645,10 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
   const [requiresFollowUp, setRequiresFollowUp] = useState(job?.requiresFollowUp ?? false);
   const [nextSteps, setNextSteps]           = useState(job?.nextSteps ?? '');
   const [jobCompletion, setJobCompletion]   = useState<number>(job?.jobCompletion ?? 0);
+  /** The Xero quote number (QU-0460). Typed once when the quote goes out; the
+   *  acceptance email Xero sends carries only this number, so it is what lets
+   *  /api/notify?action=xero-quote-accepted find this order. */
+  const [xeroQuoteNumber, setXeroQuoteNumber] = useState(job?.xeroQuoteNumber ?? '');
 
   // Contractor assignment
   const [assignedContractorId, setAssignedContractorId] = useState(job?.contractorId ?? '');
@@ -2070,6 +2074,33 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
             })}
           </div>
         </div>
+
+        {/* ── Xero quote number ───────────────────────────────────────────
+            Xero's acceptance email names only the quote number, so this is what
+            moves the order to Approved by itself. Shown while the order sits at
+            Quote Sent, and after that only when a number was recorded. */}
+        {job && (woStatus === 'quote_sent' || !!job.xeroQuoteNumber) && (
+          <div className="border-b border-slate-200 bg-slate-50 px-4 md:px-6 py-2 flex items-center gap-3 shrink-0">
+            <label className="text-xs font-semibold text-slate-700 shrink-0" htmlFor="xero-quote-number">Xero quote #</label>
+            <input
+              id="xero-quote-number"
+              value={xeroQuoteNumber}
+              placeholder="QU-0460"
+              onChange={e => setXeroQuoteNumber(e.target.value)}
+              onBlur={() => {
+                const next = xeroQuoteNumber.trim();
+                if (next === (job.xeroQuoteNumber ?? '')) return;
+                setTimeout(() => handleSaveRef.current(undefined, true, { xeroQuoteNumber: next || undefined }), 0);
+              }}
+              className="w-36 rounded-lg border border-slate-300 px-2 py-1 text-sm"
+            />
+            <span className="text-xs text-slate-500 truncate">
+              {job.quoteApprovedAt
+                ? `Accepted ${new Date(job.quoteApprovedAt).toLocaleDateString()}`
+                : 'Paste it here and the order moves to Approved on its own when the client accepts.'}
+            </span>
+          </div>
+        )}
 
         {/* ── Verbal approval: the quote still has to go out ──────────────
             The order is already past Quote Sent, so the normal workflow button

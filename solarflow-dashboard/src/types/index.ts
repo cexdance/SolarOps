@@ -470,6 +470,10 @@ export interface Job {
   currentVisit?: VisitPlan;
   visitPhotoOwners?: Record<string, string>;
   visitLabor?: VisitLabor[];
+  /** The Xero quote number for this order, e.g. `QU-0460`. Typed on the SO panel
+   *  when the quote goes out. Xero's acceptance email names only this number, so
+   *  it is the only thing that ties that email back to an order. */
+  xeroQuoteNumber?: string;
   /** Set when an admin cancelled a follow-up visit added by mistake. */
   cancelledVisitAt?: string;
   cancelledVisitBy?: string;

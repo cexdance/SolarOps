@@ -24,6 +24,9 @@ import { runDailyReport } from './_dailyReport';
 // Static for the same reason as _dailyReport above.
 import { runClientNumberAudit, alertAdmins } from './_clientNumberAudit';
 import { timingSafeEqual } from 'node:crypto';
+// Static for the same reason as _dailyReport above.
+import { parseAcceptance, findQuotedJob, applyAcceptance } from './_xeroQuote';
+import type { Job } from '../solarflow-dashboard/src/types';
 
 /** Constant-time compare that does not leak length via early return. */
 function safeEqual(a: string, b: string): boolean {
@@ -42,6 +45,9 @@ const RESEND_API_KEY   = (process.env.RESEND_API_KEY ?? '').trim() || undefined;
 const OFFICE_CC = 'cesar.jurado@conexsol.us';
 /** Set in Vercel; Vercel then sends it as the cron's Authorization header. */
 const CRON_SECRET      = (process.env.CRON_SECRET ?? '').trim();
+/** Shared secret for the Gmail Apps Script that forwards Xero quote acceptances.
+ *  Unset means the branch refuses rather than trusting an unauthenticated post. */
+const XERO_MAIL_SECRET = (process.env.XERO_MAIL_SECRET ?? '').trim();
 /** Optional. Absent means the Telegram leg stays inert instead of failing. */
 const TELEGRAM_BOT_TOKEN = (process.env.TELEGRAM_BOT_TOKEN ?? '').trim() || undefined;
 /** Optional From override for the daily report, used to smoke-test before a
@@ -135,6 +141,61 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method !== 'POST') return res.status(405).end();
+
+  // ── Xero quote acceptance (Gmail Apps Script) ──────────────────────────────
+  // Xero emails Daniel when a customer accepts a quote. A script on that mailbox
+  // forwards the subject here, and the quoted order moves to Approved on its own.
+  // The caller is a script, not a signed-in user, so it authenticates with a
+  // shared secret and this branch runs before the JWT check below.
+  // Lives here for the same reason the cron does: api/ is at the Hobby cap of 12.
+  if (req.method === 'POST' && (req.body as Record<string, unknown>)?.action === 'xero-quote-accepted') {
+    if (!XERO_MAIL_SECRET) return res.status(503).json({ error: 'XERO_MAIL_SECRET not configured' });
+    const presented = (req.headers.authorization ?? '').replace('Bearer ', '');
+    if (!safeEqual(presented, XERO_MAIL_SECRET)) return res.status(401).json({ error: 'Unauthorized' });
+
+    const body = (req.body ?? {}) as Record<string, string>;
+    const acceptance = parseAcceptance(String(body.subject ?? ''));
+    if (!acceptance) return res.status(400).json({ error: 'Not a quote acceptance subject', subject: String(body.subject ?? '').slice(0, 200) });
+
+    // Only orders that carry a quote number, never every job: an unpaginated
+    // read hits PostgREST's max-rows cap and truncates with error === null, so a
+    // full scan would quietly stop finding orders as the table grows. The set of
+    // quoted orders is small, and matching in code keeps the number tolerant of
+    // how it was typed (case, stray spaces).
+    const rows = await fetch(`${SUPABASE_URL}/rest/v1/app_data?key=like.job:*&value->>xeroQuoteNumber=not.is.null&select=key,value,updated_at&order=key`, { headers: supabaseHeaders })
+      .then(r => r.ok ? r.json() : Promise.reject(new Error('job read failed')))
+      .catch(() => null) as { key: string; value: Job; updated_at: string }[] | null;
+    if (!rows) return res.status(503).json({ error: 'Service order storage unavailable' });
+
+    const row = rows.find(r => findQuotedJob([r.value], acceptance.quoteNumber));
+    if (!row) {
+      // No order carries this quote number, so there is nothing safe to move.
+      // Reported, not guessed at: a wrong card moving is worse than a manual one.
+      console.warn('[notify] xero acceptance with no matching order:', acceptance.quoteNumber);
+      return res.status(404).json({ error: 'No service order carries that quote number', quoteNumber: acceptance.quoteNumber });
+    }
+
+    const now = new Date().toISOString();
+    const outcome = applyAcceptance(row.value, acceptance, now);
+    if (outcome.action !== 'approved') {
+      // Re-sent or forwarded twice: report the no-op rather than failing, so the
+      // script does not retry forever.
+      return res.status(200).json({ ok: true, outcome: outcome.action, woNumber: row.value.woNumber, quoteNumber: acceptance.quoteNumber });
+    }
+
+    const next = outcome.job;
+    // A server write into a per-field-merged record must stamp fieldTimes, or the
+    // first stale browser silently reverts it.
+    next.fieldTimes = { ...row.value.fieldTimes, status: now, woStatus: now, quoteApprovedAt: now, auditLog: now, updatedAt: now };
+    const saved = await fetch(`${SUPABASE_URL}/rest/v1/app_data?key=eq.${encodeURIComponent(row.key)}&updated_at=eq.${encodeURIComponent(row.updated_at)}`, {
+      method: 'PATCH', headers: { ...supabaseHeaders, Prefer: 'return=representation' },
+      body: JSON.stringify({ value: next, updated_at: now }),
+    });
+    if (!saved.ok) return res.status(503).json({ error: 'Could not save the approval. Retry.' });
+    if (!(await saved.json()).length) return res.status(409).json({ error: 'The order changed while saving. Retry.' });
+    console.log('[notify] xero acceptance approved', row.value.woNumber, acceptance.quoteNumber);
+    return res.status(200).json({ ok: true, outcome: 'approved', woNumber: row.value.woNumber, quoteNumber: acceptance.quoteNumber });
+  }
 
   // ── Validate caller JWT ────────────────────────────────────────────────────
   const token = (req.headers.authorization ?? '').replace('Bearer ', '');
