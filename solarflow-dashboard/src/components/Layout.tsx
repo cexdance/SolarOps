@@ -511,7 +511,10 @@ export const Layout: React.FC<LayoutProps> = ({
 
               if (item.indent) {
                 // Collapsible sub-item, only render when parent is expanded
-                const parentExpanded = item.parent === 'billing' ? billingExpanded : customersExpanded;
+                // Service Orders has no expander, so its sub-item (Dispatch Map) is always shown.
+                const parentExpanded = item.parent === 'billing' ? billingExpanded
+                  : item.parent === 'jobs' ? true
+                  : customersExpanded;
                 if (!parentExpanded) return null;
                 return (
                   <button

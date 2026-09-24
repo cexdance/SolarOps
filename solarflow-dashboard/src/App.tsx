@@ -862,7 +862,12 @@ function App() {
             const existing  = prevJ.woPhotos ?? [];
             return incoming.length >= existing.length ? j : { ...j, woPhotos: existing };
           });
-          return { ...withArchived, jobs: safeMergedJobs };
+          // Keep the signed-in user. The session restore sets currentUser as soon
+          // as getSession resolves; on a slow phone connection this pull lands
+          // AFTER that and used to replace it with the stored snapshot's value
+          // (empty), which dropped the menu to the technician default and hid
+          // Sign Out.
+          return { ...withArchived, jobs: safeMergedJobs, currentUser: prev.currentUser ?? withArchived.currentUser };
         });
         // The data landed, whether that took 2s or 40s. Clear any banner the
         // timeout put up.

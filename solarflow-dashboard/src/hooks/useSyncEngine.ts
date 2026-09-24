@@ -95,7 +95,8 @@ export function useSyncEngine({
               };
             })
           : prev.jobs;
-        return { ...prev, ...merged, jobs: safeMergedJobs };
+        // Never let a stored snapshot replace the signed-in user (see App.tsx adopt).
+        return { ...prev, ...merged, jobs: safeMergedJobs, currentUser: prev.currentUser ?? merged.currentUser };
       });
     })();
     const tracked = run.finally(() => {
