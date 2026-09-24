@@ -59,7 +59,7 @@ import { ContractorInvite as ContractorInviteType } from './types/contractor';
 import { AppState, Job, Customer, User, AppNotification, SolarEdgeExtraSite, RMAEntry, WOStatus, JobStatus, Activity } from './types';
 import { FL_SITES } from './lib/solarEdgeSites';
 import { isFloridaSite, isAllowedCustomer, deriveClientId, findCustomerForSite } from './lib/solarEdgeSiteFilter';
-import { getDeletedCustomerIds, markJobDeleted, findDuplicateCustomer, hasDanglingCustomerRef } from './lib/dataStore';
+import { getDeletedCustomerIds, markJobDeleted, findDuplicateCustomer, findPossibleDuplicateCustomer, hasDanglingCustomerRef } from './lib/dataStore';
 import { clientIdChangeConflict } from './lib/leadConvert';
 import { markUndo, peekUndo, takeUndo, applyUndo, clearUndo, clearUndoTombstones } from './lib/undo';
 import { mergeCustomerPair } from './lib/syncEngine';
@@ -2443,7 +2443,18 @@ function App() {
     // which is fine for imports and form submits (a second submit re-renders
     // first). If two creates ever land in the same tick, move the check into
     // the updater and hand the id back through a callback.
-    const existing = findDuplicateCustomer(data.customers, customer);
+    // A different client number does not prove a different client (Blackstone,
+    // see findPossibleDuplicateCustomer). On a softer match, a human decides.
+    // OK is the safe answer, so Enter never makes a second record by accident.
+    const exact = findDuplicateCustomer(data.customers, customer);
+    const possible = exact ? undefined : findPossibleDuplicateCustomer(data.customers, customer);
+    const existing = exact ?? (possible && window.confirm(
+      `Possible duplicate: "${customer.name || 'this client'}" looks like an existing client ` +
+      `(${possible.reason}):\n\n  ${possible.customer.name}` +
+      `${possible.customer.clientId ? `, ${possible.customer.clientId}` : ''}` +
+      `${possible.customer.address ? `, ${possible.customer.address}` : ''}\n\n` +
+      `OK: use the existing client.\nCancel: create a new, separate client anyway.`
+    ) ? possible.customer : undefined);
     if (existing) {
       // Reuse the existing record, but do NOT drop what the incoming one
       // carried: an import arrives with comments and files the existing record

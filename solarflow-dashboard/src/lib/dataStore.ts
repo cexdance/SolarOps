@@ -283,6 +283,45 @@ export function findDuplicateCustomer(
 }
 
 /**
+ * A client on file that is PROBABLY the same person, and why we think so.
+ *
+ * INCIDENT 2026-09-22, Grif Blackstone. He was already US-15693 (converted from
+ * a SolarEdge lead on 08-28), and the Add Customer form made him again as
+ * US-15708. findDuplicateCustomer could not see it: a new record is handed a
+ * FRESH client number before the check, and neither record had a site id. The
+ * email and phone were the same all along, only the case and the formatting
+ * differed ("GrifBlackstone@" vs "grifblackstone@", "+1 (954) 249-7114" with
+ * invisible bidi marks vs "9542497114").
+ *
+ * A soft match: two clients can share a name, a household can share a phone.
+ * The caller asks a human; it never merges on this alone.
+ */
+export function findPossibleDuplicateCustomer(
+  customers: Customer[],
+  candidate: Partial<Pick<Customer, 'name' | 'email' | 'phone' | 'address' | 'zip'>>,
+): { customer: Customer; reason: string } | undefined {
+  const email = (s?: string) => (s ?? '').trim().toLowerCase();
+  const phone = (s?: string) => { const d = (s ?? '').replace(/\D/g, ''); return d.length === 11 && d[0] === '1' ? d.slice(1) : d; };
+  const words = (s?: string) => (s ?? '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  const street = (c: { address?: string; zip?: string }) =>
+    words(c.address) && (c.zip ?? '').trim() ? `${words(c.address)}|${(c.zip ?? '').trim().slice(0, 5)}` : '';
+
+  // A blank key must match NOTHING (same trap as findDuplicateCustomer), and a
+  // phone shorter than 10 digits is a fragment, not an identity.
+  const keys: Array<[string, (c: Customer) => string, string]> = [
+    ['same email', c => email(c.email), email(candidate.email)],
+    ['same phone', c => phone(c.phone), phone(candidate.phone).length >= 10 ? phone(candidate.phone) : ''],
+    ['same address', street, street(candidate)],
+    ['same name', c => words(c.name), words(candidate.name)],
+  ];
+  for (const [reason, key, want] of keys) {
+    const hit = want && customers.find(c => key(c) === want);
+    if (hit) return { customer: hit, reason };
+  }
+  return undefined;
+}
+
+/**
  * Does any job point at a customer this device does not hold?
  *
  * That dangling reference is proof the local cache has holes, and the
