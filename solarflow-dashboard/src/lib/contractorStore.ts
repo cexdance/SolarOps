@@ -339,6 +339,38 @@ const defaultServiceRates: ServiceRate[] = [
     adminTeamOnly: true,
     active: true
   },
+  {
+    id: 'sr-21',
+    serviceCode: 'ROOF-REPAIR',
+    serviceName: 'Roof Repair Panel Removal',
+    description: 'Panel removal for a roof repair, base rate covers up to 3 panels, additional panels billed per panel.',
+    estimatedHours: 3,
+    laborCost: 230,
+    partsCost: 0,
+    clientRateStandard: 230,
+    clientRateRecurring: 230,
+    isPowercareEligible: false,
+    powercareLaborCost: 0,
+    powercareClientRate: 0,
+    seCompensation: 0,
+    active: true
+  },
+  {
+    id: 'sr-22',
+    serviceCode: 'ROOF-REPAIR-ADD',
+    serviceName: 'Roof Repair Panel Removal additional panel',
+    description: 'Additional panel removed for a roof repair (per panel, beyond the first 3)',
+    estimatedHours: 0.5,
+    laborCost: 40,
+    partsCost: 0,
+    clientRateStandard: 40,
+    clientRateRecurring: 40,
+    isPowercareEligible: false,
+    powercareLaborCost: 0,
+    powercareClientRate: 0,
+    seCompensation: 0,
+    active: true
+  },
 ];
 
 // No demo contractor jobs, clean slate

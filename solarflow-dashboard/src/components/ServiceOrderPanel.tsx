@@ -450,9 +450,15 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
   const [laborHours, setLaborHours] = useState<number>(job?.laborHours ?? 1);
   const [partsCostDirect, setPartsCostDirect] = useState<number>(job?.partsCost ?? 0);
 
-  // ── Optimizer Pricing Calculator (PowerCare) ──────────────────────────────
+  // ── Pricing Calculator (optimizer replacement / roof repair panel removal) ──
+  // One calculator, two bases. The modifiers (roof, height, dispatch, critter
+  // guard, detached array) are the same field conditions for both jobs.
+  const isRoofRepairService = serviceCode.toUpperCase().startsWith('ROOF-REPAIR') || /roof repair/i.test(serviceType);
+  const calcCfg = isRoofRepairService
+    ? { title: 'Roof Repair Panel Removal', unit: 'panel', included: 3, base: 230, extra: 40 }
+    : { title: 'Optimizer Replacement', unit: 'optimizer', included: 4, base: 450, extra: 100 };
   const [optCalc, setOptCalc] = useState({
-    optimizerCount: 1,
+    count: 1,
     steepRoof: false,
     buildingHeight3Plus: false,
     specialtyRoof: 0,    // % surcharge 0 / 10 / 15 / 20 / 25
@@ -464,12 +470,10 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
   });
 
   const optimizerTotal = useMemo(() => {
-    const { optimizerCount, steepRoof, buildingHeight3Plus, specialtyRoof,
+    const { count, steepRoof, buildingHeight3Plus, specialtyRoof,
             critterGuard, critterPanels, emergencyDispatch, noLayout } = optCalc;
     // Base labour
-    const base = optimizerCount <= 4
-      ? 450
-      : 450 + (optimizerCount - 4) * 100;
+    const base = calcCfg.base + Math.max(0, count - calcCfg.included) * calcCfg.extra;
     // Surcharge multiplier
     let surcharge = 1;
     if (steepRoof) surcharge += 0.20;
@@ -483,19 +487,22 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
       ? 750 + (critterPanels > 20 ? Math.ceil((critterPanels - 20) / 4) * 80 : 0)
       : 0;
     return { labour, critter, total: labour + critter, surcharge, base };
-  }, [optCalc]);
+  }, [optCalc, calcCfg.base, calcCfg.included, calcCfg.extra]);
 
   const applyOptimizerCalc = useCallback(() => {
     const { critter, surcharge, base } = optimizerTotal;
-    const { optimizerCount, steepRoof, buildingHeight3Plus, specialtyRoof,
+    const { count, steepRoof, buildingHeight3Plus, specialtyRoof,
             emergencyDispatch, critterGuard, critterPanels, detachedArray, noLayout } = optCalc;
+    const { title, unit, included } = calcCfg;
     const surchargePct = Math.round((surcharge - 1) * 100);
     const addItems: WOLineItem[] = [];
 
     // Base labour line
-    const baseDesc = optimizerCount <= 4
-      ? `Optimizer Replacement, Base Charge (${optimizerCount} optimizer${optimizerCount > 1 ? 's' : ''}, incl. mobilization, diagnostics, commissioning)`
-      : `Optimizer Replacement, Base (4 units) + ${optimizerCount - 4} additional`;
+    const baseDesc = count <= included
+      ? isRoofRepairService
+        ? `${title}, Base Charge (${count} ${unit}${count > 1 ? 's' : ''}, up to ${included})`
+        : `${title}, Base Charge (${count} ${unit}${count > 1 ? 's' : ''}, incl. mobilization, diagnostics, commissioning)`
+      : `${title}, Base (${included} ${unit}s) + ${count - included} additional`;
     addItems.push({ id: `opt-base-${Date.now()}`, type: 'labor', description: baseDesc, quantity: 1, unitCost: base, totalCost: base });
 
     // Surcharge line (if any)
@@ -525,7 +532,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
     }
 
     setLineItems(prev => [...prev, ...addItems]);
-  }, [optCalc, optimizerTotal]);
+  }, [optCalc, optimizerTotal, calcCfg, isRoofRepairService]);
 
   // Line items
   const [lineItems, setLineItems]   = useState<WOLineItem[]>(job?.lineItems ?? []);
@@ -3018,28 +3025,28 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
           {!viewingHistory && activeTab === 'parts' && (
             <div className="p-6 space-y-4">
 
-              {/* ── Optimizer Pricing Calculator (optimizer-service WOs only) ─── */}
-              {isOptimizerService && (
+              {/* ── Pricing Calculator (optimizer / roof repair WOs only) ─── */}
+              {(isOptimizerService || isRoofRepairService) && (
                 <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 space-y-4">
                   <div className="flex items-center gap-2">
                     <Zap className="w-4 h-4 text-indigo-600 shrink-0" />
-                    <p className="text-sm font-semibold text-indigo-800">Optimizer Replacement Pricing Calculator</p>
+                    <p className="text-sm font-semibold text-indigo-800">{calcCfg.title} Pricing Calculator</p>
                   </div>
 
-                  {/* Row 1: optimizer count */}
+                  {/* Row 1: unit count */}
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     <div className="sm:col-span-1">
-                      <label className="block text-xs font-medium text-slate-600 mb-1"># Optimizers</label>
+                      <label className="block text-xs font-medium text-slate-600 mb-1"># {calcCfg.unit === 'panel' ? 'Panels' : 'Optimizers'}</label>
                       <input
                         type="number" min={1} step={1}
-                        value={optCalc.optimizerCount}
-                        onChange={e => setOptCalc(p => ({ ...p, optimizerCount: Math.max(1, parseInt(e.target.value) || 1) }))}
+                        value={optCalc.count}
+                        onChange={e => setOptCalc(p => ({ ...p, count: Math.max(1, parseInt(e.target.value) || 1) }))}
                         className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
                       />
                       <p className="text-[10px] text-slate-400 mt-0.5">
-                        {optCalc.optimizerCount <= 4
-                          ? `Base rate (covers 1-4)`
-                          : `Base + ${optCalc.optimizerCount - 4} additional`}
+                        {optCalc.count <= calcCfg.included
+                          ? `Base rate (covers 1-${calcCfg.included})`
+                          : `Base + ${optCalc.count - calcCfg.included} additional`}
                       </p>
                     </div>
                     <div>
