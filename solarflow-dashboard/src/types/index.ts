@@ -474,6 +474,11 @@ export interface Job {
    *  when the quote goes out. Xero's acceptance email names only this number, so
    *  it is the only thing that ties that email back to an order. */
   xeroQuoteNumber?: string;
+  /** Signed manual correction added to the calculated Actual Service Call Cost.
+   *  Stored as a DIFFERENCE, not a total, so parts/labor/expenses added later
+   *  still move the cost. Set by typing a total on the SO panel. */
+  costAdjustment?: number;
+  costAdjustmentNote?: string;
   /** Set when an admin cancelled a follow-up visit added by mistake. */
   cancelledVisitAt?: string;
   cancelledVisitBy?: string;

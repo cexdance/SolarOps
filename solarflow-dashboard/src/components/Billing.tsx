@@ -370,7 +370,7 @@ export const Billing: React.FC<BillingProps> = ({
     const c = serviceCallCostBreakdown(job, expensesByJob.get(job.id));
     const labor = c.baseLabor + c.extraLabor + c.visitLabor;
     const parts = c.parts + c.reroofParts;
-    const extras = c.extraLabor + c.visitLabor + c.mileage + c.expenseTotal;
+    const extras = c.extraLabor + c.visitLabor + c.mileage + c.expenseTotal + Math.abs(c.adjustment);
     return (
       <div className="text-[11px] text-slate-600 bg-slate-50 border border-slate-200 rounded-md px-2 py-1 mb-2">
         <div className="flex justify-between gap-2">
@@ -384,6 +384,7 @@ export const Billing: React.FC<BillingProps> = ({
             {c.visitLabor > 0 && ` + visit labor ${formatCost(c.visitLabor)}`}
             {c.mileage > 0 && ` + mileage ${formatCost(c.mileage)}`}
             {c.expenseTotal > 0 && ` + receipts ${formatCost(c.expenseTotal)}`}
+            {c.adjustment !== 0 && ` ${c.adjustment > 0 ? '+' : '-'} adjustment ${formatCost(Math.abs(c.adjustment))}`}
           </div>
         )}
       </div>

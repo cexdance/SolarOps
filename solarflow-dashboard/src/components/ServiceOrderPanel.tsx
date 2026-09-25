@@ -7,7 +7,7 @@ import {
   CheckCircle, Clock, AlertTriangle, DollarSign, Wrench,
   Camera, ClipboardList, Package, ZapOff, Zap,
   ShieldCheck, Banknote, TrendingUp, TrendingDown, Users,
-  RotateCcw, History, Loader2, FolderOpen, MapPin, ExternalLink, Printer, Home,
+  RotateCcw, History, Loader2, FolderOpen, MapPin, ExternalLink, Printer, Home, Pencil,
 } from 'lucide-react';
 import SiteMapView from './views/SiteMapView';
 import ReroofTab from './ReroofTab';
@@ -209,6 +209,129 @@ const sumLineItems = (items: WOLineItem[]) => {
   const labor = items.filter(i => i.type === 'labor').reduce((a, i) => a + i.totalCost, 0);
   const parts = items.filter(i => i.type !== 'labor').reduce((a, i) => a + i.totalCost, 0);
   return { labor, parts, total: labor + parts };
+};
+
+// ─── Actual Service Call Cost card ────────────────────────────────────────────
+// The total is calculated from Parts & Labor, visit labor, reroof materials,
+// mileage and expenses. Editing it stores only the DIFFERENCE (costAdjustment),
+// so anything added afterwards still moves the total. Clearing writes 0 / ''
+// rather than undefined so the clear survives the sync merge.
+
+const ActualCostCard: React.FC<{
+  total: number;
+  calculated: number;
+  adjustment: number;
+  note: string;
+  breakdown: string;
+  editable: boolean;
+  onSave: (adjustment: number, note: string) => void;
+}> = ({ total, calculated, adjustment, note, breakdown, editable, onSave }) => {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+  const [draftNote, setDraftNote] = useState('');
+  const start = () => { setDraft(total.toFixed(2)); setDraftNote(note); setEditing(true); };
+  const typed = parseFloat(draft);
+  const valid = draft.trim() !== '' && Number.isFinite(typed) && typed >= 0;
+  const save = () => {
+    if (!valid) return;
+    const adj = +(typed - calculated).toFixed(2);
+    onSave(adj, adj === 0 ? '' : draftNote.trim());
+    setEditing(false);
+  };
+  return (
+    <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-xs font-medium text-slate-500">Actual Service Call Cost</p>
+          <p className="text-[11px] text-slate-400 truncate">
+            {breakdown}{adjustment !== 0 ? ' + adjustment' : ''}
+          </p>
+        </div>
+        {!editing && (
+          <div className="flex items-center gap-2 shrink-0">
+            <p className="text-base font-bold text-slate-900">{formatCost(total)}</p>
+            {editable && (
+              <button
+                type="button"
+                onClick={start}
+                aria-label="Edit actual service call cost"
+                className="p-2 -mr-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-200 cursor-pointer"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+      {!editing && adjustment !== 0 && (
+        <div className="mt-1.5 flex items-center justify-between gap-2 text-[11px] text-slate-500">
+          <span className="min-w-0 truncate">
+            Calculated {formatCost(calculated)} · Adjustment {adjustment > 0 ? '+' : '-'}{formatCost(Math.abs(adjustment))}
+            {note ? `, ${note}` : ''}
+          </span>
+          {editable && (
+            <button
+              type="button"
+              onClick={() => onSave(0, '')}
+              className="shrink-0 text-slate-500 underline hover:text-slate-800 cursor-pointer"
+            >
+              Remove
+            </button>
+          )}
+        </div>
+      )}
+      {editing && (
+        <div className="mt-2 space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="text-[11px] text-slate-500" htmlFor="actual-cost-input">Total $</label>
+            <input
+              id="actual-cost-input"
+              type="number"
+              inputMode="decimal"
+              min={0}
+              step="0.01"
+              autoFocus
+              value={draft}
+              onChange={e => setDraft(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false); }}
+              className="w-32 rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm"
+            />
+            <span className="text-[11px] text-slate-400">Calculated {formatCost(calculated)}</span>
+          </div>
+          <input
+            type="text"
+            value={draftNote}
+            onChange={e => setDraftNote(e.target.value)}
+            placeholder="Reason for the adjustment (optional)"
+            className="w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm"
+          />
+          {valid && (
+            <p className="text-[11px] text-slate-500">
+              Saves an adjustment of {typed - calculated >= 0 ? '+' : '-'}{formatCost(Math.abs(typed - calculated))}.
+              Parts, labor and expenses added later still add on top.
+            </p>
+          )}
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={save}
+              disabled={!valid}
+              className="px-3 py-1.5 rounded-md bg-orange-500 text-white text-xs font-semibold hover:bg-orange-600 disabled:opacity-50 cursor-pointer"
+            >
+              Save cost
+            </button>
+            <button
+              type="button"
+              onClick={() => setEditing(false)}
+              className="px-3 py-1.5 rounded-md border border-slate-300 text-xs font-semibold text-slate-600 hover:bg-slate-100 cursor-pointer"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 };
 
 // ─── Parts catalog autocomplete ───────────────────────────────────────────────
@@ -1734,7 +1857,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
   const costs = serviceCallCostBreakdown({
     serviceType, reroof, lineItems, contractorPayRate, contractorPayUnit,
     laborHours, partsCost: partsCostDirect, isPowercare, travelMiles,
-    visitLabor: job?.visitLabor,
+    visitLabor: job?.visitLabor, costAdjustment: job?.costAdjustment,
   }, [{ amount: contractorExpenseTotal }]);
   const { baseLabor: baseLaborCost, extraLabor: labor, visitLabor, parts, reroofParts } = costs;
   const mileageMiles = isPowercare ? (travelMiles || 0) : 0;
@@ -2385,20 +2508,21 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
               {/* Fields column: everything but comments, order-1 at desktop so it
                   reads first even though comments are first in DOM (mobile order). */}
               <div className="space-y-5 lg:order-1 mt-5 lg:mt-0">
-              {/* Actual Service Call Cost, at-a-glance. Derived, read-only: the
-                  inputs live in Parts & Labor and Reroofing. */}
-              <div className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                <div className="min-w-0">
-                  <p className="text-xs font-medium text-slate-500">Actual Service Call Cost</p>
-                  <p className="text-[11px] text-slate-400 truncate">
-                    Labor{parts > 0 ? ' + parts' : ''}
-                    {reroofParts > 0 ? ' + reroofing materials' : ''}
-                    {mileageMiles > 0 ? ` + ${mileageMiles} mi × $0.54` : ''}
-                    {contractorExpenseTotal > 0 ? ' + expenses' : ''}
-                  </p>
-                </div>
-                <p className="text-base font-bold text-slate-900 shrink-0">{formatCost(actualCallCost)}</p>
-              </div>
+              {/* Actual Service Call Cost: calculated from Parts & Labor and
+                  Reroofing, plus an editable adjustment (site transfers are a flat fee). */}
+              <ActualCostCard
+                total={actualCallCost}
+                calculated={isSiteTransfer ? SITE_TRANSFER_COST : costs.calculated}
+                adjustment={isSiteTransfer ? 0 : costs.adjustment}
+                note={job?.costAdjustmentNote ?? ''}
+                breakdown={'Labor'
+                  + (parts > 0 ? ' + parts' : '')
+                  + (reroofParts > 0 ? ' + reroofing materials' : '')
+                  + (mileageMiles > 0 ? ` + ${mileageMiles} mi × $0.54` : '')
+                  + (contractorExpenseTotal > 0 ? ' + expenses' : '')}
+                editable={!!job && !isSiteTransfer}
+                onSave={(costAdjustment, costAdjustmentNote) => onSave({ costAdjustment, costAdjustmentNote })}
+              />
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="min-w-0">

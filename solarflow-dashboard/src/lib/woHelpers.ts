@@ -617,8 +617,10 @@ export function serviceCallCostBreakdown(job: Partial<Job>, expenses: { amount: 
   const mileage = job.isPowercare ? +((job.travelMiles || 0) * 0.54).toFixed(2) : 0;
   const expenseTotal = expenses.filter(e => e.status !== 'rejected' && e.status !== 'draft')
     .reduce((s, e) => s + (e.amount || 0), 0);
-  const total = +(baseLabor + extraLabor + visitLabor + parts + reroofParts + mileage + expenseTotal).toFixed(2);
-  return { baseLabor, extraLabor, visitLabor, parts, reroofParts, mileage, expenseTotal, total };
+  const adjustment = job.costAdjustment || 0;
+  const calculated = +(baseLabor + extraLabor + visitLabor + parts + reroofParts + mileage + expenseTotal).toFixed(2);
+  const total = +(calculated + adjustment).toFixed(2);
+  return { baseLabor, extraLabor, visitLabor, parts, reroofParts, mileage, expenseTotal, adjustment, calculated, total };
 }
 
 export function actualServiceCallCost(job: Partial<Job>, expenses: { amount: number; status?: string }[] = []): number {

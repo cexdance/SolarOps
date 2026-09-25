@@ -40,4 +40,12 @@ describe('service call cost', () => {
   it('defaults missing pay units to the panel flat rate and ignores inactive reroof data', () => {
     expect(actualServiceCallCost({ ...reroof, contractorPayUnit: undefined, serviceType: 'Repair' })).toBe(700);
   });
+  it('adds a manual adjustment on top, and later costs still move the total', () => {
+    // User edited 850 -> 900: stored as +50.
+    const adjusted = { ...reroof, costAdjustment: 50 };
+    expect(serviceCallCostBreakdown(adjusted)).toMatchObject({ calculated: 850, adjustment: 50, total: 900 });
+    // A $40 receipt lands afterwards: it adds on top of the edited total.
+    expect(actualServiceCallCost(adjusted, [{ amount: 40, status: 'pending' }])).toBe(940);
+    expect(actualServiceCallCost({ ...reroof, costAdjustment: -100 })).toBe(750);
+  });
 });
