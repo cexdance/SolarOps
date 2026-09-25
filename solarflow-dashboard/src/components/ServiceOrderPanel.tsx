@@ -2520,7 +2520,8 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                   + (reroofParts > 0 ? ' + reroofing materials' : '')
                   + (mileageMiles > 0 ? ` + ${mileageMiles} mi × $0.54` : '')
                   + (contractorExpenseTotal > 0 ? ' + expenses' : '')}
-                editable={!!job && !isSiteTransfer}
+                // Admins only, same audience as Billing (the panel's isAdmin also admits coo).
+                editable={!!job && !isSiteTransfer && currentUserRole === 'admin'}
                 onSave={(costAdjustment, costAdjustmentNote) => onSave({ costAdjustment, costAdjustmentNote })}
               />
 
