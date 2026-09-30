@@ -248,8 +248,12 @@ export function listForStage(stage: string | undefined): string | undefined {
 
 interface TrelloWebhookAction {
   type: string;
+  /** Trello's action id. For commentCard this IS the comment's id. */
+  id?: string;
   data?: {
     card?: { id: string; name: string; shortLink?: string };
+    /** updateComment / deleteComment: the comment the event is about. */
+    action?: { id?: string; text?: string };
     list?: { id: string; name?: string };       // present on createCard
     listAfter?: { id: string; name?: string };  // present on updateCard ONLY when it's a list move
     board?: { id: string };
@@ -886,6 +890,203 @@ export function canReapLead(job: any): boolean {
  * on signature, so "Trello returns 404 for this card" is the only claim here
  * that cannot be forged.
  */
+// ── Trello comments -> SolarOps activity (owner decision 2026-09-30) ────────
+//
+// Every comment on the board, by anyone, lands in the matching SolarOps
+// record's activity log. Before this the webhook read commentCard only as a cue
+// to fill empty contact fields, and comments reached the app through two
+// one-off scripts, the last on 09-01. So a lead worked entirely in Trello looked
+// untouched in LL and got called twice: 28 of the 33 leads Alessandra worked on
+// 2026-09-29 showed no activity at all.
+//
+// APPEND ONLY, including edits and deletes. The client merges activityHistory
+// with unionById, which keeps whichever copy of an id the browser ALREADY holds
+// (first seen wins, not newest). An in-place rewrite would never reach a browser
+// that had loaded the old text, and that browser would push the old text back.
+// So an edit or a delete in Trello becomes a NEW entry, never a mutation.
+
+export const COMMENT_ACTIONS = new Set(['commentCard', 'updateComment', 'deleteComment']);
+
+/**
+ * A comment SolarOps itself posted to Trello. `_trelloCustomerSync.ts` (d7be441)
+ * already exports converted customers' activity, audit entries, RMAs and notes
+ * as comments, each ending in one of these marker lines. Importing those back
+ * would copy every SolarOps note onto itself: 662 of the 717 comments missing
+ * on 2026-09-30 were exactly that. The export side already refuses anything
+ * with a `trello-` id, so with this check the loop is closed in both directions.
+ * Keep this list in step with the markers written in _trelloCustomerSync.ts.
+ */
+export function isSolarOpsEcho(text: string | undefined): boolean {
+  return /SolarOps (?:RMA ID|activity ID|audit ID|audit import|record notes):/.test(text ?? '');
+}
+
+const HEX24 = /^[0-9a-fA-F]{24}$/;
+
+/** Every id an imported Trello comment has been stored under. Two one-off
+ *  scripts used two prefixes; both must count as "already imported". */
+export function importedCommentIds(commentId: string): string[] {
+  return [`trello-cmt-${commentId}`, `trello-comment-${commentId}`];
+}
+
+/** Short stable hash, so the same edited text never lands twice. */
+function textHash(t: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < t.length; i++) { h ^= t.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+  return (h >>> 0).toString(36);
+}
+
+export interface TrelloCommentActivity {
+  id: string;
+  type: 'note_added';
+  description: string;
+  timestamp: string;
+  userName?: string;
+}
+
+/**
+ * A VERIFIED Trello comment event, as the activity entry it becomes. Pure.
+ *
+ * Ids are keyed on the COMMENT, not on the event, so a forged or replayed event
+ * cannot multiply entries: one entry per comment, one per distinct edited text,
+ * one deletion note per comment.
+ */
+export function commentActivityFor(ev: {
+  kind: 'commentCard' | 'updateComment' | 'deleteComment';
+  commentId: string;
+  /** Current comment text, as Trello itself reports it. */
+  text?: string;
+  /** The comment's own date (commentCard) or the time of the edit/delete. */
+  date: string;
+  author?: string;
+  /** For a deletion note: the entry we already hold for that comment. */
+  original?: { userName?: string; timestamp?: string };
+}): TrelloCommentActivity | undefined {
+  const author = ev.author?.trim() || undefined;
+  const text = (ev.text ?? '').trim();
+  if (ev.kind === 'commentCard') {
+    if (!text) return undefined;
+    return { id: `trello-cmt-${ev.commentId}`, type: 'note_added', description: text, timestamp: ev.date, userName: author };
+  }
+  if (ev.kind === 'updateComment') {
+    if (!text) return undefined;
+    return {
+      id: `trello-cmtedit-${ev.commentId}-${textHash(text)}`,
+      type: 'note_added',
+      description: `Edited in Trello: ${text}`,
+      timestamp: ev.date,
+      userName: author,
+    };
+  }
+  const who = ev.original?.userName ? ` by ${ev.original.userName}` : '';
+  const when = ev.original?.timestamp ? ` from ${ev.original.timestamp.slice(0, 10)}` : '';
+  return {
+    id: `trello-cmtdel-${ev.commentId}`,
+    type: 'note_added',
+    description: `A Trello comment${who}${when} was deleted in Trello. Its original text is kept in this log.`,
+    timestamp: ev.date,
+  };
+}
+
+/** Append `entry` unless the history already holds any of `aliases`. Pure.
+ *  Returns undefined when there is nothing to write. */
+export function appendActivityOnce<T extends { id?: string }>(
+  history: T[] | undefined,
+  entry: T,
+  aliases: string[],
+): T[] | undefined {
+  const h = history ?? [];
+  if (h.some(e => !!e.id && aliases.includes(e.id))) return undefined;
+  return [...h, entry];
+}
+
+/** The SolarOps job row a card's comments belong to: the lead made from it, or
+ *  the service order it was sent from ("Send to Trello"). */
+async function jobKeyForCard(cardId: string): Promise<string | undefined> {
+  const direct = `job:job-trello-${cardId}`;
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/app_data?key=eq.${encodeURIComponent(direct)}&select=key`, { headers: supabaseHeaders });
+  if (r.ok && ((await r.json()) as unknown[]).length > 0) return direct;
+  const c = await fetch(`${TRELLO_BASE}/cards/${cardId}?key=${API_KEY}&token=${API_TOKEN}&fields=desc`);
+  const desc = c.ok ? ((await c.json()) as { desc?: string }).desc : undefined;
+  const linked = await linkedJobFor(cardId, desc);
+  return linked ? `job:${linked}` : undefined;
+}
+
+/**
+ * Import one comment event into the matching record's activity log.
+ *
+ * NOTHING in the payload is trusted: this endpoint fails open on signature, and
+ * the repo is public. The comment is re-fetched from Trello by id, which is the
+ * one view nobody can forge. It must be a real commentCard on an allowed board.
+ * An edit's text is the text Trello reports NOW (it updates the comment's own
+ * action). A delete is accepted only when the comment genuinely 404s AND the
+ * job already holds that comment, so a forged delete cannot touch any record.
+ */
+export async function importCommentEvent(action: TrelloWebhookAction): Promise<string> {
+  const kind = action.type as 'commentCard' | 'updateComment' | 'deleteComment';
+  const commentId = kind === 'commentCard' ? action.id : action.data?.action?.id;
+  if (!commentId || !HEX24.test(commentId)) return 'malformed comment id';
+  const now = new Date().toISOString();
+
+  const res = await fetch(
+    `${TRELLO_BASE}/actions/${commentId}?key=${API_KEY}&token=${API_TOKEN}` +
+    `&fields=type,date,data&memberCreator=true&memberCreator_fields=fullName`,
+  );
+  let cardId: string | undefined;
+  let verified: { type?: string; date?: string; data?: { text?: string; card?: { id?: string }; board?: { id?: string } }; memberCreator?: { fullName?: string } } | undefined;
+  if (kind === 'deleteComment') {
+    if (res.status !== 404) return `comment still exists in Trello (${res.status})`;
+    cardId = action.data?.card?.id;   // bound below: the job must already hold this comment
+  } else {
+    if (!res.ok) return `Trello ${res.status}`;
+    verified = await res.json() as typeof verified;
+    if (verified?.type !== 'commentCard') return 'not a comment';
+    if (!isAllowedBoard(verified.data?.board?.id)) return 'comment is not on an allowed board';
+    if (isSolarOpsEcho(verified.data?.text)) return 'SolarOps echo, not imported';
+    cardId = verified.data?.card?.id;
+  }
+  if (!cardId || !HEX24.test(cardId)) return 'no card';
+
+  const key = await jobKeyForCard(cardId);
+  if (!key) return 'card has no SolarOps record';
+  const row = await fetch(`${SUPABASE_URL}/rest/v1/app_data?key=eq.${encodeURIComponent(key)}&select=value`, { headers: supabaseHeaders });
+  const job = row.ok ? ((await row.json()) as { value?: any }[])[0]?.value : undefined;
+  if (!job) return 'record not found';
+  const history: TrelloCommentActivity[] = Array.isArray(job.activityHistory) ? job.activityHistory : [];
+  const held = history.find(e => importedCommentIds(commentId).includes(e.id));
+
+  let entry: TrelloCommentActivity | undefined;
+  let aliases: string[];
+  if (kind === 'commentCard') {
+    entry = commentActivityFor({ kind, commentId, text: verified?.data?.text, date: verified?.date ?? now, author: verified?.memberCreator?.fullName });
+    aliases = importedCommentIds(commentId);
+  } else if (kind === 'updateComment') {
+    const text = (verified?.data?.text ?? '').trim();
+    if (held && held.description.trim() === text) return 'no change';
+    entry = commentActivityFor({ kind, commentId, text, date: now, author: verified?.memberCreator?.fullName });
+    aliases = entry ? [entry.id] : [];
+  } else {
+    if (!held) return 'unknown comment for this record';
+    entry = commentActivityFor({ kind, commentId, date: now, original: { userName: held.userName, timestamp: held.timestamp } });
+    aliases = entry ? [entry.id] : [];
+  }
+  if (!entry) return 'empty comment';
+
+  const next = appendActivityOnce(history, entry, aliases);
+  if (!next) return 'already imported';
+  job.activityHistory = next;
+  // Server write into a per-field-merged record: stamp the field clock, or the
+  // first stale browser merges its older activityHistory as the winner.
+  stampMirroredFields(job, ['activityHistory'], now);
+  const put = await fetch(`${SUPABASE_URL}/rest/v1/app_data?on_conflict=key`, {
+    method: 'POST',
+    headers: { ...supabaseHeaders, Prefer: 'resolution=merge-duplicates,return=minimal' },
+    body: JSON.stringify({ key, value: job, updated_at: now }),
+  });
+  if (!put.ok) throw new Error(`activity write ${put.status}: ${await put.text().catch(() => '')}`);
+  console.info(`[trello-webhook] ${kind} ${commentId} -> ${key} (${entry.id})`);
+  return 'imported';
+}
+
 async function reapDeletedLead(jobId: string, now: string): Promise<'reaped' | 'kept' | 'absent'> {
   const key = `job:${jobId}`;
   const jobRes = await fetch(
@@ -1035,6 +1236,24 @@ async function handleLeadImportWebhook(req: VercelRequest, res: VercelResponse) 
       }
       const result = await reapDeletedLead(`job-trello-${deletedCardId}`, new Date().toISOString());
       return res.status(200).json({ job: { id: `job-trello-${deletedCardId}`, result } });
+    }
+
+    // Comments -> activity log. Runs before the lead-import checks below so a
+    // comment on ANY card with a SolarOps record lands, including service
+    // orders sent to Trello (those return early from the import path). A
+    // failure here is logged, never allowed to break the contact backfill that
+    // commentCard has always triggered.
+    if (COMMENT_ACTIONS.has(action.type)) {
+      if (!API_KEY || !API_TOKEN || !SERVICE_ROLE_KEY) return res.status(500).json({ error: 'Server not configured' });
+      let comment = 'error';
+      try { comment = await importCommentEvent(action); }
+      catch (err) { console.error('[trello-webhook] comment import failed:', err); }
+      // `?commentsOnly` lets the backfill replay history without re-running the
+      // contact backfill 900 times. It can only ever do LESS work, so it needs
+      // no auth.
+      if (action.type !== 'commentCard' || req.query?.commentsOnly !== undefined) {
+        return res.status(200).json({ comment });
+      }
     }
 
     const target = matchTargetList(action);
