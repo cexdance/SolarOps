@@ -10,6 +10,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const authedFetch = vi.fn();
 vi.mock('../lib/supabase', () => ({ authedFetch: (...a: unknown[]) => authedFetch(...a) }));
 
+// Pin the sheet URL. clientRegistry reads VITE_CLIENT_REGISTRY_URL at import, and
+// it is set in a developer's .env.local but NOT in CI, so without this the same
+// tests passed locally and failed in CI (stampSheetRow returned null). Pinned
+// here, they exercise the configured path everywhere; the unconfigured path has
+// its own test below that unsets it explicitly.
+vi.stubEnv('VITE_CLIENT_REGISTRY_URL', 'https://script.google.com/macros/s/test/exec');
 const { stampSheetRow, clearSheetRow, sheetRegistryConfigured } = await import('../lib/clientRegistry');
 
 const reply = (body: unknown, ok = true, status = 200) =>
@@ -43,9 +49,17 @@ describe('stampSheetRow', () => {
 
   it('is skipped entirely when the sheet is not configured', async () => {
     // Preview builds have no VITE_CLIENT_REGISTRY_URL, so nothing is called.
-    if (!sheetRegistryConfigured()) {
-      expect(await stampSheetRow('Ron Devilliers', 'US-15715')).toBeNull();
+    // A fresh module instance with the URL unset, so this ALWAYS runs rather
+    // than only on a machine that happens to lack the variable.
+    vi.stubEnv('VITE_CLIENT_REGISTRY_URL', '');
+    vi.resetModules();
+    try {
+      const fresh = await import('../lib/clientRegistry');
+      expect(fresh.sheetRegistryConfigured()).toBe(false);
+      expect(await fresh.stampSheetRow('Ron Devilliers', 'US-15715')).toBeNull();
       expect(authedFetch).not.toHaveBeenCalled();
+    } finally {
+      vi.stubEnv('VITE_CLIENT_REGISTRY_URL', 'https://script.google.com/macros/s/test/exec');
     }
   });
 });
