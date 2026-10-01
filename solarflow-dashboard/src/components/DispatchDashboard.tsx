@@ -1,3 +1,4 @@
+import { PhoneLink } from './PhoneLink';
 // SolarOps, OPS CENTER Dashboard
 // 2 columns × 2 rows = 4 configurable widget slots
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
@@ -752,13 +753,13 @@ const SingleLeadWidget: React.FC<{ leadId: string }> = ({ leadId }) => {
       {/* Contact info */}
       <div className="space-y-1.5 flex-1">
         {lead.phone && (
-          <a
-            href={`tel:${lead.phone}`}
+          <PhoneLink
+            phone={lead.phone}
             className="flex items-center gap-2 px-2.5 py-2 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors group"
           >
             <Phone className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
             <span className="text-xs text-blue-700 font-medium">{lead.phone}</span>
-          </a>
+          </PhoneLink>
         )}
         {lead.email && (
           <a

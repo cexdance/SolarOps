@@ -1,3 +1,4 @@
+import { PhoneLink } from './PhoneLink';
 // SolarFlow MVP - Technician Mobile View
 import React, { useState } from 'react';
 import {
@@ -142,13 +143,13 @@ export const TechnicianView: React.FC<TechnicianViewProps> = ({
             <div className="bg-slate-50 rounded-lg p-3">
               <p className="text-xs text-slate-500 mb-2">Contact</p>
               <div className="flex gap-2">
-                <a
-                  href={`tel:${customer?.phone}`}
+                <PhoneLink
+                  phone={customer?.phone}
                   className="flex-1 flex items-center justify-center gap-1 py-2 bg-blue-50 text-blue-600 rounded-lg text-sm font-medium"
                 >
                   <Phone className="w-4 h-4" />
                   Call
-                </a>
+                </PhoneLink>
                 <a
                   href={`https://maps.google.com/?q=${encodeURIComponent(
                     `${customer?.address}, ${customer?.city}, ${customer?.state}`

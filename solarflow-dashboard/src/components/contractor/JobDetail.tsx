@@ -1,3 +1,4 @@
+import { PhoneLink } from '../PhoneLink';
 // SolarFlow - Job Detail / Active Call Flow
 // Flow: Pre-Start → [Before Photo Modal] → Active Call → [After Photo Modal] → Completed
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
@@ -1022,11 +1023,11 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
             </div>
 
             <div className="flex gap-3">
-              <a href={`tel:${job.customerPhone}`}
+              <PhoneLink phone={job.customerPhone}
                 className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-sm font-medium transition-colors cursor-pointer"
               >
                 <Phone className="w-4 h-4" />Call
-              </a>
+              </PhoneLink>
               {mapsUrl ? (
                 <a href={mapsUrl}
                   target="_blank" rel="noopener noreferrer"
@@ -1447,9 +1448,9 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
                 <p className="text-xs text-slate-400">On site at</p>
                 <p className="font-semibold text-slate-900 truncate">{job.address}, {job.city}</p>
               </div>
-              <a href={`tel:${job.customerPhone}`} className="p-2 bg-slate-100 rounded-lg text-slate-600 cursor-pointer">
+              <PhoneLink phone={job.customerPhone} className="p-2 bg-slate-100 rounded-lg text-slate-600 cursor-pointer">
                 <Phone className="w-4 h-4" />
-              </a>
+              </PhoneLink>
             </div>
 
             {/* Tab bar */}

@@ -1,3 +1,4 @@
+import { PhoneLink } from '../PhoneLink';
 // Map of SolarEdge sites with active alerts. Geocodes each site's address
 // (shared Nominatim cache with JobMapView/SiteMapView, so addresses already
 // looked up elsewhere resolve instantly) and plots a pin per alerted site,
@@ -145,9 +146,9 @@ export const SolarEdgeAlertsMapView: React.FC<Props> = ({ sites, alertOverrides,
                     <div className="mt-1.5 space-y-0.5">
                       {cust.name && <p className="text-xs text-slate-700 font-medium !m-0">{cust.name}</p>}
                       {cust.phone && (
-                        <a href={`tel:${cust.phone}`} className="text-xs text-slate-600 hover:underline flex items-center gap-1">
+                        <PhoneLink phone={cust.phone} className="text-xs text-slate-600 hover:underline flex items-center gap-1">
                           <Phone className="w-3 h-3" /> {cust.phone}
-                        </a>
+                        </PhoneLink>
                       )}
                       {cust.email && (
                         <a href={`mailto:${cust.email}`} className="text-xs text-slate-600 hover:underline flex items-center gap-1 break-all">

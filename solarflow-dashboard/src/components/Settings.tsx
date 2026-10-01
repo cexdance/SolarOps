@@ -413,7 +413,7 @@ export const Settings: React.FC<SettingsProps> = ({
             </span>
           </div>
           <p className="text-xs text-slate-500 leading-relaxed">
-            Click-to-call and SMS are enabled app-wide. Tap any phone number to call or text via the RingCentral app installed on this device.
+            Tap a phone number to choose Call or SMS using your device’s default Phone / Messages apps or RingCentral. RingCentral must be installed and signed in on this device.
           </p>
         </div>
 

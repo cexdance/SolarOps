@@ -43,7 +43,7 @@ import {
   CRMData,
   generateRandomLead,
 } from '../lib/crmStore';
-import { rcClickToCall, getRCClientId } from '../lib/ringcentral';
+import { PhoneLink } from './PhoneLink';
 import * as XLSX from 'xlsx';
 
 // ─── RMA Extractor ────────────────────────────────────────────────────────────
@@ -598,7 +598,7 @@ export const CRMDashboard: React.FC<CRMDashboardProps> = ({ currentUserId }) => 
                         <div className="flex items-center gap-4 mt-1 text-slate-300 text-sm">
                           <span className="flex items-center gap-1">
                             <Phone className="w-4 h-4" />
-                            {selectedLead.phone}
+                            <PhoneLink phone={selectedLead.phone} />
                           </span>
                           <span className="flex items-center gap-1">
                             <Mail className="w-4 h-4" />
@@ -664,18 +664,12 @@ export const CRMDashboard: React.FC<CRMDashboardProps> = ({ currentUserId }) => 
                         <div>
                           <h3 className="text-sm font-medium text-slate-500 mb-3">Quick Actions</h3>
                           <div className="grid grid-cols-2 gap-2">
-                            <button
-                              onClick={() => {
-                                if (selectedLead.phone && getRCClientId()) {
-                                  rcClickToCall(selectedLead.phone);
-                                }
-                                setShowCallModal(true);
-                              }}
+                            <PhoneLink phone={selectedLead.phone} action="call" onAction={() => setShowCallModal(true)}
                               className="flex items-center justify-center gap-2 py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-lg font-medium transition-colors"
                             >
                               <Phone className="w-4 h-4" />
                               Call Now
-                            </button>
+                            </PhoneLink>
                             <button
                               onClick={() => {
                                 setData(prev => logActivity(prev, selectedLead.id, currentUserId, currentUser.name, 'email', 'Sent follow-up email'));

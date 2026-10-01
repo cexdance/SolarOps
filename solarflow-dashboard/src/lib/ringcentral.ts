@@ -11,42 +11,34 @@ export function getRCClientId(): string {
   return (import.meta.env['VITE_RC_CLIENT_ID'] as string) || 'enabled';
 }
 
-/** Dial a number via the RC desktop/mobile app.
- *  Uses an anchor-click approach which is the most reliable way to
- *  trigger custom URI schemes across all browsers without getting blocked. */
-export function rcCall(phoneNumber: string): void {
-  const digits = phoneNumber.replace(/\D/g, '');
-  const uri = `rcmobile://call?number=${encodeURIComponent(digits)}`;
-  const a = document.createElement('a');
-  a.href = uri;
-  a.style.display = 'none';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  // Fallback: if RC app isn't installed, tel: prompts the OS dialer after 800ms
-  setTimeout(() => {
-    if (document.hasFocus()) {
-      window.location.href = `tel:${digits}`;
-    }
-  }, 800);
+export type PhoneAction = 'call' | 'sms';
+export type PhoneProvider = 'device' | 'ringcentral';
+
+/** Keep international prefixes; never concatenate an extension into the number. */
+export function normalizePhoneNumber(value: string): string {
+  const base = value.trim().split(/(?:\bext\.?|\bx|[;,#])/i)[0].trim();
+  if (!/^[+\d\s().-]+$/.test(base)) return '';
+  const digits = base.replace(/\D/g, '');
+  return digits ? `${base.startsWith('+') ? '+' : ''}${digits}` : '';
 }
 
-/** Open RC SMS compose to a number */
+export function phoneHref(phone: string, action: PhoneAction, provider: PhoneProvider): string | undefined {
+  const number = normalizePhoneNumber(phone);
+  if (!number) return undefined;
+  return provider === 'device'
+    ? `${action === 'call' ? 'tel' : 'sms'}:${number}`
+    : `rcmobile://${action}?number=${encodeURIComponent(number)}`;
+}
+
+/** Legacy callers must invoke this synchronously from a user gesture. */
+export function rcCall(phoneNumber: string): void {
+  const href = phoneHref(phoneNumber, 'call', 'ringcentral');
+  if (href) window.location.assign(href);
+}
+
 export function rcSMS(phoneNumber: string): void {
-  const digits = phoneNumber.replace(/\D/g, '');
-  const uri = `rcmobile://compose?number=${encodeURIComponent(digits)}&type=sms`;
-  const a = document.createElement('a');
-  a.href = uri;
-  a.style.display = 'none';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  // Fallback: sms: scheme after 800ms if RC didn't open
-  setTimeout(() => {
-    if (document.hasFocus()) {
-      window.location.href = `sms:${digits}`;
-    }
-  }, 800);
+  const href = phoneHref(phoneNumber, 'sms', 'ringcentral');
+  if (href) window.location.assign(href);
 }
 
 // Backward-compat aliases

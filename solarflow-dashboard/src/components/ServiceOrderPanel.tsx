@@ -1,3 +1,4 @@
+import { PhoneLink } from './PhoneLink';
 // ServiceOrderPanel, full WO create/edit slide-over
 // Opened from SiteProfilePanel or SolarEdgeMonitoring
 
@@ -2004,13 +2005,13 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                 )}
                 {customer?.email && customer?.phone && <span className="text-slate-600">{' · '}</span>}
                 {customer?.phone && (
-                  <a
-                    href={`tel:${customer.phone.replace(/[^\d+]/g, '')}`}
+                  <PhoneLink
+                    phone={customer.phone}
                     title="Call the customer"
                     className="text-slate-400 hover:text-orange-300 transition-colors whitespace-nowrap"
                   >
                     {customer.phone}
-                  </a>
+                  </PhoneLink>
                 )}
               </div>
             )}

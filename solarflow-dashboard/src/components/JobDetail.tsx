@@ -1,3 +1,4 @@
+import { PhoneLink } from './PhoneLink';
 // SolarFlow MVP - Job Detail Component
 import React, { useState } from 'react';
 import { formatMoney } from '../lib/money';
@@ -174,13 +175,13 @@ export const JobDetail: React.FC<JobDetailProps> = ({
             {customer.address}, {customer.city}, {customer.state} {customer.zip}
           </p>
           <div className="flex gap-3">
-            <a
-              href={`tel:${customer.phone}`}
+            <PhoneLink
+              phone={customer.phone}
               className="text-sm text-blue-600 flex items-center gap-1 hover:underline"
             >
               <Phone className="w-4 h-4" />
               {customer.phone}
-            </a>
+            </PhoneLink>
             <a
               href={`mailto:${customer.email}`}
               className="text-sm text-blue-600 flex items-center gap-1 hover:underline"

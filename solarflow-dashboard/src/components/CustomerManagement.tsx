@@ -53,7 +53,7 @@ import {
   interactionConfig,
   outcomeLabels,
 } from '../lib/customerStore';
-import { rcCall, rcSMS } from '../lib/ringcentral';
+import { PhoneLink } from './PhoneLink';
 import { uploadCustomerFilesPartial, type CustomerFileUpload } from '../lib/customerFileStorage';
 import { toast } from 'sonner';
 import { ImportPrefill } from './ImportPrefill';
@@ -708,7 +708,7 @@ export const CustomerManagement: React.FC<CustomerManagementProps> = ({ currentU
                     <div className="flex items-center gap-4 mt-1 text-sm text-slate-500">
                       <span className="flex items-center gap-1">
                         <Phone className="w-4 h-4" />
-                        {selectedCustomer.phone}
+                        <PhoneLink phone={selectedCustomer.phone} />
                       </span>
                       <span className="flex items-center gap-1">
                         <Mail className="w-4 h-4" />
@@ -728,16 +728,12 @@ export const CustomerManagement: React.FC<CustomerManagementProps> = ({ currentU
                     <Edit className="w-4 h-4" />
                     Edit
                   </button>
-                  <button
-                    onClick={() => {
-                      if (selectedCustomer.phone) rcCall(selectedCustomer.phone);
-                      setInteractionType('call'); setShowInteractionModal(true);
-                    }}
+                  <PhoneLink phone={selectedCustomer.phone} action="call" onAction={() => { setInteractionType('call'); setShowInteractionModal(true); }}
                     className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
                   >
                     <Phone className="w-4 h-4" />
                     Call
-                  </button>
+                  </PhoneLink>
                   <button
                     onClick={() => { setInteractionType('email'); setShowInteractionModal(true); }}
                     className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
@@ -745,16 +741,12 @@ export const CustomerManagement: React.FC<CustomerManagementProps> = ({ currentU
                     <Mail className="w-4 h-4" />
                     Email
                   </button>
-                  <button
-                    onClick={() => {
-                      if (selectedCustomer.phone) rcSMS(selectedCustomer.phone);
-                      setInteractionType('sms'); setShowInteractionModal(true);
-                    }}
+                  <PhoneLink phone={selectedCustomer.phone} action="sms" onAction={() => { setInteractionType('sms'); setShowInteractionModal(true); }}
                     className="flex items-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors"
                   >
                     <MessageSquare className="w-4 h-4" />
                     SMS
-                  </button>
+                  </PhoneLink>
                 </div>
               </div>
 

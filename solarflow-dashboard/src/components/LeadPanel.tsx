@@ -8,7 +8,7 @@ import { Phone, Mail, FileText, X, UserCheck, PhoneCall, MessageSquare } from 'l
 import type { Job, LeadInfo, Activity } from '../types';
 import { seedLeadInfo, leadDisplayName, formatImportedAt } from '../lib/leadConvert';
 import { leadOutreachMailto, LEAD_OUTREACH_SUBJECT } from '../lib/leadOutreach';
-import { rcCall, rcSMS } from '../lib/ringcentral';
+import { PhoneLink } from './PhoneLink';
 import { authedFetch } from '../lib/supabase';
 import { trelloCardIdOf } from '../lib/trelloSync';
 import { LabelPicker } from './LabelPicker';
@@ -197,24 +197,18 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({ job, currentUserName, onSa
                 misdial would write a contact record. */}
             <div className="flex gap-2">
               <input className={FIELD} placeholder="Phone" value={info.phone ?? ''} onChange={e => set('phone', e.target.value)} onBlur={saveInfo} />
-              <button
-                type="button"
-                onClick={() => info.phone && rcCall(info.phone)}
-                disabled={!info.phone}
-                title="Call via RingCentral"
+              <PhoneLink phone={info.phone} action="call"
+                title="Call or choose an app"
                 className="shrink-0 px-3 rounded-lg bg-green-600 text-white text-sm font-medium hover:bg-green-700 disabled:opacity-40 flex items-center gap-1"
               >
                 <PhoneCall className="w-4 h-4" /> Call
-              </button>
-              <button
-                type="button"
-                onClick={() => info.phone && rcSMS(info.phone)}
-                disabled={!info.phone}
-                title="Text via RingCentral"
+              </PhoneLink>
+              <PhoneLink phone={info.phone} action="sms"
+                title="Text or choose an app"
                 className="shrink-0 px-3 rounded-lg bg-purple-600 text-white text-sm font-medium hover:bg-purple-700 disabled:opacity-40 flex items-center gap-1"
               >
                 <MessageSquare className="w-4 h-4" /> SMS
-              </button>
+              </PhoneLink>
             </div>
             <div className="flex gap-2">
               <input className={FIELD} placeholder="Email" value={info.email ?? ''} onChange={e => set('email', e.target.value)} onBlur={saveInfo} />
