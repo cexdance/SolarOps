@@ -138,9 +138,23 @@ assert.equal(
 );
 // A card edited in place (desc change, label change) has no listAfter, must NOT match.
 assert.equal(matchTargetList({ ...TARGET, type: 'updateCard', data: { ...TARGET.data } }), undefined);
-// Wrong list on the right board must NOT match.
-assert.equal(
+// Any list on an allowed board matches (b0e4d0d, 2026-09-10: LL columns = Trello lists),
+// labelled from the list name when the payload carries one.
+assert.deepEqual(
   matchTargetList({ ...TARGET, type: 'createCard', data: { ...TARGET.data, list: { id: 'someOtherList' } } }),
+  { boardId: '6a5a58e06fbf97144b5d96c9', listId: 'someOtherList', label: 'FL: Services board' },
+);
+assert.deepEqual(
+  matchTargetList({ ...TARGET, type: 'updateCard', data: { ...TARGET.data, listAfter: { id: 'newList', name: 'Scheduled' } } }),
+  { boardId: '6a5a58e06fbf97144b5d96c9', listId: 'newList', label: 'FL: Scheduled' },
+);
+// A list on a board outside ALLOWED_BOARD_IDS must still NOT match, known list id or not.
+assert.equal(
+  matchTargetList({ type: 'createCard', data: { board: { id: 'foreignBoard' }, card: { id: 'c1', name: 'x' }, list: { id: '6a5a58e06fbf97144b5d96be' } } }),
+  undefined,
+);
+assert.equal(
+  matchTargetList({ type: 'createCard', data: { board: { id: 'foreignBoard' }, card: { id: 'c1', name: 'x' }, list: { id: 'someOtherList' } } }),
   undefined,
 );
 // commentCard (or any other action type) must NOT match, even with a card present.
