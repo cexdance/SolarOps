@@ -42,7 +42,7 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { requireUser } from './_auth';
-import { makeCustomerSync, linkedCardId } from './_trelloCustomerSync';
+import { makeCustomerSync, linkedCardId, SOLAROPS_MARKER } from './_trelloCustomerSync';
 import { extractLeadFromImage, validSiteId, type ParsedLead } from './parse-lead-image';
 
 // Trello signs rawBody + callbackURL, so the bytes must be the ones on the wire.
@@ -914,10 +914,11 @@ export const COMMENT_ACTIONS = new Set(['commentCard', 'updateComment', 'deleteC
  * would copy every SolarOps note onto itself: 662 of the 717 comments missing
  * on 2026-09-30 were exactly that. The export side already refuses anything
  * with a `trello-` id, so with this check the loop is closed in both directions.
- * Keep this list in step with the markers written in _trelloCustomerSync.ts.
+ * SOLAROPS_MARKER lives beside the writer in _trelloCustomerSync.ts, so the two
+ * can never drift: a new marker style is recognised here the day it ships.
  */
 export function isSolarOpsEcho(text: string | undefined): boolean {
-  return /SolarOps (?:RMA ID|activity ID|audit ID|audit import|record notes):/.test(text ?? '');
+  return SOLAROPS_MARKER.test(text ?? '');
 }
 
 const HEX24 = /^[0-9a-fA-F]{24}$/;

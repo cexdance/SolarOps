@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { customerSyncContent, linkedCardId, makeCustomerSync, mergeCustomerDescription } from '../../../api/_trelloCustomerSync';
+import { customerSyncContent, linkedCardId, makeCustomerSync, mergeCustomerDescription, rmaComment, tagLine, tagAuthor, tagDate } from '../../../api/_trelloCustomerSync';
+import { isSolarOpsEcho } from '../../../api/trello-card';
 
 const cardId = '6aa4940ed25ee20fff76d045';
 const job = { id: `job-trello-${cardId}`, customerId: 'customer-1', woNumber: 'SO-1', serviceType: 'Site Transfer', rmaEntries: [{ id: 'rma-1', rmaNumber: '123', status: 'pending' }], activityHistory: [{ id: 'note-1', description: 'Customer called', timestamp: '2026-09-15', userName: 'Staff' }] };
@@ -15,11 +16,12 @@ describe('converted customer Trello content', () => {
     const content = customerSyncContent(job, customer);
     expect(content.name).toBe('US-15704 Serrano Lorena');
     expect(content.block).toContain('16361 Yellow Eye Dr, Clermont, FL 34714');
-    expect(content.comments[0].marker).toBe('SolarOps RMA ID: rma-1');
+    expect(content.comments[0].legacyMarker).toBe('SolarOps RMA ID: rma-1');
+    expect(content.comments[0].text).toContain(content.comments[0].marker);
   });
   it('unions duplicate activity IDs and excludes Trello echoes', () => {
     const content = customerSyncContent({ ...job, activityHistory: [...job.activityHistory, { id: 'trello-cmt-123', description: 'echo' }, { id: 'other', description: 'SolarOps RMA ID: rma-1' }] }, { ...customer, activityHistory: job.activityHistory });
-    expect(content.comments.filter(c => c.marker.startsWith('SolarOps activity ID:'))).toHaveLength(1);
+    expect(content.comments.filter(c => c.legacyMarker.startsWith('SolarOps activity ID:'))).toHaveLength(1);
   });
   it('updates only the managed description block', () => {
     const initial = mergeCustomerDescription('Human notes\nImportant', customerSyncContent(job, customer).block);
@@ -72,7 +74,7 @@ describe('customer sync execution', () => {
     await f.sync(job.id); expect(f.comments).toHaveLength(2);
     const before = f.writes(); await f.sync(job.id); expect(f.writes()).toBe(before);
     f.records.get(`job:${job.id}`).rmaEntries[0].status = 'approved';
-    await f.sync(job.id); expect(f.comments).toHaveLength(2); expect(f.comments[0].data.text).toContain('approved');
+    await f.sync(job.id); expect(f.comments).toHaveLength(2); expect(f.comments[0].data.text).toMatch(/approved/i);
   });
   it('adopts an existing backfill marker instead of posting another RMA', async () => {
     const f = fixture(); f.comments.push({ id: 'old', data: { text: 'Older content\nSolarOps RMA ID: rma-1' } });
@@ -90,5 +92,63 @@ describe('customer sync execution', () => {
   it('does not unarchive or write an archived duplicate', async () => {
     const f = fixture(); f.card.closed = true;
     expect(await f.sync(job.id)).toMatchObject({ skipped: 'archived card' }); expect(f.writes()).toBe(0);
+  });
+});
+
+// The 2026-10-01 cleanup: Trello gets only what someone on the card needs, in a
+// short format the owner can read at a glance.
+describe('short Trello comment format', () => {
+  it('a note is its text plus ONE tag line: SolarOps, author, date', () => {
+    const c = customerSyncContent({ ...job, rmaEntries: [], activityHistory: [
+      { id: 'n1', type: 'note_added', description: 'Sent Mail to get the info', userName: 'Cesar Jurado (Admin)', timestamp: '2026-09-30T15:12:58.555Z' },
+    ] }, customer).comments[0];
+    const lines = c.text.split('\n');
+    expect(lines[0]).toBe('Sent Mail to get the info');
+    expect(lines.at(-1)).toMatch(/^\[SolarOps\]\(https:\/\/\S+#so-activity-n1\) · Cesar Jurado · Sep 30, 2026$/);
+    expect(c.text).not.toMatch(/Original date|Author:|Type:|US-15704/);   // the old 5-line header is gone
+  });
+
+  it('posts notes and RMAs only, never internal bookkeeping', () => {
+    const c = customerSyncContent({ ...job, notes: 'lead email copy', auditLog: [{ id: 'a1', details: 'Fields updated' }],
+      activityHistory: [
+        { id: 'w1', type: 'job_updated', description: 'Work order SO-1 updated, Inverter Change · new' },
+        { id: 'i1', type: 'info_updated', description: 'Updated: Address: "-" -> "x"' },
+        { id: 's1', type: 'status_changed', description: 'Stage draft -> draft' },
+        { id: 'n1', type: 'note_added', description: 'Called, left voicemail' },
+      ] }, { ...customer, notes: 'another copy' });
+    expect(c.comments.map(x => x.legacyMarker)).toEqual(['SolarOps RMA ID: rma-1', 'SolarOps activity ID: n1']);
+  });
+
+  it('an RMA is one readable line, case number only when it differs, no money', () => {
+    const r = { id: 'r9', rmaNumber: '7278902', caseNumber: '7278902', partDescription: 'Site Transfer', manufacturer: 'SolarEdge',
+      status: 'pending', compensationAmount: 250, createdBy: 'Cesar Jurado (Admin)', createdAt: '2026-09-25T15:14:09.036Z' };
+    expect(rmaComment(r).split('\n')[0]).toBe('RMA 7278902 · Site Transfer · SolarEdge · Pending');
+    expect(rmaComment(r)).not.toMatch(/Case|250|Address|Customer:/);
+    expect(rmaComment({ ...r, caseNumber: 'C-1' })).toContain('\nCase C-1\n');
+    expect(rmaComment({ ...r, rmaNumber: '' })).toMatch(/^RMA \(number pending\)/);
+  });
+
+  it('cleans the tag: placeholder author dropped, date in the office time zone', () => {
+    expect(tagAuthor('Not recorded')).toBeUndefined();
+    expect(tagAuthor('Daniel Matos (Admin)')).toBe('Daniel Matos');
+    // 01:30 UTC on Oct 1 is still the evening of Sep 30 in Florida.
+    expect(tagDate('2026-10-01T01:30:00Z')).toBe('Sep 30, 2026');
+    expect(tagLine('activity', 'x', 'Not recorded', 'bad date')).toBe('[SolarOps](https://solarflow-dashboard-sooty.vercel.app/#so-activity-x)');
+  });
+
+  it('rewrites a pre-cleanup comment IN PLACE, never posting a duplicate', async () => {
+    const f = fixture();
+    f.comments.push({ id: 'old', data: { text: 'SolarOps activity — US-15704 Serrano Lorena\nOriginal date: 2026-09-15\nAuthor: Staff\nType: activity\n\nCustomer called\nSolarOps activity ID: note-1' } });
+    await f.sync(job.id);
+    const note = f.comments.find(c => c.id === 'old');
+    expect(note.data.text).toMatch(/^Customer called\n\n\[SolarOps\]/);
+    expect(f.comments.filter(c => c.data.text.includes('Customer called'))).toHaveLength(1);
+    // and a second run with nothing changed writes nothing
+    const before = f.writes(); await f.sync(job.id); expect(f.writes()).toBe(before);
+  });
+
+  it('the import side still recognises the new format as our own echo', () => {
+    expect(isSolarOpsEcho('Called\n\n[SolarOps](https://solarflow-dashboard-sooty.vercel.app/#so-activity-n1) · Cesar Jurado · Sep 30, 2026')).toBe(true);
+    expect(isSolarOpsEcho('First call, no answer')).toBe(false);
   });
 });

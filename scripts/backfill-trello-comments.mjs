@@ -44,7 +44,7 @@ const sb = { Authorization: `Bearer ${SR}`, apikey: SR };
 // Same markers isSolarOpsEcho() refuses (comments SolarOps posted itself). The
 // webhook enforces this on every write; mirrored here only so the dry-run counts
 // are honest.
-const isEcho = (t) => /SolarOps (?:RMA ID|activity ID|audit ID|audit import|record notes):/.test(t ?? '');
+const isEcho = (t) => /SolarOps (?:RMA ID|activity ID|audit ID|audit import|record notes):|#so-(?:activity|rma)-/.test(t ?? '');
 const idsFor = (c) => [`trello-cmt-${c}`, `trello-comment-${c}`];
 
 // 1. Every comment on the board, oldest first.

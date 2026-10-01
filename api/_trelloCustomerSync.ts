@@ -1,7 +1,10 @@
 import { createHash, randomUUID } from 'node:crypto';
 
 type RecordData = Record<string, any>;
-type Comment = { marker: string; text: string };
+/** `marker` is how the sync finds its own comment again (it sits inside the
+ *  tag line's link URL). `legacyMarker` is the full-line marker comments carried
+ *  before 2026-10-01, so those are rewritten in place rather than duplicated. */
+type Comment = { marker: string; legacyMarker: string; text: string };
 const START = '<!-- SolarOps customer sync -->';
 const END = '<!-- /SolarOps customer sync -->';
 export function linkedCardId(job: RecordData): string | undefined {
@@ -9,6 +12,51 @@ export function linkedCardId(job: RecordData): string | undefined {
   return /^[a-f0-9]{24}$/i.test(id || '') ? id : undefined;
 }
 const clean = (x: unknown) => String(x ?? '').trim();
+
+// ── The one-line tag every SolarOps comment ends with (2026-10-01) ─────────
+//
+// Owner: "If we need to tag that it's coming from SolarOps, keep it under 1 line
+// with date and author." Trello renders `[SolarOps](url)` as the single word
+// SolarOps, so the tag reads "SolarOps · Cesar Jurado · Sep 30, 2026" while the
+// URL carries the record id the sync needs to find the comment again.
+const APP_URL = 'https://solarflow-dashboard-sooty.vercel.app';
+export function soLink(kind: 'activity' | 'rma', id: string): string {
+  return `${APP_URL}/#so-${kind}-${encodeURIComponent(id)}`;
+}
+/** The exact substring the sync searches for: the link target, closing paren included. */
+export function soMarker(kind: 'activity' | 'rma', id: string): string {
+  return `(${soLink(kind, id)})`;
+}
+/** Any marker SolarOps has ever written, old full-line style or new link style. */
+export const SOLAROPS_MARKER = /SolarOps (?:RMA ID|activity ID|audit ID|audit import|record notes):|#so-(?:activity|rma)-/;
+
+/** "Cesar Jurado (Admin)" -> "Cesar Jurado"; a placeholder author is dropped. */
+export function tagAuthor(name: unknown): string | undefined {
+  const s = clean(name).replace(/\s*\(admin\)\s*$/i, '');
+  return !s || /^not recorded$/i.test(s) ? undefined : s;
+}
+/** "Sep 30, 2026" in the office's time zone, so an evening note keeps its day. */
+export function tagDate(iso: unknown): string | undefined {
+  const d = new Date(clean(iso));
+  if (!clean(iso) || Number.isNaN(d.getTime())) return undefined;
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'America/New_York' });
+}
+export function tagLine(kind: 'activity' | 'rma', id: string, author: unknown, when: unknown): string {
+  return [`[SolarOps](${soLink(kind, id)})`, tagAuthor(author), tagDate(when)].filter(Boolean).join(' · ');
+}
+
+const humanize = (s: unknown) => { const t = clean(s).replace(/_/g, ' '); return t ? t[0].toUpperCase() + t.slice(1) : ''; };
+
+/** One RMA as one readable line (plus the case number when it differs). No
+ *  dollar amounts: money stays out of shared surfaces (SHOW_MONEY). */
+export function rmaComment(r: RecordData): string {
+  const head = [r.rmaNumber ? `RMA ${clean(r.rmaNumber)}` : 'RMA (number pending)',
+    clean(r.partDescription), clean(r.manufacturer), humanize(r.rmaStatus || r.status)].filter(Boolean).join(' · ');
+  const lines = [head];
+  if (clean(r.caseNumber) && clean(r.caseNumber) !== clean(r.rmaNumber)) lines.push(`Case ${clean(r.caseNumber)}`);
+  if (r.compensationCollected === true) lines.push('Compensation collected');
+  return `${lines.join('\n')}\n\n${tagLine('rma', r.id, r.createdBy, r.createdAt)}`;
+}
 export function customerSyncContent(job: RecordData, customer: RecordData) {
   const name = [customer.clientId, customer.name || job.clientName].filter(Boolean).join(' ');
   const address = [customer.address || job.siteAddress, customer.city, [customer.state, customer.zip].filter(Boolean).join(' ')].filter(Boolean).join(', ');
@@ -20,43 +68,32 @@ export function customerSyncContent(job: RecordData, customer: RecordData) {
     if (clean(value)) lines.push(`${label}: ${clean(value)}`);
   }
   lines.push(END);
+  // ONLY what someone working the card in Trello needs: real notes and RMAs
+  // (owner decision 2026-10-01). Everything else this used to post was
+  // internal bookkeeping that read as noise on the board: 315 automatic "work
+  // order updated" lines with no author, 139 audit entries (85 of them just
+  // "Fields updated"), field-edit diffs, and copies of the lead email that is
+  // already the card description. All of it still lives in SolarOps.
   const comments: Comment[] = [];
   for (const r of job.rmaEntries || []) {
     if (!r.id) continue;
-    const marker = `SolarOps RMA ID: ${r.id}`;
-    const body = [`RMA imported from SolarOps service order ${job.woNumber || job.id}`, `Customer: ${name}`];
-    if (address) body.push(`Address: ${address}`);
-    for (const [label, value] of Object.entries({ Manufacturer: r.manufacturer, Part: r.partDescription,
-      'RMA number': r.rmaNumber, 'Case number': r.caseNumber, 'RMA status': r.rmaStatus, 'Legacy status': r.status,
-      'Compensation collected': r.compensationCollected, 'Compensation amount': r.compensationAmount,
-      'Compensation collected at': r.compensationCollectedAt, Created: r.createdAt, 'Created by': r.createdBy, Updated: r.updatedAt })) {
-      if (value !== undefined && value !== null && clean(value)) body.push(`${label}: ${value}`);
-    }
-    comments.push({ marker, text: [...body, marker].join('\n') });
+    comments.push({ marker: soMarker('rma', r.id), legacyMarker: `SolarOps RMA ID: ${r.id}`, text: rmaComment(r) });
   }
   const activities = new Map<string, RecordData>();
   for (const a of [...(customer.activityHistory || []), ...(job.activityHistory || [])]) {
     // Never export a Trello-origin event back to Trello, including previous imports.
-    if (!a.id || /^trello[-:]/i.test(a.id) || /SolarOps (?:RMA ID|activity ID|audit ID|record notes):/.test(a.description || '')) continue;
+    if (!a.id || /^trello[-:]/i.test(a.id) || SOLAROPS_MARKER.test(a.description || '')) continue;
+    // Notes only. A missing type is free text from an older writer, so it counts.
+    if (a.type && a.type !== 'note_added') continue;
+    if (!clean(a.description || a.details)) continue;
     activities.set(a.id, a);
   }
   for (const a of activities.values()) {
-    const marker = `SolarOps activity ID: ${a.id}`;
-    comments.push({ marker, text: [`SolarOps activity — ${name}`, `Original date: ${a.timestamp || 'Not recorded'}`,
-      `Author: ${a.userName || 'Not recorded'}`, `Type: ${a.type || 'activity'}`, '', a.description || a.details || '', marker].join('\n') });
-  }
-  for (const a of job.auditLog || []) {
-    if (!a.id) continue;
-    const marker = `SolarOps audit ID: ${a.id}`;
-    comments.push({ marker, text: [`SolarOps audit — ${job.woNumber || job.id}`, `Original date: ${a.timestamp || 'Not recorded'}`,
-      `Author: ${a.userName || 'Not recorded'}`, `Action: ${a.action || 'updated'}`, '', a.details || '', marker].join('\n') });
-  }
-  const seenNotes = new Set<string>();
-  for (const source of [customer, job]) {
-    if (!clean(source.notes) || seenNotes.has(source.notes)) continue;
-    seenNotes.add(source.notes);
-    const marker = `SolarOps record notes: ${source.id}`;
-    comments.push({ marker, text: `SolarOps record notes — ${name}\n\n${source.notes}\n\n${marker}` });
+    comments.push({
+      marker: soMarker('activity', a.id),
+      legacyMarker: `SolarOps activity ID: ${a.id}`,
+      text: `${clean(a.description || a.details)}\n\n${tagLine('activity', a.id, a.userName, a.timestamp)}`,
+    });
   }
   return { name, block: lines.join('\n'), comments };
 }
@@ -123,10 +160,13 @@ export function makeCustomerSync(options: { databaseUrl: string; serviceKey: str
       if (card.name !== content.name || card.desc !== desc) await trello(`cards/${cardId}`, 'PUT', { name: content.name, desc });
       let posted = 0, updated = 0;
       for (const c of content.comments) {
-        // Adopt previous one-time imports by their stable marker.
-        const found = existing.find(a => (a.data?.text || '').split('\n').includes(c.marker));
-        // Previous audit backfills stored the audit IDs in one combined comment.
-        if (!found && c.marker.startsWith('SolarOps audit ID:') && existing.some(a => (a.data?.text || '').includes(`SolarOps audit import: ${jobId}`) && a.data.text.includes(c.marker.slice('SolarOps audit ID: '.length)))) continue;
+        // Find our own comment by its link marker, or by the full-line marker it
+        // carried before the 2026-10-01 format, so old ones are rewritten in
+        // place instead of duplicated.
+        const found = existing.find(a => {
+          const t = a.data?.text || '';
+          return t.includes(c.marker) || t.split('\n').includes(c.legacyMarker);
+        });
         if (found?.data.text === c.text) continue;
         await renew();
         const result = found
