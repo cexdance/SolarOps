@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { customerSyncContent, linkedCardId, makeCustomerSync, mergeCustomerDescription, rmaComment, tagLine, tagAuthor, tagDate } from '../../../api/_trelloCustomerSync';
+import { customerSyncContent, linkedCardId, makeCustomerSync, mergeCustomerDescription, rmaComment, tagLine, tagAuthor, tagDate, isRetiredComment } from '../../../api/_trelloCustomerSync';
 import { isSolarOpsEcho } from '../../../api/trello-card';
 
 const cardId = '6aa4940ed25ee20fff76d045';
@@ -59,6 +59,7 @@ function fixture() {
     if (method === 'GET' && url.pathname.endsWith('/actions')) return Response.json(comments);
     if (method === 'GET') return Response.json(card);
     writes++;
+    if (method === 'DELETE' && /\/actions\/[^/]+$/.test(url.pathname)) { const id = url.pathname.split('/').at(-1); const i = comments.findIndex(c => c.id === id); if (i >= 0) comments.splice(i, 1); return Response.json({ _value: null }); }
     if (url.pathname.endsWith('/comments')) {
       if (method === 'PUT') { const id = url.pathname.split('/').at(-2); const c = comments.find(c => c.id === id); c.data.text = body.text; return Response.json(c); }
       const c = { id: String(comments.length + 1), data: { text: body.text } }; comments.push(c); return Response.json(c);
@@ -150,5 +151,47 @@ describe('short Trello comment format', () => {
   it('the import side still recognises the new format as our own echo', () => {
     expect(isSolarOpsEcho('Called\n\n[SolarOps](https://solarflow-dashboard-sooty.vercel.app/#so-activity-n1) · Cesar Jurado · Sep 30, 2026')).toBe(true);
     expect(isSolarOpsEcho('First call, no answer')).toBe(false);
+  });
+});
+
+describe('retiring old bookkeeping comments (server side, 2026-10-01)', () => {
+  const legacy = (type: string, body: string, id: string) =>
+    `SolarOps activity — US-1 X\nOriginal date: 2026-09-30\nAuthor: Not recorded\nType: ${type}\n\n${body}\nSolarOps activity ID: ${id}`;
+
+  it('retires exactly the categories no longer posted', () => {
+    expect(isRetiredComment(legacy('job_updated', 'Work order SO-1 updated', 'w1'))).toBe(true);
+    expect(isRetiredComment(legacy('info_updated', 'Updated: Address', 'i1'))).toBe(true);
+    expect(isRetiredComment('SolarOps audit — SO-1\n\nFields updated\nSolarOps audit ID: a1')).toBe(true);
+    expect(isRetiredComment('SolarOps service-order audit — SO-1\n\n{...}\n\nSolarOps audit import: j1')).toBe(true);
+    expect(isRetiredComment('SolarOps record notes — X\n\nlead email\n\nSolarOps record notes: c1')).toBe(true);
+  });
+
+  it('never retires a note, an RMA, the new format, or anything a person wrote', () => {
+    expect(isRetiredComment(legacy('note_added', 'Called her', 'n1'))).toBe(false);
+    expect(isRetiredComment('RMA imported from SolarOps service order SO-1\nSolarOps RMA ID: r1')).toBe(false);
+    expect(isRetiredComment('Called\n\n[SolarOps](https://x/#so-activity-n1) · A · Sep 30, 2026')).toBe(false);
+    expect(isRetiredComment('First call, no answer. Type: job_updated')).toBe(false);   // a person typing similar words
+    // Even a person's comment laid out like ours, without OUR marker line, stays.
+    expect(isRetiredComment('Notes from the visit\nType: job_updated\nAuthor: Not recorded')).toBe(false);
+    expect(isRetiredComment('Fields updated')).toBe(false);
+  });
+
+  it('one sync rewrites the note, deletes the bookkeeping, leaves the human comment', async () => {
+    const f = fixture();
+    f.comments.push(
+      { id: 'human', data: { text: 'First call, no answer, vm sent' } },
+      { id: 'w1', data: { text: legacy('job_updated', 'Work order SO-1 updated', 'w1') } },
+      { id: 'a1', data: { text: 'SolarOps audit — SO-1\n\nFields updated\nSolarOps audit ID: a1' } },
+      { id: 'old', data: { text: legacy('activity', 'Customer called', 'note-1') } },
+    );
+    const r = await f.sync(job.id);
+    expect(r).toMatchObject({ removed: 2 });
+    const ids = f.comments.map(c => c.id);
+    expect(ids).toContain('human');
+    expect(ids).not.toContain('w1');
+    expect(ids).not.toContain('a1');
+    expect(f.comments.find(c => c.id === 'old').data.text).toMatch(/^Customer called\n\n\[SolarOps\]/);
+    // converged: a second pass deletes nothing more and writes nothing
+    const before = f.writes(); await f.sync(job.id); expect(f.writes()).toBe(before);
   });
 });

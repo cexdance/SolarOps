@@ -1,22 +1,16 @@
-// One-off cleanup of the comments SolarOps posted to the Conexsol Florida
-// Services Trello board (owner decision 2026-10-01: "clean them up and leave
-// something the user can understand quickly").
+// Status report for the cleanup of the comments SolarOps posted to the Conexsol
+// Florida Services Trello board (owner decision 2026-10-01: keep real notes and
+// RMAs in a short format, remove internal bookkeeping).
 //
-// KEEP and rewrite in place: real notes (calls, emails, summaries) and RMAs.
-//   Done by running the REAL customer sync (api/_trelloCustomerSync.ts, compiled
-//   below), which finds each old comment by its legacy marker line and edits it
-//   into the short format. No second copy of the formatting rules exists here.
-// DELETE: internal bookkeeping that read as noise on the board: automatic "work
-//   order updated" lines, audit entries ("Fields updated"), field-edit diffs,
-//   copies of the lead email, and the one raw JSON audit dump. All of it still
-//   lives in SolarOps.
+// REPORT ONLY. The work itself is done SERVER-side by the customer sync
+// (api/_trelloCustomerSync.ts): it rewrites old notes/RMAs in place and retires
+// the bookkeeping comments (isRetiredComment) on every card it syncs. It runs
+// on every save of a linked order and in the daily 10:00 UTC sweep (30 orders
+// per run). It has to be server-side: the only Trello token with WRITE access
+// lives in Vercel; the local one is read-only (Board:r), which is why the first
+// local --apply on 2026-10-01 got 401 on every request and changed nothing.
 //
-// MUST run only after the deploy that taught the webhook the new marker format:
-// every edit fires `updateComment`, and an older webhook would import each one
-// back as an "Edited in Trello" activity.
-//
-//   node scripts/cleanup-trello-solarops-comments.mjs           # dry run, writes nothing
-//   node scripts/cleanup-trello-solarops-comments.mjs --apply   # rewrite, then delete
+//   node scripts/cleanup-trello-solarops-comments.mjs    # what is left to do
 
 import { readFileSync, mkdirSync } from 'node:fs';
 import { execSync } from 'node:child_process';
@@ -26,7 +20,6 @@ import { tmpdir } from 'node:os';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const BOARD = '6a5a58e06fbf97144b5d96c9';
-const APPLY = process.argv.includes('--apply');
 
 const env = {};
 for (const p of ['solarflow-dashboard/.env.local', 'solarflow-dashboard/.env']) {
@@ -109,43 +102,16 @@ for (;;) {
 const jobs = rows.map(r => r.value).filter(j => j && j.customerId && linkedCardId(j));
 console.log(`\nLinked customer service orders the sync will rewrite: ${jobs.length}`);
 
-if (!APPLY) {
-  // Show a real before/after for one card that has a kept note.
-  const sample = before.find(a => classify(a.data?.text || '').why === 'note' && (a.data.text.split('\n\n')[1] || '').length < 200);
+// Show a real before/after for one card that still has an old-format note.
+{
+  const sample = before.find(a => classify(a.data?.text || '').why === 'note');
   if (sample) {
     const job = jobs.find(j => linkedCardId(j) === sample.data.card.id);
     const id = (sample.data.text.match(/^SolarOps activity ID: (.*)$/m) || [])[1];
     const cust = job && (await (await fetch(`https://cjmhfagkkayelcsprbai.supabase.co/rest/v1/app_data?key=eq.customer:${encodeURIComponent(job.customerId)}&select=value`, { headers: { apikey: SR, Authorization: `Bearer ${SR}` } })).json())[0]?.value;
     const after = job && cust && customerSyncContent(job, cust).comments.find(c => c.legacyMarker === `SolarOps activity ID: ${id}`);
-    console.log('\n--- BEFORE ---\n' + sample.data.text + '\n--- AFTER ---\n' + (after ? after.text : '(not regenerated)'));
+    if (after) console.log('\nNext rewrite, e.g.:\n' + after.text.slice(-200));
   }
-  console.log('\nDry run, nothing written. Re-run with --apply.');
-  process.exit(0);
 }
-
-// 1. Rewrite the keepers through the real sync.
-const sync = makeCustomerSync({
-  databaseUrl: 'https://cjmhfagkkayelcsprbai.supabase.co', serviceKey: SR, apiKey: KEY, token: TOK,
-  allowedBoard: id => id === BOARD, fetcher: throttled,
-});
-const res = { updated: 0, posted: 0, skipped: 0, failed: 0 };
-for (const [i, j] of jobs.entries()) {
-  try {
-    const r = await sync.sync(j.id);
-    if (r.updated !== undefined) { res.updated += r.updated; res.posted += r.posted; } else res.skipped++;
-  } catch (e) { res.failed++; console.log(`  sync failed ${j.id}: ${e.message}`); }
-  if ((i + 1) % 10 === 0 || i === jobs.length - 1) console.log(`  rewrite ${i + 1}/${jobs.length} ${JSON.stringify(res)}`);
-}
-
-// 2. Delete the bookkeeping. Re-read first: only what is STILL old-format and
-//    in a delete category goes. A keeper the sync failed to rewrite is left.
-const now = await boardComments();
-const doomed = now.filter(a => classify(a.data?.text || '').action === 'delete');
-let deleted = 0, delFailed = 0;
-for (const a of doomed) {
-  const r = await T(`actions/${a.id}`, { method: 'DELETE' });
-  r.ok ? deleted++ : delFailed++;
-  if ((deleted + delFailed) % 50 === 0) console.log(`  deleted ${deleted}/${doomed.length}`);
-}
-const leftover = now.filter(a => classify(a.data?.text || '').action === 'keep').length;
-console.log(`\nDone. rewritten ${res.updated}, newly posted ${res.posted}, deleted ${deleted} (failed ${delFailed}), old-format keepers left ${leftover}`);
+const left = Object.entries(tally).filter(([k]) => !k.startsWith('clean')).reduce((n, [, v]) => n + v, 0);
+console.log(left ? `\n${left} comments still to clean. The server finishes them on the next sweep(s) or saves.` : '\nAll clean.');

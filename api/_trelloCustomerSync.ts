@@ -45,6 +45,32 @@ export function tagLine(kind: 'activity' | 'rma', id: string, author: unknown, w
   return [`[SolarOps](${soLink(kind, id)})`, tagAuthor(author), tagDate(when)].filter(Boolean).join(' · ');
 }
 
+/**
+ * An OLD-format SolarOps comment in a category the sync no longer posts
+ * (2026-10-01): automatic job/field updates, audit entries, the raw JSON audit
+ * dump, and record-notes copies. Only these are ever deleted.
+ *
+ * Deliberately narrow. A comment without a SolarOps marker is a person's and is
+ * never touched. Old-format notes and RMAs are NOT retired: the sync rewrites
+ * them in place, and one whose source record is gone is left alone rather than
+ * guessed at.
+ */
+export function isRetiredComment(text: string): boolean {
+  if (/#so-(?:activity|rma)-/.test(text)) return false;                 // current format
+  if (/^SolarOps audit ID:/m.test(text)) return true;
+  if (/SolarOps audit import:/.test(text)) return true;
+  if (/^SolarOps record notes:/m.test(text)) return true;
+  if (/^SolarOps activity ID:/m.test(text)) {
+    const type = (text.match(/^Type: (.*)$/m) || [])[1];
+    return !!type && type !== 'note_added' && type !== 'activity';
+  }
+  return false;
+}
+
+/** Bump when the comment FORMAT changes, so every card gets one pass even where
+ *  the underlying records did not change (the sync skips identical content). */
+const FORMAT_VERSION = 'v2-2026-10-01';
+
 const humanize = (s: unknown) => { const t = clean(s).replace(/_/g, ' '); return t ? t[0].toUpperCase() + t.slice(1) : ''; };
 
 /** One RMA as one readable line (plus the case number when it differs). No
@@ -117,9 +143,14 @@ export function makeCustomerSync(options: { databaseUrl: string; serviceKey: str
   async function trello(path: string, method = 'GET', body?: RecordData) {
     const url = new URL(`https://api.trello.com/1/${path}`);
     url.searchParams.set('key', options.apiKey); url.searchParams.set('token', options.token);
-    const r = await fetcher(url, { method, ...(body ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}), signal: AbortSignal.timeout(15000) });
-    if (!r.ok) throw new Error(`Customer sync Trello ${method} ${r.status}`);
-    return r.json();
+    // Trello allows 100 requests / 10 s per token; a cleanup pass on a busy card
+    // can exceed that, so back off on 429 instead of failing the whole card.
+    for (let attempt = 0; ; attempt++) {
+      const r = await fetcher(url, { method, ...(body ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}), signal: AbortSignal.timeout(15000) });
+      if (r.status === 429 && attempt < 4) { await new Promise(res => setTimeout(res, 1500 * (attempt + 1))); continue; }
+      if (!r.ok) throw new Error(`Customer sync Trello ${method} ${r.status}`);
+      return r.json();
+    }
   }
   async function sync(jobId: string) {
     let job = await get(`job:${jobId}`);
@@ -139,7 +170,7 @@ export function makeCustomerSync(options: { databaseUrl: string; serviceKey: str
       const customer = await get(`customer:${job.customerId}`);
       if (!customer) return { retry: true, skipped: 'customer not saved yet' };
       const content = customerSyncContent(job, customer);
-      const hash = createHash('sha256').update(JSON.stringify(content)).digest('hex');
+      const hash = createHash('sha256').update(FORMAT_VERSION + JSON.stringify(content)).digest('hex');
       const stateKey = `trello_customer_sync:${jobId}`;
       if ((await get(stateKey))?.hash === hash) return { skipped: 'unchanged' };
       const card = await trello(`cards/${cardId}?fields=idBoard,name,desc,closed`);
@@ -174,9 +205,18 @@ export function makeCustomerSync(options: { databaseUrl: string; serviceKey: str
           : await trello(`cards/${cardId}/actions/comments`, 'POST', { text: c.text });
         if (found) updated++; else { posted++; existing.push(result); }
       }
+      // Retire our own old bookkeeping comments on this card (see
+      // isRetiredComment). Never a person's comment: the marker is required.
+      let removed = 0;
+      for (const a of existing) {
+        if (!isRetiredComment(a.data?.text || '')) continue;
+        await renew();
+        await trello(`actions/${a.id}`, 'DELETE');
+        removed++;
+      }
       await renew();
       await db('on_conflict=key', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ key: stateKey, value: { hash, cardId, syncedAt: new Date().toISOString() } }) });
-      return { cardId, posted, updated };
+      return { cardId, posted, updated, removed };
     } finally {
       await db(`key=eq.${lockKey}&value->>owner=eq.${owner}`, { method: 'DELETE', headers: { Prefer: 'return=minimal' } });
     }
