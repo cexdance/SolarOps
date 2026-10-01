@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { seedLeadInfo, leadDisplayName, leadToCustomer, formatImportedAt } from '../lib/leadConvert';
+import { seedLeadInfo, leadDisplayName, leadToCustomer, formatImportedAt, jobMatchesSearch } from '../lib/leadConvert';
 import type { Job } from '../types';
 
 const job = (over: Partial<Job> = {}): Job => ({
@@ -82,5 +82,54 @@ describe('formatImportedAt', () => {
     expect(formatImportedAt(undefined, NOW)).toBe('');
     expect(formatImportedAt('', NOW)).toBe('');
     expect(formatImportedAt('not-a-date', NOW)).toBe('');
+  });
+});
+
+describe('jobMatchesSearch', () => {
+  // The real shape of a Trello lead: no customer, name split across two lines.
+  const adesh = {
+    clientName: 'Adesh Nangia', title: 'Adesh Nangia', woNumber: undefined,
+    notes: "Hello team! You've received a new solar lead!\n\nFirst Name: Adesh\nLast Name: Nangia\nEmail: adeshnangia@gmail.com\nPhone: 7039452850\n",
+    leadInfo: { firstName: 'Adesh', lastName: 'Nangia', phone: '7039452850', email: 'adeshnangia@gmail.com' },
+  };
+
+  it('finds a lead by its full name as it reads on the Trello card', () => {
+    // Reported 2026-10-01: this matched nothing, for all 88 leads without a customer.
+    expect(jobMatchesSearch(adesh, undefined, 'Adesh Nangia')).toBe(true);
+    expect(jobMatchesSearch(adesh, undefined, 'nangia adesh')).toBe(true);   // any order
+  });
+
+  it('still finds everything the old substring search found', () => {
+    for (const q of ['Adesh', 'Nangia', 'adeshnangia@gmail.com', '7039452850', 'solar lead']) {
+      expect(jobMatchesSearch(adesh, undefined, q)).toBe(true);
+    }
+  });
+
+  it('matches a phone typed the way people write it, and not a stranger', () => {
+    expect(jobMatchesSearch(adesh, undefined, '(703) 945-2850')).toBe(true);
+    expect(jobMatchesSearch(adesh, undefined, '703-945-2850')).toBe(true);
+    expect(jobMatchesSearch(adesh, undefined, '(954) 605-0226')).toBe(false);
+  });
+
+  it('requires EVERY word, so a wrong second word does not match', () => {
+    expect(jobMatchesSearch(adesh, undefined, 'Adesh Smith')).toBe(false);
+    expect(jobMatchesSearch(adesh, undefined, 'Nangia zzz')).toBe(false);
+  });
+
+  it('an empty or blank query matches everything', () => {
+    expect(jobMatchesSearch(adesh, undefined, '')).toBe(true);
+    expect(jobMatchesSearch(adesh, undefined, '   ')).toBe(true);
+  });
+
+  it('still searches a linked customer and the service order number', () => {
+    const so = { clientName: '', title: 'WO', woNumber: 'WO-2609-77087', notes: '', leadInfo: undefined };
+    expect(jobMatchesSearch(so, { name: 'Donnie Hall', address: '12 Oak St' }, 'donnie hall')).toBe(true);
+    expect(jobMatchesSearch(so, { name: 'Donnie Hall', address: '12 Oak St' }, 'oak')).toBe(true);
+    expect(jobMatchesSearch(so, undefined, '2609-77087')).toBe(true);
+  });
+
+  it('a short digit string does not match every phone number by accident', () => {
+    // under 4 digits the digits-only comparison is off, so "12" cannot match a phone containing 1...2
+    expect(jobMatchesSearch(adesh, undefined, '99')).toBe(false);
   });
 });

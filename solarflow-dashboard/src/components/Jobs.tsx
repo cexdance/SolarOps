@@ -67,7 +67,7 @@ function badgeLabel(job: Job): string {
 import { ServiceOrderPanel } from './ServiceOrderPanel';
 import { archiveJob } from '../lib/jobService';
 import { LeadPanel } from './LeadPanel';
-import { leadToCustomer, formatImportedAt, clientNumberOwner } from '../lib/leadConvert';
+import { leadToCustomer, formatImportedAt, clientNumberOwner, jobMatchesSearch } from '../lib/leadConvert';
 import { assignClientNumber, bindClientNumber, releaseAssignedNumber, type Assigned } from '../lib/clientNumbers';
 
 // Contractor workload buckets for the per-contractor filter summary. Uses the raw
@@ -634,11 +634,7 @@ export const Jobs: React.FC<JobsProps> = ({
   // The LL board keeps only search / powercare / period / archived.
   const jobMatches = useCallback((job: Job, includeHeld: boolean, forLL = false) => {
     const customer = customers.find((c) => c.id === job.customerId);
-    const matchesSearch =
-      !searchQuery ||
-      customer?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      customer?.address.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      job.notes.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch = jobMatchesSearch(job, customer, searchQuery);
     const matchesStatus = forLL ? true : (
       filterStatus === 'all' ? true :
       filterStatus === 'on_hold' ? !!job.onHold :
@@ -695,11 +691,7 @@ export const Jobs: React.FC<JobsProps> = ({
   // the list, map and counts.
   const sideColumnMatches = useCallback((job: Job) => {
     const customer = customers.find((c) => c.id === job.customerId);
-    const matchesSearch =
-      !searchQuery ||
-      customer?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      customer?.address.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      job.notes.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch = jobMatchesSearch(job, customer, searchQuery);
     const matchesContractor = filterContractor === 'all' || job.contractorId === filterContractor;
     const matchesPowerCare = !powerCareOnly || !!job.isPowercare;
     let matchesPeriod = true;

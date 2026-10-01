@@ -141,3 +141,36 @@ export function clientIdChangeConflict<C extends { id: string; name: string; cli
   if (!want || want === norm(prev?.clientId)) return undefined;
   return customers.find(c => c.id !== next.id && norm(c.clientId) === want);
 }
+
+/**
+ * The board search, for one job.
+ *
+ * A lead has no customer record, so the search used to look only at
+ * `job.notes`. The lead email puts the name on two lines ("First Name: Adesh" /
+ * "Last Name: Nangia"), so typing the name as it reads on the Trello card
+ * ("Adesh Nangia") matched NOTHING, for all 88 leads without a customer. That
+ * reads as a missing card, not a search bug (reported 2026-10-01).
+ *
+ * Every word the user types must appear somewhere in the job's searchable text,
+ * in any order. Strictly more permissive than the old whole-string substring
+ * test, so nothing that matched before stops matching.
+ */
+export function jobMatchesSearch(
+  job: Pick<Job, 'clientName' | 'title' | 'notes' | 'leadInfo' | 'woNumber'>,
+  customer: { name?: string; address?: string; phone?: string; email?: string } | undefined,
+  query: string,
+): boolean {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return true;
+  const li = job.leadInfo ?? {};
+  const hay = [
+    customer?.name, customer?.address, customer?.phone, customer?.email,
+    job.clientName, job.title, job.woNumber, job.notes,
+    li.firstName, li.lastName, li.phone, li.email,
+  ].filter(Boolean).join(' ').toLowerCase();
+  // Phone numbers are stored bare ("7039452850") but typed formatted
+  // ("(703) 945-2850"): compare digits when the query is mostly digits.
+  const digits = query.replace(/\D/g, '');
+  const digitHay = digits.length >= 4 ? hay.replace(/\D/g, '') : '';
+  return words.every(w => hay.includes(w)) || (digits.length >= 4 && digitHay.includes(digits));
+}
