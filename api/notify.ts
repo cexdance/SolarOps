@@ -216,6 +216,37 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const caller = await verifyRes.json().catch(() => null) as AuthUser | null;
   if (!caller?.id) return res.status(401).json({ error: 'Unauthorized' });
 
+  // ── Client registry sheet mirror ───────────────────────────────────────────
+  // The browser used to POST the Apps Script /exec URL itself. That call works
+  // from a server every time, but from a browser it depends on the user's
+  // extensions, tracking protection and third-party request rules: assigning
+  // US-15715 failed with a bare "NetworkError" on 2026-10-01 while the identical
+  // call from here returned 200. Proxying keeps it same-origin, so no browser
+  // setting can block it. Postgres owns the numbers (public.client_numbers);
+  // this only mirrors a name into the sheet for the office, so it is also
+  // deliberately not rate limited with the mention quota below.
+  // Lives here for the same reason the cron does: api/ is at the Hobby cap of 12.
+  if ((req.body as Record<string, unknown>)?.action === 'registry-mirror') {
+    if (!REGISTRY_URL) return res.status(503).json({ error: 'Client registry sheet is not configured' });
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const clientId = String(body.clientId ?? '').trim().toUpperCase();
+    const name = String(body.name ?? '').trim();
+    if (!/^US-\d{5}$/.test(clientId)) return res.status(400).json({ error: 'clientId must look like US-15704' });
+    if (!name) return res.status(400).json({ error: 'A client name is required' });
+    const payload = body.op === 'release' ? { op: 'release', clientId, name } : { clientId, name };
+    try {
+      const sheet = await fetch(REGISTRY_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(payload),
+      });
+      if (!sheet.ok) return res.status(502).json({ error: `Registry sheet returned HTTP ${sheet.status}` });
+      return res.status(200).json(await sheet.json());
+    } catch (err) {
+      return res.status(502).json({ error: `Registry sheet unreachable: ${(err as Error).message}` });
+    }
+  }
+
   const nowMs = Date.now();
   const bucket = rateLimitMap.get(caller.id);
   if (bucket && bucket.resetAt > nowMs) {

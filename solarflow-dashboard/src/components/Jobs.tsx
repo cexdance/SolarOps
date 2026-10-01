@@ -879,8 +879,9 @@ export const Jobs: React.FC<JobsProps> = ({
       updatedAt: new Date().toISOString(),
     });
     setLeadPanelJobId(null);
-    // The number is valid either way; the sheet just could not be written yet.
-    if (assigned.warning && !mergedInto) window.alert(assigned.warning);
+    // The number is valid either way; only the sheet mirror lagged, and the
+    // nightly check fills it in. Not worth a modal in front of the operator.
+    if (assigned.warning && !mergedInto) console.warn('[clientNumbers]', assigned.warning);
   };
 
   // Calendar drag-to-reschedule: stamp the new scheduled date (yyyy-MM-dd) plus

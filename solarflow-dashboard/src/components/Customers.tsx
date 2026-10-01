@@ -3474,7 +3474,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
       });
       unsavedClaim.current = a;
       setEditForm(prev => ({ ...prev, clientId: a.clientId, solarEdgeClientId: a.clientId }));
-      if (a.warning) window.alert(a.warning);
+      if (a.warning) console.warn('[clientNumbers]', a.warning);
     } catch (err) {
       window.alert(`Could not assign a client number:\n\n${(err as Error).message}`);
     } finally {
@@ -3789,7 +3789,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
     if (saved && (claimed?.clientId === saved || reserved?.clientId === saved)) {
       void bindClientNumber(saved, customer.id);
     }
-    if (reserved?.warning) window.alert(reserved.warning);
+    if (reserved?.warning) console.warn('[clientNumbers]', reserved.warning);
     onCloseEdit();
   };
 
@@ -5755,7 +5755,9 @@ const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({
         void releaseAssignedNumber(assigned);
       } else {
         void bindClientNumber(assigned.clientId, createdId);
-        if (assigned.warning) alert(assigned.warning);
+        // Mirror lag only: the number is assigned and the nightly check fills
+        // the sheet, so this never interrupts the person creating a customer.
+        if (assigned.warning) console.warn('[clientNumbers]', assigned.warning);
       }
       onClose();
     } catch (err) {

@@ -11,14 +11,42 @@
 // The endpoint is an Apps Script web app bound to the sheet; see
 // scripts/client-registry.gs for the script and its deploy steps.
 
+import { authedFetch } from './supabase';
+
 // ponytail: an Apps Script /exec URL instead of the Sheets API. No OAuth, no
 // service account key, no new /api/ function (Vercel Hobby caps api/ at 12).
+// Read here only to know whether the sheet is configured at all; the call
+// itself is made by the server (see viaServer).
 // Bracket notation: import.meta.env is an index signature under this tsconfig.
 const REGISTRY_URL = import.meta.env['VITE_CLIENT_REGISTRY_URL'] as string | undefined;
 
 /** False on builds without the sheet (preview), where mirroring is skipped. */
 export function sheetRegistryConfigured(): boolean {
   return !!REGISTRY_URL;
+}
+
+/**
+ * Every sheet write goes through OUR server, never from the browser to Google.
+ *
+ * The browser used to POST the Apps Script /exec URL directly. That call is
+ * reliable from a server and unreliable from a browser: it is a third-party
+ * request, so an extension, tracking protection or a corporate network can kill
+ * it. Assigning US-15715 failed with a bare "NetworkError" on 2026-10-01 while
+ * the identical call from the server returned 200. Same-origin cannot be
+ * blocked that way, and it keeps the sheet's URL out of the client bundle's
+ * reach entirely.
+ */
+async function viaServer(body: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const res = await authedFetch('/api/notify', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => null) as Record<string, unknown> | null;
+  const failure = data?.['error'];
+  if (!res.ok) throw new Error(String(failure ?? `Client registry sheet returned HTTP ${res.status}`));
+  if (failure) throw new Error(String(failure));
+  return data ?? {};
 }
 
 export interface SheetStamp {
@@ -40,18 +68,9 @@ export interface SheetStamp {
  */
 export async function stampSheetRow(name: string, clientId: string): Promise<SheetStamp | null> {
   if (!REGISTRY_URL) return null;
-  // text/plain keeps this a CORS "simple request" - Apps Script does not answer
-  // preflight OPTIONS, so an application/json body would fail before it is sent.
-  const res = await fetch(REGISTRY_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify({ name, clientId }),
-  });
-  if (!res.ok) throw new Error(`Client registry sheet returned HTTP ${res.status}`);
-  const data = await res.json();
-  if (data?.error) throw new Error(String(data.error));
-  if (!data?.clientId) throw new Error('Client registry sheet returned no row.');
-  return data as SheetStamp;
+  const data = await viaServer({ action: 'registry-mirror', name, clientId });
+  if (!data['clientId']) throw new Error('Client registry sheet returned no row.');
+  return data as unknown as SheetStamp;
 }
 
 /**
@@ -62,14 +81,8 @@ export async function stampSheetRow(name: string, clientId: string): Promise<She
 export async function clearSheetRow(clientId: string, name: string): Promise<boolean> {
   if (!REGISTRY_URL || !clientId) return false;
   try {
-    const res = await fetch(REGISTRY_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ op: 'release', clientId, name }),
-    });
-    if (!res.ok) return false;
-    const data = await res.json();
-    return data?.released === true;
+    const data = await viaServer({ action: 'registry-mirror', op: 'release', clientId, name });
+    return data['released'] === true;
   } catch {
     return false;
   }
