@@ -88,6 +88,18 @@ export const getBillingColumn = (job: Job): BillingCol => {
   return 'pending';
 };
 
+// Whether an order shows on the Billing board at all. Archived orders live on
+// Service Orders. A held order still waiting on its quote (Create Quote or
+// Quote Sent) is parked too: there is nothing for billing to do until it comes
+// off hold, and it stays visible in Service Orders' On Hold column. A held
+// order past the quote stage keeps its column, since money is still moving.
+export const onBillingBoard = (job: Job): boolean => {
+  if (job.status === 'archived') return false;
+  if (!job.onHold) return true;
+  const col = getBillingColumn(job);
+  return col !== 'new' && col !== 'quote_sent';
+};
+
 // ── Card aging ────────────────────────────────────────────────────────────────
 // Each column runs off its own clock: the moment the card landed in that
 // stage. What "late" means differs per column (an old Quote Sent is a client
@@ -432,7 +444,7 @@ export const Billing: React.FC<BillingProps> = ({
   // billing stage, and if All counted them the seven chips would not sum to
   // All: 24 orders silently unaccounted for on a money screen is how people
   // stop trusting the numbers. Archived orders live on Service Orders.
-  const listSearched = serviceOrders.filter((j) => j.status !== 'archived' && matchesSearch(j));
+  const listSearched = serviceOrders.filter((j) => onBillingBoard(j) && matchesSearch(j));
   const stageCount = (stage: BillingCol) =>
     listSearched.filter((j) => getBillingColumn(j) === stage).length;
   const listJobs =
@@ -722,7 +734,7 @@ export const Billing: React.FC<BillingProps> = ({
             // Most critical first by default: the whole point of the markers is
             // that the worst card should not be the one you have to scroll to.
             const colSort = columnSortBy[col.key] ?? 'age_desc';
-            const inCol = filteredJobs.filter(j => j.status !== 'archived' && getBillingColumn(j) === col.key);
+            const inCol = filteredJobs.filter(j => onBillingBoard(j) && getBillingColumn(j) === col.key);
             const allColJobs = colSort === 'age_desc' || colSort === 'age_asc'
               ? sortByAge(inCol, col.key, colSort === 'age_desc' ? 'desc' : 'asc')
               : sortJobsBy(inCol, colSort, contractors);

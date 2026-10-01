@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getBillingColumn, ageTier, cardAge, sortByAge, displayName, orderKind, isServiceOrder } from '../components/Billing';
+import { getBillingColumn, onBillingBoard, ageTier, cardAge, sortByAge, displayName, orderKind, isServiceOrder } from '../components/Billing';
 import type { Job, Customer } from '../types';
 
 const job = (p: Partial<Job>): Job => ({
@@ -240,5 +240,17 @@ describe('sortByAge', () => {
     const list = [at('b', 4), at('c', 20), at('a', 1)];
     sortByAge(list, 'quote_sent', 'desc', now);
     expect(ids(list)).toEqual(['b', 'c', 'a']);
+  });
+});
+
+describe('onBillingBoard', () => {
+  it('parks a held order still in the quote columns (SO-2608-05156)', () => {
+    expect(onBillingBoard(job({ woStatus: 'draft', onHold: true }))).toBe(false);
+    expect(onBillingBoard(job({ woStatus: 'quote_sent', onHold: true }))).toBe(false);
+    expect(onBillingBoard(job({ woStatus: 'draft' }))).toBe(true);
+  });
+  it('keeps a held order that is past the quote stage, drops archived', () => {
+    expect(onBillingBoard(job({ status: 'completed', woStatus: 'completed', onHold: true }))).toBe(true);
+    expect(onBillingBoard(job({ status: 'archived' }))).toBe(false);
   });
 });
