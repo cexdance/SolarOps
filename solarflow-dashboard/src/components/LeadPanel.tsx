@@ -7,6 +7,7 @@ import React, { useEffect, useState } from 'react';
 import { Phone, Mail, FileText, X, UserCheck, PhoneCall, MessageSquare } from 'lucide-react';
 import type { Job, LeadInfo, Activity } from '../types';
 import { seedLeadInfo, leadDisplayName, formatImportedAt } from '../lib/leadConvert';
+import { leadOutreachMailto, LEAD_OUTREACH_SUBJECT } from '../lib/leadOutreach';
 import { rcCall, rcSMS } from '../lib/ringcentral';
 import { authedFetch } from '../lib/supabase';
 import { trelloCardIdOf } from '../lib/trelloSync';
@@ -126,6 +127,33 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({ job, currentUserName, onSa
     onSave({ leadInfo: info, activityHistory: next });
   };
 
+  /**
+   * Open the initial-contact draft in the user's mail app and record it on the
+   * lead. This is the one contact button that DOES auto-log (see the note above
+   * the call/SMS buttons): a fully drafted template is never opened by accident
+   * the way a phone number is misdialled, and the whole point of the button is
+   * that the first touch leaves a trail. The entry records that outreach went
+   * out, not the final text, since mailto hands the draft off to another app
+   * and we never see what was actually sent.
+   */
+  const emailLead = () => {
+    if (!info.email) return;
+    window.open(leadOutreachMailto(info.email, {
+      customerFirstName: info.firstName,
+      senderFullName: currentUserName,
+    }));
+    const entry: Activity = {
+      id: `lead-log-${Date.now()}`,
+      type: 'note_added',
+      description: `Email: initial outreach sent (${LEAD_OUTREACH_SUBJECT})`,
+      timestamp: new Date().toISOString(),
+      userName: currentUserName,
+    };
+    const next = [entry, ...activity];
+    setActivity(next);
+    onSave({ leadInfo: info, activityHistory: next });
+  };
+
   const sorted = [...activity].sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''));
 
   return (
@@ -192,9 +220,9 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({ job, currentUserName, onSa
               <input className={FIELD} placeholder="Email" value={info.email ?? ''} onChange={e => set('email', e.target.value)} onBlur={saveInfo} />
               <button
                 type="button"
-                onClick={() => info.email && window.open(`mailto:${info.email}`)}
+                onClick={emailLead}
                 disabled={!info.email}
-                title="Email this lead"
+                title="Open the initial-contact email, pre-filled, and log it on this lead"
                 className="shrink-0 px-3 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-40 flex items-center gap-1"
               >
                 <Mail className="w-4 h-4" /> Email
