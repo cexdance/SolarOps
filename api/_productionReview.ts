@@ -5,7 +5,7 @@ export interface Alert { siteId: number; status: string; type: string; firstTrig
 export interface Reading { timestamp: string; value: number | null }
 export interface Finding { kind: 'communication' | 'production'; detail: string; since?: string; weeklyWh?: number; averageWh?: number; dropPercent?: number }
 export interface Evaluation { siteId: number; name: string; checkedAt: string; findings: Finding[]; production: 'checked' | 'insufficient' | 'error'; communication: 'checked' | 'unknown'; error?: string; window: string }
-export interface Review { id: string; siteId: number; name: string; kind: Finding['kind']; finding: Finding; openedAt: string; lastCheckedAt: string; active: boolean; status: 'open' | 'in_review' | 'reviewed'; reviewer?: string; reviewedAt?: string; notes?: string; notifiedAt?: string }
+export interface Review { id: string; siteId: number; name: string; kind: Finding['kind']; finding: Finding; openedAt: string; lastCheckedAt: string; active: boolean; status: 'open' | 'in_review' | 'reviewed'; reviewer?: string; reviewedAt?: string; notes?: string; notifiedAt?: string; notificationId?: string }
 export interface ReviewState { reviews: Review[]; lastRun?: { startedAt: string; completedAt?: string; status: 'running' | 'complete' | 'partial' | 'failed'; total: number; checked: number; insufficient: number; unknownCommunication: number; errors: number; error?: string }; recipients: string[]; energyCache?: Record<string, { refreshedDay: string; values: Reading[] }> }
 export const emptyState = (): ReviewState => ({ reviews: [], recipients: [...RECIPIENTS] });
 export function floridaSite(site: Site): boolean {

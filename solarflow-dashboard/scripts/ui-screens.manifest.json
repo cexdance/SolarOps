@@ -88,6 +88,15 @@
       "detail": "Daily 48-hour communication and 40% production-drop review queue, coverage and scan status, review notes and history. Site grid, charts, import and service orders."
     },
     {
+      "id": "production-review-queue",
+      "group": "admin",
+      "title": "Florida Production Review Queue",
+      "view": "solaredge",
+      "sampleCapture": true,
+      "macro": "Human online review for prolonged communication loss and weekly production decline.",
+      "detail": "Embedded in SolarEdge Monitoring. Start review, required findings/next steps, completion and history. Email notifications require explicit approval. Public catalog uses sample sites from check-production-review-ui.mjs."
+    },
+    {
       "id": "solaredge-alerts-map",
       "group": "admin",
       "title": "SolarEdge Alerts Map",

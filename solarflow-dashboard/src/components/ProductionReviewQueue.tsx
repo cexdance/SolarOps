@@ -22,15 +22,17 @@ export function ProductionReviewQueue({ role }: { role?: string }) {
   }
   const pending = state?.reviews.filter(r => r.status !== 'reviewed') || [];
   const rows = history ? state?.reviews || [] : pending; const run = state?.lastRun;
+  const awaitingEmail = pending.filter(r => !r.notifiedAt).length;
   const stale = run && Date.now() - Date.parse(run.completedAt || run.startedAt) > 36 * 3600000;
   return <section className="rounded-xl border border-slate-200 bg-white p-4 space-y-3" aria-label="Production review queue">
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div><h2 className="font-semibold text-slate-900">Human review queue <span className="text-amber-700">({pending.length})</span></h2>
         <p className="text-sm text-slate-600">Daily Florida scan: communication lost for 48 hours or production down at least 40%.</p>
-        <p className="text-xs text-slate-500">Latest 7 completed local days compared with the average of the preceding 10 weeks. Alerts email cesar.jurado@conexsol.us.</p></div>
+        <p className="text-xs text-slate-500">Latest 7 completed local days compared with the average of the preceding 10 weeks. Email to cesar.jurado@conexsol.us requires approval before sending.</p></div>
       <div className="flex gap-2"><button type="button" className="text-sm text-blue-700 underline" onClick={() => setHistory(!history)}>{history ? 'Show pending' : 'Show history'}</button>
         <button type="button" disabled={busy} onClick={() => void load()} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm disabled:opacity-50">{busy ? 'Loading...' : 'Refresh queue'}</button></div>
     </div>
+    {awaitingEmail > 0 && <p className="text-xs text-amber-800">{awaitingEmail} alert notifications awaiting approval. Emails are held until explicitly approved.</p>}
     {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
     {run ? <div className={`rounded-lg px-3 py-2 text-xs ${stale || run.status !== 'complete' ? 'bg-amber-50 text-amber-900' : 'bg-slate-50 text-slate-600'}`}>
       Last scan: {new Date(run.completedAt || run.startedAt).toLocaleString()} ({run.status}). {run.checked}/{run.total} sites have a complete production comparison. {run.insufficient} have insufficient history. {run.unknownCommunication} lack a communication timestamp or open site fault. {run.errors} reads failed.

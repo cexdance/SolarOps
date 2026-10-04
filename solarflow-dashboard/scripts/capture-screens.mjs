@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 // SolarOps UI catalog capture script.
 // Walks scripts/ui-screens.manifest.json and writes a full-page PNG per screen,
 // then rebuilds UI_SCREEN_CATALOG.md at the repo root with embedded shots.
@@ -128,8 +129,8 @@ function buildCatalog(results) {
   const browser = await chromium.launch();
   const results = [];
 
-  const authScreens = screens.filter(s => s.noAuth);
-  const appScreens = screens.filter(s => !s.noAuth);
+  const authScreens = screens.filter(s => s.noAuth && !s.sampleCapture);
+  const appScreens = screens.filter(s => !s.noAuth && !s.sampleCapture);
 
   try {
     // 1) Pre-login screens, in their own throwaway context (these mutate
@@ -184,6 +185,14 @@ function buildCatalog(results) {
     await ctx.close();
   } finally {
     await browser.close();
+  }
+
+  // Isolated sample screenshots keep new review data out of the public catalog.
+  for (const screen of screens.filter(s => s.sampleCapture)) {
+    try {
+      execFileSync(process.execPath, [join(__dirname, 'check-production-review-ui.mjs'), `--url=${BASE_URL}`], { stdio: 'inherit' });
+      results.push({ ...screen, path: relPath(screen) });
+    } catch (error) { results.push({ ...screen, error: error.message }); }
   }
 
   // Preserve manifest order in the catalog.

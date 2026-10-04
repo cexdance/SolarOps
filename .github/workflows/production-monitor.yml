@@ -8,6 +8,14 @@ on:
         description: 'Check sites without saving reviews or sending email'
         type: boolean
         default: false
+      notifications_only:
+        description: 'Check held email; sending requires explicit message approval'
+        type: boolean
+        default: false
+      approved_email_digest:
+        description: 'Exact message digest, only after Cesar explicitly approves sending it'
+        type: string
+        default: ''
 permissions:
   contents: read
 concurrency:
@@ -22,14 +30,40 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-      - name: Analyze Florida fleet and notify new review issues
+      - name: Install locked mail transport
+        run: npm ci --ignore-scripts
+      - name: Verify configured SMTP connection
+        if: ${{ inputs.notifications_only }}
         env:
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_SECURITY: ${{ secrets.SMTP_SECURITY }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          SMTP_FROM: ${{ secrets.SMTP_FROM }}
+        run: node --input-type=module -e "import {smtpTransport,smtpFromEnv} from './scripts/production-smtp.mts'; const transport=smtpTransport(smtpFromEnv()); try { await transport.verify(); console.log('SMTP connection verified'); } finally { transport.close(); }"
+      - name: Analyze Florida fleet and hold notifications for approval
+        env:
+          EMAIL_APPROVED_DIGEST: ${{ inputs.approved_email_digest }}
+          SMTP_ENABLED: ${{ secrets.SMTP_ENABLED }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_SECURITY: ${{ secrets.SMTP_SECURITY }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          SMTP_FROM: ${{ secrets.SMTP_FROM }}
           SOLAREDGE_API_KEY: ${{ secrets.SOLAREDGE_API_KEY }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          PRODUCTION_MONITOR_FROM: ${{ vars.PRODUCTION_MONITOR_FROM }}
           DRY_RUN: ${{ inputs.dry_run }}
+          NOTIFICATIONS_ONLY: ${{ inputs.notifications_only }}
         run: |
-          if [ "$DRY_RUN" = "true" ]; then
+          if [ "$NOTIFICATIONS_ONLY" = "true" ] && [ "$DRY_RUN" = "true" ]; then
+            node scripts/production-monitor.mts --notify-only --dry-run
+          elif [ "$NOTIFICATIONS_ONLY" = "true" ]; then
+            node scripts/production-monitor.mts --notify-only
+          elif [ "$DRY_RUN" = "true" ]; then
             node scripts/production-monitor.mts --dry-run
           else
             node scripts/production-monitor.mts
