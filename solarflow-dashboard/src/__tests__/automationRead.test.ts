@@ -1,7 +1,8 @@
 // @vitest-environment node
 import { afterEach, expect, it, vi } from 'vitest';
 import { createHash } from 'node:crypto';
-import handler, { projectRecord, validAutomationToken } from '../../../api/automation-read';
+import handler, { projectRecord, validAutomationToken } from '../../../api/_automationRead';
+import usersHandler from '../../../api/users';
 
 const token = 'fixture-only-token';
 const hash = createHash('sha256').update(token).digest('hex');
@@ -11,6 +12,17 @@ function response() {
   return res;
 }
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
+
+it('keeps staff routes authenticated and routes automation writes to the read-only guard', async () => {
+  const fetcher = vi.fn(); vi.stubGlobal('fetch', fetcher);
+  const staff = response();
+  await usersHandler({ method: 'GET', headers: {}, query: {} } as any, staff as any);
+  expect(staff.status).toHaveBeenCalledWith(401);
+  const automation = response();
+  await usersHandler({ method: 'POST', headers: {}, query: { automationRead: '1' } } as any, automation as any);
+  expect(automation.status).toHaveBeenCalledWith(405);
+  expect(fetcher).not.toHaveBeenCalled();
+});
 
 it('rejects missing, incorrect, malformed and unconfigured credentials', () => {
   expect(validAutomationToken(`Bearer ${token}`, hash)).toBe(true);
