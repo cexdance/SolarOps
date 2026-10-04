@@ -127,7 +127,7 @@ export default defineConfig(({ command, mode }) => {
       '/api/solaredge': {
         target: 'https://monitoringapi.solaredge.com',
         // Review storage is a SolarOps route, not a SolarEdge upstream path.
-        router: (req) => new URL(req.url || '/', 'http://localhost').searchParams.get('action') === 'production-reviews'
+        router: (req: import('node:http').IncomingMessage) => new URL(req.url || '/', 'http://localhost').searchParams.get('action') === 'production-reviews'
           ? 'https://solarflow-dashboard-sooty.vercel.app'
           : 'https://monitoringapi.solaredge.com',
         changeOrigin: true,

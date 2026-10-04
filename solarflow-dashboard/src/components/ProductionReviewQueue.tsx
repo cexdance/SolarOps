@@ -9,7 +9,7 @@ export function ProductionReviewQueue({ role }: { role?: string }) {
   const canReview = ['admin', 'coo', 'support'].includes(role || '');
   const load = useCallback(async () => {
     setBusy(true); setError('');
-    try { const r = await authedFetch(ENDPOINT); const body = await r.json(); if (!r.ok) throw new Error(body.error || 'Review queue unavailable'); setState(body); }
+    try { const r = await authedFetch(ENDPOINT); const body = await r.json(); if (!r.ok) throw new Error(body.error || 'Review queue unavailable'); if (!Array.isArray(body.reviews)) throw new Error('Review queue response is unavailable. Refresh after deployment.'); setState(body); }
     catch (e) { setError(e instanceof Error ? e.message : 'Review queue unavailable'); } finally { setBusy(false); }
   }, []);
   useEffect(() => { void load(); }, [load]);
