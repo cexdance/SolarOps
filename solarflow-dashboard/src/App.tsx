@@ -687,7 +687,9 @@ function App() {
     // view: the point of scanning is to land on that box, not wherever you were.
     () => (new URLSearchParams(window.location.search).has('box')
       ? 'inventory'
-      : localStorage.getItem('solarflow_current_view') || 'dashboard')
+      : new URLSearchParams(window.location.search).get('view') === 'solaredge'
+        ? 'solaredge'
+        : localStorage.getItem('solarflow_current_view') || 'dashboard')
   );
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);

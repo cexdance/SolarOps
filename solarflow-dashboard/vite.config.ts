@@ -126,10 +126,18 @@ export default defineConfig(({ command, mode }) => {
       // Proxy SolarEdge Monitoring API — rewrites /api/solaredge?path=/X&... → /X?...
       '/api/solaredge': {
         target: 'https://monitoringapi.solaredge.com',
+        // Review storage is a SolarOps route, not a SolarEdge upstream path.
+        router: (req) => new URL(req.url || '/', 'http://localhost').searchParams.get('action') === 'production-reviews'
+          ? 'https://solarflow-dashboard-sooty.vercel.app'
+          : 'https://monitoringapi.solaredge.com',
         changeOrigin: true,
         configure: (proxy) => {
           proxy.on('proxyReq', (proxyReq, req) => {
             const url = new URL(req.url!, 'http://localhost');
+            if (url.searchParams.get('action') === 'production-reviews') {
+              proxyReq.path = '/api/solaredge' + url.search;
+              return;
+            }
             const apiPath = url.searchParams.get('path') || '/sites/list';
             url.searchParams.delete('path');
             proxyReq.path = apiPath + (url.searchParams.toString() ? '?' + url.searchParams.toString() : '');

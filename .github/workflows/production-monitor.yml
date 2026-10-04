@@ -1,0 +1,36 @@
+name: Florida production monitor
+on:
+  schedule:
+    - cron: '0 11 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Check sites without saving reviews or sending email'
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: florida-production-monitor
+  cancel-in-progress: false
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Analyze Florida fleet and notify new review issues
+        env:
+          SOLAREDGE_API_KEY: ${{ secrets.SOLAREDGE_API_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          if [ "$DRY_RUN" = "true" ]; then
+            node scripts/production-monitor.mts --dry-run
+          else
+            node scripts/production-monitor.mts
+          fi

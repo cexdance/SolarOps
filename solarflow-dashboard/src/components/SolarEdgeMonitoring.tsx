@@ -1,3 +1,4 @@
+import { ProductionReviewQueue } from './ProductionReviewQueue';
 // SolarEdge Monitoring: Florida Sites Table
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { formatMoney } from '../lib/money';
@@ -532,6 +533,8 @@ export const SolarEdgeMonitoring: React.FC<Props> = ({
           )}
         </div>
       </div>
+
+      <ProductionReviewQueue role={currentUserRole} />
 
       {/* Stats Strip */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">

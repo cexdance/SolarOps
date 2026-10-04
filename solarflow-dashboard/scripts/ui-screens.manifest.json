@@ -84,8 +84,8 @@
       "group": "admin",
       "title": "SolarEdge Sites",
       "view": "solaredge",
-      "macro": "SolarEdge monitoring sites grid.",
-      "detail": "SolarEdgeMonitoring. Site list, power/energy columns (MonitoringColumnPicker), SiteProfilePanel on click, import modal."
+      "macro": "SolarEdge Florida monitoring and human production review queue.",
+      "detail": "Daily 48-hour communication and 40% production-drop review queue, coverage and scan status, review notes and history. Site grid, charts, import and service orders."
     },
     {
       "id": "solaredge-alerts-map",

@@ -18,6 +18,7 @@
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { requireUser } from './_auth';
+import { productionReviewApi } from './_productionReviewApi';
 
 const V2 = 'https://monitoringapi.solaredge.com/v2';
 const PAGE = 50; // v2 page size is fixed; pageSize/size/limit are ignored
@@ -185,6 +186,7 @@ async function sitesList(apiKey: string) {
 const SITE_PATH = /^\/site\/(\d+)\/(overview|details|energy|equipment)$/;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (req.query.action === 'production-reviews') return productionReviewApi(req, res);
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
