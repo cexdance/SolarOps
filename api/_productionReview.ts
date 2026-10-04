@@ -1,5 +1,4 @@
 /** Pure production monitor rules. Shared by the background worker and API. */
-export const REVIEW_KEY = 'solarops_production_reviews';
 export const RECIPIENTS = ['cesar.jurado@conexsol.us'];
 export interface Site { siteId: number; name: string; activationStatus?: string; lastUpdateTime?: string; location?: { state?: string; timezone?: string; city?: string; country?: string } }
 export interface Alert { siteId: number; status: string; type: string; firstTrigger?: string }

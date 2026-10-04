@@ -81,7 +81,7 @@ async function main() {
     const result = evaluate(site, alerts, readings, started); result.error = error; evaluations.push(result);
     if (evaluations.length % 25 === 0) {
       console.log(`Checked ${evaluations.length}/${selected.length} sites`);
-      if (!dryRun) await updateState(current => ({ ...reconcile(current, evaluations), energyCache, lastRun: { ...run, checked: evaluations.filter(e => e.production === 'checked').length, errors: evaluations.filter(e => e.error).length } }));
+      if (!dryRun) await updateState(current => ({ ...reconcile(current, evaluations), energyCache, lastRun: { ...run, checked: evaluations.filter(e => e.production === 'checked').length, insufficient: evaluations.filter(e => e.production === 'insufficient').length, unknownCommunication: evaluations.filter(e => e.communication === 'unknown').length, errors: evaluations.filter(e => e.error).length } }));
     }
   }
   const complete = { ...run, completedAt: new Date().toISOString(), status: evaluations.some(e => e.error) ? 'partial' as const : 'complete' as const, checked: evaluations.filter(e => e.production === 'checked').length, insufficient: evaluations.filter(e => e.production === 'insufficient').length, unknownCommunication: evaluations.filter(e => e.communication === 'unknown').length, errors: evaluations.filter(e => e.error).length };

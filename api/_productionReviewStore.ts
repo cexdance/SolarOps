@@ -1,5 +1,7 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
-import { REVIEW_KEY, emptyState, type ReviewState } from './_productionReview.ts';
+import type { ReviewState } from './_productionReview';
+const REVIEW_KEY = 'solarops_production_reviews';
+const emptyState = (): ReviewState => ({ reviews: [], recipients: [] });
 export function storeConfig() {
   const key = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
   if (!key) throw new Error('Monitor storage is not configured');
