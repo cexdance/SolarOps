@@ -743,8 +743,14 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
         if (row?.supabaseUrl) recovered.set(p.id, row.supabaseUrl);
       }
       if (revoked || recovered.size === 0) return;
-      setWoPhotos(prev => prev.map(p => recovered.has(p.id) ? { ...p, storageUrl: recovered.get(p.id), dataUrl: '' } : p));
-      setTimeout(() => handleSaveRef.current(undefined, true), 0);
+      const withUrl = <T extends WOPhoto>(p: T): T => recovered.has(p.id) ? { ...p, storageUrl: recovered.get(p.id), dataUrl: '' } : p;
+      setWoPhotos(prev => prev.map(withUrl));
+      // Pass the photos as the save patch: the setTimeout below can run before
+      // React re-renders, and then handleSave still reads the old woPhotos and
+      // saves no URL at all. That is exactly what happened on the first live
+      // recovery of SO-2610-98331 (12 uploaded, 0 URLs saved).
+      const patch = { woPhotos: (job!.woPhotos ?? []).map(withUrl) };
+      setTimeout(() => handleSaveRef.current(undefined, true, patch), 0);
     })();
     return () => {
       revoked = true;
