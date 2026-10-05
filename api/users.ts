@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import automationRead from './_automationRead';
 import mailboxHandler from './_mailboxHandler';
+import mailboxSyncApi from './_mailboxSyncApi';
 
 export const config = { maxDuration: 60 };
 
@@ -107,6 +108,7 @@ function cleanPermissions(input: unknown): string[] | undefined {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (req.query.mailboxSync === '1') return mailboxSyncApi(req, res);
   if (req.query.mailbox === '1') return mailboxHandler(req, res);
   if (req.query.automationRead === '1') return automationRead(req, res);
   const caller = await verifyCaller(req);

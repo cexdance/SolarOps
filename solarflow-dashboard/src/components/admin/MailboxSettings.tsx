@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { authedFetch } from '../../lib/supabase';
+import { MailboxSyncSettings } from './MailboxSyncSettings';
 
 interface Check { ok: boolean; error?: string; messages?: number; sentFolder?: string | null }
 interface Status {
@@ -65,7 +66,6 @@ export function MailboxSettings() {
     {status?.configured && <div className="text-sm text-slate-700">
       <p>{status.email}</p>
       <p>SMTP: {status.smtpHost}:{status.smtpPort} · IMAP: {status.imapHost}:993</p>
-      <p className="text-slate-500">Connection setup only. Background email synchronization is not enabled yet.</p>
     </div>}
     {status?.checks && <div role="status" className="text-sm space-y-1">
       <p className={status.checks.smtp.ok ? 'text-green-700' : 'text-red-700'}>Sending: {status.checks.smtp.ok ? 'SMTP authentication verified (no email sent)' : status.checks.smtp.error}</p>
@@ -100,5 +100,6 @@ export function MailboxSettings() {
       <button disabled={busy} onClick={() => void run('check')} className="px-3 py-2 border rounded-lg text-sm disabled:opacity-50">{busy ? 'Checking…' : 'Check connection'}</button>
       <button disabled={busy} onClick={() => setEditing(true)} className="text-sm">Edit connection</button>
     </div>}
+    {status?.configured && <MailboxSyncSettings />}
   </section>;
 }
