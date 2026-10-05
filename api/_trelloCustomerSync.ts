@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { toTrelloMentions } from './_trelloMentions';
 
 type RecordData = Record<string, any>;
 /** `marker` is how the sync finds its own comment again (it sits inside the
@@ -198,11 +199,12 @@ export function makeCustomerSync(options: { databaseUrl: string; serviceKey: str
           const t = a.data?.text || '';
           return t.includes(c.marker) || t.split('\n').includes(c.legacyMarker);
         });
-        if (found?.data.text === c.text) continue;
+        const outText = toTrelloMentions(c.text);
+        if (found?.data.text === outText) continue;
         await renew();
         const result = found
-          ? await trello(`cards/${cardId}/actions/${found.id}/comments`, 'PUT', { text: c.text })
-          : await trello(`cards/${cardId}/actions/comments`, 'POST', { text: c.text });
+          ? await trello(`cards/${cardId}/actions/${found.id}/comments`, 'PUT', { text: outText })
+          : await trello(`cards/${cardId}/actions/comments`, 'POST', { text: outText });
         if (found) updated++; else { posted++; existing.push(result); }
       }
       // Retire our own old bookkeeping comments on this card (see

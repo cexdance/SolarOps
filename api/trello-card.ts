@@ -42,6 +42,7 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { requireUser } from './_auth';
+import { fromTrelloMentions } from './_trelloMentions';
 import { makeCustomerSync, linkedCardId, SOLAROPS_MARKER } from './_trelloCustomerSync';
 import { extractLeadFromImage, validSiteId, type ParsedLead } from './parse-lead-image';
 
@@ -1043,6 +1044,8 @@ export async function importCommentEvent(action: TrelloWebhookAction): Promise<s
     if (verified?.type !== 'commentCard') return 'not a comment';
     if (!isAllowedBoard(verified.data?.board?.id)) return 'comment is not on an allowed board';
     if (isSolarOpsEcho(verified.data?.text)) return 'SolarOps echo, not imported';
+    // Trello handles become SolarOps handles before anything is stored or compared.
+    if (verified.data?.text) verified.data.text = fromTrelloMentions(verified.data.text);
     cardId = verified.data?.card?.id;
   }
   if (!cardId || !HEX24.test(cardId)) return 'no card';
