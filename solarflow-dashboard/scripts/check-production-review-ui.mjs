@@ -32,7 +32,7 @@ try {
   await page.goto(`${url}/?view=solaredge`, { waitUntil: 'domcontentloaded' });
   await page.locator('input[type=email]').fill(env.SNAP_UI_EMAIL); await page.locator('input[type=password]').fill(env.SNAP_UI_PASSWORD);
   await page.locator('button[type=submit]').click();
-  await page.getByRole('heading', { name: 'Human review queue (2)' }).waitFor({ timeout: 30000 });
+  await page.getByRole('heading', { name: 'O&M: Current sites to review (2)' }).waitFor({ timeout: 30000 });
   await page.getByPlaceholder('Search site ID, name, address…').fill('sample-catalog-no-table-results');
   await page.getByRole('button', { name: 'Start review', exact: true }).first().click();
   await page.getByText('in review | Condition still active', { exact: false }).waitFor();
@@ -40,9 +40,10 @@ try {
   await page.getByLabel('Findings and next steps').fill('Sample review: check internet connection and inverter status.');
   const queue = page.locator('section[aria-label="Production review queue"]');
   const output = resolve(directory, '../../ui-catalog/screens/admin'); mkdirSync(output, { recursive: true });
+  await page.screenshot({ path: '/tmp/solarops-om-desktop.png', fullPage: true });
   await queue.screenshot({ path: resolve(output, 'production-review-queue.png') });
-  await page.getByRole('button', { name: 'Complete human review', exact: true }).click();
-  await page.getByRole('heading', { name: 'Human review queue (1)' }).waitFor();
+  await page.getByRole('button', { name: 'Complete review', exact: true }).click();
+  await page.getByRole('heading', { name: 'O&M: Current sites to review (1)' }).waitFor();
   await page.getByRole('button', { name: 'Show history', exact: true }).click();
   await page.getByText('Sample review: check internet connection and inverter status.', { exact: false }).waitFor();
   await page.setViewportSize({ width: 390, height: 844 });

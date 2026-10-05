@@ -35,8 +35,19 @@ async function pages<T>(kind: 'sites' | 'alerts'): Promise<T[]> {
   throw new Error('Fleet pagination exceeded safety limit');
 }
 function escape(value: string) { return value.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!); }
+export function reviewEmail(reviews: Review[]) {
+  const subject = reviewSubject(reviews);
+  const count = new Set(reviews.map(r => r.siteId)).size;
+  const subtitle = `Florida · ${count} ${count === 1 ? 'site' : 'sites'}`;
+  const queueUrl = 'https://solarflow-dashboard-sooty.vercel.app/?view=solaredge';
+  const siteUrl = (id: number) => `https://monitoring.solaredge.com/one#/residential/digital-twin?siteId=${id}`;
+  const rows = reviews.map(r => `<tr><td style="padding:20px 0;border-bottom:1px solid #e2e8f0"><p style="margin:0 0 6px;font-size:16px;font-weight:600;color:#0D1B2A">${escape(r.name)}</p><p style="margin:0 0 10px;font-size:12px;color:#64748b">Site ${r.siteId} · ${r.kind === 'communication' ? 'Communication' : 'Production'}</p><p style="margin:0 0 12px;line-height:1.6">${escape(r.finding.detail)}</p><a style="color:#087f91" href="${siteUrl(r.siteId)}">Open in SolarEdge</a></td></tr>`).join('');
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escape(subject)}</title></head><body style="margin:0;background:#f1f5f9;color:#334155;font:14px Arial,sans-serif"><table role="presentation" style="width:100%;max-width:680px;margin:24px auto;border-collapse:collapse;background:#fff"><tr><td style="padding:24px;background:#0D1B2A;border-bottom:4px solid #F5A623"><p style="margin:0 0 16px;color:#F5A623;font-size:13px;font-weight:700">SolarOps</p><h1 style="margin:0;font-size:24px;line-height:1.3;color:#fff">O&amp;M: Current sites to review</h1><p style="margin:12px 0 0;color:#A8BDD0">${subtitle}</p></td></tr><tr><td style="padding:24px"><p style="margin:0 0 18px;line-height:1.6">Check the sites below in SolarEdge and record findings and next steps in SolarOps.</p><a style="display:inline-block;padding:12px 16px;border-radius:6px;background:#F5A623;color:#0D1B2A;font-weight:700;text-decoration:none" href="${queueUrl}">Open O&amp;M review list</a><table role="presentation" style="width:100%;border-collapse:collapse;margin-top:8px">${rows}</table><p style="margin:20px 0 0;font-size:12px;line-height:1.6;color:#64748b">Review criteria: no communication for 48 hours, or production at least 40% below the prior 10-week weekly average. Production uses the latest 7 completed local days. Check weather and site conditions before scheduling service.</p></td></tr></table></body></html>`;
+  const text = `${subject}\n${subtitle}\n\nCheck the sites below in SolarEdge and record findings and next steps in SolarOps.\n\n` + reviews.map(r => `${r.name} (site ${r.siteId})\n${r.finding.detail}\n${siteUrl(r.siteId)}`).join('\n\n') + `\n\nOpen O&M review list: ${queueUrl}\n\nReview criteria: no communication for 48 hours, or production at least 40% below the prior 10-week weekly average. Production uses the latest 7 completed local days. Check weather and site conditions before scheduling service.`;
+  return { subject, html, text };
+}
 export function emailApprovalDigest(reviews: Review[]) {
-  return createHash('sha256').update(JSON.stringify({ to: RECIPIENTS, subject: reviewSubject(reviews), reviews })).digest('hex');
+  return createHash('sha256').update(JSON.stringify({ to: RECIPIENTS, ...reviewEmail(reviews) })).digest('hex');
 }
 export async function sendAlerts(reviews: Review[], approvedDigest?: string) {
   if (!reviews.length) return;
@@ -48,15 +59,13 @@ export async function sendAlerts(reviews: Review[], approvedDigest?: string) {
   if (!key && !useSmtp) throw new Error('Email delivery is not configured');
   const ids = reviews.map(r => r.id).sort();
   const digest = createHash('sha256').update(ids.join('\n')).digest('hex');
-  const links = reviews.map(r => `<li><strong>${escape(r.name)} (site ${r.siteId})</strong><p>${escape(r.finding.detail)}</p><a href="https://monitoring.solaredge.com/one#/residential/digital-twin?siteId=${r.siteId}">Open SolarEdge site</a></li>`).join('');
-  const subject = reviewSubject(reviews);
-  const html = `<h1>Florida sites need human online review</h1><p>Communication threshold: 48 hours. Production threshold: at least 40% below the prior 10-week average.</p><ol>${links}</ol><p><a href="https://solarflow-dashboard-sooty.vercel.app/?view=solaredge">Open SolarOps, SolarEdge Monitoring review queue</a></p><p>Please record findings and next steps in the SolarOps review queue. A production flag is a review request and may reflect weather or another cause.</p>`;
+  const { subject, html, text } = reviewEmail(reviews);
   let receiptId: string;
   if (useSmtp) {
     const { smtpTransport, smtpFromEnv } = await import('./production-smtp.mts');
     const config = smtpFromEnv(); const transport = smtpTransport(config);
     try {
-      const info = await transport.sendMail({ from: { name: 'SolarOps', address: config.from }, to: RECIPIENTS, subject, html, text: reviews.map(r => `${r.name} (site ${r.siteId})\n${r.finding.detail}\nhttps://monitoring.solaredge.com/one#/residential/digital-twin?siteId=${r.siteId}`).join('\n\n') + '\n\nReview queue: https://solarflow-dashboard-sooty.vercel.app/?view=solaredge', messageId: `<solarops.production.${digest}@${config.from.split('@')[1]}>` });
+      const info = await transport.sendMail({ from: { name: 'SolarOps', address: config.from }, to: RECIPIENTS, subject, html, text, messageId: `<solarops.production.${digest}@${config.from.split('@')[1]}>` });
       if (!info.messageId || !RECIPIENTS.every(recipient => info.accepted?.some(address => address.toLowerCase() === recipient.toLowerCase()))) throw new Error('Recipient was not accepted');
       receiptId = `smtp:${info.messageId}`;
     } catch (error) {
@@ -64,7 +73,7 @@ export async function sendAlerts(reviews: Review[], approvedDigest?: string) {
       throw new Error(`Email delivery failed (SMTP ${code}); new alerts remain pending`);
     } finally { transport.close(); }
   } else {
-    const r = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { Authorization: `Bearer ${key}`, 'User-Agent': 'SolarOps/1.0', 'Content-Type': 'application/json', 'Idempotency-Key': `production-review-${digest}` }, body: JSON.stringify({ from: (process.env.PRODUCTION_MONITOR_FROM || 'SolarOps <solar.ops@conexsol.us>').trim(), to: RECIPIENTS, subject, html }), signal: AbortSignal.timeout(30000) });
+    const r = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { Authorization: `Bearer ${key}`, 'User-Agent': 'SolarOps/1.0', 'Content-Type': 'application/json', 'Idempotency-Key': `production-review-${digest}` }, body: JSON.stringify({ from: (process.env.PRODUCTION_MONITOR_FROM || 'SolarOps <solar.ops@conexsol.us>').trim(), to: RECIPIENTS, subject, html, text }), signal: AbortSignal.timeout(30000) });
     if (!r.ok) { const detail = await r.json().catch(() => ({})) as { message?: string }; throw new Error(`Email delivery failed (${r.status}): ${detail.message?.slice(0, 200) || 'Provider rejected the request'}; new alerts remain pending`); }
     const receipt = await r.json() as { id?: string };
     if (!receipt.id) throw new Error('Email provider did not return a receipt; alerts remain pending');

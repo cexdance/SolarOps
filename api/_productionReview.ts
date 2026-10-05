@@ -68,10 +68,8 @@ export function reconcile(state: ReviewState, evaluations: Evaluation[]): Review
   }
   return { ...state, reviews, recipients: [...RECIPIENTS] };
 }
-export function reviewSubject(reviews: Review[]): string {
-  const kinds = [...new Set(reviews.map(r => r.kind === 'communication' ? '48h communication outage' : '40% production drop'))].join(' / ');
-  const count = new Set(reviews.map(r => r.siteId)).size;
-  return `SolarOps: ${count} Florida ${count === 1 ? 'site needs' : 'sites need'} human review | ${kinds}`;
+export function reviewSubject(_reviews: Review[]): string {
+  return 'O&M: Current sites to review';
 }
 
 /** DAY resolution permits at most one month. Buffers include local boundary days. */

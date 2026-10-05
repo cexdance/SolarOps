@@ -35,7 +35,7 @@ describe('Florida production review', () => {
     const failure = evaluate(site, [], null, now); failure.error = '429'; state = reconcile(state, [failure]); expect(state.reviews[0]!.active).toBe(true);
     state = reconcile(state, [evaluate(site, [], readings(700), now)]); expect(state.reviews[0]!.active).toBe(false);
     state = reconcile(state, [{ ...finding, checkedAt: '2026-10-06T11:00:00Z' }]); expect(state.reviews).toHaveLength(2); expect(state.reviews[1]!.status).toBe('open');
-    expect(reviewSubject(state.reviews)).toContain('1 Florida site needs');
+    expect(reviewSubject(state.reviews)).toBe('O&M: Current sites to review');
   });
   it('covers explicit Florida and naming fallback, excluding other states', () => {
     expect(floridaSite(site)).toBe(true); expect(floridaSite({ ...site, location: { state: 'Georgia' } })).toBe(false); expect(floridaSite({ ...site, location: {} })).toBe(true);

@@ -4,12 +4,14 @@
 
 _Last captured: 2026-10-04 - 27/27 screens - viewport 1440x900_
 
+Refreshed this run: production-review-queue. Other screenshots retained from the previous capture.
+
 Text-only routing reference: [UI_UX_SCREEN_MAP.md](UI_UX_SCREEN_MAP.md)
 
 ## Contents
 
 - **Authentication & Onboarding**: [Staff Login](#staff-login) / [Forgot Password](#forgot-password) / [Reset Password](#reset-password) / [Contractor Login](#contractor-login)
-- **Staff App (admin role)**: [Ops Center](#dispatch) / [Dashboard](#dashboard) / [Customers](#customers) / [SolarEdge Sites](#solaredge) / [Florida Production Review Queue](#production-review-queue) / [SolarEdge Alerts Map](#solaredge-alerts-map) / [Work Orders](#jobs) / [LL Board (lead funnel)](#ll-board) / [LL LeadPanel (Trello lead)](#ll-lead-panel) / [Service order: Send to Trello](#so-send-to-trello) / [Dispatch Map](#routes) / [RMA Tracker](#rma) / [Billing](#billing) / [Billing (Kanban)](#billing-kanban) / [Contractor Pay](#contractor-billing) / [Service Rates](#rates) / [Messages (Internal Messenger)](#messages) / [Contractors](#contractors) / [New Install](#projects) / [Inventory](#inventory) / [Settings](#settings)
+- **Staff App (admin role)**: [Ops Center](#dispatch) / [Dashboard](#dashboard) / [Customers](#customers) / [SolarEdge Sites](#solaredge) / [O&M: Current sites to review](#production-review-queue) / [SolarEdge Alerts Map](#solaredge-alerts-map) / [Work Orders](#jobs) / [LL Board (lead funnel)](#ll-board) / [LL LeadPanel (Trello lead)](#ll-lead-panel) / [Service order: Send to Trello](#so-send-to-trello) / [Dispatch Map](#routes) / [RMA Tracker](#rma) / [Billing](#billing) / [Billing (Kanban)](#billing-kanban) / [Contractor Pay](#contractor-billing) / [Service Rates](#rates) / [Messages (Internal Messenger)](#messages) / [Contractors](#contractors) / [New Install](#projects) / [Inventory](#inventory) / [Settings](#settings)
 - **Sales Role**: [Sales CRM](#crm)
 - **Contractor Portal**: [Contractor Dashboard](#my-jobs)
 
@@ -108,22 +110,22 @@ Text-only routing reference: [UI_UX_SCREEN_MAP.md](UI_UX_SCREEN_MAP.md)
 <a id="solaredge"></a>
 
 - **id:** `solaredge` (view `solaredge`)
-- **Macro:** SolarEdge Florida monitoring and human production review queue.
+- **Macro:** SolarEdge Florida monitoring and O&M review list.
 - **Detail:** Daily 48-hour communication and 40% production-drop review queue, coverage and scan status, review notes and history. Site grid, charts, import and service orders.
 
 ![SolarEdge Sites](ui-catalog/screens/admin/solaredge.png)
 
 ---
 
-## Florida Production Review Queue
+## O&M: Current sites to review
 
 <a id="production-review-queue"></a>
 
 - **id:** `production-review-queue` (view `solaredge`)
-- **Macro:** Human online review for prolonged communication loss and weekly production decline.
-- **Detail:** Embedded in SolarEdge Monitoring. Start review, required findings/next steps, completion and history. Public catalog uses sample sites from check-production-review-ui.mjs.
+- **Macro:** Current Florida sites to review for communication and production issues.
+- **Detail:** Embedded in SolarEdge Monitoring. Start review, required findings/next steps, completion and history. Email notifications require explicit approval. Public catalog uses sample sites from check-production-review-ui.mjs.
 
-![Florida Production Review Queue](ui-catalog/screens/admin/production-review-queue.png)
+![O&M: Current sites to review](ui-catalog/screens/admin/production-review-queue.png)
 
 ---
 

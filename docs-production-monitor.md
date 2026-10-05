@@ -9,15 +9,15 @@ All SolarEdge v2 sites and alerts are paginated. Explicit Florida/FL locations a
 - Communication: an open SITE_COMMUNICATION_FAULT or RAPID_SITE_COMMUNICATION_FAULT with SolarEdge `firstTrigger` at least 48 hours old, or a timezone-qualified lastUpdateTime at least 48 hours old. Inverter-only communication faults do not establish a whole-site outage. Poll timestamps and null energy values do not establish communication loss. Sites without evidence are counted as unknown communication coverage.
 - Production: latest seven completed days in each site's timezone versus the arithmetic average of the ten preceding, nonoverlapping seven-day periods. Production at or below 60% of that average triggers review. All 77 daily values must be finite and nonnegative; missing/null readings are insufficient data, while actual zero is valid. A zero baseline cannot establish a percentage decline.
 - The scan runs daily. A communication threshold crossing is detected at the next successful scan, rather than exactly at hour 48.
-- Weather and seasonality are not automatically corrected. These flags request human online review, not a diagnosis.
+- Weather and seasonality are not automatically corrected. These flags request an O&M site review; they do not establish a diagnosis.
 
 Daily energy requests are split into windows below SolarEdge's one-month limit. Requests are paced below 25 per minute and retry 429/5xx responses. History is cached, with recent ten-day refreshes and a complete refresh every seven days. Initial scans require roughly three energy calls per site. Progress is persisted every 25 sites. A failed site read cannot clear an existing incident or turn missing production into zero.
 
 ## Queue and email
 
-Open SolarOps, SolarEdge Monitoring. The human review queue shows open and in-review incidents, scan coverage, failures, and stale scan warnings. Operations staff can start reviews and complete them with findings/next steps. History retains the reviewer and notes. Recovery does not silently complete the human review. A recovered condition that reappears creates a new incident.
+Open SolarOps, SolarEdge Monitoring. The O&M review list shows open and in-review incidents, scan coverage, failures, and stale scan warnings. Operations staff can start reviews and complete them with findings/next steps. History retains the reviewer and notes. Recovery does not silently complete the review. A recovered condition that reappears creates a new incident.
 
-New incidents prepare notifications to cesar.jurado@conexsol.us and hold them for explicit approval. Subjects state the number of Florida sites and the trigger, such as `SolarOps: 3 Florida sites need human review | 48h communication outage / 40% production drop`. Links open individual SolarEdge sites and the SolarOps queue. Successfully notified unresolved incidents are not resent. Failed delivery remains pending for another approved attempt. Resend's idempotency key reduces duplicate delivery during retries; delivery and database acknowledgement are not one atomic transaction.
+New incidents prepare notifications to cesar.jurado@conexsol.us and hold them for explicit approval. Subject and report title: `O&M: Current sites to review`. The report subtitle identifies Florida and the site count. Findings and thresholds stay in the report body. SolarOps navy and gold styling matches the application. Links open individual SolarEdge sites and the SolarOps queue. Successfully notified unresolved incidents are not resent. Failed delivery remains pending for another approved attempt. Resend's idempotency key reduces duplicate delivery during retries; delivery and database acknowledgement are not one atomic transaction.
 
 ## Deployment and storage
 
