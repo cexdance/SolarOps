@@ -21,6 +21,7 @@
  */
 
 import React, { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { serviceOrderNo, actualServiceCallCost } from '../lib/woHelpers';
 import { loadContractorJobs } from '../lib/contractorStore';
 import { formatCost } from '../lib/money';
@@ -230,6 +231,11 @@ const PRINT_STYLE = `
     size: A4 portrait;
     margin: 18mm 18mm 18mm 18mm;
   }
+  /* Print only the report: the modal is portaled to <body>, so every other
+     top-level node (the app) can go. The app locks body scrolling, which
+     would otherwise clip the report to its first page. */
+  body > *:not(.sow-print-root) { display: none !important; }
+  html, body { height: auto !important; overflow: visible !important; }
   /* Remove overlay chrome */
   .sow-overlay {
     position: static !important;
@@ -336,8 +342,11 @@ export const SowDistributionModal: React.FC<Props> = ({
   // actualCost; surfaced here so the report shows WHY the total is what it is.
   const powercareMiles = job.isPowercare ? (job.travelMiles || 0) : 0;
 
-  return (
-    <>
+  // Portaled to <body> so print can hide the whole app and keep only this.
+  // Rendered inside the Service Order panel, the panel's sidebar, tabs and
+  // photos printed under and around the report (SO-2609-98940).
+  return createPortal(
+    <div className="sow-print-root">
       {/* Injected print styles */}
       <style>{PRINT_STYLE}</style>
 
@@ -603,6 +612,7 @@ export const SowDistributionModal: React.FC<Props> = ({
         </div>
       </div>
 
-    </>
+    </div>,
+    document.body,
   );
 };
