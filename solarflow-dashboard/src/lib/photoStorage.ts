@@ -23,8 +23,38 @@ async function contentHashId(blob: Blob): Promise<string> {
   return `ph-${hex}`;
 }
 
+// ── Upload concurrency ────────────────────────────────────────────────────────
+// Picking 12 photos fired 12 parallel uploads; one dropped phone connection
+// failed all 12 at the same instant (SO-2610-98331). Three at a time keeps a
+// batch moving while a bad moment costs at most three.
+// ponytail: one global cap for every caller, per-connection tuning if ever needed.
+const MAX_UPLOADS = 3;
+let activeUploads = 0;
+const uploadWaiters: (() => void)[] = [];
+
+export async function withUploadSlot<T>(fn: () => Promise<T>): Promise<T> {
+  if (activeUploads >= MAX_UPLOADS) await new Promise<void>(r => uploadWaiters.push(r));
+  else activeUploads++;
+  try {
+    return await fn();
+  } finally {
+    // Hand the slot straight to the next waiter, so a new caller can't slip in
+    // between the release and the wake-up and push the count past the cap.
+    const next = uploadWaiters.shift();
+    if (next) next(); else activeUploads--;
+  }
+}
+
 // ── WO Photo upload ───────────────────────────────────────────────────────────
-export async function uploadPhotoToStorage(
+export function uploadPhotoToStorage(
+  file: File | Blob,
+  jobId: string,
+  photoId: string,
+): Promise<UploadResult> {
+  return withUploadSlot(() => uploadOne(file, jobId, photoId));
+}
+
+async function uploadOne(
   file: File | Blob,
   jobId: string,
   photoId: string,

@@ -270,7 +270,7 @@ export async function hydrateWoPhotos<T extends WoPhotoLike>(photos: T[]): Promi
 
 // ── Supabase Storage mirror ─────────────────────────────────────────────────
 
-async function mirrorRow(id: string): Promise<{ ok: boolean; error?: string }> {
+export async function mirrorRow(id: string): Promise<{ ok: boolean; error?: string }> {
   const row = await getPhoto(id);
   if (!row) return { ok: false, error: 'row not found' };
   if (row.uploadStatus === 'uploaded') return { ok: true };

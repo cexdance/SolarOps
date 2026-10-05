@@ -726,6 +726,25 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
         if (p.dataUrl && !job!.woPhotos![i].dataUrl) created.push(p.dataUrl);
       });
       setWoPhotos(photosForCurrent({ ...job!, woPhotos: hydrated }));
+      // A photo whose upload failed lives only in THIS device's IndexedDB, so
+      // every other device shows a broken tile and nothing ever retried it
+      // (SO-2610-98331: 12 photos lost to one dropped connection). This device
+      // still holds the bytes: upload them now and save the storage URL, the
+      // same way a normal upload finishes. Other devices find no row and skip.
+      const { getPhoto, mirrorRow } = await import('../lib/photoStore');
+      const recovered = new Map<string, string>();
+      for (const p of job!.woPhotos ?? []) {
+        if (p.storageUrl || !p.photoStoreId) continue;
+        let row = await getPhoto(p.photoStoreId).catch(() => undefined);
+        if (row && row.uploadStatus !== 'uploaded' && row.blob) {
+          await mirrorRow(row.id);
+          row = await getPhoto(row.id).catch(() => undefined);
+        }
+        if (row?.supabaseUrl) recovered.set(p.id, row.supabaseUrl);
+      }
+      if (revoked || recovered.size === 0) return;
+      setWoPhotos(prev => prev.map(p => recovered.has(p.id) ? { ...p, storageUrl: recovered.get(p.id), dataUrl: '' } : p));
+      setTimeout(() => handleSaveRef.current(undefined, true), 0);
     })();
     return () => {
       revoked = true;
