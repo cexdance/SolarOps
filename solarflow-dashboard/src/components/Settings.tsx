@@ -30,6 +30,7 @@ import { logUpload } from '../lib/changeLog';
 import { LogViewer } from './admin/LogViewer';
 import { UserPermissionsPanel } from './admin/UserPermissionsPanel';
 import { DailyReportSettings } from './admin/DailyReportSettings';
+import { MailboxSettings } from './admin/MailboxSettings';
 import { canManageUsers } from '../lib/access';
 
 interface SettingsProps {
@@ -471,6 +472,8 @@ export const Settings: React.FC<SettingsProps> = ({
             </div>
           )}
         </div>
+
+        {currentUser?.role === 'admin' && <MailboxSettings />}
 
         {/* IONOS Email / SMTP Integration */}
         <div className="p-4 border-b border-slate-100">
