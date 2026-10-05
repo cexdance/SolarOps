@@ -154,6 +154,17 @@ export async function sendServiceOrderToTrello(
   throw new Error(body.error || `Trello card was not created (${r.status})`);
 }
 
+/** false only when Trello says the card is gone; null when the check itself failed. */
+export async function trelloCardExists(cardId: string): Promise<boolean | null> {
+  try {
+    const r = await authedFetch(`/api/trello-card?exists=${encodeURIComponent(cardId)}`);
+    if (!r.ok) return null;
+    return ((await r.json()) as { exists?: boolean }).exists ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /** Last known Trello lists, so the board draws instantly and works offline. */
 export function cachedTrelloLists(): TrelloList[] | null {
   try { return JSON.parse(localStorage.getItem(CACHE_KEY) ?? 'null'); } catch { return null; }

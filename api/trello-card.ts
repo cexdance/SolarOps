@@ -468,9 +468,18 @@ export function refJobId(desc: string | undefined): string | undefined {
  * ref line first, then the card id saved on an order (`trelloCardId`), which
  * still links the card if someone deletes the ref line in Trello.
  */
-async function linkedJobFor(cardId: string, desc: string | undefined): Promise<string | undefined> {
+export async function linkedJobFor(cardId: string, desc: string | undefined): Promise<string | undefined> {
   const fromRef = refJobId(desc);
   if (fromRef) return fromRef;
+  // A lead card stays the lead's card even when an order links to it: Send to
+  // Trello links a client's later orders to their existing card. Calling it the
+  // order's card would make the webhook skip it and freeze the lead record's
+  // own sync (SO-2610-62845 linked to US-15707's lead card, SO-2609-95542).
+  const lead = await fetch(
+    `${SUPABASE_URL}/rest/v1/app_data?key=eq.${encodeURIComponent(`job:job-trello-${cardId}`)}&select=key`,
+    { headers: supabaseHeaders },
+  );
+  if (lead.ok && ((await lead.json()) as unknown[]).length > 0) return undefined;
   const r = await fetch(
     `${SUPABASE_URL}/rest/v1/app_data?key=like.job:*&value->>trelloCardId=eq.${encodeURIComponent(cardId)}&select=key&limit=1`,
     { headers: supabaseHeaders },
@@ -1875,7 +1884,12 @@ async function handleCreateCard(req: VercelRequest, res: VercelResponse) {
   );
   const prior = existing.ok ? (await existing.json() as { trelloCardId?: string; trelloCardUrl?: string }[])[0] : undefined;
   if (prior?.trelloCardId) {
-    return res.status(409).json({ error: 'This order already has a Trello card', cardId: prior.trelloCardId, url: prior.trelloCardUrl });
+    // A card deleted in Trello leaves the order pointing at nothing; only a card
+    // Trello still has blocks a re-send (SO-2610-62845, deleted 3 min after send).
+    const still = await fetch(`${TRELLO_BASE}/cards/${prior.trelloCardId}?fields=id&key=${API_KEY}&token=${API_TOKEN}`);
+    if (still.status !== 404) {
+      return res.status(409).json({ error: 'This order already has a Trello card', cardId: prior.trelloCardId, url: prior.trelloCardUrl });
+    }
   }
 
   // The list must be an open list on the import board: the token can reach
@@ -2096,6 +2110,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // phones and addresses. Streaming keeps them behind the signed-in check
     // above and stores nothing. Trello attachment URLs do not open without a
     // Trello login, which is why LL could not show the source at all before.
+    // GET ?exists=<card id>: is the card an order links to still on Trello?
+    // Send to Trello offers a re-send instead of a dead link when it is gone.
+    if (req.query.exists !== undefined) {
+      const id = String(Array.isArray(req.query.exists) ? req.query.exists[0] : req.query.exists);
+      if (!/^[0-9a-f]{24}$/i.test(id)) return res.status(400).json({ error: 'Malformed card id' });
+      if (!API_KEY || !API_TOKEN) return res.status(500).json({ error: 'Trello credentials not configured' });
+      const c = await fetch(`${TRELLO_BASE}/cards/${id}?fields=id&key=${API_KEY}&token=${API_TOKEN}`);
+      if (c.status === 404) return res.status(200).json({ exists: false });
+      if (!c.ok) return res.status(502).json({ error: `Trello ${c.status}` });
+      return res.status(200).json({ exists: true });
+    }
+
     if (req.query.image !== undefined) {
       const imgCard = String(Array.isArray(req.query.image) ? req.query.image[0] : req.query.image);
       if (!/^[0-9a-f]{24}$/i.test(imgCard)) return res.status(400).json({ error: 'Malformed card id' });

@@ -7,7 +7,7 @@ import { Send, ExternalLink, ChevronDown } from 'lucide-react';
 import type { Job, Customer, RMAEntry } from '../types';
 import {
   cachedTrelloLists, fetchTrelloLists, defaultListFor, soCardContent,
-  sendServiceOrderToTrello, trelloCardIdOf, type TrelloList,
+  sendServiceOrderToTrello, trelloCardIdOf, trelloCardExists, type TrelloList,
 } from '../lib/trelloSync';
 
 const BTN = 'inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700';
@@ -51,7 +51,18 @@ export const SendToTrello: React.FC<{
   const leadCardId = trelloCardIdOf(job);
   const cardUrl = job.trelloCardUrl ?? (leadCardId ? `https://trello.com/c/${leadCardId}` : undefined);
 
-  if (cardUrl) {
+  // A card deleted in Trello left a dead "Open in Trello" link and no way to
+  // send again (SO-2610-62845). Only the card this order was SENT to is
+  // checked; a lead card is the order's origin and is never re-sent.
+  const [cardGone, setCardGone] = useState(false);
+  useEffect(() => {
+    if (!job.trelloCardId) return undefined;
+    let live = true;
+    trelloCardExists(job.trelloCardId).then(e => { if (live) setCardGone(e === false); });
+    return () => { live = false; };
+  }, [job.trelloCardId]);
+
+  if (cardUrl && !cardGone) {
     return (
       <a href={cardUrl} target="_blank" rel="noreferrer" className={BTN} title="This order's card on the Florida Trello board">
         <ExternalLink className="w-3.5 h-3.5 text-slate-500" />
@@ -111,6 +122,7 @@ export const SendToTrello: React.FC<{
           <p className="text-[11px] text-slate-500">
             Adds client, contact, site, status{rmaEntries.length ? ', RMA' : ''} and notes to the card, so Anthony can follow up from Trello.
           </p>
+          {cardGone && <p className="text-xs text-amber-700">The card this order was linked to was deleted in Trello. Sending links the client's existing card, or creates a new one.</p>}
           {error && <p role="alert" className="text-xs text-red-600">{error}</p>}
           <div className="flex justify-end gap-2">
             <button type="button" onClick={() => setOpen(false)} disabled={sending} className="px-3 py-1.5 text-xs font-semibold rounded-lg text-slate-600 hover:bg-slate-100">
