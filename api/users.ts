@@ -1,5 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import automationRead from './_automationRead';
+import mailboxHandler from './_mailboxHandler';
+
+export const config = { maxDuration: 60 };
 
 const SUPABASE_URL = 'https://cjmhfagkkayelcsprbai.supabase.co';
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -104,6 +107,7 @@ function cleanPermissions(input: unknown): string[] | undefined {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (req.query.mailbox === '1') return mailboxHandler(req, res);
   if (req.query.automationRead === '1') return automationRead(req, res);
   const caller = await verifyCaller(req);
   if (!caller) return res.status(401).json({ error: 'Unauthorized' });

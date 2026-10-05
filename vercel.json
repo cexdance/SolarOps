@@ -4,6 +4,7 @@
   "outputDirectory": "solarflow-dashboard/dist",
   "framework": "vite",
   "rewrites": [
+    { "source": "/api/mailbox", "destination": "/api/users?mailbox=1" },
     { "source": "/((?!api/|assets/|version\\.json|.*\\..*).*)", "destination": "/index.html" }
   ],
   "headers": [

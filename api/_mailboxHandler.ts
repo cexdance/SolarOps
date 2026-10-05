@@ -2,8 +2,6 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { requireUser } from './_auth';
 import { checkMailbox, decryptMailbox, encryptMailbox, mailboxFromEnv, validateMailbox } from './_mailbox';
 
-export const config = { maxDuration: 60 };
-
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Cache-Control', 'no-store');
   if (req.method !== 'GET' && req.method !== 'POST') {

@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { checkMailbox, decryptMailbox, encryptMailbox, mailboxFromEnv, validateMailbox } from '../../../api/_mailbox';
-import handler from '../../../api/mailbox';
+import handler from '../../../api/_mailboxHandler';
 import { requireUser } from '../../../api/_auth';
 vi.mock('../../../api/_auth', () => ({ requireUser: vi.fn() }));
 vi.mock('../../../api/_mailbox', async importOriginal => ({
