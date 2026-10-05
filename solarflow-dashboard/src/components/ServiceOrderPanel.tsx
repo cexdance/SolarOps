@@ -707,6 +707,17 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
   // instead of the stale version captured when the callback was last created.
   // Assigned below (after handleSave is defined); declared here so it's in scope.
   const handleSaveRef = useRef<(statusOverride?: WOStatus, keepOpen?: boolean, patch?: Partial<Job>) => void>(() => {});
+  // Saves requested from async upload code. They run in an effect AFTER React
+  // commits the state they follow. setTimeout(0) is not a commit barrier on iOS
+  // Safari: the save ran first, read the previous woPhotos, and dropped the
+  // last photo's storageUrl in each batch (SO-2610-98331, plus 8 photos on 6
+  // more orders). Drained by the effect next to handleSaveRef.current below.
+  const pendingSaves = useRef<Parameters<typeof handleSaveRef.current>[]>([]);
+  const [saveTick, setSaveTick] = useState(0);
+  const requestSave = useCallback((...args: Parameters<typeof handleSaveRef.current>) => {
+    pendingSaves.current.push(args);
+    setSaveTick(t => t + 1);
+  }, []);
 
   // Photos. Some entries may be migrated to the local photoStore (no inline
   // dataUrl, only a photoStoreId). Hydrate those in the background so <img>
@@ -750,7 +761,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
       // saves no URL at all. That is exactly what happened on the first live
       // recovery of SO-2610-98331 (12 uploaded, 0 URLs saved).
       const patch = { woPhotos: (job!.woPhotos ?? []).map(withUrl) };
-      setTimeout(() => handleSaveRef.current(undefined, true, patch), 0);
+      requestSave(undefined, true, patch);
     })();
     return () => {
       revoked = true;
@@ -1241,7 +1252,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
           pendingUploads.current.delete(pdfId);
           setUploading(pendingUploads.current.size > 0);
           if (pendingUploads.current.size === 0) {
-            setTimeout(() => handleSaveRef.current(undefined, true), 0);
+            requestSave(undefined, true);
           }
         }
         return;
@@ -1308,10 +1319,10 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
         // Auto-save once ALL in-flight uploads settle (prevents simultaneous-upload stomp).
         // With 3 concurrent photos, each decrements pendingUploads independently; only the
         // last to finish (size===0) fires the single consolidated save so all storageUrls
-        // are in state before writing to Supabase. setTimeout(0) defers until after React
-        // commits the setWoPhotos update above.
+        // are in state before writing to Supabase. requestSave runs it after React
+        // commits the setWoPhotos update above (setTimeout(0) did not, on iOS).
         if (pendingUploads.current.size === 0) {
-          setTimeout(() => handleSaveRef.current(undefined, true), 0);
+          requestSave(undefined, true);
         }
       } catch (err) {
         pendingUploads.current.delete(photoId);
@@ -1331,7 +1342,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
         }
         // Still save, other concurrent uploads may have succeeded.
         if (pendingUploads.current.size === 0) {
-          setTimeout(() => handleSaveRef.current(undefined, true), 0);
+          requestSave(undefined, true);
         }
       }
     });
@@ -1553,7 +1564,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
           console.error('[ServiceOrderPanel] paste upload failed', result.error);
         }
         if (pendingUploads.current.size === 0) {
-          setTimeout(() => handleSaveRef.current(undefined, true), 0);
+          requestSave(undefined, true);
         }
       } catch (err) {
         pendingUploads.current.delete(photoId);
@@ -1563,7 +1574,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
         setTimeout(() => setPasteError(null), 6000);
         console.error('[ServiceOrderPanel] paste image compression failed', err);
         if (pendingUploads.current.size === 0) {
-          setTimeout(() => handleSaveRef.current(undefined, true), 0);
+          requestSave(undefined, true);
         }
       }
     });
@@ -1819,6 +1830,10 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
   // This is the fix for the stale-closure bug: useCallback closures (handlePhotoFiles,
   // handleNotesPaste) captured handleSave from an old render and read stale woPhotos.
   handleSaveRef.current = handleSave;
+  useEffect(() => {
+    for (const args of pendingSaves.current.splice(0)) handleSave(...args);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [saveTick]);
   const renderedVisit = useRef(job?.currentVisit?.id);
   useEffect(() => {
     if (!job?.currentVisit) return;
@@ -3813,14 +3828,14 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
                         await parkPhotoInIdb(photoId, uploadCategory, blob);
                       }
                       if (pendingUploads.current.size === 0) {
-                        setTimeout(() => handleSaveRef.current(undefined, true), 0);
+                        requestSave(undefined, true);
                       }
                     } catch (err) {
                       pendingUploads.current.delete(photoId);
                       setUploading(pendingUploads.current.size > 0);
                       console.error('[ServiceOrderPanel] paste photo upload failed', err);
                       if (pendingUploads.current.size === 0) {
-                        setTimeout(() => handleSaveRef.current(undefined, true), 0);
+                        requestSave(undefined, true);
                       }
                     }
                   });
