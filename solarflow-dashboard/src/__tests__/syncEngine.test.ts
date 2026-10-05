@@ -261,6 +261,14 @@ describe('mergeWoPhotos (M1: deletions stick, in-flight uploads survive)', () =>
   it('handles empty arrays', () => {
     expect(mergeWoPhotos([], [])).toEqual([]);
   });
+
+  it('does not resurrect an empty shell (no storageUrl, dataUrl or photoStoreId)', () => {
+    const a = makePhoto({ id: 'a', storageUrl: 'https://s/a.jpg' });
+    const shell = makePhoto({ id: 'shell', dataUrl: '' });
+    const parked = makePhoto({ id: 'parked', dataUrl: '', photoStoreId: 'idb-1' });
+    const merged = mergeWoPhotos([a], [a, shell, parked]);
+    expect(merged.map(p => p.id).sort()).toEqual(['a', 'parked']);
+  });
 });
 
 describe('mergeRemote, photo preservation', () => {

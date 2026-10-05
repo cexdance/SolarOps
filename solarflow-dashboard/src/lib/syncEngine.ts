@@ -1521,7 +1521,10 @@ export function mergeWoPhotos(winnerPhotos: WOPhoto[], loserPhotos: WOPhoto[]): 
     if (have.has(eff(p))) continue;
     // Loser-only photo: keep it ONLY if it is not yet uploaded (still in flight).
     // An uploaded photo (has storageUrl) absent from the newer winner = deleted.
-    if (!p.storageUrl) merged.push(p);
+    // In flight means its bytes are somewhere: inline dataUrl or this device's
+    // IndexedDB. An entry with neither is an empty shell no device can render;
+    // keeping it would resurrect shells the winner removed (WO-2604-54207).
+    if (!p.storageUrl && (p.dataUrl || p.photoStoreId)) merged.push(p);
   }
   // Collapse any duplicates already present in the winner set (this function only
   // gates what the LOSER adds; it never healed pre-existing clones, which is how
