@@ -885,6 +885,15 @@ export const Jobs: React.FC<JobsProps> = ({
     onUpdateJob({ ...job, scheduledDate: newDate, updatedAt: new Date().toISOString() });
   };
 
+  // Weekly planner: stamp date + time on every proposed order in one pass.
+  const handleApplyPlan = (items: { jobId: string; date: string; time: string }[]) => {
+    const now = new Date().toISOString();
+    for (const it of items) {
+      const job = jobs.find(j => j.id === it.jobId);
+      if (job) onUpdateJob({ ...job, scheduledDate: it.date, scheduledTime: it.time, updatedAt: now });
+    }
+  };
+
   // Park / un-park a service order. Hold drops it out of the active queue on both
   // the admin board and the contractor portal; the underlying woStatus is kept so
   // Resume returns it to its place in the pipeline.
@@ -1188,6 +1197,8 @@ export const Jobs: React.FC<JobsProps> = ({
           onJobClick={handleCardClick}
           onReschedule={handleReschedule}
           onToggleHold={handleToggleHold}
+          allJobs={jobs}
+          onApplyPlan={handleApplyPlan}
         />
       )}
 

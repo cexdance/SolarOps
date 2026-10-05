@@ -4,9 +4,10 @@ import {
   subWeeks, subMonths, startOfMonth, endOfMonth, eachDayOfInterval,
   isSameDay, isSameMonth, isToday, isValid,
 } from 'date-fns';
-import { ChevronLeft, ChevronRight, CalendarDays, User, Clock, Pause, Play } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CalendarDays, User, Clock, Pause, Play, Route } from 'lucide-react';
 import { Job, Customer, User as UserType, JobStatus } from '../types';
 import type { Contractor } from '../types/contractor';
+import { WeeklyRoutePlanner, isReadyToSchedule, type PlanApply } from './WeeklyRoutePlanner';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -445,6 +446,103 @@ const UnscheduledStrip: React.FC<{
   );
 };
 
+// ── Scheduling list (right rail) ─────────────────────────────────────────────
+
+type ListFilter = 'scheduled' | 'pending' | 'completed';
+const DONE = ['completed', 'invoiced', 'paid'];
+
+const SchedulingList: React.FC<{
+  jobs: Job[];
+  customers: Customer[];
+  resolveContractor: (job: Job) => string;
+  onJobClick: (jobId: string) => void;
+  onGoToDate: (date: Date) => void;
+}> = ({ jobs, customers, resolveContractor, onJobClick, onGoToDate }) => {
+  const [filter, setFilter] = useState<ListFilter>('pending');
+  const [q, setQ] = useState('');
+  const custById = React.useMemo(() => new Map(customers.map(c => [c.id, c])), [customers]);
+
+  const buckets = React.useMemo(() => {
+    const b: Record<ListFilter, Job[]> = { scheduled: [], pending: [], completed: [] };
+    for (const j of jobs) {
+      if (!j.woNumber || j.status === 'archived') continue;
+      if (DONE.includes(j.status)) b.completed.push(j);
+      else if (j.onHold) continue;
+      else if (parseDateSafe(j.scheduledDate)) b.scheduled.push(j);
+      else b.pending.push(j);
+    }
+    const t = (j: Job) => parseDateSafe(j.scheduledDate)?.getTime() ?? 0;
+    b.scheduled.sort((a, c) => t(a) - t(c));
+    b.completed.sort((a, c) => t(c) - t(a));
+    return b;
+  }, [jobs]);
+
+  const nameOf = (j: Job) => custById.get(j.customerId)?.name ?? j.clientName ?? j.woNumber ?? j.id;
+  const needle = q.trim().toLowerCase();
+  const rows = buckets[filter]
+    .filter(j => !needle || `${nameOf(j)} ${j.woNumber ?? ''} ${custById.get(j.customerId)?.address ?? ''}`.toLowerCase().includes(needle))
+    .slice(0, 200);
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+
+  const tabs: [ListFilter, string][] = [['pending', 'Pending'], ['scheduled', 'Scheduled'], ['completed', 'Completed']];
+  return (
+    <aside className="xl:w-80 xl:shrink-0 border border-slate-200 rounded-lg bg-white flex flex-col max-h-[70vh] xl:max-h-[calc(100vh-200px)]">
+      <div className="p-2 border-b border-slate-200">
+        <div className="flex rounded-lg border border-slate-200 overflow-hidden text-xs">
+          {tabs.map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => setFilter(key)}
+              className={`flex-1 px-2 py-1.5 font-medium ${filter === key ? 'bg-slate-800 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}
+            >
+              {label} ({buckets[key].length})
+            </button>
+          ))}
+        </div>
+        <input
+          value={q}
+          onChange={e => setQ(e.target.value)}
+          placeholder="Search name, order, address"
+          className="mt-2 w-full text-xs px-2 py-1.5 border border-slate-200 rounded-lg"
+        />
+      </div>
+      <ul className="overflow-y-auto divide-y divide-slate-100">
+        {rows.length === 0 && <li className="p-4 text-xs text-slate-500 text-center">Nothing here.</li>}
+        {rows.map(j => {
+          const d = parseDateSafe(j.scheduledDate);
+          const tech = resolveContractor(j);
+          const done = DONE.includes(j.status);
+          const flags: string[] = [];
+          if (!done && d && d < today) flags.push('Overdue');
+          if (!done && !tech && !j.contractorId) flags.push('No tech');
+          if (!done && d && !j.scheduledTime) flags.push('No time');
+          if (!custById.get(j.customerId)?.address) flags.push('No address');
+          return (
+            <li key={j.id}>
+              <button onClick={() => { onJobClick(j.id); if (d) onGoToDate(d); }} className="w-full text-left px-3 py-2 hover:bg-slate-50">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="text-sm font-medium text-slate-900 truncate">{nameOf(j)}</span>
+                  <span className="text-[11px] text-slate-500 whitespace-nowrap">{d ? format(d, 'EEE MMM d') : 'No date'}</span>
+                </div>
+                <div className="text-xs text-slate-500 truncate">
+                  {j.woNumber}{j.scheduledTime ? ` · ${j.scheduledTime.slice(0, 5)}` : ''}{tech ? ` · ${tech}` : ''}
+                </div>
+                {flags.length > 0 && (
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {flags.map(f => (
+                      <span key={f} className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">{f}</span>
+                    ))}
+                  </div>
+                )}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </aside>
+  );
+};
+
 // ── Main Component ────────────────────────────────────────────────────────────
 
 interface WorkOrderCalendarProps {
@@ -458,6 +556,10 @@ interface WorkOrderCalendarProps {
   onReschedule?: Reschedule;
   /** Park/un-park a work order from its calendar card. */
   onToggleHold?: (job: Job) => void;
+  /** Every order, unfiltered, so the weekly planner sees calls already booked. */
+  allJobs?: Job[];
+  /** Apply a weekly plan: set date and time on each order. */
+  onApplyPlan?: (items: PlanApply[]) => void;
 }
 
 type CalStatusFilter = 'active' | 'on_hold' | 'completed' | 'all';
@@ -478,7 +580,10 @@ export const WorkOrderCalendar: React.FC<WorkOrderCalendarProps> = ({
   onJobClick,
   onReschedule,
   onToggleHold,
+  allJobs,
+  onApplyPlan,
 }) => {
+  const [showPlanner, setShowPlanner] = useState(false);
   const [calendarView, setCalendarView] = useState<CalendarViewMode>(() => {
     const saved = localStorage.getItem(CALENDAR_VIEW_KEY) as CalendarViewMode | null;
     return saved ?? 'week';
@@ -545,11 +650,27 @@ export const WorkOrderCalendar: React.FC<WorkOrderCalendarProps> = ({
       : `${format(weekStart, 'MMM d')}, ${format(twoWeekEnd, 'MMM d, yyyy')}`;
   };
 
+  const planPool = allJobs ?? jobs;
+  const readyCount = React.useMemo(() => planPool.filter(isReadyToSchedule).length, [planPool]);
+  const isThursday = new Date().getDay() === 4;
+
   const weekStart = getWeekStart(focusDate);
   const weekDays = eachDayOfInterval({ start: weekStart, end: addDays(weekStart, 6) });
 
   return (
-    <div className="select-none">
+    <div className="select-none flex flex-col xl:flex-row gap-4 items-start">
+     <div className="flex-1 min-w-0 w-full">
+      {onApplyPlan && isThursday && readyCount > 0 && (
+        <div className="mb-3 flex items-center justify-between gap-3 flex-wrap rounded-lg border border-orange-200 bg-orange-50 px-3 py-2">
+          <p className="text-sm text-orange-900">
+            It is Thursday. <strong>{readyCount}</strong> service order{readyCount === 1 ? '' : 's'} still need a date for next week.
+          </p>
+          <button onClick={() => setShowPlanner(true)} className="px-3 py-1.5 text-sm font-medium rounded-lg bg-orange-500 text-white hover:bg-orange-600">
+            Plan next week
+          </button>
+        </div>
+      )}
+
       <UnscheduledStrip jobs={unscheduledJobs} customers={customers} onJobClick={onJobClick} />
 
       {/* Header */}
@@ -579,6 +700,16 @@ export const WorkOrderCalendar: React.FC<WorkOrderCalendarProps> = ({
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          {onApplyPlan && (
+            <button
+              onClick={() => setShowPlanner(true)}
+              title="Propose dates and routes for unscheduled orders next week"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 text-sm font-medium rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+            >
+              <Route className="w-4 h-4" />
+              Plan next week
+            </button>
+          )}
           {/* Status filter: defaults to Active so finished/parked orders are hidden. */}
           <div className="flex rounded-lg border border-slate-200 overflow-hidden text-sm">
             {([['active', 'Active'], ['on_hold', 'On Hold'], ['completed', 'Completed'], ['all', 'All']] as [CalStatusFilter, string][]).map(([key, label]) => (
@@ -635,6 +766,25 @@ export const WorkOrderCalendar: React.FC<WorkOrderCalendarProps> = ({
           resolveContractor={resolveContractor}
           onReschedule={onReschedule}
           onToggleHold={onToggleHold}
+        />
+      )}
+
+     </div>
+     <SchedulingList
+       jobs={planPool}
+       customers={customers}
+       resolveContractor={resolveContractor}
+       onJobClick={onJobClick}
+       onGoToDate={d => setFocusDate(getWeekStart(d))}
+     />
+
+      {showPlanner && onApplyPlan && (
+        <WeeklyRoutePlanner
+          jobs={planPool}
+          customers={customers}
+          contractors={contractors}
+          onApply={onApplyPlan}
+          onClose={() => setShowPlanner(false)}
         />
       )}
 

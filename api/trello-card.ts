@@ -1834,6 +1834,18 @@ async function handleSweep(req: VercelRequest, res: VercelResponse) {
  * the order through its normal save, so there is exactly one writer of the
  * job record and no server write racing a browser's per-field merge.
  */
+/**
+ * A card for the same client already on the board? Matches the client number
+ * (US-15707) when the name carries one, else the whole name, case-insensitive.
+ * Catches cards made by hand in Trello, which the per-order link cannot see.
+ */
+export function findDuplicateCard<T extends { name: string }>(name: string, cards: T[]): T | undefined {
+  const norm = (n: string) => n.trim().toLowerCase().replace(/\s+/g, ' ');
+  const num = (n: string) => /\bUS-\d{4,6}\b/i.exec(n)?.[0].toUpperCase();
+  const key = num(name);
+  return cards.find(c => (key ? num(c.name) === key : norm(c.name) === norm(name)));
+}
+
 async function handleCreateCard(req: VercelRequest, res: VercelResponse) {
   if (!(await requireUser(req, res))) return;
   if (!API_KEY || !API_TOKEN) return res.status(500).json({ error: 'Trello credentials not configured' });
@@ -1869,6 +1881,14 @@ async function handleCreateCard(req: VercelRequest, res: VercelResponse) {
   const info = l.ok ? await l.json() as { idBoard?: string; closed?: boolean } : {};
   if (!isAllowedBoard(info.idBoard) || info.closed) {
     return res.status(400).json({ error: 'That list is not an open list on the Florida board' });
+  }
+
+  // Same client already carded on this board (made by hand, or sent from another
+  // order)? Return that card rather than a second one.
+  const open = await fetch(`${TRELLO_BASE}/boards/${info.idBoard}/cards?fields=name,shortUrl&key=${API_KEY}&token=${API_TOKEN}`);
+  if (open.ok) {
+    const dup = findDuplicateCard(name, await open.json() as { id: string; name: string; shortUrl: string }[]);
+    if (dup) return res.status(409).json({ error: 'This client already has a Trello card', cardId: dup.id, url: dup.shortUrl });
   }
 
   // Any ref line the client sent is dropped; the server writes the only one.

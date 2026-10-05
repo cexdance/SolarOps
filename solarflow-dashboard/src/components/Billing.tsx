@@ -24,6 +24,10 @@ import { startNewBillingCycle, visitNeedsApproval, visitAwaitingQuote } from '..
 import { notifyAdminForInvoice } from '../lib/quoteService';
 import { declineQuote } from '../lib/jobService';
 import { formatCost } from '../lib/money';
+import {
+  cachedTrelloLists, fetchTrelloLists, defaultListFor, soCardContent,
+  sendServiceOrderToTrello, trelloCardIdOf,
+} from '../lib/trelloSync';
 import { WorkOrderCalendar } from './WorkOrderCalendar';
 import { BillingReportModal } from './BillingReportModal';
 import { SowDistributionModal } from './SowDistributionModal';
@@ -276,6 +280,36 @@ export const Billing: React.FC<BillingProps> = ({
   // Close-out step: which order is being covered, and the date the admin picked.
   const [coverJobId, setCoverJobId] = useState<string | null>(null);
   const [coverDate, setCoverDate] = useState(() => toDateInputValue());
+
+  // Push every Create Quote order that has no Trello card yet into the Service
+  // "Quote/Invoicing in Progress" list. The server refuses duplicates (409 returns
+  // the existing card), and orders already linked are skipped here.
+  const [sendingTrello, setSendingTrello] = useState(false);
+  const sendColumnToTrello = async (colJobs: Job[]) => {
+    if (sendingTrello) return;
+    const todo = colJobs.filter(j => !j.trelloCardUrl && !trelloCardIdOf(j));
+    const skipped = colJobs.length - todo.length;
+    if (todo.length === 0) { window.alert(`Nothing to send: all ${colJobs.length} already have a Trello card.`); return; }
+    const lists = ((await fetchTrelloLists()) ?? cachedTrelloLists() ?? []).filter(l => !l.closed);
+    const listId = defaultListFor(lists, 'service_quote_in_progress');
+    const list = lists.find(l => l.id === listId);
+    if (!list || list.stage !== 'service_quote_in_progress') { window.alert('Could not find the "Quote/Invoicing in Progress for Service" list on Trello. Nothing was sent.'); return; }
+    const names = todo.map(j => customers.find(c => c.id === j.customerId)?.name ?? j.woNumber ?? j.id);
+    if (!window.confirm(`Create ${todo.length} Trello card${todo.length === 1 ? '' : 's'} in "${list.name}"?\n\n${names.join('\n')}${skipped ? `\n\n(${skipped} already on Trello, skipped)` : ''}`)) return;
+    setSendingTrello(true);
+    const failed: string[] = [];
+    for (const job of todo) {
+      const customer = customers.find(c => c.id === job.customerId);
+      try {
+        const { cardId, url } = await sendServiceOrderToTrello(job.id, list.id, soCardContent(job, customer, job.rmaEntries ?? []));
+        onUpdateJob({ ...job, trelloCardId: cardId, trelloCardUrl: url, updatedAt: new Date().toISOString() });
+      } catch (e) {
+        failed.push(`${customer?.name ?? job.woNumber}: ${e instanceof Error ? e.message : 'failed'}`);
+      }
+    }
+    setSendingTrello(false);
+    window.alert(failed.length ? `Sent ${todo.length - failed.length} of ${todo.length}. Failed:\n${failed.join('\n')}` : `Sent ${todo.length} to Trello.`);
+  };
 
   /** Open the close-out step with today pre-filled. */
   const startCoverCosts = (jobId: string) => {
@@ -776,6 +810,16 @@ export const Billing: React.FC<BillingProps> = ({
                         >
                           <AlertTriangle className="w-2.5 h-2.5" />
                           {agingCount} aging
+                        </button>
+                      )}
+                      {col.key === 'new' && colJobs.length > 0 && (
+                        <button
+                          onClick={() => void sendColumnToTrello(colJobs)}
+                          disabled={sendingTrello}
+                          title="Create Trello cards for these orders in Quote/Invoicing in Progress for Service"
+                          className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-white/70 hover:bg-white border border-current disabled:opacity-50"
+                        >
+                          {sendingTrello ? 'Sending...' : 'To Trello'}
                         </button>
                       )}
                       <span className="text-xs font-bold">{colJobs.length}</span>
