@@ -266,7 +266,8 @@ describe('mergeWoPhotos (M1: deletions stick, in-flight uploads survive)', () =>
     const a = makePhoto({ id: 'a', storageUrl: 'https://s/a.jpg' });
     const shell = makePhoto({ id: 'shell', dataUrl: '' });
     const parked = makePhoto({ id: 'parked', dataUrl: '', photoStoreId: 'idb-1' });
-    const merged = mergeWoPhotos([a], [a, shell, parked]);
+    const blobShell = makePhoto({ id: 'blob', dataUrl: 'blob:https://app/123' });
+    const merged = mergeWoPhotos([a], [a, shell, parked, blobShell]);
     expect(merged.map(p => p.id).sort()).toEqual(['a', 'parked']);
   });
 });

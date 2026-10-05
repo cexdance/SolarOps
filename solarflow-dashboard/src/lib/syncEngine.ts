@@ -1524,7 +1524,9 @@ export function mergeWoPhotos(winnerPhotos: WOPhoto[], loserPhotos: WOPhoto[]): 
     // In flight means its bytes are somewhere: inline dataUrl or this device's
     // IndexedDB. An entry with neither is an empty shell no device can render;
     // keeping it would resurrect shells the winner removed (WO-2604-54207).
-    if (!p.storageUrl && (p.dataUrl || p.photoStoreId)) merged.push(p);
+    // A blob: dataUrl does not count: it is a display handle for one tab, and
+    // the shells that kept coming back to WO-2604-54207 carried one in memory.
+    if (!p.storageUrl && ((p.dataUrl && !isEphemeralUrl(p.dataUrl)) || p.photoStoreId)) merged.push(p);
   }
   // Collapse any duplicates already present in the winner set (this function only
   // gates what the LOSER adds; it never healed pre-existing clones, which is how
