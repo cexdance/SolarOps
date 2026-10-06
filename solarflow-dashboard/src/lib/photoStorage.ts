@@ -90,6 +90,19 @@ async function uploadOne(
   return { url: data.publicUrl, error: null };
 }
 
+// ── SOW report PDF ────────────────────────────────────────────────────────────
+// One fixed path per order, overwritten on every send. /api/trello-card?sowPdf
+// builds this same path itself from the job id, so a request can only ever
+// attach this order's report.
+export async function uploadSowPdf(pdf: Blob, jobId: string): Promise<string | null> {
+  const authErr = await assertSession();
+  if (authErr) return authErr;
+  const { error } = await supabase.storage
+    .from(BUCKET)
+    .upload(`sow-reports/${jobId}/sow.pdf`, pdf, { contentType: 'application/pdf', upsert: true });
+  return error ? error.message : null;
+}
+
 // ── Avatar upload ─────────────────────────────────────────────────────────────
 export async function uploadAvatarToStorage(
   file: File | Blob,

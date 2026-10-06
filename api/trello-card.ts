@@ -1924,6 +1924,73 @@ async function handleCreateCard(req: VercelRequest, res: VercelResponse) {
   return res.status(200).json({ cardId: card.id, url: card.shortUrl });
 }
 
+/**
+ * POST /api/trello-card?sowPdf=1, body { jobId }.
+ *
+ * Attaches the order's SOW Completion Report PDF to its Trello card. The
+ * browser renders the PDF and uploads it to Storage first (a report with photos
+ * runs past Vercel's 4.5 MB request cap). The server builds the Storage path
+ * from the job id, so a request can only attach this order's own report, and it
+ * resolves the card from the stored order, never from the request.
+ * A re-send replaces the order's earlier SOW attachment, once the new one is on.
+ */
+async function handleSowPdf(req: VercelRequest, res: VercelResponse) {
+  if (!(await requireUser(req, res))) return;
+  if (!API_KEY || !API_TOKEN) return res.status(500).json({ error: 'Trello credentials not configured' });
+
+  const raw = await readRawBody(req);
+  let body: { jobId?: string };
+  try { body = raw ? JSON.parse(raw) : (req.body ?? {}); }
+  catch { return res.status(400).json({ error: 'Body is not valid JSON' }); }
+  const jobId = String(body.jobId ?? '').trim();
+  if (!/^[A-Za-z0-9_-]{3,80}$/.test(jobId)) return res.status(400).json({ error: 'Malformed job id' });
+
+  const jr = await fetch(
+    `${SUPABASE_URL}/rest/v1/app_data?key=eq.${encodeURIComponent(`job:${jobId}`)}&select=value->>trelloCardId,value->>woNumber`,
+    { headers: supabaseHeaders },
+  );
+  const job = jr.ok ? (await jr.json() as { trelloCardId?: string; woNumber?: string }[])[0] : undefined;
+  if (!job) return res.status(404).json({ error: 'No such order' });
+  const cardId = job.trelloCardId || /^job-trello-([0-9a-f]{24})$/i.exec(jobId)?.[1];
+  if (!cardId) return res.status(409).json({ error: 'This order has no Trello card yet. Send it to Trello first.' });
+
+  const c = await fetch(`${TRELLO_BASE}/cards/${cardId}?fields=idBoard&key=${API_KEY}&token=${API_TOKEN}`);
+  if (c.status === 404) return res.status(409).json({ error: 'The Trello card was deleted. Send the order to Trello again.' });
+  const { idBoard } = c.ok ? await c.json() as { idBoard?: string } : {};
+  if (!isAllowedBoard(idBoard)) return res.status(403).json({ error: 'Card is not on an allowed board' });
+
+  const pdf = await fetch(`${SUPABASE_URL}/storage/v1/object/customer-files/sow-reports/${jobId}/sow.pdf`, { headers: supabaseHeaders });
+  if (!pdf.ok) return res.status(404).json({ error: 'Report PDF not found. Try sending again.' });
+  const bytes = Buffer.from(await pdf.arrayBuffer());
+  if (bytes.subarray(0, 4).toString('latin1') !== '%PDF') return res.status(400).json({ error: 'Stored report is not a PDF' });
+  if (bytes.byteLength > 10_000_000) return res.status(413).json({ error: 'Report PDF is over 10 MB' });
+
+  const name = `SOW ${job.woNumber || jobId}.pdf`;
+  const form = new FormData();
+  form.append('file', new Blob([bytes], { type: 'application/pdf' }), name);
+  form.append('name', name);
+  form.append('mimeType', 'application/pdf');
+  const up = await fetch(`${TRELLO_BASE}/cards/${cardId}/attachments?key=${API_KEY}&token=${API_TOKEN}`, { method: 'POST', body: form });
+  if (!up.ok) {
+    console.error('[trello-sow] attach failed:', up.status, await up.text().catch(() => ''));
+    return res.status(502).json({ error: `Trello attach ${up.status}` });
+  }
+  const att = await up.json() as { id: string; url: string };
+
+  // Replace, never pile up: earlier copies of THIS order's report go, after the
+  // new one is safely on the card. Other orders on a shared client card keep theirs.
+  const list = await fetch(`${TRELLO_BASE}/cards/${cardId}/attachments?fields=name&key=${API_KEY}&token=${API_TOKEN}`);
+  if (list.ok) {
+    for (const a of await list.json() as { id: string; name: string }[]) {
+      if (a.name === name && a.id !== att.id) {
+        await fetch(`${TRELLO_BASE}/cards/${cardId}/attachments/${a.id}?key=${API_KEY}&token=${API_TOKEN}`, { method: 'DELETE' });
+      }
+    }
+  }
+  console.info(`[trello-sow] ${name} attached to card ${cardId}`);
+  return res.status(200).json({ url: att.url, cardUrl: `https://trello.com/c/${cardId}` });
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Trello HEAD-verifies the callback URL synchronously when the webhook is
   // created. Must return 2xx or registration is rejected outright.
@@ -1932,6 +1999,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
   // "Send to Trello" from a service order. Must run before the webhook branch:
   // both are POST, and this one is authenticated while the webhook is not.
+  if (req.method === 'POST' && req.query?.sowPdf !== undefined) {
+    try { return await handleSowPdf(req, res); }
+    catch (err) {
+      console.error('[trello-sow] crashed:', err);
+      return res.status(500).json({ error: err instanceof Error ? err.message : 'SOW attach crashed' });
+    }
+  }
   if (req.method === 'POST' && req.query?.create !== undefined) {
     try { return await handleCreateCard(req, res); }
     catch (err) {

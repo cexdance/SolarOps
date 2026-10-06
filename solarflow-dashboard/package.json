@@ -23,6 +23,8 @@
     "@supabase/supabase-js": "^2.99.2",
     "@types/qrcode": "^1.5.6",
     "date-fns": "^3.0.0",
+    "html2canvas": "^1.4.1",
+    "jspdf": "^4.2.1",
     "jsqr": "^1.4.0",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.364.0",

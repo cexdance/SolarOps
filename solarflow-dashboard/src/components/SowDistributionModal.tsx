@@ -25,10 +25,13 @@ import { createPortal } from 'react-dom';
 import { serviceOrderNo, actualServiceCallCost } from '../lib/woHelpers';
 import { loadContractorJobs } from '../lib/contractorStore';
 import { formatCost } from '../lib/money';
+import { buildSowPdf } from '../lib/sowPdf';
+import { uploadSowPdf } from '../lib/photoStorage';
+import { attachSowToTrello, trelloCardIdOf } from '../lib/trelloSync';
 import {
   X, FileText, MapPin,
   Sun, Cloud, CloudRain, CloudSnow, CloudLightning,
-  AlertTriangle, CheckCircle, Briefcase, FileCheck, ChevronRight, DollarSign,
+  AlertTriangle, CheckCircle, Briefcase, FileCheck, ChevronRight, DollarSign, Send,
 } from 'lucide-react';
 import { Job, WOPhoto } from '../types';
 import { Contractor } from '../types/contractor';
@@ -279,6 +282,28 @@ export const SowDistributionModal: React.FC<Props> = ({
 }) => {
   const [weather, setWeather] = useState<WeatherResult | null | 'loading'>('loading');
 
+  // Send the report to the client's Trello card as a PDF. Shown only when the
+  // order has a card; the server re-resolves the card from the stored order.
+  const hasCard = !!(job.trelloCardId || trelloCardIdOf(job));
+  const [trelloSend, setTrelloSend] = useState<{ step: 'idle' | 'building' | 'uploading' | 'attaching' | 'done' | 'error'; msg?: string; cardUrl?: string }>({ step: 'idle' });
+  const sendToTrello = async () => {
+    const area = document.getElementById('sow-dist-print-area');
+    if (!area || (trelloSend.step !== 'idle' && trelloSend.step !== 'done' && trelloSend.step !== 'error')) return;
+    try {
+      setTrelloSend({ step: 'building' });
+      const pdf = await buildSowPdf(area);
+      setTrelloSend({ step: 'uploading' });
+      const upErr = await uploadSowPdf(pdf, job.id);
+      if (upErr) throw new Error(upErr === 'session_expired' ? 'Session expired, sign in again.' : `Upload failed: ${upErr}`);
+      setTrelloSend({ step: 'attaching' });
+      const { cardUrl } = await attachSowToTrello(job.id);
+      setTrelloSend({ step: 'done', cardUrl });
+    } catch (e) {
+      setTrelloSend({ step: 'error', msg: e instanceof Error ? e.message : 'Could not send to Trello' });
+    }
+  };
+  const trelloBusy = ['building', 'uploading', 'attaching'].includes(trelloSend.step);
+
   // PDFs can't render as <img>, so they get their own full page each further down
   const isPdf         = (p: WOPhoto) =>
     p.mimeType === 'application/pdf' || /\.pdf(\?|$)/i.test(p.name || '');
@@ -360,6 +385,28 @@ export const SowDistributionModal: React.FC<Props> = ({
               <p className="text-[10px] text-slate-400 mt-0.5">A4 print-ready · auto-generated on completion</p>
             </div>
             <div className="flex items-center gap-2">
+              {trelloSend.step === 'done' && trelloSend.cardUrl && (
+                <a href={trelloSend.cardUrl} target="_blank" rel="noreferrer" className="text-xs font-semibold text-emerald-700 hover:underline">
+                  Sent, open card
+                </a>
+              )}
+              {trelloSend.step === 'error' && (
+                <span role="alert" className="text-xs text-red-600 max-w-[16rem] truncate" title={trelloSend.msg}>{trelloSend.msg}</span>
+              )}
+              {hasCard && (
+                <button
+                  onClick={sendToTrello}
+                  disabled={trelloBusy}
+                  className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 bg-white text-slate-700 text-xs font-semibold rounded-lg hover:bg-slate-50 disabled:opacity-60 transition-colors cursor-pointer"
+                  title="Attach this report as a PDF to the client's Trello card"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  {trelloSend.step === 'building' ? 'Building PDF...'
+                    : trelloSend.step === 'uploading' ? 'Uploading...'
+                    : trelloSend.step === 'attaching' ? 'Attaching...'
+                    : 'Send PDF to Trello'}
+                </button>
+              )}
               <button
                 onClick={() => window.print()}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 text-white text-xs font-semibold rounded-lg hover:bg-slate-700 transition-colors cursor-pointer"

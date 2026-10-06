@@ -154,6 +154,18 @@ export async function sendServiceOrderToTrello(
   throw new Error(body.error || `Trello card was not created (${r.status})`);
 }
 
+/** Attach the order's SOW PDF (already uploaded to Storage) to its Trello card. */
+export async function attachSowToTrello(jobId: string): Promise<{ url: string; cardUrl: string }> {
+  const r = await authedFetch('/api/trello-card?sowPdf=1', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ jobId }),
+  });
+  const body = await r.json().catch(() => ({})) as { url?: string; cardUrl?: string; error?: string };
+  if (r.ok && body.url && body.cardUrl) return { url: body.url, cardUrl: body.cardUrl };
+  throw new Error(body.error || `Trello attach failed (${r.status})`);
+}
+
 /** false only when Trello says the card is gone; null when the check itself failed. */
 export async function trelloCardExists(cardId: string): Promise<boolean | null> {
   try {
