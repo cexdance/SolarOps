@@ -94,3 +94,42 @@ export async function checkMailbox(config: MailboxConfig): Promise<MailboxCheck>
     imap.close();
   }
 }
+
+export interface OutgoingMessage {
+  to: string;
+  subject: string;
+  text: string;
+  html?: string;
+  attachments?: { filename: string; content: Buffer; contentType: string }[];
+}
+
+/**
+ * Send one message through the shared IONOS mailbox.
+ *
+ * Same TLS and timeout hardening as checkMailbox, and the same rule about
+ * errors: the provider's raw message can carry the mailbox address and
+ * credentials, so callers get a flat failure and the detail goes to the log.
+ */
+export async function sendMailboxMessage(config: MailboxConfig, msg: OutgoingMessage): Promise<void> {
+  validateMailbox(config);
+  const smtp = nodemailer.createTransport({
+    host: config.smtpHost, port: config.smtpPort, secure: config.smtpPort === 465,
+    requireTLS: true, auth: { user: config.email, pass: config.password },
+    tls: { minVersion: 'TLSv1.2', rejectUnauthorized: true },
+    connectionTimeout: 10000, greetingTimeout: 10000, socketTimeout: 20000,
+    logger: false, debug: false, disableFileAccess: true, disableUrlAccess: true,
+  });
+  try {
+    await smtp.sendMail({
+      from: config.email,
+      to: msg.to,
+      replyTo: config.email,
+      subject: msg.subject,
+      text: msg.text,
+      html: msg.html,
+      attachments: msg.attachments,
+    });
+  } finally {
+    smtp.close();
+  }
+}

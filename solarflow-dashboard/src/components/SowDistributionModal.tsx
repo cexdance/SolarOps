@@ -28,11 +28,12 @@ import { formatCost } from '../lib/money';
 import { buildSowPdf } from '../lib/sowPdf';
 import { uploadSowPdf } from '../lib/photoStorage';
 import { attachSowToTrello, trelloCardIdOf } from '../lib/trelloSync';
+import { emailSowReport } from '../lib/sowEmail';
 import { logChange } from '../lib/changeLog';
 import {
   X, FileText, MapPin,
   Sun, Cloud, CloudRain, CloudSnow, CloudLightning,
-  AlertTriangle, CheckCircle, Briefcase, FileCheck, ChevronRight, DollarSign, Send,
+  AlertTriangle, CheckCircle, Briefcase, FileCheck, ChevronRight, DollarSign, Send, Mail,
 } from 'lucide-react';
 import { Job, WOPhoto } from '../types';
 import { Contractor } from '../types/contractor';
@@ -315,6 +316,35 @@ export const SowDistributionModal: React.FC<Props> = ({
   };
   const trelloBusy = ['building', 'uploading', 'attaching'].includes(trelloSend.step);
 
+  // Email the same PDF to the office. Independent of Trello: no card needed, and
+  // one failing never blocks the other.
+  const [mailSend, setMailSend] = useState<{ step: 'idle' | 'building' | 'uploading' | 'sending' | 'done' | 'error'; msg?: string; to?: string }>({ step: 'idle' });
+  const emailReport = async () => {
+    const area = document.getElementById('sow-dist-print-area');
+    if (!area || ['building', 'uploading', 'sending'].includes(mailSend.step)) return;
+    let step: 'building' | 'uploading' | 'sending' = 'building';
+    const started = Date.now();
+    logChange('sow.email_start', 'job', job.id, { woNumber: job.woNumber });
+    try {
+      setMailSend({ step });
+      const pdf = await buildSowPdf(area);
+      step = 'uploading';
+      setMailSend({ step });
+      const upErr = await uploadSowPdf(pdf, job.id);
+      if (upErr) throw new Error(upErr === 'session_expired' ? 'Session expired, sign in again.' : `Upload failed: ${upErr}`);
+      step = 'sending';
+      setMailSend({ step });
+      const { to } = await emailSowReport(job.id);
+      logChange('sow.email_success', 'job', job.id, { woNumber: job.woNumber, bytes: pdf.size, to }, undefined, Date.now() - started);
+      setMailSend({ step: 'done', to });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      logChange('sow.email_fail', 'job', job.id, { woNumber: job.woNumber, step, error: msg.slice(0, 500), stack: e instanceof Error ? (e.stack ?? '').slice(0, 800) : undefined }, undefined, Date.now() - started);
+      setMailSend({ step: 'error', msg: msg || 'Could not email the report' });
+    }
+  };
+  const mailBusy = ['building', 'uploading', 'sending'].includes(mailSend.step);
+
   // PDFs can't render as <img>, so they get their own full page each further down
   const isPdf         = (p: WOPhoto) =>
     p.mimeType === 'application/pdf' || /\.pdf(\?|$)/i.test(p.name || '');
@@ -418,6 +448,26 @@ export const SowDistributionModal: React.FC<Props> = ({
                     : 'Send PDF to Trello'}
                 </button>
               )}
+              {mailSend.step === 'done' && (
+                <span className="text-xs font-semibold text-emerald-700" title={`Sent to ${mailSend.to}`}>
+                  Emailed
+                </span>
+              )}
+              {mailSend.step === 'error' && (
+                <span role="alert" className="text-xs text-red-600 max-w-[16rem] truncate" title={mailSend.msg}>{mailSend.msg}</span>
+              )}
+              <button
+                onClick={emailReport}
+                disabled={mailBusy}
+                className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 bg-white text-slate-700 text-xs font-semibold rounded-lg hover:bg-slate-50 disabled:opacity-60 transition-colors cursor-pointer"
+                title="Email this report as a PDF to the office"
+              >
+                <Mail className="w-3.5 h-3.5" />
+                {mailSend.step === 'building' ? 'Building PDF...'
+                  : mailSend.step === 'uploading' ? 'Uploading...'
+                  : mailSend.step === 'sending' ? 'Sending...'
+                  : 'Email report'}
+              </button>
               <button
                 onClick={() => window.print()}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 text-white text-xs font-semibold rounded-lg hover:bg-slate-700 transition-colors cursor-pointer"
