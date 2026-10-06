@@ -3,7 +3,7 @@
 import React from 'react';
 import { describe, it, expect } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import VisitBanner from '../components/contractor/VisitBanner';
+import VisitBanner, { VisitDetail } from '../components/contractor/VisitBanner';
 import type { ContractorJob } from '../types/contractor';
 
 const base = { id: 'cj-1', sourceJobId: 'job-1' } as unknown as ContractorJob;
@@ -35,5 +35,22 @@ describe('VisitBanner', () => {
     const html = renderToStaticMarkup(<VisitBanner job={{ ...base, visits: [visit(1), visit(2)] }} />);
     expect(html).toContain('Visit 3 of 3');
     expect(html).toContain('Review earlier visits (2)');
+  });
+});
+
+describe('VisitDetail', () => {
+  it('shows one earlier visit in full, with large photos', () => {
+    const html = renderToStaticMarkup(<VisitDetail visit={{
+      ...visit(1), nextSteps: 'Return to swap the inverter.',
+      labor: [{ id: 'l1', visitId: 'job-1:visit:1', description: 'Diagnostics', hours: 2, updatedAt: '' }],
+      parts: [{ id: 'p1', name: 'DC breaker', quantity: 2 }],
+    } as never} onClose={() => {}} />);
+    expect(html).toContain('Visit 1');
+    expect(html).toContain('Visit 1 findings');
+    expect(html).toContain('Return to swap the inverter.');
+    expect(html).toContain('Diagnostics');
+    expect(html).toContain('DC breaker');
+    expect(html).toContain('Photos (1)');
+    expect(html).toContain('Close visit');
   });
 });

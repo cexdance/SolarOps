@@ -10,7 +10,10 @@ const fmt = (d?: string) => {
   return isNaN(t.getTime()) ? d : t.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 };
 
-const VisitHistory: React.FC<{ visits?: WOVisit[]; showBilling?: boolean }> = ({ visits, showBilling }) => {
+// onOpen adds a per-visit "Open" button (the contractor's full-screen review).
+// The row itself is not clickable: it already holds photo links, and a tap
+// target wrapping them steals the tap on a phone.
+const VisitHistory: React.FC<{ visits?: WOVisit[]; showBilling?: boolean; onOpen?: (v: WOVisit) => void }> = ({ visits, showBilling, onOpen }) => {
   if (!visits?.length) return null;
   return (
     <div>
@@ -22,7 +25,17 @@ const VisitHistory: React.FC<{ visits?: WOVisit[]; showBilling?: boolean }> = ({
           <li key={v.id} className="rounded-xl bg-slate-50 border border-slate-200 p-3 space-y-1.5">
             <div className="flex items-center justify-between gap-2">
               <span className="text-sm font-semibold text-slate-800">Visit {v.number}</span>
-              <span className="text-xs text-slate-500">{fmt(v.date)}</span>
+              <span className="flex items-center gap-2">
+                <span className="text-xs text-slate-500">{fmt(v.date)}</span>
+                {onOpen && (
+                  <button
+                    onClick={() => onOpen(v)}
+                    className="text-xs font-semibold text-orange-700 bg-orange-50 border border-orange-200 rounded-lg px-2 py-1 cursor-pointer"
+                  >
+                    Open
+                  </button>
+                )}
+              </span>
             </div>
             {v.serviceType && <p className="text-sm font-semibold text-slate-800">{v.serviceType}</p>}
             {v.labor?.map(l => <p key={l.id} className="text-xs text-slate-600">Labor: {l.description}, {l.hours} hours{showBilling && l.rate !== undefined ? ` at $${l.rate}/hr` : ''}</p>)}
