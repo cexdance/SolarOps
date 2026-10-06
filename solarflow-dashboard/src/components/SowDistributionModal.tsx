@@ -28,6 +28,7 @@ import { formatCost } from '../lib/money';
 import { buildSowPdf } from '../lib/sowPdf';
 import { uploadSowPdf } from '../lib/photoStorage';
 import { attachSowToTrello, trelloCardIdOf } from '../lib/trelloSync';
+import { logChange } from '../lib/changeLog';
 import {
   X, FileText, MapPin,
   Sun, Cloud, CloudRain, CloudSnow, CloudLightning,
@@ -289,17 +290,27 @@ export const SowDistributionModal: React.FC<Props> = ({
   const sendToTrello = async () => {
     const area = document.getElementById('sow-dist-print-area');
     if (!area || (trelloSend.step !== 'idle' && trelloSend.step !== 'done' && trelloSend.step !== 'error')) return;
+    // Every send is logged with the step it reached: the first live send failed
+    // in the browser and left no trace anywhere (SO-2610-62845, 2026-10-06).
+    let step: 'building' | 'uploading' | 'attaching' = 'building';
+    const started = Date.now();
+    logChange('sow.send_start', 'job', job.id, { woNumber: job.woNumber });
     try {
-      setTrelloSend({ step: 'building' });
+      setTrelloSend({ step });
       const pdf = await buildSowPdf(area);
-      setTrelloSend({ step: 'uploading' });
+      step = 'uploading';
+      setTrelloSend({ step });
       const upErr = await uploadSowPdf(pdf, job.id);
       if (upErr) throw new Error(upErr === 'session_expired' ? 'Session expired, sign in again.' : `Upload failed: ${upErr}`);
-      setTrelloSend({ step: 'attaching' });
+      step = 'attaching';
+      setTrelloSend({ step });
       const { cardUrl } = await attachSowToTrello(job.id);
+      logChange('sow.send_success', 'job', job.id, { woNumber: job.woNumber, bytes: pdf.size }, undefined, Date.now() - started);
       setTrelloSend({ step: 'done', cardUrl });
     } catch (e) {
-      setTrelloSend({ step: 'error', msg: e instanceof Error ? e.message : 'Could not send to Trello' });
+      const msg = e instanceof Error ? e.message : String(e);
+      logChange('sow.send_fail', 'job', job.id, { woNumber: job.woNumber, step, error: msg.slice(0, 500), stack: e instanceof Error ? (e.stack ?? '').slice(0, 800) : undefined }, undefined, Date.now() - started);
+      setTrelloSend({ step: 'error', msg: msg || 'Could not send to Trello' });
     }
   };
   const trelloBusy = ['building', 'uploading', 'attaching'].includes(trelloSend.step);
