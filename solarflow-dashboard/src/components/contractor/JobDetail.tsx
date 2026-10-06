@@ -25,6 +25,7 @@ import { uploadPhotoToStorage } from '../../lib/photoStorage';
 import { appendPhoto, flushPendingMirrors, listPhotosForJob, dataUrlToBlob, deletePhotoForJobByUrl } from '../../lib/photoStore';
 import { logChange, logJobChange, describeUrl } from '../../lib/changeLog';
 import ServiceOrderCard from './ServiceOrderCard';
+import VisitBanner from './VisitBanner';
 import { currentVisitId, visitNeedsApproval } from '../../lib/visits';
 import { changeVisit } from '../../lib/visitApi';
 import { loadServiceRates } from '../../lib/contractorStore';
@@ -1046,6 +1047,10 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, contractorId, onBack,
             </div>
           </div>
         )}
+
+        {/* Which visit this is, plus the earlier trips on this order. Above the
+            Service Order card: the tech needs it before they start shooting. */}
+        <VisitBanner job={job} />
 
         {/* Service Order review: links the WO to its SO, scope of work, dates,
             status, location, photos and notes in one read-only place. */}

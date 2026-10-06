@@ -37,7 +37,7 @@ const VisitHistory: React.FC<{ visits?: WOVisit[]; showBilling?: boolean }> = ({
               </p>
             )}
             {v.photoUrls.length > 0 && (
-              <div className="grid grid-cols-6 gap-1">
+              <div className="grid grid-cols-4 sm:grid-cols-6 gap-1">
                 {v.photoUrls.map(src => (
                   <a key={src} href={src} target="_blank" rel="noreferrer" className="block aspect-square rounded-md overflow-hidden bg-slate-100 border border-slate-200">
                     <img src={src} alt={`Visit ${v.number} photo`} loading="lazy" className="w-full h-full object-cover" />
