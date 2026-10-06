@@ -21,7 +21,7 @@ const fmt = (d?: string) => {
  *  Exported for the render test. */
 export const VisitDetail: React.FC<{ visit: WOVisit; onClose: () => void }> = ({ visit, onClose }) => (
   <div className="fixed inset-0 z-50 bg-white flex flex-col">
-    <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-slate-200 bg-slate-50">
+    <div className="flex items-center justify-between gap-2 px-4 py-3 pt-safe border-b border-slate-200 bg-slate-50">
       <div className="min-w-0">
         <p className="text-sm font-bold text-slate-900">Visit {visit.number}</p>
         <p className="text-xs text-slate-500">{fmt(visit.date)}</p>

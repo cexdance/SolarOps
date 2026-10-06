@@ -10,6 +10,11 @@
    so fixed bottom CTAs sat flush at the screen edge and were overlapped by the
    device bottom toolbar / home indicator. Define them so the inset is applied. */
 @layer utilities {
+  /* Top counterpart, for full-screen panels whose header would otherwise sit
+     under the notch (or the admin's "Viewing as" bar). */
+  .pt-safe {
+    padding-top: calc(env(safe-area-inset-top, 0px) + 0.75rem);
+  }
   .pb-safe {
     padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 0.75rem);
   }

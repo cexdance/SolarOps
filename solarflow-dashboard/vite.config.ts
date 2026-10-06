@@ -65,6 +65,9 @@ export default defineConfig(({ command, mode }) => {
     },
   },
   server: {
+    // Honour an assigned PORT so a second agent session can run its own dev
+    // server beside one already holding 5173. Unset locally: Vite picks 5173.
+    port: process.env.PORT ? Number(process.env.PORT) : undefined,
     proxy: {
       // Proxy Xero token endpoint to avoid CORS in dev
       '/xero-token': {

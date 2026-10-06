@@ -17,9 +17,11 @@ const VisitHistory: React.FC<{ visits?: WOVisit[]; showBilling?: boolean; onOpen
   if (!visits?.length) return null;
   return (
     <div>
-      <p className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
-        <CalendarCheck className="w-3.5 h-3.5" /> Previous visits ({visits.length})
-      </p>
+      {!onOpen && (
+        <p className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
+          <CalendarCheck className="w-3.5 h-3.5" /> Previous visits ({visits.length})
+        </p>
+      )}
       <ol className="space-y-2">
         {visits.map(v => (
           <li key={v.id} className="rounded-xl bg-slate-50 border border-slate-200 p-3 space-y-1.5">
