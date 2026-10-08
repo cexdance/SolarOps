@@ -2426,7 +2426,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
               toggle back to the current visit. The two render sites are
               mutually exclusive: never both, so only one VisitWorkspace is
               ever mounted at a time. */}
-          {job && !(activeTab === 'overview' && !viewingHistory) && <div className="p-4"><VisitWorkspace key={job.currentVisit?.id ?? job.id} job={job} isAdmin={isAdmin} onSelectionChange={setViewingHistory} snapshot={{ operationalNotes: serviceReport, serviceStatus, visitLabor: job.visitLabor, photos: { process: woPhotos.map(p => p.storageUrl || p.dataUrl) } }} onSave={saved => {
+          {job && (viewingHistory || (activeTab !== 'overview' && activeTab !== 'report')) && <div className="p-4"><VisitWorkspace key={job.currentVisit?.id ?? job.id} job={job} isAdmin={isAdmin} onSelectionChange={setViewingHistory} snapshot={{ operationalNotes: serviceReport, serviceStatus, visitLabor: job.visitLabor, photos: { process: woPhotos.map(p => p.storageUrl || p.dataUrl) } }} onSave={saved => {
             if (saved.currentVisit?.id === job.currentVisit?.id && saved.currentVisit?.approval === job.currentVisit?.approval && JSON.stringify(saved.visits) === JSON.stringify(job.visits)) handleSave(undefined, true, { visitLabor: saved.visitLabor });
             else onSave(saved, false);
           }} /></div>}

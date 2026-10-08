@@ -10,6 +10,13 @@ const job = (patch: Partial<Job> = {}): Job => ({ id: 'j1', customerId: 'c1', co
 const input = { expectedVisitId: 'j1:visit:1', date: '2026-09-15', time: '10:00', serviceType: 'Optimizer replacement', reason: 'Bring replacement optimizer' };
 const next = () => requestVisit(job(), input, 'tech', now);
 describe('follow-up lifecycle', () => {
+  it('contractor follow-up on an invoiced, unpaid visit lands in Create Quote with visit 1 invoice kept', () => {
+    const n = requestVisit(job({ woNumber: 'SO-1', woStatus: 'invoiced', status: 'invoiced', clientPaidAt: undefined, invoicedAt: '2026-09-11' }), input, 'tech', now);
+    expect(n.visits![0].billing).toMatchObject({ xeroInvoiceId: 'invoice-1', invoicedAt: '2026-09-11' });
+    expect(n.currentVisit).toMatchObject({ number: 2, approval: 'pending', requestedBy: 'tech' });
+    expect(n.woStatus).toBe('draft'); expect(n.xeroInvoiceId).toBeUndefined();
+    expect(getBillingColumn(n)).toBe('new'); // CREATE QUOTE column
+  });
   it('archives paid visit and requests quote review without booking or closing', () => {
     const n = next(); expect(n.id).toBe('j1'); expect(n.visits).toHaveLength(1);
     expect(n.visits![0]).toMatchObject({ serviceType: 'Diagnostic', workDone: 'Diagnosed optimizer failure', billing: { quoteAmount: 120, xeroInvoiceId: 'invoice-1', clientPaidAt: '2026-09-11' } });

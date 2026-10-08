@@ -56,7 +56,7 @@ export default function VisitWorkspace({ job, isAdmin, onSave, onSelectionChange
           </div>
         </div>}
       </div>}
-      <VisitLaborEditor visitId={current} entries={job.visitLabor ?? []} showCosts={isAdmin} onChange={visitLabor => onSave({ ...job, visitLabor })} />
+      <VisitLaborEditor visitId={current} entries={job.visitLabor ?? []} onChange={visitLabor => onSave({ ...job, visitLabor })} />
       {!visitNeedsApproval(job) && <button type="button" disabled={(job.visits?.length ?? 0) >= MAX_VISITS - 1} className="text-sm font-semibold text-orange-700 disabled:text-slate-500" onClick={() => setOpen(v => !v)}>{(job.visits?.length ?? 0) >= 10 ? 'Visit limit reached. Contact the office.' : 'Finish visit / Add follow-up visit'}</button>}
       {open && <div className="space-y-2 border-t pt-3">
         <p className="text-xs text-slate-600">Save current work before requesting a follow-up. The date is proposed until approval and dispatch.</p>

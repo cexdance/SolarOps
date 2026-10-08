@@ -40,7 +40,7 @@ const VisitHistory: React.FC<{ visits?: WOVisit[]; showBilling?: boolean; onOpen
               </span>
             </div>
             {v.serviceType && <p className="text-sm font-semibold text-slate-800">{v.serviceType}</p>}
-            {v.labor?.map(l => <p key={l.id} className="text-xs text-slate-600">Labor: {l.description}, {l.hours} hours{showBilling && l.rate !== undefined ? ` at $${l.rate}/hr` : ''}</p>)}
+            {v.labor?.map(l => <p key={l.id} className="text-xs text-slate-600">Work: {l.description}, {l.hours} hours</p>)}
             <p className="text-sm text-slate-700 whitespace-pre-wrap">{v.workDone || 'No work notes recorded.'}</p>
             {v.nextSteps && (
               <p className="text-xs text-slate-500 whitespace-pre-wrap"><span className="font-semibold">Left to do:</span> {v.nextSteps}</p>
