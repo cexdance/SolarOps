@@ -24,6 +24,8 @@ describe('follow-up lifecycle', () => {
     for (const k of ['quoteSentAt','clientPaidAt','xeroInvoiceId','completedAt'] as const) expect(n[k]).toBeUndefined();
     expect(n.woStatus).toBe('draft'); expect(getBillingColumn(n)).toBe('new');
   });
+  it('accepts a past follow-up date on or after the previous visit', () => { expect(requestVisit(job(), { ...input, date: '2026-09-11' }, 'tech', now).scheduledDate).toBe('2026-09-11'); });
+  it('archives the cost adjustment with the finished visit and starts the new one at 0', () => { const n = requestVisit(job({ costAdjustment: -120, costAdjustmentNote: 'Client installed inverter' }), input, 'tech', now); expect(n.visits![0].billing).toMatchObject({ costAdjustment: -120, costAdjustmentNote: 'Client installed inverter' }); expect(n.costAdjustment).toBe(0); expect(n.costAdjustmentNote).toBe(''); });
   it('retries against same visit are idempotent', () => { const n = next(); expect(requestVisit(n, input, 'tech', now)).toBe(n); });
   it('requires valid date, time, service type and remaining work', () => {
     for (const p of [{ date: '' }, { date: '2026-02-30' }, { date: '2026-09-01' }, { time: '25:00' }, { serviceType: '' }, { reason: ' ' }]) expect(() => requestVisit(job(), { ...input, ...p }, 'tech', now)).toThrow();
@@ -37,7 +39,7 @@ describe('follow-up lifecycle', () => {
   it('quote approval requires sent quote, reference and usable date', () => {
     expect(() => decideVisit(next(), 'approved', 'Client accepted', 'admin', now)).toThrow(/quote/);
     expect(() => decideVisit(next(), 'included', '', 'admin', now)).toThrow(/reference/);
-    expect(() => decideVisit({ ...next(), scheduledDate: '2026-09-01' }, 'included', 'covered', 'admin', now)).toThrow(/date/);
+    expect(decideVisit({ ...next(), scheduledDate: '2026-09-11' }, 'included', 'covered', 'admin', now).woStatus).toBe('quote_approved'); // past date, written up late
     expect(decideVisit({ ...next(), quoteSentAt: now }, 'approved', 'Customer email acceptance', 'admin', now).currentVisit?.approval).toBe('approved');
   });
   it('keeps pending follow-ups visible but unstartable', () => { const n = next(); expect(pickupJobsForContractor('crew1', [n])).toHaveLength(1); const view = toContractorJobView(n, { id: 'cj', status: 'completed', completedAt: now, operationalNotes: 'old work' } as never); expect(view.status).toBe('on_hold'); expect(view.completedAt).toBeUndefined(); expect(view.operationalNotes).toBe(''); });

@@ -515,6 +515,8 @@ export interface VisitLabor {
 
 export interface WOVisitBilling {
   totalAmount?: number;
+  costAdjustment?: number;
+  costAdjustmentNote?: string;
   clientPaymentDueAt?: string;
   costsCoveredAt?: string;
   paymentRecordedBy?: string;

@@ -1843,6 +1843,8 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
       renderedVisit.current = job.currentVisit.id; setViewingHistory(false);
       setServiceType(job.serviceType); setServiceCode(job.serviceCode ?? ''); setScheduledDate(job.scheduledDate); setScheduledTime(job.scheduledTime);
       setLineItems(job.lineItems ?? []); setQuoteAmount(job.quoteAmount ?? 0); setServiceReport(job.serviceReport ?? '');
+      // Without these the next save wrote the previous visit's hours/parts back.
+      setLaborHours(job.laborHours ?? 0); setPartsCostDirect(job.partsCost ?? 0);
       setRequiresFollowUp(false); setNextSteps(job.nextSteps ?? ''); setWoPhotos(photosForCurrent(job));
     }
   }, [job?.currentVisit?.id, job?.currentVisit?.approval]);

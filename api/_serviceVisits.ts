@@ -3,7 +3,7 @@ import type { ContractorJob } from '../solarflow-dashboard/src/types/contractor'
 
 export const visitId = (job: Job) => job.currentVisit?.id ?? `${job.id}:visit:${(job.visits?.length ?? 0) + 1}`;
 export const pendingVisit = (job: Job) => !!job.currentVisit && !['approved', 'included'].includes(job.currentVisit.approval);
-const billingKeys = ['totalAmount', 'clientPaymentDueAt', 'costsCoveredAt', 'quoteAmount', 'quoteSentAt', 'quoteApprovedAt', 'verbalApprovalAt', 'lineItems', 'xeroInvoiceId', 'invoicedAt', 'clientPaidAt'] as const;
+const billingKeys = ['totalAmount', 'clientPaymentDueAt', 'costsCoveredAt', 'quoteAmount', 'quoteSentAt', 'quoteApprovedAt', 'verbalApprovalAt', 'lineItems', 'xeroInvoiceId', 'invoicedAt', 'clientPaidAt', 'costAdjustment', 'costAdjustmentNote'] as const;
 export function requestVisit(job: Job, input: { expectedVisitId: string; date: string; time?: string; serviceCode?: string; serviceType: string; reason: string; snapshot?: Partial<ContractorJob> }, actor: string, now: string): Job {
   // Same expected visit is the idempotency key across retries and devices.
   if (job.visits?.some(v => v.id === input.expectedVisitId)) return job;
@@ -11,7 +11,8 @@ export function requestVisit(job: Job, input: { expectedVisitId: string; date: s
   if (pendingVisit(job)) throw new Error('The current visit is awaiting approval.');
   if ((job.visits?.length ?? 0) >= 10) throw new Error('The 10 follow-up limit has been reached. Contact the office.');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date) || !Number.isFinite(Date.parse(input.date)) || new Date(input.date).toISOString().slice(0, 10) !== input.date) throw new Error('Enter a valid return date.');
-  if (input.date < new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date(now))) throw new Error('Choose today or a future return date.');
+  // Past dates are allowed: the visit is often written up days after it happened.
+  if (job.scheduledDate && input.date < job.scheduledDate.slice(0, 10)) throw new Error('The follow-up cannot be before the previous visit.');
   if (input.time && !/^([01]\d|2[0-3]):[0-5]\d$/.test(input.time)) throw new Error('Enter a valid return time.');
   if (!input.serviceType?.trim() || input.serviceType.length > 200 || !input.reason?.trim() || input.reason.length > 5000) throw new Error('Service type and remaining work are required.');
   const s = input.snapshot ?? {};
@@ -46,6 +47,9 @@ export function requestVisit(job: Job, input: { expectedVisitId: string; date: s
   next.totalAmount = 0;
   next.lineItems = [{ id: `${currentVisit.id}:scope`, type: 'labor', description: currentVisit.serviceType, quantity: 1, unitCost: 0, totalCost: 0 }];
   next.contractorLaborAmount = 0; next.contractorPartsAmount = 0; next.travelMiles = 0;
+  // The cost adjustment was a correction to the finished visit (archived in its
+  // billing). 0/'' rather than undefined so the reset survives the sync merge.
+  next.costAdjustment = 0; next.costAdjustmentNote = '';
   // Preserve the captured media on the parent, with explicit ownership.
   next.woPhotos = [...(job.woPhotos ?? []), ...urls.filter(u => !job.woPhotos?.some(p => (p.storageUrl || p.dataUrl) === u)).map((u, i) => ({ id: `${id}:photo:${i}`, category: 'process' as const, name: 'Visit photo', storageUrl: u, dataUrl: '', createdAt: now, visitId: owners[u] || id }))];
   return next;
@@ -95,7 +99,6 @@ export function decideVisit(job: Job, action: 'included' | 'approved', reason: s
   if (!job.currentVisit) throw new Error('No follow-up visit to approve.');
   if (!reason?.trim()) throw new Error('Record the approval or included coverage reference.');
   if (action === 'approved' && !job.quoteSentAt) throw new Error('Create and send the visit quote before recording approval.');
-  if (job.scheduledDate < new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date(now))) throw new Error('Update the proposed date before approving this visit.');
   const currentVisit: VisitPlan = { ...job.currentVisit, approval: action, decidedAt: now, decidedBy: actor, decisionReason: reason.trim() };
   return { ...job, ...(action === 'included' ? { totalAmount: 0, quoteAmount: 0 } : {}), currentVisit, woStatus: 'quote_approved', status: 'assigned', quoteApprovedAt: now, updatedAt: now };
 }
