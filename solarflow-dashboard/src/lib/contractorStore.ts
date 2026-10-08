@@ -371,6 +371,22 @@ const defaultServiceRates: ServiceRate[] = [
     seCompensation: 0,
     active: true
   },
+  {
+    id: 'sr-23',
+    serviceCode: 'ISO-FAULT-DIAG',
+    serviceName: 'Isolation Fault Diagnostics',
+    description: 'Diagnose an isolation (ground) fault on the array: isolate the affected string, trace the fault to the panel or conductor, and report the cause.',
+    estimatedHours: 5,
+    laborCost: 700,
+    partsCost: 0,
+    clientRateStandard: 1400,
+    clientRateRecurring: 1400,
+    isPowercareEligible: false,
+    powercareLaborCost: 0,
+    powercareClientRate: 0,
+    seCompensation: 0,
+    active: true
+  },
 ];
 
 // No demo contractor jobs, clean slate
