@@ -1667,6 +1667,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
   // Save, optionally override woStatus (used when auto-saving after stage advance)
   // and optionally merge a patch of fields the panel does not hold in state
   // (quoteSentAt). The patch is applied LAST so it wins over the built payload.
+  const [savedFlash, setSavedFlash] = useState(false);
   const handleSave = (statusOverride?: WOStatus, keepOpen?: boolean, patch?: Partial<Job>) => {
     const effectiveWoStatus = statusOverride ?? woStatus;
     const { total } = sumLineItems(lineItems);
@@ -1823,7 +1824,7 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
     }
 
     // keepOpen=true (workflow-advance, RMA auto-save) never closes the panel;
-    // the explicit Save Changes button (no args) closes it via shouldClose above.
+    // Save Changes on an existing order passes keepOpen too; only Create closes.
   };
 
   // Sync the ref on every render so async callbacks always call the fresh handleSave.
@@ -4387,8 +4388,9 @@ export const ServiceOrderPanel: React.FC<ServiceOrderPanelProps> = ({
             {isNew && (
               <span className="text-xs text-slate-400">Creating new service order for <strong>{siteName}</strong></span>
             )}
+            {savedFlash && <span role="status" className="text-sm font-medium text-emerald-700">Saved</span>}
             <button
-              onClick={() => handleSave()}
+              onClick={() => { if (isNew) { handleSave(); return; } handleSave(undefined, true); setSavedFlash(true); setTimeout(() => setSavedFlash(false), 2000); }}
               className="px-6 py-2 bg-orange-500 text-white text-sm font-semibold rounded-lg hover:bg-orange-600 transition-colors cursor-pointer"
             >
               {isNew ? 'Create Service Order' : 'Save Changes'}
