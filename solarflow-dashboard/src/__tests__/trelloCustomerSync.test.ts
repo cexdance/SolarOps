@@ -195,3 +195,27 @@ describe('retiring old bookkeeping comments (server side, 2026-10-01)', () => {
     const before = f.writes(); await f.sync(job.id); expect(f.writes()).toBe(before);
   });
 });
+
+// 2026-10-09: one Trello card per client, every order and visit on it.
+describe('one client card for every order', () => {
+  const so1 = { ...job, createdAt: '2026-09-01', woStatus: 'paid', rmaEntries: [], activityHistory: [{ id: 'n1', type: 'note_added', description: 'Called client' }],
+    visits: [{ id: 'j1:visit:1', number: 1, date: '2026-09-02', serviceType: 'Diagnostic', workDone: 'Found bad optimizer', labor: [{ id: 'l1', description: 'Diagnose', hours: 2 }], nextSteps: 'Replace optimizer', finishedAt: '2026-09-03T15:00:00Z', billing: { totalAmount: 900 } }],
+    currentVisit: { id: 'j1:visit:2', number: 2 } };
+  const so2 = { id: 'job-2', customerId: 'customer-1', woNumber: 'SO-2', serviceType: 'Inverter Change', woStatus: 'draft', createdAt: '2026-10-01' };
+  const c = customerSyncContent(so2, customer, [so2, so1]);
+  it('lists every order in the description, oldest first', () => {
+    expect(c.block).toContain('Service orders:\n- SO-1 · Site Transfer · Visit 2 of 2 · Paid\n- SO-2 · Inverter Change · Draft');
+  });
+  it('posts a finished visit as its own comment with order, visit, date, work and hours, no money', () => {
+    const v = c.comments.find(x => x.marker.includes('#so-visit-'))!;
+    expect(v.text.split('\n')[0]).toBe('SO-1 · Visit 1 · Sep 2, 2026');
+    expect(v.text).toContain('Work done: Found bad optimizer\n- Diagnose, 2 h\nLeft to do: Replace optimizer');
+    expect(v.text).not.toMatch(/900|\$/);
+  });
+  it('prefixes notes with their order number when the client has several orders', () => {
+    expect(c.comments.find(x => x.legacyMarker === 'SolarOps activity ID: n1')!.text).toMatch(/^SO-1 · Called client/);
+  });
+  it('treats the visit marker as a SolarOps echo', () => {
+    expect(isSolarOpsEcho(c.comments.find(x => x.marker.includes('#so-visit-'))!.text)).toBe(true);
+  });
+});

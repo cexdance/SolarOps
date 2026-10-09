@@ -5,7 +5,7 @@ type RecordData = Record<string, any>;
 /** `marker` is how the sync finds its own comment again (it sits inside the
  *  tag line's link URL). `legacyMarker` is the full-line marker comments carried
  *  before 2026-10-01, so those are rewritten in place rather than duplicated. */
-type Comment = { marker: string; legacyMarker: string; text: string };
+type Comment = { marker: string; legacyMarker?: string; text: string };
 const START = '<!-- SolarOps customer sync -->';
 const END = '<!-- /SolarOps customer sync -->';
 export function linkedCardId(job: RecordData): string | undefined {
@@ -21,15 +21,15 @@ const clean = (x: unknown) => String(x ?? '').trim();
 // SolarOps, so the tag reads "SolarOps · Cesar Jurado · Sep 30, 2026" while the
 // URL carries the record id the sync needs to find the comment again.
 const APP_URL = 'https://solarflow-dashboard-sooty.vercel.app';
-export function soLink(kind: 'activity' | 'rma', id: string): string {
+export function soLink(kind: 'activity' | 'rma' | 'visit', id: string): string {
   return `${APP_URL}/#so-${kind}-${encodeURIComponent(id)}`;
 }
 /** The exact substring the sync searches for: the link target, closing paren included. */
-export function soMarker(kind: 'activity' | 'rma', id: string): string {
+export function soMarker(kind: 'activity' | 'rma' | 'visit', id: string): string {
   return `(${soLink(kind, id)})`;
 }
 /** Any marker SolarOps has ever written, old full-line style or new link style. */
-export const SOLAROPS_MARKER = /SolarOps (?:RMA ID|activity ID|audit ID|audit import|record notes):|#so-(?:activity|rma)-/;
+export const SOLAROPS_MARKER = /SolarOps (?:RMA ID|activity ID|audit ID|audit import|record notes):|#so-(?:activity|rma|visit)-/;
 
 /** "Cesar Jurado (Admin)" -> "Cesar Jurado"; a placeholder author is dropped. */
 export function tagAuthor(name: unknown): string | undefined {
@@ -42,7 +42,7 @@ export function tagDate(iso: unknown): string | undefined {
   if (!clean(iso) || Number.isNaN(d.getTime())) return undefined;
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'America/New_York' });
 }
-export function tagLine(kind: 'activity' | 'rma', id: string, author: unknown, when: unknown): string {
+export function tagLine(kind: 'activity' | 'rma' | 'visit', id: string, author: unknown, when: unknown): string {
   return [`[SolarOps](${soLink(kind, id)})`, tagAuthor(author), tagDate(when)].filter(Boolean).join(' · ');
 }
 
@@ -57,7 +57,7 @@ export function tagLine(kind: 'activity' | 'rma', id: string, author: unknown, w
  * guessed at.
  */
 export function isRetiredComment(text: string): boolean {
-  if (/#so-(?:activity|rma)-/.test(text)) return false;                 // current format
+  if (/#so-(?:activity|rma|visit)-/.test(text)) return false;                 // current format
   if (/^SolarOps audit ID:/m.test(text)) return true;
   if (/SolarOps audit import:/.test(text)) return true;
   if (/^SolarOps record notes:/m.test(text)) return true;
@@ -70,7 +70,7 @@ export function isRetiredComment(text: string): boolean {
 
 /** Bump when the comment FORMAT changes, so every card gets one pass even where
  *  the underlying records did not change (the sync skips identical content). */
-const FORMAT_VERSION = 'v2-2026-10-01';
+const FORMAT_VERSION = 'v3-2026-10-09';
 
 const humanize = (s: unknown) => { const t = clean(s).replace(/_/g, ' '); return t ? t[0].toUpperCase() + t.slice(1) : ''; };
 
@@ -84,42 +84,69 @@ export function rmaComment(r: RecordData): string {
   if (r.compensationCollected === true) lines.push('Compensation collected');
   return `${lines.join('\n')}\n\n${tagLine('rma', r.id, r.createdBy, r.createdAt)}`;
 }
-export function customerSyncContent(job: RecordData, customer: RecordData) {
+/** One finished visit as one comment: order, visit number and date on top,
+ *  then the report. No money (SHOW_MONEY). */
+export function visitComment(job: RecordData, v: RecordData): string {
+  const head = [clean(job.woNumber), `Visit ${v.number}`, tagDate(v.date ? `${String(v.date).slice(0, 10)}T12:00:00` : v.finishedAt)].filter(Boolean).join(' · ');
+  const lines = [head];
+  if (clean(v.serviceType)) lines.push(`Service: ${clean(v.serviceType)}`);
+  lines.push(`Work done: ${clean(v.workDone) || 'No work notes recorded.'}`);
+  for (const l of v.labor || []) if (clean(l.description)) lines.push(`- ${clean(l.description)}, ${l.hours} h`);
+  if (clean(v.nextSteps)) lines.push(`Left to do: ${clean(v.nextSteps)}`);
+  return `${lines.join('\n')}\n\n${tagLine('visit', v.id, undefined, v.finishedAt)}`;
+}
+const orderLine = (j: RecordData) => [clean(j.woNumber), clean(j.serviceType),
+  j.currentVisit ? `Visit ${j.currentVisit.number} of ${j.currentVisit.number}` : (j.visits?.length ? `Visit ${j.visits.length + 1} of ${j.visits.length + 1}` : ''),
+  humanize(j.woStatus)].filter(Boolean).join(' · ');
+const byAge = (a: RecordData, b: RecordData) => clean(a.createdAt || a.id).localeCompare(clean(b.createdAt || b.id));
+
+/** Everything on ONE client card (2026-10-09): every order of the client in the
+ *  description, each finished visit as its own comment, notes and RMAs prefixed
+ *  with their order number. `jobs` defaults to the one order (older callers). */
+export function customerSyncContent(job: RecordData, customer: RecordData, jobs: RecordData[] = [job]) {
+  const orders = [...jobs].sort(byAge);
   const name = [customer.clientId, customer.name || job.clientName].filter(Boolean).join(' ');
   const address = [customer.address || job.siteAddress, customer.city, [customer.state, customer.zip].filter(Boolean).join(' ')].filter(Boolean).join(', ');
   const lines = [START, `Customer: ${name}`, 'Record type: Customer (converted from lead)'];
   for (const [label, value] of Object.entries({ Address: address, Phone: customer.phone, Email: customer.email,
-    'Service Order': job.woNumber, Service: job.serviceType, 'Service order status': job.woStatus,
-    'Site ID': job.siteTransferSiteId || customer.solarEdgeSiteId || job.solarEdgeSiteId,
-    'Inverter serial': job.siteTransferInverterSerial })) {
+    'Site ID': orders.map(j => j.siteTransferSiteId).find(Boolean) || customer.solarEdgeSiteId || orders.map(j => j.solarEdgeSiteId).find(Boolean),
+    'Inverter serial': orders.map(j => j.siteTransferInverterSerial).find(Boolean) })) {
     if (clean(value)) lines.push(`${label}: ${clean(value)}`);
   }
+  const listed = orders.filter(j => clean(j.woNumber));
+  if (listed.length) { lines.push('Service orders:'); for (const j of listed) lines.push(`- ${orderLine(j)}`); }
   lines.push(END);
-  // ONLY what someone working the card in Trello needs: real notes and RMAs
-  // (owner decision 2026-10-01). Everything else this used to post was
-  // internal bookkeeping that read as noise on the board: 315 automatic "work
-  // order updated" lines with no author, 139 audit entries (85 of them just
-  // "Fields updated"), field-edit diffs, and copies of the lead email that is
-  // already the card description. All of it still lives in SolarOps.
+  // ONLY what someone working the card in Trello needs: real notes, RMAs and
+  // finished visit reports (owner decisions 2026-10-01, 2026-10-09). Internal
+  // bookkeeping still lives in SolarOps only.
   const comments: Comment[] = [];
-  for (const r of job.rmaEntries || []) {
-    if (!r.id) continue;
-    comments.push({ marker: soMarker('rma', r.id), legacyMarker: `SolarOps RMA ID: ${r.id}`, text: rmaComment(r) });
+  const prefix = (j: RecordData) => clean(j.woNumber) && listed.length > 1 ? `${clean(j.woNumber)} · ` : '';
+  for (const j of orders) {
+    for (const v of j.visits || []) {
+      if (!v.id) continue;
+      comments.push({ marker: soMarker('visit', v.id), text: visitComment(j, v) });
+    }
+    for (const r of j.rmaEntries || []) {
+      if (!r.id) continue;
+      comments.push({ marker: soMarker('rma', r.id), legacyMarker: `SolarOps RMA ID: ${r.id}`, text: prefix(j) + rmaComment(r) });
+    }
   }
-  const activities = new Map<string, RecordData>();
-  for (const a of [...(customer.activityHistory || []), ...(job.activityHistory || [])]) {
+  const activities = new Map<string, { a: RecordData; j?: RecordData }>();
+  const take = (a: RecordData, j?: RecordData) => {
     // Never export a Trello-origin event back to Trello, including previous imports.
-    if (!a.id || /^trello[-:]/i.test(a.id) || SOLAROPS_MARKER.test(a.description || '')) continue;
+    if (!a.id || /^trello[-:]/i.test(a.id) || SOLAROPS_MARKER.test(a.description || '')) return;
     // Notes only. A missing type is free text from an older writer, so it counts.
-    if (a.type && a.type !== 'note_added') continue;
-    if (!clean(a.description || a.details)) continue;
-    activities.set(a.id, a);
-  }
-  for (const a of activities.values()) {
+    if (a.type && a.type !== 'note_added') return;
+    if (!clean(a.description || a.details)) return;
+    if (!activities.has(a.id) || j) activities.set(a.id, { a, j });
+  };
+  for (const a of customer.activityHistory || []) take(a);
+  for (const j of orders) for (const a of j.activityHistory || []) take(a, j);
+  for (const { a, j } of activities.values()) {
     comments.push({
       marker: soMarker('activity', a.id),
       legacyMarker: `SolarOps activity ID: ${a.id}`,
-      text: `${clean(a.description || a.details)}\n\n${tagLine('activity', a.id, a.userName, a.timestamp)}`,
+      text: `${j ? prefix(j) : ''}${clean(a.description || a.details)}\n\n${tagLine('activity', a.id, a.userName, a.timestamp)}`,
     });
   }
   return { name, block: lines.join('\n'), comments };
@@ -153,10 +180,24 @@ export function makeCustomerSync(options: { databaseUrl: string; serviceKey: str
       return r.json();
     }
   }
+  /** Every live order of the client, the given one included even before the
+   *  list query sees it. */
+  async function siblings(job: RecordData): Promise<RecordData[]> {
+    const rows = await db(`key=like.job:*&value->>customerId=eq.${encodeURIComponent(job.customerId)}&select=value`);
+    const all = new Map<string, RecordData>();
+    for (const r of rows) if (r.value?.id && r.value.deleted !== true) all.set(r.value.id, r.value);
+    all.set(job.id, job);
+    return [...all.values()];
+  }
+  /** The client's ONE card: the card of the client's oldest linked order. A
+   *  second card made by hand is left alone (owner decision 2026-10-09). */
+  const clientCard = (orders: RecordData[]) => [...orders].sort(byAge).map(linkedCardId).find(Boolean);
   async function sync(jobId: string) {
     let job = await get(`job:${jobId}`);
-    const cardId = job && linkedCardId(job);
-    if (!cardId || !job.customerId) return { skipped: 'not a linked customer' };
+    if (!job?.customerId) return { skipped: 'not a linked customer' };
+    let orders = await siblings(job);
+    const cardId = clientCard(orders);
+    if (!cardId) return { skipped: 'not a linked customer' };
     const lockKey = `trello_sync_lock:${cardId}`, owner = randomUUID();
     const lease = () => ({ owner, expires: new Date(Date.now() + 120000).toISOString() });
     const insert = await db('on_conflict=key', { method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates,return=representation' }, body: JSON.stringify({ key: lockKey, value: lease() }) });
@@ -167,12 +208,14 @@ export function makeCustomerSync(options: { databaseUrl: string; serviceKey: str
     try {
       // Re-read after the lock: a queued request must not write an older snapshot.
       job = await get(`job:${jobId}`);
-      if (!job || linkedCardId(job) !== cardId || !job.customerId) return { skipped: 'link changed' };
+      if (!job?.customerId) return { skipped: 'link changed' };
+      orders = await siblings(job);
+      if (clientCard(orders) !== cardId) return { skipped: 'link changed' };
       const customer = await get(`customer:${job.customerId}`);
       if (!customer) return { retry: true, skipped: 'customer not saved yet' };
-      const content = customerSyncContent(job, customer);
+      const content = customerSyncContent(job, customer, orders);
       const hash = createHash('sha256').update(FORMAT_VERSION + JSON.stringify(content)).digest('hex');
-      const stateKey = `trello_customer_sync:${jobId}`;
+      const stateKey = `trello_customer_sync:card:${cardId}`;
       if ((await get(stateKey))?.hash === hash) return { skipped: 'unchanged' };
       const card = await trello(`cards/${cardId}?fields=idBoard,name,desc,closed`);
       if (!options.allowedBoard(card.idBoard)) throw new Error('Customer sync board not allowed');
@@ -197,7 +240,7 @@ export function makeCustomerSync(options: { databaseUrl: string; serviceKey: str
         // place instead of duplicated.
         const found = existing.find(a => {
           const t = a.data?.text || '';
-          return t.includes(c.marker) || t.split('\n').includes(c.legacyMarker);
+          return t.includes(c.marker) || (!!c.legacyMarker && t.split('\n').includes(c.legacyMarker));
         });
         const outText = toTrelloMentions(c.text);
         if (found?.data.text === outText) continue;
@@ -224,8 +267,9 @@ export function makeCustomerSync(options: { databaseUrl: string; serviceKey: str
     }
   }
   async function customerJobs(customerId: string): Promise<string[]> {
+    // One sync covers the whole client card, so one linked order is enough.
     const rows = await db(`key=like.job:*&value->>customerId=eq.${encodeURIComponent(customerId)}&select=value`);
-    return rows.filter((r: any) => linkedCardId(r.value)).map((r: any) => r.value.id);
+    return rows.filter((r: any) => linkedCardId(r.value)).slice(0, 1).map((r: any) => r.value.id);
   }
   return { sync, customerJobs };
 }

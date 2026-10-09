@@ -11,8 +11,10 @@ export function queueTrelloCustomerRows(rows: { key: string; value: unknown }[])
   if (typeof window === 'undefined') return;
   const pending = new Set(read());
   for (const row of rows) {
-    const value = row.value as { id?: string; customerId?: string; trelloCardId?: string };
-    if (row.key.startsWith('customer:') || (row.key.startsWith('job:') && value.customerId && (value.trelloCardId || value.id?.startsWith('job-trello-')))) pending.add(row.key);
+    // Any order of a client: it lands on the client's card even when it was
+    // never sent to Trello itself (the server skips clients with no card).
+    const value = row.value as { customerId?: string };
+    if (row.key.startsWith('customer:') || (row.key.startsWith('job:') && value.customerId)) pending.add(row.key);
   }
   try { write([...pending]); } catch { /* Nightly server sweep also reconciles. */ }
   if (!timer) timer = setTimeout(() => { timer = undefined; void drain(); }, 2000);
