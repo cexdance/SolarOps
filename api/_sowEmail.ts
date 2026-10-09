@@ -51,11 +51,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const jr = await fetch(
     `${SUPABASE_URL}/rest/v1/app_data?key=eq.${encodeURIComponent(`job:${jobId}`)}` +
-    `&select=value->>woNumber,value->>clientName,value->>siteAddress`,
+    `&select=value->>woNumber,value->>clientName,value->>siteAddress,value->>serviceType,value->>customerId`,
     { headers: { ...headers, 'Content-Type': 'application/json' } },
   );
-  const job = jr.ok ? (await jr.json() as { woNumber?: string; clientName?: string; siteAddress?: string }[])[0] : undefined;
+  const job = jr.ok ? (await jr.json() as { woNumber?: string; clientName?: string; siteAddress?: string; serviceType?: string; customerId?: string }[])[0] : undefined;
   if (!job) return res.status(404).json({ error: 'No such order' });
+  // Client number and name come from the customer record (the order's own
+  // clientName can be a lead name). Missing customer just leaves them out.
+  const cr = job.customerId ? await fetch(
+    `${SUPABASE_URL}/rest/v1/app_data?key=eq.${encodeURIComponent(`customer:${job.customerId}`)}&select=value->>clientId,value->>name`,
+    { headers: { ...headers, 'Content-Type': 'application/json' } },
+  ) : undefined;
+  const customer = cr?.ok ? (await cr.json() as { clientId?: string; name?: string }[])[0] : undefined;
 
   const pdf = await fetch(
     `${SUPABASE_URL}/storage/v1/object/customer-files/sow-reports/${jobId}/sow.pdf`,
@@ -89,11 +96,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!mailbox) return res.status(503).json({ error: 'No shared mailbox is configured. Set one up in Settings.' });
 
   const order = job.woNumber || jobId;
-  const who = job.clientName ? ` for ${job.clientName}` : '';
+  const name = (customer?.name || job.clientName || '').trim();
+  const who = name ? ` for ${name}` : '';
   const filename = `SOW ${order}.pdf`;
   const lines = [
     `SOW Completion Report${who}`,
+    customer?.clientId ? `Client number: ${customer.clientId}` : '',
     `Service order: ${order}`,
+    job.serviceType ? `Service: ${job.serviceType}` : '',
     job.siteAddress ? `Site: ${job.siteAddress}` : '',
     '',
     'The completion report is attached as a PDF.',
@@ -102,7 +112,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     await sendMailboxMessage(mailbox, {
       to: SOW_EMAIL_TO,
-      subject: `SOW Completion Report, ${order}${who}`,
+      subject: sowSubject(order, customer?.clientId, name, job.serviceType),
       text: lines.join('\n'),
       html: `<div style="font-family:-apple-system,Segoe UI,sans-serif;font-size:14px;color:#0f172a">
         ${lines.map(l => `<p style="margin:0 0 6px">${esc(l)}</p>`).join('')}
@@ -117,4 +127,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   console.info(`[sow-email] ${filename} (${bytes.byteLength} bytes) sent to ${SOW_EMAIL_TO}`);
   return res.status(200).json({ sent: true, to: SOW_EMAIL_TO, filename, bytes: bytes.byteLength });
+}
+
+/** "SOW Completion Report, US-15715 Ron Devilliers, Inverter Commissioning Only, SO-2610-98331".
+ *  Line breaks stripped: these are user-typed fields going into a mail header. */
+export function sowSubject(order: string, clientId?: string, name?: string, service?: string): string {
+  const one = (x?: string) => (x ?? '').replace(/[\r\n]+/g, ' ').trim();
+  return ['SOW Completion Report', [one(clientId), one(name)].filter(Boolean).join(' '), one(service), one(order)]
+    .filter(Boolean).join(', ').slice(0, 250);
 }

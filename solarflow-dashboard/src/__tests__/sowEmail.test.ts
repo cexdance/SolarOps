@@ -130,3 +130,12 @@ describe('POST /api/users?sowEmail=1', () => {
     expect(status).toBe(405);
   });
 });
+
+describe('SOW email subject', () => {
+  it('carries client number, name, service type and order, on one line', async () => {
+    const { sowSubject } = await import('../../../api/_sowEmail');
+    expect(sowSubject('SO-2610-98331', 'US-15715', 'Ron Devilliers ', 'Inverter Commissioning Only'))
+      .toBe('SOW Completion Report, US-15715 Ron Devilliers, Inverter Commissioning Only, SO-2610-98331');
+    expect(sowSubject('SO-1', undefined, 'A\r\nBcc: x@y.z')).toBe('SOW Completion Report, A Bcc: x@y.z, SO-1');
+  });
+});
